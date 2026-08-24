@@ -56,6 +56,8 @@ const SYNERGIES = [
   { tag: "LST",            name: "LST 시절",       need: 2, atk: 0.10, def: 0.10, hp: 0.10, desc: "함께 글을 쓰던 때" },
   { tag: ["우생회", "쥐어진", "쥐는"], name: "우생회",  need: 2, atk: 0.20,            desc: "쥐어주는 자와 쥐어진 자" },
   { tag: "아라온호",        name: "아라온호",       need: 2, atk: 0.12, hp: 0.12,  desc: "극지를 향해 배를 몬다" },
+  /* 인격은 김하주 하나뿐이라, 교육위원(이형우·강호영)을 세워야 둘이 찹니다 */
+  { tag: "영덕의 요리사",  name: "영덕의 요리사",  need: 2, def: 0.15, hp: 0.25,  desc: "먹은 사람은 쉬이 쓰러지지 않는다" },
   { tag: "총기 협회",      name: "북부 총기 협회", need: 2, atk: 0.18,            desc: "화력으로 말한다" },
   { tag: "작성위원",       name: "작성위원회",     need: 3, hp: 0.15, def: 0.10,  desc: "결국 우리는 글을 쓰는 사람들" }
 ];
@@ -288,7 +290,8 @@ const SINNERS = {
       { star: 2, title: "모나크 각본가",         atk: 16, def: 9,  hp: 78, note: "제가 이런걸 하는 게 낫나요?"  },
       { star: 2, title: "공룡의날 P.E.T",     atk: 17, def: 9,  hp: 77, note: "피곤하다, 그림."  },
       { star: 3, title: "남부 협회 3과 부장", atk: 26, def: 15, hp: 103, note: "바다라고 다를 건 없네."  },
-      { star: 3, title: "살수 아티스트",      atk: 33, def: 9,  hp: 93, note: "트위터 60만 좋아요"  }
+      { star: 3, title: "살수 아티스트",      atk: 33, def: 9,  hp: 93, note: "트위터 60만 좋아요"  },
+      { star: 3, title: "영덕의 요리사",      atk: 20, def: 24, hp: 137, note: "담는 게 반이에요, 반."  }
     ]
   },
 
@@ -319,133 +322,166 @@ const SINNERS = {
  *
  *   ▸ 능력을 몇 번 쓸 수 있는가
  *    manage     전투 시작 관리력 +n
+ *               ※ 첫 턴에 관리력 최대치로 잘립니다. manageMax 를 안 올리면
+ *                  +2 까지만 유효하고 그 위는 버려집니다. 짝으로 적으세요.
  *    manageMax  관리력 최대치 +n
  *    gain       턴마다 회복하는 관리력 +n
  *    cheap      관리자 능력 비용 -n (최소 1까지)
+ *               ※ 첨삭·퇴고(2)만 1 로 내려갑니다. 교정·독촉은 이미 1 이라 안 내려갑니다.
+ *                  그래서 2 이상은 아무 효과가 없습니다 — 1 만 쓰세요.
  *
  *   ▸ 능력이 얼마나 잘 드는가
  *    revive     첨삭으로 일어날 때 체력 비율 +n  (0.15 = +15%p)
- *    correct    교정이 깎아 주는 피해 +n         (0.10 = 받는 피해가 10%p 더 줄어듦)
+ *               ※ 기본 0.2 와 더해 1.0 을 넘으면 버려집니다.
+ *    correct    교정이 깎아 주는 피해 +n
+ *               ※ 교정 배수 = max(0.05, RULE.correctCut - correct) 입니다.
+ *                  correctCut 이 0.25 이므로 교정은 기본으로 피해를 75% 깎고,
+ *                  correct 0.05 면 80%, 0.10 이면 85%, 0.20 이면 95% 로 늘어납니다.
+ *                  0.20 에서 바닥에 닿으니 그 위는 통째로 버려집니다.
  *    push       독촉 배수 +n                     (0.4 = 1.5배 → 1.9배)
  *
  *   ▸ 작성위원 자체를 키운다
  *    atk / def / hp   파티 전원 능력치 +비율 (0.08 = +8%)
  *
- *  획득은 story.js 에서  { t:"advisor", who:"lee_hyeongwu_inquisitor" }  로 줍니다.
+ *  ■ 「이형우의 오이샌드위치」를 잊지 마세요
+ *    이 기프트는 이형우 위원의 effect 를 «모든 키에» 곱합니다(지금은 2배).
+ *    그래서 이형우 위원은 correct 0.10, revive 0.40 이 상한입니다 —
+ *    그 위로 적으면 기프트를 낀 순간 바닥·천장에 걸려 버려집니다.
+ *
+ *  획득은 story.js 에서  { t:"advisor", name:"이형우", title:"N사 이단심문관" }  으로 줍니다.
  *  뽑기에서도 낮은 확률로 나옵니다.
  * ------------------------------------------------------------- */
 /*  영문 코드 없이, 그냥 목록입니다. 아래 서식대로 한 줄 더 쓰면 바로 늘어납니다.
  *  구분은 title + name 으로 하므로, 같은 사람에게 같은 제목을 두 번 주지만 마세요.
+ *
+ *  ■ 이미 낸 위원의 제목·이름을 고칠 때
+ *    보관함에는 「제목|이름」 문자열만 남습니다. 그냥 고치면 그 위원을 가진 사람이
+ *    조용히 잃어버립니다. 환급도 없습니다. 고치기 전 이름을 was 에 적어 두세요.
+ *      was: "옛제목|이름"                    하나면 문자열
+ *      was: ["옛제목|이름", "더옛날|이름"]     여럿이면 배열
+ *    옛 영문 id(lee_hyeongwu_inquisitor 같은 것)도 여기 적으면 받아 줍니다.
  */
 const ADVISORS = [
 
   /* ── N사 인격 ── */
   { name: "이형우", title: "N사 이단심문관", star: 2, portrait: null,
-    effect: { manage: 1, correct: 0.05 },
-    desc: "틀린 문장을 먼저 찾아낸다. 관리력 +1, 교정 +5%p." },
+    effect: { correct: 0.05, manage: 2, manageMax: 1, def: 0.05, hp: 0.03 },
+    desc: "틀린 문장을 먼저 찾아낸다. 교정 +5%p, 시작 관리력 +2·최대 +1, 파티 방어 +5%·체력 +3%." },
 
   { name: "이형우", title: "L사 에프터팀", star: 2, portrait: null,
-    effect: { revive: 0.20, def: 0.05 },
-    desc: "뒤처리를 맡는다. 첨삭 회복량 +20%p, 파티 방어 +5%." },
+    effect: { revive: 0.25, manage: 1, def: 0.04 },
+    desc: "뒤처리를 맡는다. 첨삭 회복 +25%p, 시작 관리력 +1, 파티 방어 +4%." },
 
   { name: "이형우", title: "북부 총기 협회 4과 부장", star: 3, portrait: null,
-    effect: { push: 0.5, atk: 0.08 },
-    desc: "몰아붙이는 법을 안다. 독촉 +0.5배, 파티 공격 +8%." },
+    effect: { push: 0.4, manage: 2, manageMax: 2, atk: 0.05 },
+    desc: "몰아붙이는 법을 안다. 독촉 +0.4배, 시작 관리력 +2·최대 +2, 파티 공격 +5%." },
 
   { name: "이형우", title: "구J사 수석연구원", star: 3, portrait: null,
-    effect: { manageMax: 2, gain: 1 },
-    desc: "설계도부터 다시 그린다. 관리력 최대 +2, 턴당 회복 +1." },
+    effect: { gain: 2, manage: 3, manageMax: 3, def: 0.05 },
+    desc: "설계도부터 다시 그린다. 턴당 관리력 +2, 시작 +3·최대 +3, 파티 방어 +5%." },
 
   { name: "강호영", title: "K사 해군 과장", star: 2, portrait: null,
-    effect: { correct: 0.08, def: 0.06 },
-    desc: "갑판 위의 규율. 교정 +8%p, 파티 방어 +6%.",
+    effect: { correct: 0.05, manage: 3, manageMax: 2, def: 0.07, hp: 0.06 },
+    desc: "갑판 위의 규율. 교정 +5%p, 시작 관리력 +3·최대 +2, 파티 방어 +7%·체력 +6%.",
     note: "평범하게 해군 입대를 한 강호영" },
 
   { name: "강호영", title: "U사 해양의 왕", star: 2, portrait: null,
-    effect: { hp: 0.12, correct: 0.06 },
-    desc: "바다가 등을 받친다. 파티 체력 +12%, 교정 +6%p." },
+    effect: { gain: 1, manage: 2, manageMax: 2, hp: 0.05 },
+    desc: "바다가 등을 받친다. 턴당 관리력 +1, 시작 +2·최대 +2, 파티 체력 +5%." },
 
   { name: "강호영", title: "북부 총기 협회 3과", star: 3, portrait: null,
-    effect: { push: 0.3, atk: 0.12 },
-    desc: "화력으로 말한다. 독촉 +0.3배, 파티 공격 +12%." },
+    effect: { push: 0.3, gain: 1, atk: 0.05 },
+    desc: "화력을 끊지 않는다. 독촉 +0.3배, 턴당 관리력 +1, 파티 공격 +5%." },
 
   { name: "김정래", title: "C사 미군 과장", star: 2, portrait: null,
-    effect: { cheap: 1, hp: 0.05 },
-    desc: "보급이 먼저다. 관리자 능력 비용 -1, 파티 체력 +5%." },
+    effect: { cheap: 1, manage: 2, hp: 0.05 },
+    desc: "보급이 먼저다. 첨삭·퇴고 비용 -1, 시작 관리력 +2, 파티 체력 +5%." },
 
   { name: "김정래", title: "N사 어둠의 왕", star: 3, portrait: null,
-    effect: { manage: 1, manageMax: 1, atk: 0.08, def: 0.08, hp: 0.08 },
-    desc: "아무 말 없이 뒤에 서 있다. 관리력 +1·최대 +1, 파티 전 능력치 +8%." },
+    effect: { manage: 2, manageMax: 2, gain: 1, atk: 0.03, def: 0.03, hp: 0.03 },
+    desc: "아무 말 없이 뒤에 서 있다. 시작 관리력 +2·최대 +2, 턴당 +1, 파티 전 능력치 +3%." },
 
   /* ── 남부협회 인격 ── */
   { name: "김연준", title: "남부협회 3과", star: 2, portrait: null,
-    effect: { atk: 0.06, def: 0.06 },
-    desc: "협회의 방식대로 처리한다. 파티 공격·방어 +6%." },
+    effect: { manage: 2, manageMax: 1, atk: 0.05 },
+    desc: "협회의 방식대로 처리한다. 시작 관리력 +2·최대 +1, 파티 공격 +5%." },
 
   { name: "김연준", title: "C사 미군 일등대리", star: 3, portrait: null,
-    effect: { cheap: 1, correct: 0.08 },
-    desc: "말이 통하게 만든다. 관리자 능력 비용 -1, 교정 +8%p.",
+    effect: { correct: 0.13, cheap: 1, manage: 3, manageMax: 3, def: 0.05, hp: 0.05 },
+    desc: "말이 통하게 만든다. 교정 +13%p, 첨삭·퇴고 비용 -1, 시작 관리력 +3·최대 +3, 파티 방어·체력 +5%.",
     note: "카투사 입대에 성공한 세계선의 김연준" },
 
   { name: "이승찬", title: "C사 육군 수송부", star: 2, portrait: null,
-    effect: { hp: 0.10, gain: 1 },
-    desc: "제때 실어 나른다. 파티 체력 +10%, 관리력 회복 +1.",
+    effect: { gain: 1, hp: 0.04 },
+    desc: "제때 실어 나른다. 턴당 관리력 +1, 파티 체력 +4%.",
     note: "운전병으로 입대한 세계선의 이승찬" },
 
   { name: "이승찬", title: "참깨라면 애호가", star: 2, portrait: null,
-    effect: { revive: 0.25 },
-    desc: "한 봉지와 한 캔이면 충분하다. 첨삭 회복량 +25%p." },
+    effect: { revive: 0.35, cheap: 1, manage: 2, manageMax: 2, hp: 0.05 },
+    desc: "한 봉지와 한 캔이면 충분하다. 첨삭 회복 +35%p, 첨삭·퇴고 비용 -1, 시작 관리력 +2·최대 +2, 파티 체력 +5%." },
 
   { name: "이승찬", title: "남부협회 2과", star: 2, portrait: null,
-    effect: { atk: 0.10 },
-    desc: "협회 2과의 일처리. 파티 공격 +10%." },
+    effect: { push: 0.15, manage: 2, atk: 0.03 },
+    desc: "협회 2과의 일처리. 독촉 +0.15배, 시작 관리력 +2, 파티 공격 +3%." },
 
   { name: "이승찬", title: "L사 에프터팀", star: 2, portrait: null,
-    effect: { def: 0.12, revive: 0.10 },
-    desc: "마지막에야 길을 닫는다. 파티 방어 +12%, 첨삭 회복량 +10%p." },
+    effect: { revive: 0.20, manageMax: 2, def: 0.05 },
+    desc: "마지막에야 길을 닫는다. 첨삭 회복 +20%p, 관리력 최대 +2, 파티 방어 +5%." },
 
   { name: "이승찬", title: "아라온호 작살잡이", star: 3, portrait: null,
-    effect: { push: 0.4, atk: 0.10, crit: 0.05 },
-    desc: "겨눈 곳에 한 번에 꽂는다. 독촉 +0.4배, 파티 공격 +10%, 치명타 +5%p." },
+    effect: { push: 0.4, manage: 2, manageMax: 2, crit: 0.06, atk: 0.03 },
+    desc: "겨눈 곳에 한 번에 꽂는다. 독촉 +0.4배, 시작 관리력 +2·최대 +2, 치명타 +6%p, 파티 공격 +3%." },
 
   { name: "이승찬", title: "Y사 수석연구원", star: 3, portrait: null,
-    effect: { manageMax: 2, cheap: 1 },
-    desc: "설계가 앞선다. 관리력 최대 +2, 관리자 능력 비용 -1.",
+    effect: { gain: 1, manage: 4, manageMax: 4, cheap: 1, hp: 0.05 },
+    desc: "설계가 앞선다. 턴당 관리력 +1, 시작 +4·최대 +4, 첨삭·퇴고 비용 -1, 파티 체력 +5%.",
     note: "연세대 입학한 세계선" },
 
   { name: "이승찬", title: "렐주먹 사무소 해결사", star: 3, portrait: null,
-    effect: { atk: 0.15, crit: 0.08, critMult: 0.2 },
-    desc: "주먹으로 해결한다. 파티 공격 +15%, 치명타 +8%p·배율 +0.2." },
+    effect: { crit: 0.12, critMult: 0.4, manage: 3, manageMax: 3, atk: 0.05, hp: 0.04 },
+    desc: "주먹으로 해결한다. 치명타 +12%p·배율 +0.4, 시작 관리력 +3·최대 +3, 파티 공격 +5%·체력 +4%." },
 
   /* ── 대륵도 ── */
   { name: "도규민", title: "Y사 수석연구원", star: 2, portrait: null,
-    effect: { correct: 0.06, hp: 0.08 },
-    desc: "먼저 재어 보고 움직인다. 교정 +6%p, 파티 체력 +8%." },
+    effect: { correct: 0.05, manage: 3, manageMax: 3, def: 0.05, hp: 0.06 },
+    desc: "먼저 재어 보고 움직인다. 교정 +5%p, 시작 관리력 +3·최대 +3, 파티 방어 +5%·체력 +6%." },
 
   { name: "도규민", title: "대륵도 발굴팀원", star: 3, portrait: null,
-    effect: { atk: 0.10, def: 0.10, gain: 1 },
-    desc: "층을 걷어내며 나아간다. 파티 공격·방어 +10%, 관리력 회복 +1." },
+    effect: { correct: 0.13, gain: 1, manage: 3, manageMax: 3, atk: 0.05 },
+    desc: "층을 걷어내며 나아간다. 교정 +13%p, 턴당 관리력 +1, 시작 +3·최대 +3, 파티 공격 +5%." },
 
   { name: "김연준", title: "대륵도 발굴팀원", star: 2, portrait: null,
-    effect: { def: 0.08, hp: 0.08 },
-    desc: "삽자루를 놓지 않는다. 파티 방어·체력 +8%." },
+    effect: { push: 0.2, manage: 3, manageMax: 3, def: 0.05, hp: 0.03 },
+    desc: "삽자루를 놓지 않는다. 독촉 +0.2배, 시작 관리력 +3·최대 +3, 파티 방어 +5%·체력 +3%." },
 
   { name: "이형우", title: "대륵도의 환자", star: 3, portrait: null,
-    effect: { revive: 0.30, manage: 1, def: 0.06 },
-    desc: "누워서도 원고를 본다. 첨삭 회복량 +30%p, 관리력 +1, 파티 방어 +6%." },
+    effect: { revive: 0.40, cheap: 1, manage: 3, manageMax: 3, hp: 0.08, def: 0.05 },
+    desc: "누워서도 원고를 본다. 첨삭 회복 +40%p, 첨삭·퇴고 비용 -1, 시작 관리력 +3·최대 +3, 파티 체력 +8%·방어 +5%." },
 
   /* ── 제3발톱 ──
    *  effect 에 tag 를 적으면, 파티 전체가 아니라
    *  그 말이 이름에 든 인격에게만 걸립니다.
+   *  단 관리력 계열(manage/manageMax/gain/cheap)과 관리자 능력 계열은
+   *  tag 와 무관하게 파티 전체에 걸립니다 — tag 로 걸러지는 것은 atk/def/hp 셋뿐입니다.
    */
   { name: "이서진", title: "아라온호 갑판닦이", star: 2, portrait: null,
-    effect: { def: 0.08, hp: 0.06 },
-    desc: "갑판이 미끄러우면 아무도 못 선다. 파티 방어 +8%, 체력 +6%." },
+    effect: { correct: 0.05, manage: 1, manageMax: 2, def: 0.06, hp: 0.03 },
+    desc: "갑판이 미끄러우면 아무도 못 선다. 교정 +5%p, 시작 관리력 +1·최대 +2, 파티 방어 +6%·체력 +3%." },
+
+  /* ── 영덕의 밤 ── */
+  { name: "이형우", title: "영덕의 요리사", star: 2, portrait: null,
+    effect: { correct: 0.10, manage: 2, manageMax: 1, hp: 0.04 },
+    desc: "잘라낼 데를 먼저 본다. 교정 +10%p, 시작 관리력 +2·최대 +1, 파티 체력 +4%.",
+    note: "3.5장에서 상을 차린 장본인" },
+
+  { name: "강호영", title: "영덕의 요리사", star: 3, portrait: null,
+    effect: { correct: 0.20, manage: 3, manageMax: 3, hp: 0.05, def: 0.04 },
+    desc: "다듬을 자리를 손끝으로 안다. 교정 +20%p, 시작 관리력 +3·최대 +3, 파티 체력 +5%·방어 +4%." },
 
   { name: "이서진", title: "제3발톱 상티아스", star: 3, portrait: null,
-    effect: { tag: "제3발톱", def: 0.35 },
-    desc: "제3발톱 인격의 방어 +35%.",
-    note: "제3발톱 이름을 단 작성위원에게만 걸립니다" }
+    effect: { tag: "제3발톱", def: 0.25, hp: 0.10, manage: 2, manageMax: 2 },
+    desc: "제3발톱을 등지고 선다. 제3발톱 인격 방어 +25%·체력 +10%, 시작 관리력 +2·최대 +2.",
+    note: "방어·체력은 제3발톱 이름을 단 작성위원에게만, 관리력은 파티 전체에 걸립니다" }
 
 ];
 
@@ -478,7 +514,13 @@ const SUPPORTS = [
   { name: "윤희준", title: "아라온호 추진팀", star: 2,
     atk: 17, def: 9, hp: 79,
     portrait: null,
-    note: "엔진은 멈추지 않게 하는 게 일입니다." }
+    note: "엔진은 멈추지 않게 하는 게 일입니다." },
+
+  /* 평범한 2성보다 방어·체력이 조금 낫습니다 (2성 평균 18/8/75) */
+  { name: "이유현", title: "영덕의 요리사", star: 2,
+    atk: 16, def: 11, hp: 86,
+    portrait: null,
+    note: "상은 제가 봅니다. 드시기만 하십시오." }
 ];
 
 /* 지원 작성위원 규칙 */

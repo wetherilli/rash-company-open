@@ -105,18 +105,26 @@ const FOES = {
     heavyLine: "힘이 넘친다!"      // 강타를 준비할 때 하는 말
   },
 
+  /* 3.5장 — 곁가지 */
+  /* 참깨라면_임시.png — 나중에 직접 그린 것으로 갈아 끼울 자리입니다. TODO.md 참고. */
+  ramen_twisted: {
+    name: "뒤틀린 참깨라면", hp: 240, atk: 19, def: 6, boss: true,
+    img: "assets/enemy/참깨라면_임시.png",     // 임시 — 나중에 교체
+    desc: "길잡이가 먹다 만 것. 국물이 아직 끓고 있다.",
+    intro: "면이 스스로 일어선다.",
+    heavyLine: "면빨이 오늘 죽이는구만!"      // 강타를 준비할 때 하는 말
+  },
+
   /* 5장 */
-  /* ⚠ 조직원_임시.png 은 저작권이 있는 그림을 임시로 얹어 둔 것입니다.
-   *    배포 전에 직접 그린 것으로 갈아 끼우거나 img 를 null 로 되돌리십시오.
-   *    (null 이면 그림 없이 그냥 진행됩니다) */
+  /* 조직원_임시.png — 나중에 직접 그린 것으로 갈아 끼울 자리입니다. TODO.md 참고. */
   cartel_thug: {
     name: "제3발톱 튼튼한 조직원", hp: 140, atk: 18, def: 6,
-    img: "assets/enemy/조직원_임시.png",     // 임시 — 저작권 있음
+    img: "assets/enemy/조직원_임시.png",     // 임시 — 나중에 교체
     desc: "U사 뒷골목을 지키는 자들. 멸종한 것에는 관심이 없다."
   },
   cartel_capo: {
     name: "제3발톱 든든한 조직원", hp: 350, atk: 23, def: 8, boss: true,
-    img: "assets/enemy/조직원_임시.png",     // 임시 — 저작권 있음
+    img: "assets/enemy/조직원_임시.png",     // 임시 — 나중에 교체
     desc: "제3발톱의 이름을 달고 U사 뒷골목을 쥔 자.",
     intro: "물비린내가 짙어진다.",
     heavyLine: "형님, 제가 해보겠습니다!"      // 강타를 준비할 때 하는 말
@@ -380,27 +388,37 @@ const CHAPTERS = [
  * ══════════════════════════════════════════════════════════ */
 {
   id: "ch3_5", no: "3.5장", title: "영덕의 밤", side: true,
-  img: "assets/scene/메카고질라 갑판 밤.jpg",
-  place: "영덕", note: "싸우지 않습니다",
+  img: "assets/scene/영덕 평상시.jpg",
+  place: "영덕", note: "밤참 하나만 상대합니다",
   summary: "차려도 소용없는 상.",
   scenes: [
-    { t: "place", img: "assets/scene/메카고질라 갑판 밤.jpg", name: "영덕 — 메카고질라 갑판" },
+    { t: "place", img: "assets/scene/영덕 평상시.jpg", name: "영덕 — 메카고질라 갑판" },
 
     { t: "n", text: "N사 중간관리자 이형우는 영덕에서의 밤을 맞아 '짧은시선' 길잡이에게 저녁을 대접하려고 한다." },
-    { t: "d", who: "이형우", text: "TODO", note: "저녁을 대접하겠다고 말을 꺼내는 자리" },
-    { t: "d", who: "베르렐리우스", text: "TODO", note: "길잡이의 시큰둥한 대꾸" },
+    { t: "d", who: "이형우", text: "길잡이님. 오늘은 제가 상을 좀 봤습니다." },
+    { t: "d", who: "베르렐리우스", text: "…굳이." },
+    { t: "d", who: "이형우", text: "영덕까지 왔는데 그냥 지나가면 섭섭하지 않습니까." },
+    { t: "d", who: "베르렐리우스", text: "섭섭한 쪽은 네가 아니고?" },
 
     { t: "n", text: "하지만 너도나도 음식을 준비하기 시작하고 요리대결이 시작된다." },
-    { t: "TODO", note: "작성위원들이 하나둘 끼어드는 장면 — 원작에 대사가 없습니다" },
+    { t: "d", who: "yu_ain", text: "어? 뭐 하시는 거예요? 저도 할래요." },
+    { t: "d", who: "이형우", text: "아니, 이건 제가—" },
+    { t: "d", who: "song_hamin", text: "이거 찍어도 되죠?" },
+    { t: "d", who: "lee_hanbeom", text: "불은 제가 봅니다. 엔진 다루던 손입니다." },
+    { t: "d", who: "manager", text: "…이럴 줄 알았어." },
+    { t: "n", text: "말릴 새도 없이 갑판이 부엌이 되었다." },
 
     /* 누구를 세워 두었느냐로 차림이 달라집니다. 여기서 한 번 고칠 기회를 줍니다. */
     { t: "party", text: "누구에게 칼을 쥐어 줄지 정하십시오." },
 
     { t: "cook",
       judge: "베르렐리우스",
-      rounds: 3,
+      rounds: 2,
+      offer: 5,          // 재료 열셋 중 다섯만 꺼내 놓고, 그중 둘을 고릅니다
       intro: "영덕의 밤. 갑판에 상이 펴진다.",
       pay: 20,
+      img:     "assets/scene/영덕 평상시.jpg",       // 상을 차리는 동안
+      failImg: "assets/scene/영덕 불타는 중.jpg",    // 상이 한 번 엎어진 뒤로는
 
       /* ── 재료 ────────────────────────────────────────────
        * name 만 손잡이에 뜹니다. text·judge 는 고른 뒤에 나옵니다.
@@ -408,59 +426,111 @@ const CHAPTERS = [
        *   손잡이와 text 에는 그 낌새를 절대 적지 마십시오. */
       ingredients: [
         { name: "영덕 대게", score: 3,
-          text: "TODO", judge: "TODO",
+          text: "영덕까지 와서 이걸 안 올리면 온 뜻이 없다. 김이 오른다.",
+          judge: "…그래. 이건 인정하지.",
           withMember: {
             name: "김하주", score: -8,
             head: "상이 엎어진다.",
-            text: "TODO", say: "TODO",
-            reveal: "TODO",
-            judge: "TODO",
+            text: "한 젓가락 들던 김하주가 그대로 굳는다. 목덜미가 벌겋게 올라온다.",
+            say: "…어, 잠깐만요. 이거 좀.",
+            reveal: "아무도 몰랐다. 김하주는 갑각류를 먹으면 안 되는 사람이었다.",
+            judge: "먹이기 전에 물어는 봤어야지.",
             flag: "갑각류참사"
           } },
 
         { name: "꽃게", score: 2,
-          text: "TODO", judge: "TODO",
+          text: "대게가 없으면 꽃게라도. 껍질 깨는 소리가 요란하다.",
+          judge: "손이 많이 가는군.",
           withMember: {
             name: "김하주", score: -8,
             head: "상이 엎어진다.",
-            text: "TODO", say: "TODO",
-            reveal: "TODO",
-            judge: "TODO",
+            text: "국물을 뜬 김하주의 숟가락이 멈춘다. 얼굴이 부어오르기 시작한다.",
+            say: "…이것도 그거였네요.",
+            reveal: "아무도 몰랐다. 김하주는 갑각류를 먹으면 안 되는 사람이었다.",
+            judge: "게든 새우든, 저 사람 앞에서는 좀 치워라.",
             flag: "갑각류참사"
           } },
 
         { name: "물가자미", score: 2,
-          text: "TODO", judge: "TODO" },
+          text: "영덕 사람이면 대게보다 이걸 친다던데. 자신은 없지만 굽는다.",
+          judge: "…뼈가 많군. 나쁘진 않아." },
 
         { name: "문어", score: 2,
-          text: "TODO", judge: "TODO" },
+          text: "삶는 동안 아무도 말이 없었다. 다리가 오그라드는 것을 다들 보고 있었다.",
+          judge: "질기지만, 씹을 만은 하다." },
 
         { name: "오이", score: -1,
-          text: "TODO", judge: "TODO",
+          text: "누가 냉장고에서 꺼내 왔다. 상을 초록으로 채우면 그럴듯해 보이기는 한다.",
+          judge: "…이걸 왜 올렸지.",
           flag: "오이",
           withAdvisor: {
             name: "이형우", score: -8,
             head: "상이 엎어진다.",
-            text: "TODO", say: "TODO",
-            reveal: "TODO",
-            judge: "TODO",
+            text: "상을 차린 이형우가 제 손으로 집어 들었다가, 한 입 만에 자리에서 물러난다.",
+            say: "…죄송합니다. 잠깐만 나갔다 오겠습니다.",
+            reveal: "제가 차린 상이라 말을 못 했다. 이형우는 오이를 못 먹는다.",
+            judge: "차린 사람이 못 먹는 상을 차렸군.",
             flag: "오이참사"
           } },
 
         { name: "포도", score: 1,
-          text: "TODO", judge: "TODO",
+          text: "후식이라며 누가 씻어 왔다. 밤바다 앞에서 포도는 조금 뜬금없다.",
+          judge: "…밥은 어디 갔나.",
           flag: "포도",
           withSupport: {
             name: "이유건", score: -8,
             head: "상이 엎어진다.",
-            text: "TODO", say: "TODO",
-            reveal: "TODO",
-            judge: "TODO",
+            text: "거들던 이유건이 한 알을 집어 들고는, 곧 숨을 몰아쉰다.",
+            say: "…저, 이거 제가 좀.",
+            reveal: "아무도 묻지 않았다. 이유건은 포도를 먹으면 안 되는 사람이었다.",
+            judge: "오늘 상은 사람을 골라 가며 쓰러뜨리는군.",
             flag: "포도참사"
           } },
 
         { name: "냉장고 안쪽의 무언가", score: 0,
-          text: "TODO", judge: "TODO" }
+          text: "언제부터 있었는지 아무도 모른다. 봉지에는 아무것도 적혀 있지 않다.",
+          judge: "……." },
+
+        /* 아래 넷은 사고가 아니라, 그 사람이 있으면 «한마디 하고 지나가는» 것들입니다.
+         * 점수는 깎이지 않고 상도 엎어지지 않습니다. react 에 적습니다. */
+        { name: "사과", score: 1,
+          text: "붉고 반듯한 것이 하나 굴러 나왔다.",
+          judge: "…이건 후식인가, 반찬인가.",
+          react: [
+            { name: "박수오",
+              text: "박수오가 그것을 한참 들여다본다.",
+              say: "…사과에 먹힌 유리를 아시오?" }
+          ] },
+
+        { name: "가지", score: 1,
+          text: "물러지기 직전의 것을 겨우 건졌다. 기름을 먹이면 그럴듯해진다.",
+          judge: "…흐물거리는군." },
+
+        { name: "바나나", score: 0,
+          text: "누가 배 안에서 들고 왔다. 상 위에 놓으니 유난히 노랗다.",
+          judge: "여기가 어디라고 생각하나." },
+
+        { name: "냉면", score: 2,
+          text: "면을 삶아 찬물에 헹군다. 영덕까지 와서 굳이 이것을.",
+          judge: "…차가운 건 좋군.",
+          react: [
+            { name: "하축론",
+              text: "운전석 쪽에서 하축론이 얼굴을 내밀었다가, 도로 집어넣는다.",
+              say: "으 나쁜 기억이 떠올라..." }
+          ] },
+
+        { name: "치즈가루", score: 1,
+          text: "무엇에든 뿌리면 된다는 얼굴로 누가 통을 흔든다.",
+          judge: "…뿌린다고 다 되는 건 아니다." },
+
+        { name: "돔배기", score: 2,
+          text: "상어고기를 토막 내어 올린다. 이 동네에서는 흔한 상이다.",
+          judge: "…제사상에서나 보던 것인데.",
+          react: [
+            { name: "성시윤",
+              text: "성시윤이 젓가락을 내려놓는다.",
+              say: "…나쁜 기억이 떠오르는군요." }
+          ] }
       ],
 
       /* ── 솜씨 ────────────────────────────────────────────
@@ -468,38 +538,59 @@ const CHAPTERS = [
        * 인격 제목으로 적으면 그 인격을 꼈을 때만 쓰입니다 —
        *   "그늘의 아이": { dish: "...", line: "..." }  처럼. */
       cooks: {
-        park_suo:     { dish: "TODO", line: "TODO" },
-        lee_hanbeom:  { dish: "TODO", line: "TODO" },
-        cha_minjun:   { dish: "TODO", line: "TODO" },
-        lee_sojeong:  { dish: "TODO", line: "TODO" },
-        chu_minsu:    { dish: "TODO", line: "TODO" },
-        yu_ain:       { dish: "TODO", line: "TODO" },
-        lee_gyeongwon:{ dish: "TODO", line: "TODO" },
-        seong_siyun:  { dish: "TODO", line: "TODO" },
-        song_hamin:   { dish: "TODO", line: "TODO" },
-        kim_taeseong: { dish: "TODO", line: "TODO" },
-        kim_haju:     { dish: "TODO", line: "TODO" },
-        kim_duhyeon:  { dish: "TODO", line: "TODO" }
+        park_suo:     { dish: "정체를 알 수 없는 붉은 국물", line: "이건 먹는 게 아니라 이해하는 겁니다." },
+        lee_hanbeom:  { dish: "불맛이 지나치게 강한 구이", line: "화력은 제가 압니다." },
+        cha_minjun:   { dish: "모양만은 그럴듯한 한 접시", line: "형, 이거 사진부터 찍어요!" },
+        lee_sojeong:  { dish: "차림표까지 만들어 온 정식", line: "설명은 여기 적어 뒀어요." },
+        chu_minsu:    { dish: "지시대로 정확히 썬 회", line: "몇 점을 뜰지만 말해 주시오." },
+        yu_ain:       { dish: "보기에는 화려한 무언가", line: "자, 오늘의 요리는—" },
+        lee_gyeongwon:{ dish: "말없이 끓인 탕", line: "…드세요." },
+        seong_siyun:  { dish: "간이 정확히 맞은 조림", line: "계량은 했습니다." },
+        song_hamin:   { dish: "먹기보다 찍기 좋은 상차림", line: "일단 그림은 나오네요." },
+        kim_taeseong: { dish: "재료를 아까워하다 만 볶음", line: "이거 다 써도 되는 거예요?" },
+        kim_haju:     { dish: "그릇까지 골라 담은 한 상", line: "담는 게 반이에요, 반." },
+        kim_duhyeon:  { dish: "손질이 지나치게 정교한 회", line: "뼈는 이렇게 발라야 합니다." }
       },
-      fallback: { dish: "TODO", line: "TODO" },
+      fallback: { dish: "설명하기 어려운 접시", line: "…일단 만들어는 봤습니다." },
 
       /* 이형우 교육위원을 세웠으면 — 그가 차린 상이니까 */
-      advisor: { name: "이형우", bonus: 2, text: "TODO" },
+      advisor: { name: "이형우", bonus: 2, text: "이형우가 부엌을 돌며 간을 봐 준다. 상이 눈에 띄게 나아진다." },
 
       /* 점수대별 맺음말. 결말은 어차피 하나입니다. */
       tiers: [
-        { over: 12, text: "TODO" },
-        { over:  6, text: "TODO" },
-        { over:  0, text: "TODO" },
-        { over: -99, text: "TODO" }
+        { over: 12, text: "갑판 위에 제법 그럴듯한 상이 차려졌다. 영덕에서도 이만한 상은 드물 것이다." },
+        { over:  6, text: "먹을 만한 것이 몇 가지는 올라왔다. 그만하면 되었다고들 했다." },
+        { over:  0, text: "상은 채워졌다. 채워지기만 했다." },
+        { over: -99, text: "누구도 이것을 상이라 부르지 않았다." }
       ]
     },
 
     { t: "n", text: "수감자들은 다양한 음식으로 길잡이의 마음을 얻으려 하지만 결국 길잡이는 참깨라면 한 봉지와 맥주 한 캔을 마시고 잠들어 버린다." },
-    { t: "d", who: "베르렐리우스", text: "TODO", note: "라면 봉지를 뜯으며 — 이 장의 마지막 한마디" },
-    { t: "TODO", note: "차려 놓은 사람들의 반응 — 원작에 대사가 없습니다" },
+    { t: "d", who: "베르렐리우스", text: "…이게 제일 낫군." },
+    { t: "d", who: "이형우", text: "길잡이님." },
+    { t: "d", who: "yu_ain", text: "저희 세 시간 했는데요." },
+    { t: "n", text: "대답은 없었다. 길잡이는 이미 자고 있었다." },
 
-    { t: "TODO", note: "황금교본이 이 손에 들어오는 까닭. 원작에 없습니다 — 한 줄 적어 주십시오" },
+    /* 사고가 있었든 없었든, 여기서부터는 불이 붙습니다 */
+    { t: "place", img: "assets/scene/영덕 불타는 중.jpg", name: "영덕 — 갑판, 불붙은 상" },
+    { t: "n", text: "그리고 아무도 치우지 않은 냄비가, 혼자 끓기 시작했다." },
+    { t: "d", who: "kim_taeseong", text: "…저거 아까부터 불 꺼 놨는데요." },
+    { t: "d", who: "lee_hanbeom", text: "물러서십시오." },
+    { t: "n", text: "먹다 만 참깨라면이 국물째 일어섰다. 상에 오르지 못한 것들이 그 안에 엉겨 있었다." },
+    { t: "battle", foe: "ramen_twisted" },
+    { t: "n", text: "냄비가 잠잠해졌다. 길잡이는 그동안에도 깨지 않았다." },
+    { t: "d", who: "manager", text: "…이건 못 본 걸로 하자." },
+
+    { t: "n", text: "엎어진 국물 사이에서 무언가가 반짝였다." },
+    { t: "d", who: "kim_taeseong", text: "어? 이거 뭐지." },
+    { t: "n", text: "태성군이 젓가락으로 건져 올린 것은, 국물에 절어 있는 황금교본이었다." },
+    { t: "d", who: "kim_taeseong", text: "이거… 황금교본 아니에요?" },
+    { t: "d", who: "lee_hanbeom", text: "라면 안에 들어 있었다고요?" },
+    { t: "d", who: "kim_taeseong", text: "그러니까 아까 그게 이것 때문에…" },
+    { t: "n", text: "먹다 만 라면이 왜 일어섰는지, 그제야 알 것 같았다." },
+    { t: "d", who: "manager", text: "…길잡이는 알고 있었을까." },
+    { t: "n", text: "잠든 길잡이는 아무 말도 하지 않았다." },
+    { t: "d", who: "kim_taeseong", text: "일단… 닦아서 가져갈게요." },
     { t: "codex", n: "곁가지" },
 
     { t: "end", text: "3.5장 종료 — 그래도 밤은 지나간다." }

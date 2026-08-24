@@ -18,6 +18,7 @@
  *      advisor     그 이름의 보조 교육위원을 세우고 있어야 합니다.
  *      party       그 작성위원이 편성에 있어야 합니다. 여럿이면 배열(모두 필요).
  *      titleHas    편성된 누군가의 인격 이름에 그 말이 들어 있어야 합니다.
+      synergy     그 이름의 편성 시너지가 지금 발동 중이어야 합니다.
  *
  *    give    보상으로 주는 것
  *      support   지원 작성위원 — "제목|이름"
@@ -39,6 +40,13 @@ const ACHIEVEMENTS = [
     reward: "지원 작성위원 ★★★ 쥐는 자 김준성",
     when: { kill: "김준성", where: "mirrorHard", party: "kim_taeseong" },
     give: { support: "쥐는 자|김준성" }
+  },
+  {
+    name: "영덕의 밤을 불태우는",
+    desc: "영덕의 요리사 시너지가 발동한 채로, 거울 던전에서 뒤틀린 참깨라면을 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★ 영덕의 요리사 이유현",
+    when: { kill: "참깨라면", where: "mirror", synergy: "영덕의 요리사" },
+    give: { support: "영덕의 요리사|이유현" }
   },
   {
     name: "큰 망치의 길",

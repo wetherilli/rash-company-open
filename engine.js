@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.24.0";
-const VERSION_NAME = "그밖의 이야기";
+const VERSION = "0.27.3";
+const VERSION_NAME = "고쳐 쓰는 손";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -344,9 +344,16 @@ function newState() {
   if (v && v.party && v.party.length === 3 && v.party.every(okMember))
     party = v.party.slice();
 
+  /* 옛 이름으로 적힌 것도 지금 이름으로 옮겨 담는다 (위원 줄의 was 를 본다).
+   * 이렇게 해야 보관함 표시·뽑기 후보·중복 환급이 모두 한 이름으로 맞물린다.
+   * 한 번 불러오고 saveVault() 가 돌면 보관함이 새 이름으로 갈린다. */
   const advisorsOwned = {};
-  if (v && v.advisors) for (const k in v.advisors) if (advisorById(k)) advisorsOwned[k] = true;
-  const advisor = (v && v.advisor && advisorsOwned[v.advisor]) ? v.advisor : null;
+  if (v && v.advisors) for (const k in v.advisors) {
+    const a = advisorById(k);
+    if (a) advisorsOwned[advisorId(a)] = true;
+  }
+  const advSaved = (v && v.advisor) ? advisorById(v.advisor) : null;
+  const advisor  = (advSaved && advisorsOwned[advisorId(advSaved)]) ? advisorId(advSaved) : null;
 
   const giftsOwned = {};
   if (v && v.gifts) for (const k in v.gifts) if (giftById(k)) giftsOwned[k] = true;
@@ -444,12 +451,39 @@ function versionNotice() {
 
 /* ── 보조 교육위원 찾기 ────────────────────────────────────────
  *  ADVISORS 는 영문 키 없는 목록입니다. 구분은 「제목|이름」으로 합니다.
+ *
+ *  ■ 제목이나 이름을 고칠 때 — was 를 적어 주세요
+ *    보관함에는 「제목|이름」 문자열만 남습니다. 그래서 그냥 고치면
+ *    옛 보관함이 그 위원을 못 찾아 조용히 잃어버립니다. 환급도 없습니다.
+ *    바꾸기 전 이름을 was 에 적어 두면 옛 보관함도 그대로 찾아옵니다.
+ *
+ *      { name: "이형우", title: "영덕의 요리사", star: 2,
+ *        was: "영덕의 숙수|이형우",                        // 하나면 그냥 문자열
+ *        ... }
+ *
+ *      { name: "강호영", title: "영덕의 요리사", star: 3,
+ *        was: ["영덕의 숙수|강호영", "kang_hoyeong_cook"],  // 여럿이면 배열
+ *        ... }
+ *
+ *    옛 영문 id 를 쓰던 판(lee_hyeongwu_inquisitor 같은 것)도 여기 적으면 됩니다.
+ *    한 번 불러오면 지금 이름으로 옮겨 담기므로 옛 이름은 보관함에서 사라지지만,
+ *    was 는 지우지 마세요 — 더 옛날 보관함이 언제 들어올지 모릅니다.
  */
 function advisorList() { return (typeof ADVISORS !== "undefined" && ADVISORS) ? ADVISORS : []; }
 function advisorId(a)  { return a ? a.title + "|" + a.name : null; }
+
+/* 이 위원이 예전에 쓰던 이름들 */
+function advisorWas(a) {
+  if (!a || !a.was) return [];
+  return Array.isArray(a.was) ? a.was : [a.was];
+}
+
 function advisorById(id) {
   if (!id) return null;
-  return advisorList().find(a => advisorId(a) === id) || null;
+  const list = advisorList();
+  /* 지금 이름을 먼저 봅니다 — 새 위원이 옛 이름을 물려받아도 현역이 이깁니다 */
+  return list.find(a => advisorId(a) === id) ||
+         list.find(a => advisorWas(a).indexOf(id) >= 0) || null;
 }
 /* 스토리에서 { t:"advisor", name:"이형우", title:"N사 이단심문관" } 로 가리킨 것을 찾는다 */
 function advisorFrom(s) {
@@ -936,7 +970,9 @@ function renderParty() {
     /* 카드는 세 가지를 서로 다르게 보여 준다.
      *   차례   — 지금 이 사람의 명령을 고르는 중 (금색 테두리)
      *   노려짐 — 이번 턴 적이 노리는 사람 (붉은 테두리 + 점선)
-     *   정함   — 이미 명령을 골라 둔 사람 (초록 테두리, 흐리게) */
+     *   정함   — 이미 명령을 골라 둔 사람 (초록 테두리, 흐리게)
+     * 여기에 관리자 능력이 걸린 자국을 덧붙인다 — 교정·독촉은 이번 턴에만
+     * 사는 것이라, 걸어 놓고도 걸렸는지 알 수 없으면 안 쓴 것과 같다. */
     const aimed  = !!(b && b.aim === who && hp > 0);
     const acting = !!(b && b.cur === who && hp > 0);
     const ready  = !!(cmd && !acting && hp > 0);
@@ -954,6 +990,10 @@ function renderParty() {
       if (aimed)  mark += ' <span class="aimtag">노려짐' + (b.heavy ? '·강타' : '') + '</span>';
       if (ready)  mark += ' <span class="readytag">' +
                           (cmd === "guard" ? "방어" : "공격") + '</span>';
+      if (b && b.mods) {
+        if (b.mods[who + "_guard"]) mark += ' <span class="corrtag">교정</span>';
+        if (b.mods[who + "_push"])  mark += ' <span class="pushtag">독촉</span>';
+      }
     }
     if (sup) mark += ' <span class="suptag">지원</span>';
     div.innerHTML =
@@ -991,10 +1031,11 @@ function buttons(list) {
  *  결과를 바로 보여주지 않고, 한 번 크게 빛낸 뒤에 펼칩니다.
  *  길이는 RULE.gachaFxMs 에서 고칩니다. 0 으로 두면 그냥 넘어갑니다.
  */
-function starFlash(star, line, after) {
+/* green 을 켜면 금빛 대신 초록빛으로 터집니다 — 특정 배정의 대상이 나왔을 때 */
+function starFlash(star, line, after, green) {
   if (!RULE.gachaFxMs) { if (after) after(); return; }
   const el = document.createElement("div");
-  el.className = "flashfx";
+  el.className = "flashfx" + (green ? " green" : "");
   el.innerHTML = '<div class="ring"></div>' +
                  '<div class="beam"></div>' +
                  '<div class="txt"><span class="star">' + stars(star) + '</span>' +
@@ -1030,6 +1071,15 @@ function starFlash(star, line, after) {
 function bigWin(out) {
   return (out || []).find(r =>
     r.isNew && (r.kind === "adv" ? r.adv.star : r.id.star) >= 3) || null;
+}
+
+/* 특정 배정에서는 «그 배정의 대상» 을 먼저 집습니다.
+ * 한 묶음에 대상과 그 밖의 ★★★ 이 같이 나오면 대상 쪽을 보여 주는 것이 맞습니다. */
+function bigWinOn(out, p) {
+  if (!p) return null;
+  return (out || []).find(r =>
+    r.isNew && (r.kind === "adv" ? r.adv.star : r.id.star) >= 3 &&
+    pickupHit(p, r.kind === "adv" ? r.adv.title : r.id.title)) || null;
 }
 
 /* 빛날 때 함께 보여 줄 한 줄.
@@ -1460,13 +1510,23 @@ function doCamera(s) {
 function doCook(s) {
   S.waiting = true;
   const cooks  = S.party.filter(Boolean);
-  const stock  = (s.ingredients || []).slice();
+  /* offer 를 적어 두면 재료를 그만큼만 무작위로 꺼내 놓습니다.
+   * 매번 상이 달라지고, 숨은 사고도 늘 나오지는 않게 됩니다. */
+  let stock = (s.ingredients || []).slice();
+  if (s.offer && s.offer < stock.length) {
+    const bag = stock.slice(), pickN = [];
+    while (pickN.length < s.offer && bag.length) pickN.push(bag.splice(rnd(bag.length), 1)[0]);
+    stock = pickN;
+  }
   const rounds = Math.min(s.rounds || cooks.length, cooks.length, stock.length || 99);
   const usedW  = [];
   const usedI  = [];
   let score = 0;
 
   divider();
+  /* img 를 적어 두면 상을 차리는 동안 그 배경이 깔립니다.
+   * failImg 를 적어 두면 «상이 엎어진 뒤로는» 그 배경으로 바뀌어 그대로 갑니다. */
+  if (s.img) setBackdrop(s.img);
   say(s.intro || "상이 차려진다. 누가 무엇을 낼지 정하십시오.", "sys");
   if (s.judge) showSpeaker(portraitOf(s.judge), nameOf(s.judge));
 
@@ -1535,8 +1595,21 @@ function doCook(s) {
     line(sk.k.dish);
     if (sk.k.line) line(sk.k.line, w);
 
+    /* 그냥 한마디 하고 지나가는 것 — 사고가 아닙니다. 점수도 안 깎입니다.
+     * 편성된 사람이면 물론이고, 승무원(하축론 같은)은 늘 배에 있으니 언제나 나옵니다. */
+    (ing.react || []).forEach(r => {
+      const inParty = S.party.some(x => x && memberName(x) === r.name);
+      const inCrew  = Object.keys(CREW).some(k => CREW[k].name === r.name ||
+                                                  CREW[k].codename === r.name);
+      if (!inParty && !inCrew) return;
+      if (r.text) line(r.text);
+      if (r.say)  line(r.say, r.name);
+    });
+
     if (wa) {
       divider();
+      /* 한 번 엎어지면 그 뒤로는 계속 이 배경입니다 — 불은 저절로 꺼지지 않습니다 */
+      if (s.failImg) setBackdrop(s.failImg);
       say(wa.head || "상이 엎어진다.", "bad");
       shakeScreen(true);
       line(wa.say, wa.name);
@@ -1684,6 +1757,28 @@ function beginTurn() {
   askNext();
 }
 
+/* ── 관리자 능력의 대상 고르기 ──────────────────────────────────
+ *  «누구에게 걸 것인가» 가 중요한 능력은 손잡이 줄을 파티로 한 번 갈아
+ *  끼워 고르게 합니다. 명령을 고르는 중인 사람에게 그냥 걸어 버리면,
+ *  적이 노리는 사람이 따로 있을 때 관리력만 버리게 됩니다 —
+ *  서 있는 셋 중 하나만 맞으니 그냥 누르면 셋에 둘은 헛돕니다.
+ *
+ *  고르면 done(대상) 을 부르고, 그만두면 askNext() 로 되돌아갑니다.
+ *  관리력은 여기서 깎지 않습니다. 깎는 것은 고른 뒤 done 안에서 —
+ *  그래야 그만두어도 손해가 없습니다.
+ */
+function pickTarget(cands, done) {
+  const b = S.battle;
+  const list = cands.map((w, i) => ({
+    label: memberName(w) + (b.aim === w ? "  ◀ 노려짐" : ""),
+    cls:   b.aim === w ? "primary" : "",
+    key:   i < 9 ? String(i + 1) : null,
+    fn:    () => done(w)
+  }));
+  list.push({ label: "그만두기", cls: "ghost", key: "0", fn: () => askNext() });
+  buttons(list);
+}
+
 function askNext() {
   const b = S.battle;
   const pending = S.party.filter(w => w && alive(w) && !b.cmds[w]);
@@ -1743,17 +1838,23 @@ function askNext() {
     }
   });
 
+  /* 교정 — 지킬 사람을 고릅니다.
+   * 적이 노리는 사람과 지금 명령하는 사람은 대개 다르므로, 예전처럼
+   * b.cur 에 그냥 걸면 관리력만 버리는 일이 잦았습니다. pickTarget 참고. */
+  const guardable = S.party.filter(w => w && alive(w) && !b.mods[w + "_guard"]);
   list.push({
-    label: "교정 (" + cCorrect + ")", cls: "ghost",
-    disabled: b.manage < cCorrect || b.mods[who + "_guard"],
-    fn: () => {
-      b.manage -= cCorrect; b.mods[who + "_guard"] = true;
-      say(withJosa(CREW.manager.codename, "이") + " " + memberName(who) + "의 글을 교정한다.", "good");
+    label: "교정 (" + cCorrect + ")…", cls: "ghost",
+    disabled: b.manage < cCorrect || !guardable.length,
+    fn: () => pickTarget(guardable, t => {
+      b.manage -= cCorrect; b.mods[t + "_guard"] = true;
+      say(withJosa(CREW.manager.codename, "이") + " " + memberName(t) + "의 글을 교정한다.", "good");
       askNext();
-    }
+    })
   });
+  /* 독촉은 고르게 하지 않습니다 — 세게 때리게 할 사람은 지금 명령을 고르는
+   * 바로 그 사람이라, b.cur 가 늘 원하는 대상입니다. 이름만 적어 둡니다. */
   list.push({
-    label: "독촉 (" + cPush + ")", cls: "ghost",
+    label: "독촉 · " + memberName(who) + " (" + cPush + ")", cls: "ghost",
     disabled: b.manage < cPush || b.mods[who + "_push"],
     fn: () => {
       b.manage -= cPush; b.mods[who + "_push"] = true;
@@ -1802,6 +1903,10 @@ function achieveMatches(a, foeName) {
   }
   if (w.titleHas) {
     if (!S.party.some(m => m && memberTitle(m).indexOf(w.titleHas) >= 0)) return false;
+  }
+  /* 그 시너지가 지금 «발동 중» 이어야 합니다 (이름으로 찾습니다) */
+  if (w.synergy) {
+    if (!activeSynergies().some(x => x.name === w.synergy)) return false;
   }
   return true;
 }
@@ -1905,8 +2010,9 @@ function resolveTurn() {
     if (crit) dmg *= critMult();
     dmg = Math.max(1, Math.floor(dmg));
     b.hp -= dmg;
-    say(crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
-             : (memberName(who) + "의 공격 — " + dmg + " 피해"), crit ? "crit" : "hit");
+    say((crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
+              : (memberName(who) + "의 공격 — " + dmg + " 피해")) +
+        (b.mods[who + "_push"] ? " (독촉)" : ""), crit ? "crit" : "hit");
     foeHit(0);
     render();
 
@@ -1944,7 +2050,8 @@ function resolveTurn() {
     /* 강타는 보통 공격과 한눈에 갈리도록 따로 적습니다 */
     say((heavy ? "▶ " + b.name + "의 강타! — " : b.name + "의 공격 — ") +
         memberName(t) + "에게 " + dmg + " 피해" +
-        (b.cmds[t] === "guard" ? " (방어)" : ""), heavy ? "heavy" : "bad");
+        (b.cmds[t] === "guard" ? " (방어)" : "") +
+        (b.mods[t + "_guard"] ? " (교정)" : ""), heavy ? "heavy" : "bad");
 
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     render();
@@ -2502,13 +2609,15 @@ function openShop(back) {
              '<div class="sub">1회 ' + RULE.pullCost + ' ' + CURRENCY + '</div>' +
              '<div class="sub">' + RULE.guaranteePulls + '회에 ★★ 이상 하나 확정</div>' +
            '</div>';
-    if (pickupOn())
-      h +=   '<div class="slot pk" data-pickup="1">' +
-               stripHTML(PICKUP.banner) +
-               '<div class="nm">' + PICKUP.name + '</div>' +
-               '<div class="sub">1회 ' + pickupCost() + ' ' + CURRENCY + '</div>' +
-               '<div class="sub" style="color:#d8b26a">' + PICKUP.desc + '</div>' +
-             '</div>';
+    /* 서 있는 특정 배정만큼 칸이 섭니다 (최대 PICKUP_MAX 개) */
+    pickupList().forEach((p, i) => {
+      h += '<div class="slot pk" data-pickup="' + i + '">' +
+             stripHTML(p.banner) +
+             '<div class="nm">' + p.name + '</div>' +
+             '<div class="sub">1회 ' + pickupCost(p) + ' ' + CURRENCY + '</div>' +
+             '<div class="sub" style="color:#d8b26a">' + p.desc + '</div>' +
+           '</div>';
+    });
     h += '</div>';
 
     const gTotal = (typeof GIFTS !== "undefined") ? GIFTS.length : 0;
@@ -2559,8 +2668,10 @@ function openShop(back) {
     const g = $sheet.querySelector(".slot[data-gacha]");
     if (g) g.onclick = () => openGacha(() => draw(null));
 
-    const pu = $sheet.querySelector(".slot[data-pickup]");
-    if (pu) pu.onclick = () => openGacha(() => draw(null), true);
+    $sheet.querySelectorAll(".slot[data-pickup]").forEach(el => {
+      const p = pickupList()[+el.dataset.pickup];
+      if (p) el.onclick = () => openGacha(() => draw(null), p);
+    });
 
     const gp = $sheet.querySelector(".slot[data-gift]");
     if (gp) gp.onclick = () => {
@@ -2663,20 +2774,32 @@ function rollTier(forceHigh) {
 }
 
 /* ── 특정 배정 (픽업) ─────────────────────────────────────────
- *  data/pickup.js 의 PICKUP 을 그대로 읽습니다. 파일이 없으면 그냥 꺼집니다.
+ *  data/pickup.js 의 PICKUPS 를 읽습니다. 파일이 없으면 그냥 꺼집니다.
+ *  한 번에 세울 수 있는 것은 PICKUP_MAX 개까지 (지금 둘).
+ *  넘게 적어 두면 앞에서부터 그만큼만 섭니다.
  */
-function pickupOn()   { return typeof PICKUP !== "undefined" && PICKUP && PICKUP.on; }
-function pickupTags() {
-  if (!pickupOn()) return [];
-  return Array.isArray(PICKUP.tag) ? PICKUP.tag : [PICKUP.tag];
+function pickupMax() {
+  return (typeof PICKUP_MAX === "number" && PICKUP_MAX > 0) ? PICKUP_MAX : 2;
 }
-/* 제목에 픽업 대상 단어가 들어 있는가 */
-function pickupHit(title) {
+function pickupList() {
+  let all = [];
+  if (typeof PICKUPS !== "undefined" && Array.isArray(PICKUPS)) all = PICKUPS;
+  else if (typeof PICKUP !== "undefined" && PICKUP) all = [PICKUP];   // 옛 방식도 받아 줍니다
+  return all.filter(p => p && p.on).slice(0, pickupMax());
+}
+function pickupOn() { return pickupList().length > 0; }
+
+function pickupTags(p) {
+  if (!p) return [];
+  return Array.isArray(p.tag) ? p.tag : [p.tag];
+}
+/* 제목에 그 배정의 대상 단어가 들어 있는가 */
+function pickupHit(p, title) {
   const t = String(title || "");
-  return pickupTags().some(w => w && t.indexOf(w) >= 0);
+  return pickupTags(p).some(w => w && t.indexOf(w) >= 0);
 }
-function pickupCost() {
-  if (pickupOn() && typeof PICKUP.cost === "number") return PICKUP.cost;
+function pickupCost(p) {
+  if (p && typeof p.cost === "number") return p.cost;
   return RULE.pullCost;
 }
 
@@ -2689,20 +2812,21 @@ function stripHTML(img) {
 }
 
 /* 특정 배정 광고 띠 — 그림을 깔고 그 위에 문구를 얹습니다. (배정 화면 큰 띠) */
-function pkBannerHTML() {
-  if (!pickupOn() || !PICKUP.line) return "";
-  const bg = PICKUP.banner
-    ? ' style="background-image:url(\'' + assetURL(PICKUP.banner) + '\')"' : "";
-  return '<div class="pkline' + (PICKUP.banner ? ' pic' : '') + '"' + bg + '>' +
-           '<span>' + PICKUP.line + '</span>' +
+function pkBannerHTML(p) {
+  if (!p || !p.line) return "";
+  const bg = p.banner
+    ? ' style="background-image:url(\'' + assetURL(p.banner) + '\')"' : "";
+  return '<div class="pkline' + (p.banner ? ' pic' : '') + '"' + bg + '>' +
+           '<span>' + p.line + '</span>' +
          '</div>';
 }
 
+/* pk 에 특정 배정 하나를 넘기면 그 배정으로 엽니다. 없으면 일반 배정입니다. */
 function openGacha(done, pk) {
   $modal.classList.add("on");
-  const pickup = !!(pk && pickupOn());
-  const cost   = pickup ? pickupCost() : RULE.pullCost;
-  const rate   = pickup ? (typeof PICKUP.rate === "number" ? PICKUP.rate : 0.5) : 0;
+  const pickup = pk || null;
+  const cost   = pickup ? pickupCost(pickup) : RULE.pullCost;
+  const rate   = pickup ? (typeof pickup.rate === "number" ? pickup.rate : 0.5) : 0;
 
   /* 1성도 포함 — 1성은 전원 보유 상태라 중복으로 나와 환급된다 */
   const pool = [];
@@ -2715,9 +2839,9 @@ function openGacha(done, pk) {
     let h = '<h2>' + (pickup ? '특 정 배 정' : '인 격 배 정') + '</h2>';
     if (pickup) {
       /* 이 판의 광고 문구 — data/pickup.js 의 line·banner 에서 갈아 끼웁니다 */
-      if (PICKUP.line) h += pkBannerHTML();
-      h += '<div class="hint" style="color:#d8b26a">' + PICKUP.name +
-           '　·　' + PICKUP.desc + '<br>' +
+      if (pickup.line) h += pkBannerHTML(pickup);
+      h += '<div class="hint" style="color:#d8b26a">' + pickup.name +
+           '　·　' + pickup.desc + '<br>' +
            '같은 성급 안에서 ' + pct(rate) + ' 확률로 대상이 먼저 나옵니다. ' +
            '성급 확률은 일반 배정과 같습니다.</div>';
     }
@@ -2754,7 +2878,7 @@ function openGacha(done, pk) {
     /* 특정 배정이면, 정해진 확률로 대상 안에서만 고른다 */
     const narrow = (list, get) => {
       if (!pickup || Math.random() >= rate) return list;
-      const only = list.filter(x => pickupHit(get(x)));
+      const only = list.filter(x => pickupHit(pickup, get(x)));
       return only.length ? only : list;
     };
 
@@ -2812,9 +2936,11 @@ function openGacha(done, pk) {
       }
       saveVault();
       render();
-      /* 처음 얻은 ★★★ 이 섞여 있으면 한 번 빛낸 뒤에 펼친다 */
-      const win = bigWin(out);
-      if (win) starFlash(3, bigWinLine(win), () => draw(out));
+      /* 처음 얻은 ★★★ 이 섞여 있으면 한 번 빛낸 뒤에 펼친다.
+       * 그것이 이 특정 배정의 대상이면 초록빛으로 터집니다. */
+      const onBanner = bigWinOn(out, pickup);
+      const win = onBanner || bigWin(out);
+      if (win) starFlash(3, bigWinLine(win), () => draw(out), !!onBanner);
       else draw(out);
     };
 

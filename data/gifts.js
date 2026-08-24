@@ -45,6 +45,11 @@ const GIFTS = [
     effect: { synergy: "L사", mult: 2 }
   },
   {
+    star: 2, name: "탱고 양념장",
+    desc: "영덕의 요리사 시너지 50% 강화",
+    effect: { synergy: "영덕의 요리사", mult: 1.5 }
+  },
+  {
     star: 2, name: "공룡의날 무전기",
     desc: "공룡의 날 인격들의 공격력 10%, 방어력 10% 강화",
     effect: { tag: "공룡의날", atk: 0.10, def: 0.10 }
@@ -103,8 +108,8 @@ const GIFTS = [
   },
   {
     star: 3, name: "이형우의 오이샌드위치",
-    desc: "이형우 보조 교육위원의 효과 +200%",
-    effect: { advisorName: "이형우", mult: 3 }
+    desc: "이형우 보조 교육위원의 효과 +100%",
+    effect: { advisorName: "이형우", mult: 2 }
   },
   {
     star: 3, name: "대륵도의 바다",
