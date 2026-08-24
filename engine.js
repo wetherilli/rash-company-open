@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.27.3";
-const VERSION_NAME = "고쳐 쓰는 손";
+const VERSION = "0.28.0";
+const VERSION_NAME = "조각난 거울";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -28,7 +28,9 @@ const RULE = {
    * 여기 적은 값이 그대로 나갑니다 (아래 moneyGain 을 타지 않습니다).
    * 인격·교육위원·E.G.O 기프트 모두 이 표를 씁니다. */
   dupRefund:   { 1: 3, 2: 15, 3: 50 },
-  moneyGain:   0.7,    // 원고료로 들어오는 모든 수입에 곱하는 값 — 황금교본 교환은 제외
+  /* 원고료로 들어오는 수입에 곱하는 값.
+   * 타지 않는 것 셋 — 황금교본 교환, 위 dupRefund, 거울 던전 완주 보상(고정값). */
+  moneyGain:   0.35,
   /* 뽑기 확률 — 합이 1이 되게 맞추세요 */
   rate1:       0.83,   // 1성 (전원 보유 상태라 중복으로 나와 환급된다)
   rate2:       0.13,   // 2성
@@ -70,8 +72,9 @@ const ENK_RULE = {
   max:       10,                  // 보유 상한
   dailyFill: 10,                  // 자정을 넘겼을 때 채워 주는 양
   everyMs:   2 * 60 * 60 * 1000,  // 1개가 차는 데 걸리는 시간 (2시간)
-  cost:      1,                   // 거울 던전 1회 입장에 드는 양
-  costHard:  1                    // 하드 거울 던전 1회 입장에 드는 양
+  cost:        1,                 // 거울 던전 1회 입장에 드는 양
+  costHard:    1,                 // 하드 거울 던전 1회 입장에 드는 양
+  costExtreme: 2                  // 익스트림 거울 던전 1회 입장에 드는 양
 };
 
 /* ── 판이 올라갔을 때 ──────────────────────────────────────────
@@ -95,6 +98,30 @@ function verKey(v) {
           : VERSION_RULE.compare === "major" ? 1 : 2;
   return p.slice(0, n).join(".");
 }
+
+/* 판 번호를 앞자리부터 수로 견줍니다. a 가 뒤면 음수, 앞서면 양수. */
+function verCmp(a, b) {
+  const x = String(a || "0").split(".").map(Number);
+  const y = String(b || "0").split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/* ── 뒤에서 온 보관함 ─────────────────────────────────────────
+ *  이 판보다 «나중» 판에서 저장한 보관함을 열었을 때입니다.
+ *  그 보관함에는 이 판이 모르는 것들이 들어 있을 수 있어,
+ *  읽어서 다시 쓰면 모르는 것을 조용히 지워 버립니다.
+ *
+ *  그래서 자물쇠를 겁니다.
+ *    · 게임을 시작하지 못하게 막고
+ *    · saveVault() 가 한 글자도 쓰지 못하게 합니다
+ *  최신 판으로 열면 그대로 살아 있습니다.
+ */
+let VAULT_LOCK = null;   // { from, to } — 잠겼을 때만 채워집니다
+function vaultLocked() { return !!VAULT_LOCK; }
 
 const SAVE_KEY  = "rash_company_save_v1";    // 진행 기록 (어디까지 읽었나)
 const VAULT_KEY = "rash_company_vault_v1";   // 보관함 (모은 인격 — 회차가 바뀌어도 남는다)
@@ -181,6 +208,7 @@ function loadVault() {
 }
 function saveVault() {
   if (!S) return;
+  if (vaultLocked()) return;   // 뒤에서 온 보관함은 절대 덮어쓰지 않습니다
   Store.set(VAULT_KEY, JSON.stringify(vaultToObject()));
 }
 function clearVault() { Store.del(VAULT_KEY); }
@@ -359,10 +387,15 @@ function newState() {
   if (v && v.gifts) for (const k in v.gifts) if (giftById(k)) giftsOwned[k] = true;
   const gift = (v && v.gift && giftsOwned[v.gift]) ? v.gift : null;
 
+  /* 뒤에서 온 보관함이면 여기서 자물쇠를 겁니다.
+   * 값은 읽되(무엇이 들었는지 보여 주려고), 쓰기는 막힙니다. */
+  if (v && v.ver && verCmp(v.ver, VERSION) > 0)
+    VAULT_LOCK = { from: v.ver, to: VERSION };
+
   /* 옛 판에서 만든 보관함이면 원고료가 절반만 넘어온다 */
   let money = (v && typeof v.money === "number") ? v.money : 120;
   let verNote = null;
-  if (v && VERSION_RULE.on && verKey(v.ver) !== verKey(VERSION)) {
+  if (v && VERSION_RULE.on && !vaultLocked() && verKey(v.ver) !== verKey(VERSION)) {
     const before = money;
     money = Math.floor(money * VERSION_RULE.moneyKeep);
     verNote = { from: v.ver || null, to: VERSION, before, after: money };
@@ -387,7 +420,8 @@ function newState() {
     waiting: false,
     ended: false,
     mirror: false,
-    mirrorHard: false
+    mirrorHard: false,
+    mirrorTier: null
   };
 }
 
@@ -607,8 +641,23 @@ function advisorEffect() {
   }
   return out;
 }
-/* 원고료 수입은 전부 이 문을 지나갑니다. RULE.moneyGain 하나로 조절됩니다. */
+/* 원고료 수입은 전부 이 문을 지나갑니다. RULE.moneyGain 하나로 조절됩니다.
+ * 거울 던전 완주 보상만은 예외로, 고정값이 그대로 들어옵니다. */
 function earn(n) { return Math.max(1, Math.round(n * RULE.moneyGain)); }
+
+/* 이야기가 원고료를 내주는가.
+ *
+ *  본편은 «처음 지나갈 때만» 냅니다. 한 번 마친 장을 다시 돌면 한 푼도 안 나옵니다.
+ *  되풀이해서 벌 수 있는 곳은 거울 던전뿐입니다.
+ *
+ *  거울 던전 안이면 여기를 묻지 않고 언제나 냅니다.
+ *  장 밖(어디에도 속하지 않은 전투)이라면 막지 않습니다. */
+function storyPays() {
+  if (S.mirror) return true;
+  const c = curChapter();
+  if (!c) return true;
+  return !(S.cleared && S.cleared[c.id]);
+}
 
 function manageCap()  { return RULE.manageMax + advisorEffect().manageMax; }
 function skillCost(base) { return Math.max(1, base - advisorEffect().cheap); }
@@ -1648,7 +1697,9 @@ function doCook(s) {
       if (t) line(t.text);
     }
 
-    const pay = Math.max(0, score) * (s.pay || 0);
+    /* 본편과 같은 규칙 — 처음 지나갈 때만 값을 쳐 줍니다 */
+    const raw = Math.max(0, score) * (s.pay || 0);
+    const pay = (raw > 0 && storyPays()) ? earn(raw) : 0;
     if (pay > 0) { S.money += pay; say(CURRENCY + " " + pay + " 획득.", "gain"); render(); }
 
     S.waiting = false;
@@ -1877,11 +1928,17 @@ function achieved(a)   { return !!(S.achieved && S.achieved[a.name]); }
 /* 지금 어디서 싸우고 있는가 */
 function battleWhere() {
   if (!S.mirror) return "story";
-  return (MIRROR && MIRROR.id === "mirror_hard") ? "mirrorHard" : "mirror";
+  return mirrorRuleNow().key;      // mirror · mirrorHard · mirrorExtreme
 }
 
-function achieveMatches(a, foeName) {
+/* cleared 를 넘기면 «거울 던전을 끝까지 돌았다» 는 사건입니다.
+ * 적을 쓰러뜨린 사건과 서로 섞이지 않게 갈라 둡니다 — 완주 업적은 완주에만,
+ * 나머지 업적은 처치에만 반응합니다. */
+function achieveMatches(a, foeName, cleared) {
   const w = a.when || {};
+
+  if (w.clear) { if (w.clear !== cleared) return false; }
+  else if (cleared) return false;
 
   if (w.kill) {
     const list = Array.isArray(w.kill) ? w.kill : [w.kill];
@@ -1889,8 +1946,9 @@ function achieveMatches(a, foeName) {
   }
   if (w.where) {
     const here = battleWhere();
-    /* 하드는 거울 던전이기도 하다 */
-    if (w.where === "mirror") { if (here !== "mirror" && here !== "mirrorHard") return false; }
+    /* "mirror" 라고만 적으면 하드·익스트림까지 다 쳐 줍니다.
+     * 특정 갈래만 세고 싶으면 그 key 를 그대로 적으십시오. */
+    if (w.where === "mirror") { if (here === "story") return false; }
     else if (here !== w.where) return false;
   }
   if (w.advisor) {
@@ -1912,9 +1970,9 @@ function achieveMatches(a, foeName) {
 }
 
 /* 적을 쓰러뜨렸을 때 부릅니다 */
-function checkAchievements(foeName) {
+function checkAchievements(foeName, cleared) {
   achieveList().forEach(a => {
-    if (achieved(a) || !achieveMatches(a, foeName)) return;
+    if (achieved(a) || !achieveMatches(a, foeName, cleared)) return;
     if (!S.achieved) S.achieved = {};
     S.achieved[a.name] = true;
 
@@ -2066,11 +2124,14 @@ function resolveTurn() {
 
 function victory() {
   const b = S.battle;
-  const reward = earn(Math.floor((b.maxhp + b.atk * 4) / 6) * (b.boss ? 2 : 1));
+  const reward = storyPays()
+    ? earn(Math.floor((b.maxhp + b.atk * 4) / 6) * (b.boss ? 2 : 1))
+    : 0;
   S.money += reward;
   divider();
   say("▶ " + b.name + " 격파.", "good");
-  say(CURRENCY + " " + reward + " 획득.", "gain");
+  if (reward) say(CURRENCY + " " + reward + " 획득.", "gain");
+  else say("이미 지나온 길이다. " + CURRENCY + "는 나오지 않는다.", "sys");
   checkAchievements(b.name);
   saveVault();
   healParty(RULE.winHeal, "숨을 고른다.");
@@ -2821,6 +2882,28 @@ function pkBannerHTML(p) {
          '</div>';
 }
 
+/* ── 칸 머리의 그림 띠 ──────────────────────────────────────────
+ *  운전석의 장 칸과 거울 칸 위에 얹는 얇은 그림입니다. 글씨는 안 들어갑니다.
+ *  특정 배정 칸이 쓰던 .pkline.small 을 그대로 씁니다 — 높이를 맞추려는 것입니다.
+ *
+ *  잠긴 칸에는 그림을 깔지 않습니다. 아직 못 본 곳을 미리 보여 주지 않으려는 것이고,
+ *  그래도 빈 띠는 남겨서 칸끼리 높이가 어긋나지 않게 합니다.
+ */
+function slotStrip(img) {
+  if (!img) return '<div class="pkline small blank"></div>';
+  return '<div class="pkline small pic" style="background-image:url(\'' +
+         assetURL(img) + '\')"></div>';
+}
+
+/* 그 장을 대표할 그림 — 맨 처음 나오는 place 장면의 배경을 씁니다.
+ * 장에 banner 를 직접 적어 두었으면 그것이 이깁니다. */
+function chapterBanner(c) {
+  if (!c) return null;
+  if (c.banner) return c.banner;
+  const s = (c.scenes || []).find(x => x && x.t === "place" && x.img);
+  return s ? s.img : null;
+}
+
 /* pk 에 특정 배정 하나를 넘기면 그 배정으로 엽니다. 없으면 일반 배정입니다. */
 function openGacha(done, pk) {
   $modal.classList.add("on");
@@ -2958,6 +3041,7 @@ function openGacha(done, pk) {
  * ===================================================================== */
 function readSave() { return Store.get(SAVE_KEY); }
 function save() {
+  if (vaultLocked()) { say("보관함이 잠겨 있어 기록하지 않았습니다.", "todo"); return; }
   try {
     const c = JSON.parse(JSON.stringify(S));
     c.battle = null; c.waiting = false;
@@ -3027,6 +3111,7 @@ function openChapterSelect(back) {
     const needs = chapterNeeds(c);
     const miss  = chapterMissing(c);
     return '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-i="' + i + '"' : '') + '>' +
+             slotStrip(open ? chapterBanner(c) : null) +
              '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no +
                (c.subtitle ? '　' + c.subtitle : (c.title ? '　' + c.title : '')) + '</div>' +
              '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능') : '잠김') + '</div>' +
@@ -3056,12 +3141,14 @@ function openChapterSelect(back) {
     const open  = mirrorUnlocked(rule);
     const canGo = open && enkNow >= rule.cost;
     return '<div class="slot' + (open && !canGo ? ' sel' : '') + '"' +
-             (canGo ? ' ' + attr + '="1"' : '') + '>' +
+             (canGo ? ' ' + attr : '') + '>' +
+             slotStrip(open ? MIRROR_BG : null) +
              '<div class="' + (canGo ? 'nm' : 'lock') + '">' + rule.name + '　' + rule.sub + '</div>' +
              '<div class="sub">' + (open
                ? ('이미 만난 적 ' + countWord(rule.count) + ' 연달아 상대합니다. ' +
                   '본편의 ' + rule.scale + '배 세기입니다.' +
-                  (rule.maxBoss > 1 ? ' 보스가 ' + rule.maxBoss + '까지 섞입니다.' : ''))
+                  (rule.maxBoss >= rule.count ? ' 셋 다 보스일 수 있습니다.'
+                   : rule.maxBoss > 1 ? ' 보스가 ' + rule.maxBoss + '까지 섞입니다.' : ''))
                : ('본편을 ' + rule.needCleared + '장 마치면 열립니다')) + '</div>' +
              '<div class="sub">완주 보상 ' + CURRENCY + ' ' + rule.bonus +
                '　·　황금교본 ' + rule.codex + '</div>' +
@@ -3072,8 +3159,9 @@ function openChapterSelect(back) {
   };
 
   h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">거울</div>' +
-       '<div class="grid">' + slot(MIRROR_RULE, "data-mirror") +
-                              slot(MIRROR_HARD, "data-mirrorhard") + '</div>' +
+       '<div class="grid">' +
+         MIRROR_TIERS.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+       '</div>' +
        '<div style="margin:10px 0 0">' + enkBarHTML() + '</div>';
 
   h += '<div class="modalfoot"><button id="csclose" class="ghost">닫기</button></div>';
@@ -3084,10 +3172,9 @@ function openChapterSelect(back) {
   });
   const rs = $sheet.querySelector(".slot[data-resume]");
   if (rs) rs.onclick = () => { closeModal(); if (!load()) { glass(); say("기록이 손상되었다.", "todo"); } };
-  const m = $sheet.querySelector(".slot[data-mirror]");
-  if (m) m.onclick = () => { closeModal(); startMirror(false); };
-  const mh = $sheet.querySelector(".slot[data-mirrorhard]");
-  if (mh) mh.onclick = () => { closeModal(); startMirror(true); };
+  $sheet.querySelectorAll(".slot[data-mirror]").forEach(el => {
+    el.onclick = () => { closeModal(); startMirror(el.dataset.mirror); };
+  });
   document.getElementById("csclose").onclick = () => { closeModal(); if (back) back(); };
 }
 
@@ -3095,10 +3182,18 @@ function openChapterSelect(back) {
  *  유리창에 비친 것들과 싸운다. 이미 만난 적들 중 셋이 무작위로 나오고,
  *  본편보다 scale 만큼 강해져 있습니다. 쉬지 않고 이어집니다.
  *
- *  두 갈래가 있습니다.
- *    MIRROR_RULE  보통 — 30% 강함
- *    MIRROR_HARD  하드 — 2배. 보스가 둘까지 섞이고, 보상이 훨씬 큽니다.
- *  둘 다 들어갈 때 엔케팔린을 씁니다 (ENK_RULE 참고).
+ *  세 갈래가 있습니다.
+ *    MIRROR_RULE     보통   — 30% 강함. 보스 하나까지.
+ *    MIRROR_HARD     하드   — 2배.  보스 둘까지.
+ *    MIRROR_EXTREME  익스트림 — 3배. 셋 다 보스일 수 있습니다.
+ *  전부 들어갈 때 엔케팔린을 씁니다 (ENK_RULE 참고).
+ *
+ *  완주 보상 원고료는 고정값입니다 — RULE.moneyGain 을 타지 않고
+ *  아래 bonus 에 적은 수가 그대로 들어옵니다. 상점 칸에 적힌 수와 실제로 받는 수가
+ *  어긋나지 않게 하려는 것입니다.
+ *
+ *  갈래를 늘리려면 MIRROR_TIERS 에 한 덩이 더 얹으면 됩니다.
+ *  칸·손잡이·업적 조건은 전부 그 배열을 보고 스스로 늘어납니다.
  *
  *  누가 나올지는 들어가기 전에 알려 주지 않습니다. 부딪쳐 봐야 압니다.
  */
@@ -3106,11 +3201,13 @@ function openChapterSelect(back) {
 const MIRROR_BG = "assets/scene/거울던전.jpg";
 
 const MIRROR_RULE = {
+  key:  "mirror",
   name: "거울 던전",
   sub:  "유리창에 비친 것들",
+  prefix: "거울의 ",   // 비쳐 나온 적 이름 앞에 붙는 말
   count:  3,      // 몇 명과 연달아 싸우는가
   scale:  1.3,    // 본편 대비 강화 배수 (1.3 = 30% 강함)
-  bonus:  260,    // 완주 보상 (원고료)
+  bonus:  100,    // 완주 보상 (원고료) — 고정값. moneyGain 을 타지 않습니다
   codex:  1,      // 완주 보상 (황금교본) — 돌 때마다 받습니다
   maxBoss: 1,     // 한 번에 나올 수 있는 보스 수
   bossChance: 0.65, // 보스가 섞여 나올 확률
@@ -3119,11 +3216,13 @@ const MIRROR_RULE = {
 };
 
 const MIRROR_HARD = {
+  key:  "mirrorHard",
   name: "하드 거울 던전",
   sub:  "깨진 유리창에 비친 것들",
+  prefix: "깨진 거울의 ",
   count:  3,
   scale:  2.0,    // 본편의 2배
-  bonus:  720,    // 보통의 약 2.8배
+  bonus:  300,
   codex:  3,
   maxBoss: 2,     // 보스가 둘까지 섞인다
   bossChance: 0.90,
@@ -3131,7 +3230,40 @@ const MIRROR_HARD = {
   cost: ENK_RULE.costHard
 };
 
-function mirrorRuleNow() { return S && S.mirrorHard ? MIRROR_HARD : MIRROR_RULE; }
+const MIRROR_EXTREME = {
+  key:  "mirrorExtreme",
+  name: "익스트림 거울 던전",
+  sub:  "산산이 부서진 유리창에 비친 것들",
+  prefix: "조각난 거울의 ",
+  count:  3,
+  scale:  3.0,    // 본편의 3배
+  bonus:  700,
+  codex:  7,
+  maxBoss: 3,     // 셋 다 보스일 수 있습니다
+  bossChance: 1.0,  // 보스가 반드시 섞입니다
+  needCleared: 5, // 본편을 다섯 장 마쳐야 열립니다
+  cost: ENK_RULE.costExtreme
+};
+
+/* 갈래를 늘리려면 여기에 얹으면 됩니다. 순서가 곧 화면에 서는 순서입니다. */
+const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME];
+
+/* 갈래를 어떻게 부르든 받아 줍니다 — 번호, key 문자열, 규칙 그 자체,
+ * 그리고 예전에 쓰던 참/거짓(하드인가 아닌가)까지. */
+function mirrorTier(t) {
+  if (t == null || t === false) return MIRROR_RULE;
+  if (t === true) return MIRROR_HARD;                  // 옛 startMirror(true)
+  if (typeof t === "number") return MIRROR_TIERS[t] || MIRROR_RULE;
+  if (typeof t === "string")
+    return MIRROR_TIERS.find(r => r.key === t) || MIRROR_RULE;
+  return t;
+}
+
+function mirrorRuleNow() {
+  if (!S) return MIRROR_RULE;
+  /* 옛 보관함에는 mirrorTier 가 없고 mirrorHard 참/거짓만 있습니다 */
+  return mirrorTier(S.mirrorTier != null ? S.mirrorTier : !!S.mirrorHard);
+}
 
 function mirrorUnlocked(rule) {
   const r = rule || MIRROR_RULE;
@@ -3165,7 +3297,7 @@ function buildMirrorFoes(rule) {
     const f = FOES[src];
     const id = "__mirror_" + i;
     FOES[id] = {
-      name: (r === MIRROR_HARD ? "깨진 거울의 " : "거울의 ") + f.name,
+      name: (r.prefix || "거울의 ") + f.name,
       hp:  Math.round(f.hp  * k),
       atk: Math.round(f.atk * k),
       def: Math.round(f.def * k),
@@ -3183,8 +3315,9 @@ function buildMirrorFoes(rule) {
   });
 }
 
-function startMirror(hard) {
-  const rule = hard ? MIRROR_HARD : MIRROR_RULE;
+function startMirror(tier) {
+  const rule = mirrorTier(tier);
+  const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
 
   if (!mirrorUnlocked(rule)) {
     say(rule.name + "은 본편을 " + rule.needCleared + "장 마쳐야 열립니다.", "sys");
@@ -3198,10 +3331,13 @@ function startMirror(hard) {
   }
 
   const ids = buildMirrorFoes(rule);
+  const 첫줄 = rule === MIRROR_EXTREME
+    ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
+    : rule === MIRROR_HARD
+      ? "유리창에 금이 간다. 갈라진 틈마다 다른 것이 서 있다."
+      : "메카고질라의 유리창이 흐려지더니, 비친 것들이 걸어 나온다.";
   const scenes = [{ t: "place", img: MIRROR_BG, name: rule.name },
-                  { t: "n", text: hard
-                      ? "유리창에 금이 간다. 갈라진 틈마다 다른 것이 서 있다."
-                      : "메카고질라의 유리창이 흐려지더니, 비친 것들이 걸어 나온다." },
+                  { t: "n", text: 첫줄 },
                   { t: "n", text: "쉴 틈은 없다. " + countWord(rule.count) + " 연달아 상대해야 한다." }];
   ids.forEach((id, i) => {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
@@ -3210,12 +3346,13 @@ function startMirror(hard) {
   scenes.push({ t: "mirrorClear" });
 
   MIRROR = {
-    id: hard ? "mirror_hard" : "mirror", no: rule.name, title: "",
+    id: rule.key, no: rule.name, title: "",
     subtitle: rule.sub, scenes: scenes
   };
 
   S.mirror = true;
-  S.mirrorHard = !!hard;
+  S.mirrorTier = MIRROR_TIERS.indexOf(rule);
+  S.mirrorHard = hard;              // 옛 보관함과 맞추려고 함께 둡니다
   S.sc = 0;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
@@ -3238,18 +3375,24 @@ function startMirror(hard) {
 
 function mirrorClear() {
   const rule = mirrorRuleNow();
-  const hard = !!S.mirrorHard;
   divider();
-  say(hard ? "깨진 유리가 도로 맞물린다." : "유리창이 다시 맑아진다.", "good");
-  const mb = earn(rule.bonus);
+  say(rule === MIRROR_EXTREME ? "흩어진 조각들이 하나씩 제자리를 찾아 간다."
+    : rule === MIRROR_HARD    ? "깨진 유리가 도로 맞물린다."
+    :                           "유리창이 다시 맑아진다.", "good");
+  /* 고정값입니다 — earn() 을 타지 않으므로 상점 칸에 적힌 수가 그대로 들어옵니다 */
+  const mb = rule.bonus;
   S.money += mb;
   say(CURRENCY + " " + mb + " 획득.", "gain");
   if (rule.codex) {
     S.codex += rule.codex;
     say("비친 것들이 남기고 간 황금교본 " + rule.codex + "권.  (보유 " + S.codex + ")", "gain");
   }
+  /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
+   * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
+  checkAchievements(null, rule.key);
   saveVault();
   S.mirror = false;
+  S.mirrorTier = null;
   S.mirrorHard = false;
   MIRROR = null;
   S.ended = true;
@@ -3257,7 +3400,7 @@ function mirrorClear() {
   const again = enkCount() >= rule.cost;
   buttons([
     { label: again ? "한 번 더" : "한 번 더 (" + ENK_RULE.name + " 부족)",
-      cls: "primary", disabled: !again, fn: () => startMirror(hard) },
+      cls: "primary", disabled: !again, fn: () => startMirror(rule.key) },
     { label: "유리창", fn: () => glass() },
     { label: "상점", cls: "ghost", fn: () => openShop(() => {}) }
   ]);
@@ -3497,9 +3640,36 @@ function openVault(back) {
  *  메인 화면. 장을 고르고, 작성위원을 편성하고, 보관함을 여는 곳.
  *  메카고질라 안에서 밖을 내다보는 자리다.
  */
+/* 뒤에서 온 보관함을 열었을 때 — 여기서 멈춥니다.
+ * 손잡이는 「다시 확인」 하나뿐입니다. 새 판으로 열면 그대로 이어집니다. */
+function vaultLockScreen() {
+  const n = VAULT_LOCK;
+  clearLog();
+  showCard(null);
+  setBackdrop(false, null);
+  say("보 관 함 이 잠 겼 습 니 다", "place");
+  divider();
+  say("이 보관함은 v" + n.from + " 에서 저장한 것입니다. " +
+      "지금 돌아가는 것은 v" + n.to + " 입니다.", "bad");
+  say("나중 판에서 만든 보관함에는 이 판이 모르는 것이 들어 있을 수 있습니다. " +
+      "그대로 열어 두면 모르는 것을 지운 채 덮어쓰게 됩니다.", "n");
+  divider();
+  say("그래서 아무것도 쓰지 않고 멈췄습니다. 모아 두신 것은 그대로 있습니다.", "sys");
+  say("v" + n.from + " 이상으로 열어 주십시오. " +
+      "온라인 판을 쓰고 계시면 새로고침 한 번으로 최신 판이 됩니다.", "sys");
+  divider();
+  render();
+  buttons([
+    { label: "다시 확인", cls: "primary", fn: () => glass() },
+    { label: "보관함 내보내기", fn: () => openRecord(() => glass()) }
+  ]);
+}
+
 function glass() {
+  VAULT_LOCK = null;       // 다시 읽으므로 판단도 다시 합니다
   S = newState();          // 보관함에서 다시 읽어 온다
   SCENES = [];
+  if (vaultLocked()) return vaultLockScreen();
   clearLog();
   showCard("assets/logo/작성위원 전원.png", "라슈 컴퍼니");
   say("유 리 창", "place");

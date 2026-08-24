@@ -520,7 +520,13 @@ const SUPPORTS = [
   { name: "이유현", title: "영덕의 요리사", star: 2,
     atk: 16, def: 11, hp: 86,
     portrait: null,
-    note: "상은 제가 봅니다. 드시기만 하십시오." }
+    note: "상은 제가 봅니다. 드시기만 하십시오." },
+
+  /* 익스트림 거울 던전을 끝내야 옵니다. 가장 늦게 얻는 만큼 3성 평균보다 위입니다 */
+  { name: "정윤하", title: "L사 비포팀", star: 3,
+    atk: 33, def: 14, hp: 108,
+    portrait: null,
+    note: "부서진 것을 먼저 보는 쪽이 비포팀입니다." }
 ];
 
 /* 지원 작성위원 규칙 */
