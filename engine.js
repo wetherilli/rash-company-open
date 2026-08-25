@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.29.2";
+const VERSION = "0.29.3";
 const VERSION_NAME = "육참골탄";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -190,6 +190,8 @@ function vaultToObject() {
     codex:    S.codex,
     newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
     enk:      S.enk || null,
+    /* 이미 받은 우편. 이것을 빠뜨리면 받은 표시가 안 남아 무한정 다시 받힙니다. */
+    mailTaken: Object.keys(S.mailTaken || {}),
     ver:      VERSION
   };
 }
@@ -209,6 +211,7 @@ function loadVault() {
     gift:     v.gift || null,
     supports: toMap(v.supports),
     achieved: toMap(v.achieved),
+    mailTaken: toMap(v.mailTaken),
     cleared:  toMap(v.cleared),
     equip:    v.equip || {},
     party:    v.party || null,
@@ -441,6 +444,7 @@ function newState() {
     giftsOwned, gift,
     supportsOwned,
     achieved: achievedMap,
+    mailTaken: (v && v.mailTaken) ? v.mailTaken : {},
     hp: {},                 // who -> 현재 체력 (없으면 최대)
     money,
     verNote,                // 판이 올라갔을 때 한 번 알려 줄 내용
@@ -3916,48 +3920,57 @@ function mailWasted(m) {
   return enkCount() >= ENK_RULE.max;
 }
 
+/* 받아 봅니다. 돌려주는 것은 창에 그대로 적을 한 줄입니다 —
+ * { ok, msg }. 받은 뒤 유리창으로 돌아가면 로그가 지워지므로,
+ * 결과는 반드시 창 안에서 보여 주어야 합니다. */
 function mailTake(m) {
-  if (!mailOpen(m)) return false;
-  if (mailWasted(m)) {
-    divider();
-    say(ENK_RULE.name + "이 이미 가득 차 있습니다. (" + enkCount() + " / " + ENK_RULE.max + ")", "bad");
-    say("한 개도 받지 못하고 우편만 사라지므로, 조금 쓰신 뒤에 받으십시오.", "sys");
-    return false;
-  }
+  if (!mailOpen(m))
+    return { ok: false, msg: "기간이 지난 우편입니다." };
+  if (mailWasted(m))
+    return { ok: false, msg: ENK_RULE.name + "이 이미 가득 차 있습니다 (" +
+             enkCount() + " / " + ENK_RULE.max + "). 한 개도 받지 못하고 우편만 사라지므로, " +
+             "조금 쓰신 뒤에 받으십시오." };
   const g = m.give || {};
   if (!S.mailTaken) S.mailTaken = {};
   S.mailTaken[m.id] = true;
 
-  divider();
-  say("우편을 받았다 — " + m.title, "gain");
-  if (g.money) { S.money += g.money; say(CURRENCY + " " + g.money + " 획득.", "gain"); }
-  if (g.codex) { S.codex += g.codex; say("황금교본 " + g.codex + "권 획득.", "gain"); }
+  const got = [];
+  if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); }
+  if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
   if (g.enk) {
     enkSync();
     const before = enkCount();
     S.enk.n = Math.min(ENK_RULE.max, before + g.enk);
-    const got = enkCount() - before;
-    say(ENK_RULE.name + " " + got + " 획득." +
-        (got < g.enk ? "  (상한 " + ENK_RULE.max + " 을 넘겨 받지는 못합니다)" : ""), "gain");
+    const n = enkCount() - before;
+    got.push(ENK_RULE.name + " " + n +
+             (n < g.enk ? " (상한 " + ENK_RULE.max + " 을 넘겨 받지는 못했습니다)" : ""));
   }
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
     if (sp) {
       if (!S.supportsOwned) S.supportsOwned = {};
       S.supportsOwned[SUP_PREFIX + g.support] = true;
-      say("지원 작성위원 합류 — " + stars(sp.star) + " " + sp.title + " " + sp.name, "gain");
-    } else say("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")", "todo");
+      got.push("지원 작성위원 " + stars(sp.star) + " " + sp.title + " " + sp.name);
+    } else got.push("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")");
   }
   saveVault();
-  return true;
+
+  /* 로그에도 남깁니다 — 창을 닫은 뒤에도 무엇을 받았는지 되짚을 수 있게 */
+  divider();
+  say("우편을 받았다 — " + m.title, "gain");
+  got.forEach(x => say(x + " 획득.", "gain"));
+
+  return { ok: true, msg: "받았습니다 — " + got.join("　·　") };
 }
 
-function openMail(back) {
+/* note 를 넘기면 창 위에 한 줄로 붙습니다 — 방금 받은 결과나 못 받은 까닭. */
+function openMail(back, note) {
   $modal.classList.add("on");
   const all = mailList();
   const 기다림 = mailWaiting();
 
   let h = '<h2>우 편 함</h2>' +
+    (note ? '<div class="mailnote' + (note.ok ? ' ok' : ' no') + '">' + note.msg + '</div>' : '') +
           '<div class="hint">불편을 끼쳤을 때 얹어 드리는 자리입니다. ' +
           '하나에 한 번씩만 받습니다.' +
           (기다림 ? '　<b style="color:#d8b26a">받지 않은 우편 ' + 기다림 + '통</b>' : '') +
@@ -3994,10 +4007,11 @@ function openMail(back) {
   $sheet.querySelectorAll(".slot[data-mail]").forEach(el => {
     el.onclick = () => {
       const m = live[+el.dataset.mail];
-      /* 못 받는 까닭(가득 참·기간 지남)은 로그에 적히므로 창을 닫고 보여 줍니다 */
-      closeModal(); render();
-      mailTake(m);
-      if (back) back();
+      /* 창을 닫지 않고 그 자리에서 다시 그립니다 — 유리창으로 돌아가면
+       * 로그가 지워져 무엇을 받았는지 못 보게 됩니다. */
+      const r = mailTake(m);
+      render();
+      openMail(back, r);
     };
   });
   document.getElementById("mlclose").onclick = () => {

@@ -426,6 +426,10 @@
   .grid.one{grid-template-columns:1fr;}
   /* 우편 칸의 마지막 줄 — 남은 날과 「눌러서 받기」를 오른쪽에 붙입니다 */
   .slot .mailfoot{text-align:right;margin-top:4px;}
+  /* 방금 받은 결과 / 못 받은 까닭 — 창 위에 붙습니다 */
+  .mailnote{border-left:3px solid;padding:8px 12px;margin:8px 0 4px;font-size:13px;}
+  .mailnote.ok{border-color:#d8b26a;background:#17150f;color:#f0d79c;}
+  .mailnote.no{border-color:#c8403a;background:#170e10;color:#e0a09a;}
   .slot{border:1px solid #2a2a30;background:#121218;padding:9px 11px;cursor:pointer;font-size:13px;}
   .slot:hover{border-color:#c8403a;}
   .slot.sel{border-color:#d8b26a;background:#17151a;}
