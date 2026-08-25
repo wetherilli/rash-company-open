@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.29.4";
+const VERSION = "0.29.5";
 const VERSION_NAME = "편성 저장";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -430,11 +430,16 @@ function newState() {
   /* 세워 둔 것들 — 가진 것만 남기고, 같은 것이 두 번 들어가지 않게 걸러 냅니다.
    * 개명 대비로 advisorById 를 거쳐 지금 이름으로 옮겨 담습니다. */
   const advisorOn = [];
+  const 선이름 = {};
   ((v && v.advisorOn) || []).forEach(k => {
     const a = advisorById(k);
     if (!a) return;
     const id = advisorId(a);
-    if (advisorsOwned[id] && advisorOn.indexOf(id) < 0) advisorOn.push(id);
+    /* 같은 사람이 두 번 들어가지 않게 이름으로도 걸러 냅니다 */
+    if (advisorsOwned[id] && advisorOn.indexOf(id) < 0 && !선이름[a.name]) {
+      선이름[a.name] = true;
+      advisorOn.push(id);
+    }
   });
   const giftOn = [];
   ((v && v.giftOn) || []).forEach(k => {
@@ -726,6 +731,16 @@ function advisorOnList() {
 function equippedAdvisors() { return advisorOnList().map(advisorById).filter(Boolean); }
 function equippedAdvisor()  { return equippedAdvisors()[0] || null; }
 function advisorIsOn(k)     { return advisorOnList().indexOf(k) >= 0; }
+
+/* 한 사람을 둘 세울 수는 없습니다.
+ * 강호영처럼 제목만 다른 인격이 여럿인 교육위원이 있어, 제목이 다르다고
+ * 같은 사람을 둘 세우면 그 사람 몫이 두 번 들어갑니다.
+ * 이미 세운 사람과 이름이 같으면(자기 자신은 빼고) 못 세웁니다. */
+function advisorNameTaken(k) {
+  const a = advisorById(k);
+  if (!a) return false;
+  return equippedAdvisors().some(x => x.name === a.name && advisorId(x) !== k);
+}
 
 /* "박수오" 처럼 한글 이름으로 적어도 찾아 줍니다 */
 function sinnerKey(x) {
@@ -2601,14 +2616,18 @@ function openParty(done) {
     h += '<div class="hint">전투를 도와줄 보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다. ' +
          '직접 싸우지는 않고, 작성위원 전원에게 상시 효과를 겁니다.' +
          (advNext ? '　' + advNext + '을 마치면 한 명 더.' : '') + '</div>' +
-         '<div class="grid"><div class="slot' + (advs.length ? ' sel' : '') + '" data-adv="1">' +
-           (advs.length
-             ? advs.map(a => '<div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
-                             a.title + ' ' + a.name + '</div><div class="sub">' + a.desc + '</div>').join("") +
-               (advs.length < advCap ? '<div class="sub">빈 칸 ' + (advCap - advs.length) + '　·　눌러서 더 세우십시오</div>' : "")
-             : '<div class="lock">세우지 않음</div><div class="sub">' +
-                 (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
-         '</div></div>';
+         '<div class="grid">';
+    /* 칸 수만큼 나란히 세웁니다 — 한 칸에 쌓지 않습니다 */
+    for (let i = 0; i < advCap; i++) {
+      const a = advs[i];
+      h += '<div class="slot' + (a ? ' sel' : '') + '" data-adv="' + i + '">' +
+             (a ? '<div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
+                    a.title + ' ' + a.name + '</div><div class="sub">' + a.desc + '</div>'
+                : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
+                    (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
+           '</div>';
+    }
+    h += '</div>';
 
     /* E.G.O 기프트 */
     const gfs = equippedGifts();
@@ -2618,14 +2637,17 @@ function openParty(done) {
     h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">E.G.O 기프트</div>' +
          '<div class="hint"><b>' + gfCap + '개</b>까지 지닐 수 있습니다. 상점에서 황금교본으로 뽑습니다.' +
          (gfNext ? '　' + gfNext + '을 마치면 하나 더.' : '') + '</div>' +
-         '<div class="grid"><div class="slot' + (gfs.length ? ' sel' : '') + '" data-gift="1">' +
-           (gfs.length
-             ? gfs.map(gf => '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + gf.name +
-                             '</div><div class="sub">' + gf.desc + '</div>').join("") +
-               (gfs.length < gfCap ? '<div class="sub">빈 칸 ' + (gfCap - gfs.length) + '　·　눌러서 더 지니십시오</div>' : "")
-             : '<div class="lock">지니지 않음</div><div class="sub">' +
-                 (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
-         '</div></div>';
+         '<div class="grid">';
+    for (let i = 0; i < gfCap; i++) {
+      const gf = gfs[i];
+      h += '<div class="slot' + (gf ? ' sel' : '') + '" data-gift="' + i + '">' +
+             (gf ? '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + gf.name +
+                     '</div><div class="sub">' + gf.desc + '</div>'
+                 : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
+                     (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
+           '</div>';
+    }
+    h += '</div>';
 
     h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">작성위원</div>' +
          '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다.</div>' +
@@ -2736,10 +2758,12 @@ function openParty(done) {
       if (done) done();
     };
     document.getElementById("pids").onclick = () => openEquip(() => draw());
-    const advSlot = $sheet.querySelector(".slot[data-adv]");
-    if (advSlot) advSlot.onclick = () => openAdvisor(() => draw());
-    const gfSlot = $sheet.querySelector(".slot[data-gift]");
-    if (gfSlot) gfSlot.onclick = () => openGiftPick(() => draw());
+    $sheet.querySelectorAll(".slot[data-adv]").forEach(el => {
+      el.onclick = () => openAdvisor(() => draw());
+    });
+    $sheet.querySelectorAll(".slot[data-gift]").forEach(el => {
+      el.onclick = () => openGiftPick(() => draw());
+    });
 
     document.getElementById("psave").onclick = () => openPresetSave(() => draw());
     /* 저장해 둔 편성을 누르면 그 자리에서 갈아 끼웁니다.
@@ -4253,9 +4277,17 @@ function presetApplyRaw(p) {
   S.party = (p.party || []).slice();
   S.equip = Object.assign({}, S.equip);
   for (const w in (p.equip || {})) if (p.equip[w]) S.equip[w] = p.equip[w];
-  /* 그때보다 칸이 줄었으면 앞에서부터 그만큼만 */
-  S.giftOn    = (p.giftOn    || []).slice(0, giftSlots());
-  S.advisorOn = (p.advisorOn || []).slice(0, advisorSlots());
+  /* 그때보다 칸이 줄었으면 앞에서부터 그만큼만.
+   * 교육위원은 같은 사람이 두 번 서지 않게 이름으로도 걸러 냅니다. */
+  S.giftOn = (p.giftOn || []).slice(0, giftSlots());
+  const 선 = {}, adv = [];
+  (p.advisorOn || []).forEach(k => {
+    const a = advisorById(k);
+    if (!a || 선[a.name] || adv.length >= advisorSlots()) return;
+    선[a.name] = true;
+    adv.push(k);
+  });
+  S.advisorOn = adv;
   S.gift    = S.giftOn[0]    || null;
   S.advisor = S.advisorOn[0] || null;
 }
@@ -4381,11 +4413,17 @@ function openAdvisor(back) {
     const k = advisorId(a);
     const has = !!(S.advisorsOwned && S.advisorsOwned[k]);
     const on  = advisorIsOn(k);
-    h += '<div class="slot' + (on ? ' sel' : '') + '"' + (has ? ' data-pick="' + k + '"' : '') + '>' +
-           '<div class="' + (has ? 'nm' : 'lock') + '">' +
+    /* 같은 사람을 이미 세웠으면 못 고릅니다 — N사 이형우와 L사 이형우처럼 */
+    const 겹침 = has && !on && advisorNameTaken(k);
+    const 고를수있나 = has && !겹침;
+    h += '<div class="slot' + (on ? ' sel' : '') + '"' +
+           (고를수있나 ? ' data-pick="' + k + '"' : '') + '>' +
+           '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name +
              (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
            '<div class="sub">' + (has ? a.desc : '미보유') + '</div>' +
+           (겹침 ? '<div class="sub" style="color:#c8403a">' + withJosa(a.name, "을") +
+                   ' 이미 세웠습니다. 한 사람은 한 번만 설 수 있습니다.</div>' : '') +
            (has && a.note ? '<div class="sub">' + a.note + '</div>' : '') +
          '</div>';
   });
@@ -4398,6 +4436,7 @@ function openAdvisor(back) {
       /* 빈 손잡이는 «모두 내리기» */
       if (!k) S.advisorOn = [];
       else if (advisorIsOn(k)) S.advisorOn = advisorOnList().filter(x => x !== k);
+      else if (advisorNameTaken(k)) return;      // 같은 사람은 둘 세울 수 없습니다
       else {
         const list = advisorOnList();
         /* 칸이 다 찼으면 «맨 먼저 세운 사람» 이 물러납니다 */
