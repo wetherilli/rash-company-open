@@ -1488,7 +1488,10 @@ const CHAPTERS = [
 
   /* ── 마지막 전투 · 케빈 → 마왕 난입 ────────────────────── */
   { t: "n", text: "구름이 한 점으로 모였다.", shake: "hard" },
-  { t: "flash", text: "그 아래에서 목이 없는 것이 일어섰다." },
+  { t: "n", text: "무언가가 구름을 찢으며 하늘을 가로질렀다. 옥상 끝에서 끝까지, 한 호흡에." },
+  { t: "d", who: "kim_duhyeon", text: "…와." },
+  { t: "d", who: "kim_duhyeon", text: "저건 좀… 멋있는데." },
+  { t: "flash", text: "그리고 그것이 내려앉았다. 목이 없는 것이 일어섰다." },
   { t: "d", who: "마왕 이경원", text: "케빈. 손님이다." },
   { t: "battle", foe: "kevin",
     joinIn: { at: 0.2, foe: "mawang_lee", heal: 0.3,
