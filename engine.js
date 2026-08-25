@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.1";
+const VERSION = "1.0.2";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -44,7 +44,7 @@ const RULE = {
   startMoney:  400,    // 보관함이 아예 없을 때 손에 쥐고 시작하는 원고료
   /* 장을 마칠 때 주는 원고료. «처음 마칠 때만» 나옵니다 (storyPays 참고).
    * 장마다 다르게 주고 싶으면 그 장에 clearPay 를 적으면 그것이 이깁니다. */
-  clearPay:    40,
+  clearPay:    200,
   /* 체포로 깎는 적 방어 비율. 이번 턴에만 걸립니다.
    * data/characters.js 의 「체포」 설명 글에도 같은 수가 적혀 있습니다 — 함께 고치십시오. */
   arrestCut:   0.20,
@@ -3906,7 +3906,7 @@ const MIRROR_RULE = {
   prefix: "거울의 ",   // 비쳐 나온 적 이름 앞에 붙는 말
   count:  3,      // 몇 명과 연달아 싸우는가
   scale:  1.3,    // 본편 대비 강화 배수 (1.3 = 30% 강함)
-  bonus:  100,    // 완주 보상 (원고료) — 고정값. moneyGain 을 타지 않습니다
+  bonus:  150,    // 완주 보상 (원고료) — 고정값. moneyGain 을 타지 않습니다
   codex:  1,      // 완주 보상 (황금교본) — 돌 때마다 받습니다
   maxBoss: 1,     // 한 번에 나올 수 있는 보스 수
   bossChance: 0.65, // 보스가 섞여 나올 확률
@@ -3922,7 +3922,7 @@ const MIRROR_HARD = {
   prefix: "깨진 거울의 ",
   count:  3,
   scale:  2.0,    // 본편의 2배
-  bonus:  300,
+  bonus:  250,
   codex:  3,
   maxBoss: 2,     // 보스가 둘까지 섞인다
   bossChance: 0.90,
@@ -3938,7 +3938,7 @@ const MIRROR_EXTREME = {
   prefix: "조각난 거울의 ",
   count:  5,      // 다섯을 연달아 상대합니다
   scale:  3.0,    // 본편의 3배 — 가운데 회복이 있어 견딜 만합니다
-  bonus:  700,
+  bonus:  900,
   codex:  7,
   maxBoss: 3,     // 보스는 셋까지 섞입니다
   bossChance: 1.0,  // 보스가 반드시 섞입니다
