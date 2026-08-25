@@ -29,7 +29,7 @@ const PICKUPS = [
     tag:  "모나크",
     rate: 0.60,
     cost: 30,     // 일반 배정과 같은 값. 안 적으면 자동으로 RULE.pullCost 를 씁니다
-    line:   "괴수는 아직 끝나지 않았습니다.",
+    line:   "괴수는 아직 끝나지 않았다.",
     banner: "assets/scene/모나크 저택.jpg",
     desc: "이름에 「모나크」가 든 인격이 자주 나옵니다. 유아인 ★★★ · 차민준 ★★ · 이경원 ★★★."
   },

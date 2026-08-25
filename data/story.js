@@ -1229,7 +1229,7 @@ const CHAPTERS = [
   { t: "n", text: "아무도 손을 들지 않았다. 경원군은 그럴 줄 알았다는 얼굴로 고개를 숙였다." },
   { t: "d", who: "lee_gyeongwon", text: "…아, 네. 그럼 이번은 제 차례네요." },
 
-  { t: "d", who: "manager", text: "G사가 어떤 데예요?" },
+  { t: "d", who: "manager", text: "G사가 어떤 데야?" },
   { t: "d", who: "kim_taeseong", text: "괴수의 기업입니다. 괴수를 만들어내고…" },
   { t: "d", who: "kim_duhyeon", text: "그 괴수로 미디어를 만들죠. 영화, 특촬, 굿즈까지." },
   { t: "n", text: "괴수를 만드는 것과 괴수로 돈을 버는 것. 그 둘 사이에 G사가 있었다." },
@@ -1238,7 +1238,7 @@ const CHAPTERS = [
   { t: "n", text: "차 안이 잠시 조용해졌다.",
     extra: [
       { when: { party: "lee_sojeong" }, who: "lee_sojeong",
-        text: "괴수 영화요? 저 그런 거 눈이 아파서 잘 못 봐요. 다 크고, 어둡고, 시끄럽잖아요." },
+        text: "괴수 영화. 크고, 어둡고, 시끄러운 걸 두 시간 보는 일이지. 그걸로 먹고사는 회사가 있다니." },
       { when: { party: "chu_minsu" }, who: "chu_minsu",
         text: "괴수를 «만든다» 는 게 어디까지를 말하는 거지. 설계도가 있다는 뜻인가?" },
       { when: { party: "song_hamin" }, who: "song_hamin",
@@ -1268,9 +1268,9 @@ const CHAPTERS = [
 
   /* ── 경원군에게 묻는다 ─────────────────────────────────── */
   { t: "n", text: "경원군은 아까부터 창밖만 보고 있었다." },
-  { t: "d", who: "manager", text: "경원군, 그 세리자와라는 사람하고 어떤 관계에요?" },
+  { t: "d", who: "manager", text: "경원군, 그 세리자와라는 사람하고 어떤 관계야?" },
   { t: "d", who: "lee_gyeongwon", text: "한때는 좋아했었는데, 이제 변해서 안 좋아해요." },
-  { t: "d", who: "manager", text: "그런데 왜 뭘 걱정하는 거에요? 그 사람이 변해서 떠난 거에요?" },
+  { t: "d", who: "manager", text: "그런데 왜 뭘 걱정하는 거야? 그 사람이 변해서 떠난 거야?" },
   { t: "d", who: "lee_gyeongwon", text: "… 상관 없잖아요. 님하고는." },
   { t: "n", text: "그 뒤로 경원군은 한마디도 하지 않았다.",
     extra: [
@@ -1284,7 +1284,7 @@ const CHAPTERS = [
   { t: "place", img: "assets/scene/모나크 저택.jpg", name: "G사 · 모나크 저택" },
   { t: "n", text: "모나크. 세리자와가 조용히 괴수 이야기를 만들어내던 커다란 저택이었다." },
   { t: "n", text: "문 앞에 검은 천이 걸려 있었다. 축제가 아니었다." },
-  { t: "d", who: "manager", text: "…이거, 장례식인데요." },
+  { t: "d", who: "manager", text: "…이거, 장례식인데." },
   { t: "d", who: "guide", text: "…본사에 연락해 보겠습니다. 여러분은 먼저 들어가 계십시오." },
   { t: "n", text: "길잡이는 그렇게 말하고 문 밖에 남았다. 그 등이 오늘따라 작아 보였다." },
 
@@ -1322,9 +1322,9 @@ const CHAPTERS = [
 
   /* ── 노란테의 결정 ─────────────────────────────────────── */
   { t: "d", who: "manager", text: "…계약서대로면 물건을 받아야 하는데." },
-  { t: "d", who: "manager", text: "줄 사람이 없네요." },
+  { t: "d", who: "manager", text: "줄 사람이 없네." },
   { t: "n", text: "노란테는 잠깐 셈을 했다. 나간 공금, 길잡이의 얼굴, 빈손으로 돌아가는 길." },
-  { t: "d", who: "manager", text: "…찾읍시다. 저택 안에 있을 거예요." },
+  { t: "d", who: "manager", text: "…찾자. 저택 안에 있을 거야." },
   { t: "d", who: "manager", text: "그렇게라도 해야지… 길잡이님한테 안 혼나려면…" },
   { t: "n", text: "장례식장에서 물건을 뒤지자는 말이었다. 좋은 얼굴은 아무도 아니었지만, 반대하는 사람도 없었다.",
     extra: [
@@ -1343,22 +1343,22 @@ const CHAPTERS = [
   { t: "n", text: "조명이 한 줄씩 꺼졌다. 꺼진 자리마다 복도가 조금씩 어긋났다." },
   { t: "n", text: "문이 있던 자리에 벽이 있고, 벽이 있던 자리에 계단이 있었다. 장례식장은 순식간에 난장판이 되었다." },
   { t: "d", who: "cha_minjun", text: "오히려 좋아! 지금이야말로 황금교본 찾을 기회잖아요!" },
-  { t: "d", who: "kim_duhyeon", text: "…민준아." },
-  { t: "d", who: "cha_minjun", text: "왜요, 틀린 말 했어요?" },
+  { t: "d", who: "kim_duhyeon", text: "…민준이 형." },
+  { t: "d", who: "cha_minjun", text: "왜, 틀린 말 했어?" },
 
   /* ── 잡졸 A ───────────────────────────────────────────── */
   { t: "n", text: "그리고 어긋난 복도 저쪽에서, 무언가가 걸어 나왔다." },
   { t: "battle", foe: "monarch_a" },
 
   { t: "n", text: "쓰러진 것의 뒷다리에 촬영용 표식이 붙어 있었다. 사람을 해치지 않도록 만들어진 것이었다." },
-  { t: "d", who: "kim_taeseong", text: "…이건 사람을 물면 안 되는 물건입니다." },
-  { t: "d", who: "manager", text: "그런데 물었잖아요." },
+  { t: "d", who: "kim_taeseong", text: "…사람을 물면 안되는 물건일 텐데요…" },
+  { t: "d", who: "manager", text: "그런데 물었잖아." },
   { t: "n", text: "",
     extra: [
       { when: { party: "chu_minsu" }, who: "chu_minsu",
         text: "설계가 잘못된 게 아니라, 설계를 «누가 고친» 거겠지." },
       { when: { party: "lee_sojeong" }, who: "lee_sojeong",
-        text: "…무섭다고 하면 안 되나요. 저 그냥 무서운데." },
+        text: "이런걸 무섭다고 하는 건가. 그냥 무섭다는 말밖에 하지 못하는 사람들 같군." },
       { when: { party: "song_hamin" }, who: "song_hamin",
         text: "이거 찍어두면 나중에 증거 되지 않을까요. …손 떨려서 흔들리겠지만." }
     ] },
@@ -1381,11 +1381,11 @@ const CHAPTERS = [
   { t: "place", img: "assets/scene/구C사 지하실.jpg", name: "모나크 저택 · 지하" },
   { t: "n", text: "계단은 아래로만 이어졌다. 내려갈수록 공기가 마르고, 종이 냄새가 났다." },
   { t: "n", text: "그리고 그 끝에, 사람이라고 부르기 어려운 것이 앉아 있었다." },
-  { t: "d", who: "로포", text: "…어어? 이게 누구야." },
-  { t: "d", who: "로포", text: "수오 형! 수오 형 아니야?! 나야 나, 로포!" },
+  { t: "d", who: "로포", text: "…어어? 이게 누구십니까." },
+  { t: "d", who: "로포", text: "수오 씨! 수오 씨 아니십니까?! 저예요 저, 로포!" },
   { t: "n", text: "목도리 딜로포사우루스였던 것이, 이제는 어디부터가 목도리인지 알 수 없게 되어 있었다." },
-  { t: "d", who: "park_suo", text: "…나는 당신을 형이라고 불릴 만큼 가깝게 지낸 기억이 없소." },
-  { t: "d", who: "로포", text: "에이~ 섭섭하게 왜 그래~" },
+  { t: "d", who: "park_suo", text: "…나는 당신과 이름을 부를 만큼 가깝게 지낸 기억이 없소." },
+  { t: "d", who: "로포", text: "에이~ 섭섭하게 왜 그러십니까~" },
 
   { t: "d", who: "lee_gyeongwon", text: "…이상해." },
   { t: "d", who: "lee_gyeongwon", text: "장례식이 너무 빨라. 오래 앓다 가신 분인데, 부고가 어제였어." },
@@ -1393,14 +1393,14 @@ const CHAPTERS = [
   { t: "n", text: "경원군이 목소리를 높인 것은 처음이었다." },
   { t: "d", who: "lee_gyeongwon", text: "말해. 여기서 무슨 일이 있었어." },
 
-  { t: "d", who: "로포", text: "아~ 그거? 응, 나 벌써 찾았어. 황금교본." },
+  { t: "d", who: "로포", text: "아~ 그거요? 네, 저 벌써 찾았습니다. 황금교본." },
   { t: "d", who: "manager", text: "뭐?" },
-  { t: "d", who: "로포", text: "그리고 그걸로 만들었지. 형이 보면 진짜 놀랄 걸 만들었어." },
+  { t: "d", who: "로포", text: "그리고 그걸로 만들었지요. 수오 씨가 보면 진짜 놀랄 걸 만들었— 아니, 놀랄 거야. 놀랄 걸." },
   { t: "d", who: "kim_duhyeon", text: "네가 만들어봐야 또 허접한 거겠지. 지난번처럼." },
   { t: "d", who: "로포", text: "…" },
   { t: "n", text: "로포는 잠깐 조용해졌다가, 웃었다. 웃음이 멈추지 않았다." },
-  { t: "d", who: "로포", text: "하하, 하하하! 그래! 그렇게 생각해! 계속 그렇게 생각하고 있어!" },
-  { t: "d", who: "로포", text: "난 여기서 할 일 다 했거든. 그럼 이만~" },
+  { t: "d", who: "로포", text: "하하, 하하하! 그럼요, 그렇게 생각하십시오! 계속 그렇게! 그렇게 생각하고 있어! 끝까지!" },
+  { t: "d", who: "로포", text: "저는 여기서 할 일 다 했거든요. 그럼 이만~ 이만, 이만." },
   { t: "n", text: "로포는 벽 안으로 들어가듯 사라졌다." },
   { t: "d", who: "park_suo", text: "…거기 서시오!" },
   { t: "n", text: "박수오가 쫓으려 했지만, 그 앞을 무언가가 가로막았다. 하나가 아니었다." },
@@ -1411,13 +1411,13 @@ const CHAPTERS = [
     endText: "…아무리 베어도 줄지 않는다. 뒤에서 계속 밀려 들어온다." },
 
   { t: "n", text: "숨이 찼다. 하나를 넘기면 둘이 들어왔다." },
-  { t: "d", who: "manager", text: "…관리력이, 안 남았어요." },
-  { t: "d", who: "kim_taeseong", text: "관리자님, 뒤로." },
-  { t: "d", who: "lee_gyeongwon", text: "황금교본은커녕… 여기서 끝나는 거야?" },
+  { t: "d", who: "manager", text: "…관리력이, 안 남았어." },
+  { t: "d", who: "kim_taeseong", text: "관리자님, 뒤에 계세요…" },
+  { t: "d", who: "lee_gyeongwon", text: "…여기서 끝인가." },
   { t: "n", text: "작성위원들은 등을 맞대고 섰다. 그것 말고 할 수 있는 것이 없었다.",
     extra: [
       { when: { party: "lee_sojeong" }, who: "lee_sojeong",
-        text: "…저, 아직 하고 싶은 거 많은데요." },
+        text: "여기서 끝나는 건가. 시시하군." },
       { when: { party: "kim_haju" }, who: "kim_haju",
         text: "여기서 죽으면 밥값이 아깝잖아. 아깝다고." },
       { when: { party: "chu_minsu" }, who: "chu_minsu",
@@ -1436,7 +1436,7 @@ const CHAPTERS = [
 
   { t: "n", text: "길잡이는 숨도 고르지 않았다." },
   { t: "d", who: "kim_duhyeon", text: "…저 사람 뭐야." },
-  { t: "d", who: "lee_hanbeom", text: "…엔진을 만든 사람이 엔진보다 셀 줄은 몰랐는데요.",
+  { t: "d", who: "lee_hanbeom", text: "…내가 만든 엔진보다 저 사람이 셉니다.",
     alt: [ { when: { party: "kim_haju" }, who: "kim_haju",
              text: "…저래놓고 우리 회식비를 깎았다고?" } ] },
   { t: "d", who: "guide", text: "옥상입니다." },
