@@ -65,5 +65,13 @@ const ACHIEVEMENTS = [
     reward: "지원 작성위원 ★★★ 우생회 큰망치 심승휘",
     when: { kill: "심승휘", where: "mirror", titleHas: "망치" },
     give: { support: "우생회 큰망치|심승휘" }
+  },
+  {
+    name: "괴물들의 밤",
+    desc: "I사 시너지가 발동한 채로, 하드 거울 던전에서 데스리퍼를 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★ I사 선봉3팀 이유건",
+    /* synergy 는 시너지의 «이름» 으로 찾습니다. I사 태그의 이름은 「우주정복의 의지」입니다. */
+    when: { kill: "데스리퍼", where: "mirrorHard", synergy: "우주정복의 의지" },
+    give: { support: "I사 선봉3팀|이유건" }
   }
 ];

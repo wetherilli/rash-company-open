@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.28.2";
-const VERSION_NAME = "조각난 거울";
+const VERSION = "0.29.0";
+const VERSION_NAME = "육참골탄";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -869,6 +869,9 @@ function portraitOf(who) {
   if (isSupport(who)) { const s = supportBy(who); return s ? s.portrait : null; }
   if (SINNERS[who])  return SINNERS[who].portrait;
   if (CREW[who])     return CREW[who].portrait;
+  /* 이야기에만 나오는 사람 — data/characters.js 의 EXTRA_PORTRAITS */
+  if (typeof EXTRA_PORTRAITS !== "undefined" && EXTRA_PORTRAITS[who])
+    return EXTRA_PORTRAITS[who];
   { const a = advisorById(who) || advisorList().find(x => x.name === who); if (a) return a.portrait; }
 
   if (who.length >= 2 && typeof FOES !== "undefined") {
@@ -2783,7 +2786,7 @@ function openShop(back) {
     /* 서 있는 특정 배정만큼 칸이 섭니다 (최대 PICKUP_MAX 개) */
     pickupList().forEach((p, i) => {
       h += '<div class="slot pk" data-pickup="' + i + '">' +
-             stripHTML(p.banner) +
+             stripHTML(p.banner, p.line) +
              '<div class="nm">' + p.name + '</div>' +
              '<div class="sub">1회 ' + pickupCost(p) + ' ' + CURRENCY + '</div>' +
              '<div class="sub" style="color:#d8b26a">' + p.desc + '</div>' +
@@ -2982,10 +2985,12 @@ function pickupCost(p) {
 
 /* 상점 칸 머리에 얹는 작은 그림 띠 — 글씨 없이 그림만.
  * 칸마다 이것을 하나씩 달아 두면 칸 크기가 서로 어긋나지 않습니다. */
-function stripHTML(img) {
+function stripHTML(img, label) {
   if (!img) return "";
+  /* label 을 주면 띠 위에 글씨가 얹힙니다 — 특정 배정의 광고 문구 자리입니다 */
   return '<div class="pkline small pic" ' +
-         'style="background-image:url(\'' + assetURL(img) + '\')"></div>';
+         'style="background-image:url(\'' + assetURL(img) + '\')">' +
+         (label ? '<span>' + label + '</span>' : "") + '</div>';
 }
 
 /* 특정 배정 광고 띠 — 그림을 깔고 그 위에 문구를 얹습니다. (배정 화면 큰 띠) */
