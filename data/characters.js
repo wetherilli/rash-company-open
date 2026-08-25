@@ -248,7 +248,9 @@ const SINNERS = {
       { star: 2, title: "공룡의날 부장",                       atk: 16, def: 10, hp: 81, note: "제가 총괄해보죠." },
       { star: 2, title: "신해수랜드 경비",                atk: 20, def: 7,  hp: 73, note: "퍼레이드를 지키는 것." },
       { star: 3, title: "LST E.G.O :: 사랑과 증오의 이름으로", atk: 36, def: 13, hp: 119, note: "마법소녀, 너무 좋잖아?" },
-      { star: 3, title: "H사 군주",                            atk: 32, def: 18, hp: 148, note: "다 부질없는 것들, 부쉈다." }
+      { star: 3, title: "H사 군주",                            atk: 32, def: 18, hp: 148, note: "다 부질없는 것들, 부쉈다." },
+      /* 3.1성급 — 기본 3성보다 10% 좋게. 총사라 공격 쪽으로 치우쳐 있습니다 */
+      { star: 3, title: "북부 총기 협회 총사",                 atk: 32, def: 11, hp: 109, note: "쏘는 법을 아는 쪽이 이긴다." }
     ]
   },
 

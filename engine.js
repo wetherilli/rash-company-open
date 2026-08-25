@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.29.3";
-const VERSION_NAME = "육참골탄";
+const VERSION = "0.29.4";
+const VERSION_NAME = "편성 저장";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -178,9 +178,15 @@ function vaultToObject() {
   return {
     ids:      Object.keys(S.owned).filter(k => idByKey(k)),
     advisors: Object.keys(S.advisorsOwned || {}),
-    advisor:  S.advisor || null,
+    /* advisor / gift 는 «첫째 칸» 입니다. 옛 판이 읽을 수 있게 남겨 둡니다.
+     * 실제로 세운 것 전부는 advisorOn / giftOn 에 있습니다. */
+    advisor:  advisorOnList()[0] || null,
+    advisorOn: (S.advisorOn || []).filter(Boolean),
     gifts:    Object.keys(S.giftsOwned || {}),
-    gift:     S.gift || null,
+    gift:     giftOnList()[0] || null,
+    giftOn:   (S.giftOn || []).filter(Boolean),
+    /* 저장해 둔 편성 3칸 */
+    presets:  S.presets || null,
     supports: Object.keys(S.supportsOwned || {}),
     achieved: Object.keys(S.achieved || {}),
     cleared:  Object.keys(S.cleared || {}),
@@ -207,8 +213,12 @@ function loadVault() {
     owned:    toMap(v.ids),
     advisors: toMap(v.advisors),
     advisor:  v.advisor || null,
+    /* 옛 보관함에는 advisorOn 이 없습니다 — 그때는 한 명뿐이었으니 그것을 씁니다 */
+    advisorOn: v.advisorOn || (v.advisor ? [v.advisor] : []),
     gifts:    toMap(v.gifts),
     gift:     v.gift || null,
+    giftOn:   v.giftOn || (v.gift ? [v.gift] : []),
+    presets:  v.presets || null,
     supports: toMap(v.supports),
     achieved: toMap(v.achieved),
     mailTaken: toMap(v.mailTaken),
@@ -417,6 +427,23 @@ function newState() {
   if (v && v.gifts) for (const k in v.gifts) if (giftById(k)) giftsOwned[k] = true;
   const gift = (v && v.gift && giftsOwned[v.gift]) ? v.gift : null;
 
+  /* 세워 둔 것들 — 가진 것만 남기고, 같은 것이 두 번 들어가지 않게 걸러 냅니다.
+   * 개명 대비로 advisorById 를 거쳐 지금 이름으로 옮겨 담습니다. */
+  const advisorOn = [];
+  ((v && v.advisorOn) || []).forEach(k => {
+    const a = advisorById(k);
+    if (!a) return;
+    const id = advisorId(a);
+    if (advisorsOwned[id] && advisorOn.indexOf(id) < 0) advisorOn.push(id);
+  });
+  const giftOn = [];
+  ((v && v.giftOn) || []).forEach(k => {
+    const g = giftById(k);
+    if (!g) return;
+    const id = giftId(g);
+    if (giftsOwned[id] && giftOn.indexOf(id) < 0) giftOn.push(id);
+  });
+
   /* 뒤에서 온 보관함이면 여기서 자물쇠를 겁니다.
    * 값은 읽되(무엇이 들었는지 보여 주려고), 쓰기는 막힙니다. */
   if (v && v.ver && verCmp(v.ver, VERSION) > 0)
@@ -440,8 +467,9 @@ function newState() {
     ch: 0, sc: 0,
     party,
     equip, owned,
-    advisorsOwned, advisor,
-    giftsOwned, gift,
+    advisorsOwned, advisor, advisorOn,
+    giftsOwned, gift, giftOn,
+    presets: (v && v.presets) || [null, null, null],
     supportsOwned,
     achieved: achievedMap,
     mailTaken: (v && v.mailTaken) ? v.mailTaken : {},
@@ -612,24 +640,64 @@ function advisorFrom(s) {
  * effect 에 tag 가 있으면 그 말이 든 인격에게만 atk/def/hp 가 붙습니다. */
 function advisorBonusFor(who) {
   const out = { atk: 0, def: 0, hp: 0 };
-  const a = advisorById(S.advisor);
-  if (!a || !a.effect || !a.effect.tag) return out;
-
   const id = idByKey(S.equip[who]);
   const title = id ? id.title : "";
-  const tags = Array.isArray(a.effect.tag) ? a.effect.tag : [a.effect.tag];
-  if (!tags.some(t => title.indexOf(t) >= 0)) return out;
 
-  /* 기프트가 이 교육위원을 북돋우면 함께 배가 된다 */
-  let m = 1;
-  const g = equippedGift();
-  if (g && g.effect && g.effect.advisorName && a.name === g.effect.advisorName)
-    m = g.effect.mult || 1;
+  equippedAdvisors().forEach(a => {
+    if (!a.effect || !a.effect.tag) return;
+    const tags = Array.isArray(a.effect.tag) ? a.effect.tag : [a.effect.tag];
+    if (!tags.some(t => title.indexOf(t) >= 0)) return;
 
-  out.atk = (a.effect.atk || 0) * m;
-  out.def = (a.effect.def || 0) * m;
-  out.hp  = (a.effect.hp  || 0) * m;
+    /* 기프트가 이 교육위원을 북돋우면 함께 배가 된다 */
+    let m = 1;
+    equippedGifts().forEach(g => {
+      if (g.effect && g.effect.advisorName && a.name === g.effect.advisorName)
+        m *= g.effect.mult || 1;
+    });
+
+    out.atk += (a.effect.atk || 0) * m;
+    out.def += (a.effect.def || 0) * m;
+    out.hp  += (a.effect.hp  || 0) * m;
+  });
   return out;
+}
+
+/* ── 몇 개까지 들고 가는가 ────────────────────────────────────
+ *  기프트와 교육위원은 장을 마치면 하나씩 늘어납니다.
+ *  아래 표에 { n, needCleared } 를 얹으면 그만큼 늘어납니다 —
+ *  needCleared 를 적지 않은 줄이 기본값입니다.
+ *
+ *    기프트    6장을 마치면 2개
+ *    교육위원  7장을 마치면 2명
+ *
+ *  칸을 더 늘리려면 줄 하나만 더 얹으면 됩니다. 편성 화면도, 저장해 둔 편성도
+ *  전부 이 수를 보고 스스로 늘어납니다.
+ */
+const SLOT_RULE = {
+  gift:    [{ n: 1 }, { n: 2, needCleared: "ch6" }],
+  advisor: [{ n: 1 }, { n: 2, needCleared: "ch7" }]
+};
+function slotCount(kind) {
+  let n = 1;
+  (SLOT_RULE[kind] || []).forEach(r => {
+    if (!r.needCleared || (S && S.cleared && S.cleared[r.needCleared])) n = Math.max(n, r.n);
+  });
+  return n;
+}
+function giftSlots()    { return slotCount("gift"); }
+function advisorSlots() { return slotCount("advisor"); }
+
+/* 다음 칸이 어느 장에서 열리는가 — 화면에 일러 주려고 씁니다. 다 열렸으면 null. */
+function nextSlotChapter(kind) {
+  const now = slotCount(kind);
+  const r = (SLOT_RULE[kind] || []).filter(x => x.n > now)
+              .sort((a, b) => a.n - b.n)[0];
+  if (!r || !r.needCleared) return null;
+  const c = CHAPTERS.find(x => x.id === r.needCleared);
+  if (c) return c.no;
+  /* 아직 안 만든 장이면 id 에서 번호만 뽑아 적습니다 — ch6 → 6장, ch5_5 → 5.5장 */
+  const m = String(r.needCleared).match(/^ch(\d+)(?:_(\d+))?$/);
+  return m ? (m[1] + (m[2] ? "." + m[2] : "") + "장") : r.needCleared;
 }
 
 /* ── E.G.O 기프트 ──────────────────────────────────────────── */
@@ -639,7 +707,25 @@ function giftById(id) {
   return GIFTS.find(g => g.name === id) || GIFTS.find(g => g.id === id) || null;
 }
 function giftId(g) { return g ? g.name : null; }
-function equippedGift() { return S && S.gift ? giftById(S.gift) : null; }
+
+/* 지금 지니고 있는 기프트들. 칸이 줄어들면 뒤엣것부터 떨어져 나갑니다. */
+function giftOnList() {
+  if (!S) return [];
+  return (S.giftOn || []).filter(Boolean).slice(0, giftSlots());
+}
+function equippedGifts() { return giftOnList().map(giftById).filter(Boolean); }
+/* 하나만 필요한 자리에서 씁니다 — 첫째 칸입니다 */
+function equippedGift() { return equippedGifts()[0] || null; }
+function giftIsOn(id)   { return giftOnList().indexOf(id) >= 0; }
+
+/* 세우고 있는 교육위원들 */
+function advisorOnList() {
+  if (!S) return [];
+  return (S.advisorOn || []).filter(Boolean).slice(0, advisorSlots());
+}
+function equippedAdvisors() { return advisorOnList().map(advisorById).filter(Boolean); }
+function equippedAdvisor()  { return equippedAdvisors()[0] || null; }
+function advisorIsOn(k)     { return advisorOnList().indexOf(k) >= 0; }
 
 /* "박수오" 처럼 한글 이름으로 적어도 찾아 줍니다 */
 function sinnerKey(x) {
@@ -653,8 +739,7 @@ function sinnerKey(x) {
 function giftHits(e, who) {
   if (!e) return false;
   if (e.advisorTag) {                       // 그 계열 교육위원을 세웠는가
-    const adv = advisorById(S.advisor);
-    return !!(adv && adv.title.indexOf(e.advisorTag) >= 0);
+    return equippedAdvisors().some(adv => adv.title.indexOf(e.advisorTag) >= 0);
   }
   const id = idByKey(S.equip[who]);
   const title = id ? id.title : "";
@@ -667,58 +752,75 @@ function giftHits(e, who) {
 /* 작성위원 한 명에게 걸리는 기프트 보정 */
 function giftBonusFor(who) {
   const out = { atk: 0, def: 0, hp: 0 };
-  const g = equippedGift();
-  if (!g || !g.effect) return out;
-  const e = g.effect;
-
-  if (e.all) {
-    out.atk += e.all.atk || 0; out.def += e.all.def || 0; out.hp += e.all.hp || 0;
-  }
-  if (giftHits(e, who)) {
-    out.atk += e.atk || 0; out.def += e.def || 0; out.hp += e.hp || 0;
-  }
+  equippedGifts().forEach(g => {
+    const e = g.effect;
+    if (!e) return;
+    if (e.all) {
+      out.atk += e.all.atk || 0; out.def += e.all.def || 0; out.hp += e.all.hp || 0;
+    }
+    if (giftHits(e, who)) {
+      out.atk += e.atk || 0; out.def += e.def || 0; out.hp += e.hp || 0;
+    }
+  });
   return out;
 }
 
 /* 방어의 일부를 공격으로 옮기는 기프트 (제3발톱 의리사슬) */
 function giftConvertFor(who) {
-  const g = equippedGift();
-  if (!g || !g.effect || !g.effect.defToAtk) return 0;
-  return giftHits(g.effect, who) ? g.effect.defToAtk : 0;
+  let n = 0;
+  equippedGifts().forEach(g => {
+    if (g.effect && g.effect.defToAtk && giftHits(g.effect, who)) n += g.effect.defToAtk;
+  });
+  return n;
 }
 
-function giftCrit()     { const g = equippedGift(); return (g && g.effect && g.effect.crit) || 0; }
-function giftCritMult() { const g = equippedGift(); return (g && g.effect && g.effect.critMult) || 0; }
+function giftCrit() {
+  return equippedGifts().reduce((s, g) => s + ((g.effect && g.effect.crit) || 0), 0);
+}
+function giftCritMult() {
+  return equippedGifts().reduce((s, g) => s + ((g.effect && g.effect.critMult) || 0), 0);
+}
 
 /* ── 보조 교육위원 효과 ────────────────────────────────────── */
 function advisorEffect() {
-  const a = advisorById(S.advisor);
-  const e = (a && a.effect) || {};
   const out = {
-    manage:    e.manage    || 0,
-    manageMax: e.manageMax || 0,
-    gain:      e.gain      || 0,
-    /* tag 가 있으면 파티 전체가 아니라 그 인격에게만 걸리므로 여기서는 뺀다 */
-    atk:       e.tag ? 0 : (e.atk || 0),
-    def:       e.tag ? 0 : (e.def || 0),
-    hp:        e.tag ? 0 : (e.hp  || 0),
-    revive:    e.revive    || 0,
-    correct:   e.correct   || 0,
-    push:      e.push      || 0,
-    cheap:     e.cheap     || 0,
-    crit:      e.crit      || 0,   // 치명타 확률 +
-    critMult:  e.critMult  || 0    // 치명타 배율 +
+    manage: 0, manageMax: 0, gain: 0,
+    atk: 0, def: 0, hp: 0,
+    revive: 0, correct: 0, push: 0, cheap: 0,
+    crit: 0,       // 치명타 확률 +
+    critMult: 0    // 치명타 배율 +
   };
+  const gifts = equippedGifts();
 
-  /* 기프트가 이 교육위원을 북돋우거나, 자원을 더해 준다 */
-  const g = equippedGift();
-  if (g && g.effect) {
-    if (g.effect.advisorName && a && a.name === g.effect.advisorName) {
-      const m = g.effect.mult || 1;
-      for (const k in out) out[k] *= m;
-    }
-    if (g.effect.manage) out.manage += g.effect.manage;
-  }
+  equippedAdvisors().forEach(a => {
+    const e = a.effect || {};
+    const one = {
+      manage:    e.manage    || 0,
+      manageMax: e.manageMax || 0,
+      gain:      e.gain      || 0,
+      /* tag 가 있으면 파티 전체가 아니라 그 인격에게만 걸리므로 여기서는 뺀다 */
+      atk:       e.tag ? 0 : (e.atk || 0),
+      def:       e.tag ? 0 : (e.def || 0),
+      hp:        e.tag ? 0 : (e.hp  || 0),
+      revive:    e.revive    || 0,
+      correct:   e.correct   || 0,
+      push:      e.push      || 0,
+      cheap:     e.cheap     || 0,
+      crit:      e.crit      || 0,
+      critMult:  e.critMult  || 0
+    };
+    /* 기프트가 이 교육위원을 북돋우면 그 사람 몫만 배가 됩니다 */
+    gifts.forEach(g => {
+      if (g.effect && g.effect.advisorName && a.name === g.effect.advisorName) {
+        const m = g.effect.mult || 1;
+        for (const k in one) one[k] *= m;
+      }
+    });
+    for (const k in one) out[k] += one[k];
+  });
+
+  /* 기프트가 자원을 그냥 더해 주는 경우 — 교육위원과 무관합니다 */
+  gifts.forEach(g => { if (g.effect && g.effect.manage) out.manage += g.effect.manage; });
   return out;
 }
 /* 원고료 수입은 전부 이 문을 지나갑니다. RULE.moneyGain 하나로 조절됩니다.
@@ -803,8 +905,7 @@ function synergyNames(party) {
     .filter(w => w && (isSupport(w) || S.equip[w]))
     .map(w => memberTitle(w))
     .filter(t => t);
-  const a = advisorById(S.advisor);
-  if (a) list.push(a.title);
+  equippedAdvisors().forEach(a => list.push(a.title));
   return list;
 }
 
@@ -819,11 +920,12 @@ function activeSynergies(party) {
     const n = titles.filter(t => tags.some(tg => t.indexOf(tg) >= 0)).length;
     if (n < sy.need) return;
     let scale = n >= 4 ? 2 : n >= 3 ? 1.75 : 1;
-    /* 기프트가 이 시너지를 북돋우는 경우 */
-    const g = equippedGift();
-    if (g && g.effect && g.effect.synergy &&
-        (tags.indexOf(g.effect.synergy) >= 0 || g.effect.synergy === sy.name))
-      scale *= (g.effect.mult || 1);
+    /* 기프트가 이 시너지를 북돋우는 경우 — 여럿을 지녔으면 곱해집니다 */
+    equippedGifts().forEach(g => {
+      if (g.effect && g.effect.synergy &&
+          (tags.indexOf(g.effect.synergy) >= 0 || g.effect.synergy === sy.name))
+        scale *= (g.effect.mult || 1);
+    });
     out.push({
       name: sy.name, tag: tags[0], count: n, desc: sy.desc,
       atk: (sy.atk || 0) * scale,
@@ -1264,12 +1366,14 @@ function renderSynergy() {
 
   /* 세워둔 보조 교육위원과 지닌 기프트 — 별과 이름만 */
   let head = "";
-  const a = advisorById(S.advisor);
-  if (a) head += '<span class="adv"><span class="star">' + stars(a.star) + '</span> ' +
-                 a.title + ' ' + a.name + '</span>';
-  const gf = equippedGift();
-  if (gf) head += '<span class="gift"><span class="star">' + stars(gf.star) + '</span> ' +
-                  gf.name + '</span>';
+  equippedAdvisors().forEach(a => {
+    head += '<span class="adv"><span class="star">' + stars(a.star) + '</span> ' +
+            a.title + ' ' + a.name + '</span>';
+  });
+  equippedGifts().forEach(gf => {
+    head += '<span class="gift"><span class="star">' + stars(gf.star) + '</span> ' +
+            gf.name + '</span>';
+  });
 
   const list = activeSynergies();
   if (!list.length) {
@@ -1472,8 +1576,7 @@ function sceneWhen(c) {
     hit = hit || need[0];
   }
   if (c.advisor) {
-    const a = advisorById(S.advisor);
-    if (!a || a.name !== c.advisor) return null;
+    if (!equippedAdvisors().some(a => a.name === c.advisor)) return null;
   }
   if (c.synergy && !activeSynergies().some(x => x.name === c.synergy)) return null;
   if (c.flag && !(S.flags && S.flags[c.flag])) return null;
@@ -1824,11 +1927,11 @@ function doCook(s) {
     /* 그 재료를 «그 사람» 앞에 냈을 때만 벌어지는 일.
      * 3.5장에서는 이형우 교육위원이 오이 알레르기라 상이 엎어집니다.
      * 고르기 전에는 아무 데도 그런 낌새가 없어야 합니다. */
-    const a = advisorById(S.advisor);
+    const hasAdvisor = n => equippedAdvisors().some(x => x.name === n);
     const hasSupport = n => S.party.some(x => x && isSupport(x) && memberName(x) === n);
     const hasMember  = n => S.party.some(x => x && memberName(x) === n);
     const wa =
-      (ing.withAdvisor && a && a.name === ing.withAdvisor.name && ing.withAdvisor) ||
+      (ing.withAdvisor && hasAdvisor(ing.withAdvisor.name) && ing.withAdvisor) ||
       (ing.withSupport && hasSupport(ing.withSupport.name) && ing.withSupport) ||
       (ing.withMember  && hasMember(ing.withMember.name)   && ing.withMember)   || null;
 
@@ -1878,8 +1981,8 @@ function doCook(s) {
   const finish = () => {
     /* 그 상을 차린 교육위원을 세웠으면 덤 */
     if (s.advisor) {
-      const a = advisorById(S.advisor);
-      if (a && a.name === s.advisor.name) {
+      const a = equippedAdvisors().find(x => x.name === s.advisor.name);
+      if (a) {
         score += s.advisor.bonus || 0;
         divider();
         line(s.advisor.text, a.name);
@@ -2180,8 +2283,7 @@ function achieveMatches(a, foeName, cleared) {
     else if (here !== w.where) return false;
   }
   if (w.advisor) {
-    const ad = advisorById(S.advisor);
-    if (!ad || ad.name !== w.advisor) return false;
+    if (!equippedAdvisors().some(a => a.name === w.advisor)) return false;
   }
   if (w.party) {
     const need = Array.isArray(w.party) ? w.party : [w.party];
@@ -2488,27 +2590,40 @@ function openParty(done) {
   const draw = () => {
     let h = '<h2>편 성</h2>';
 
-    /* 맨 위 — 전투를 도와줄 보조 교육위원 */
-    const a = advisorById(S.advisor);
+    /* 맨 위 — 저장해 둔 편성 */
+    h += presetBarHTML();
+
+    /* 전투를 도와줄 보조 교육위원 */
+    const advs = equippedAdvisors();
+    const advCap = advisorSlots();
+    const advNext = nextSlotChapter("advisor");
     const advCount = Object.keys(S.advisorsOwned || {}).length;
-    h += '<div class="hint">전투를 도와줄 보조 교육위원을 한 명 세울 수 있습니다. ' +
-         '직접 싸우지는 않고, 작성위원 전원에게 상시 효과를 겁니다.</div>' +
-         '<div class="grid"><div class="slot' + (a ? ' sel' : '') + '" data-adv="1">' +
-           (a ? '<div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
-                  a.title + ' ' + a.name + '</div><div class="sub">' + a.desc + '</div>'
-              : '<div class="lock">세우지 않음</div><div class="sub">' +
-                  (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
+    h += '<div class="hint">전투를 도와줄 보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다. ' +
+         '직접 싸우지는 않고, 작성위원 전원에게 상시 효과를 겁니다.' +
+         (advNext ? '　' + advNext + '을 마치면 한 명 더.' : '') + '</div>' +
+         '<div class="grid"><div class="slot' + (advs.length ? ' sel' : '') + '" data-adv="1">' +
+           (advs.length
+             ? advs.map(a => '<div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
+                             a.title + ' ' + a.name + '</div><div class="sub">' + a.desc + '</div>').join("") +
+               (advs.length < advCap ? '<div class="sub">빈 칸 ' + (advCap - advs.length) + '　·　눌러서 더 세우십시오</div>' : "")
+             : '<div class="lock">세우지 않음</div><div class="sub">' +
+                 (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
          '</div></div>';
 
     /* E.G.O 기프트 */
-    const gf = equippedGift();
+    const gfs = equippedGifts();
+    const gfCap = giftSlots();
+    const gfNext = nextSlotChapter("gift");
     const gfCount = Object.keys(S.giftsOwned || {}).length;
     h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">E.G.O 기프트</div>' +
-         '<div class="hint">하나만 지닐 수 있습니다. 상점에서 황금교본으로 뽑습니다.</div>' +
-         '<div class="grid"><div class="slot' + (gf ? ' sel' : '') + '" data-gift="1">' +
-           (gf ? '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + gf.name +
-                 '</div><div class="sub">' + gf.desc + '</div>'
-               : '<div class="lock">지니지 않음</div><div class="sub">' +
+         '<div class="hint"><b>' + gfCap + '개</b>까지 지닐 수 있습니다. 상점에서 황금교본으로 뽑습니다.' +
+         (gfNext ? '　' + gfNext + '을 마치면 하나 더.' : '') + '</div>' +
+         '<div class="grid"><div class="slot' + (gfs.length ? ' sel' : '') + '" data-gift="1">' +
+           (gfs.length
+             ? gfs.map(gf => '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + gf.name +
+                             '</div><div class="sub">' + gf.desc + '</div>').join("") +
+               (gfs.length < gfCap ? '<div class="sub">빈 칸 ' + (gfCap - gfs.length) + '　·　눌러서 더 지니십시오</div>' : "")
+             : '<div class="lock">지니지 않음</div><div class="sub">' +
                  (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
          '</div></div>';
 
@@ -2574,6 +2689,7 @@ function openParty(done) {
     h += '<div class="modalfoot">' +
          '<button id="pdone">확정</button>' +
          '<button id="pids" class="ghost">인격 장착</button>' +
+         '<button id="psave" class="ghost">편성 저장</button>' +
          '</div>';
     $sheet.innerHTML = h;
 
@@ -2624,6 +2740,17 @@ function openParty(done) {
     if (advSlot) advSlot.onclick = () => openAdvisor(() => draw());
     const gfSlot = $sheet.querySelector(".slot[data-gift]");
     if (gfSlot) gfSlot.onclick = () => openGiftPick(() => draw());
+
+    document.getElementById("psave").onclick = () => openPresetSave(() => draw());
+    /* 저장해 둔 편성을 누르면 그 자리에서 갈아 끼웁니다.
+     * picking 도 함께 맞춰야 아래 목록의 번호가 어긋나지 않습니다. */
+    $sheet.querySelectorAll(".slot[data-preset]").forEach(el => {
+      el.onclick = () => {
+        presetApply(presetList()[+el.dataset.preset]);
+        picking = S.party.slice();
+        draw();
+      };
+    });
   };
   draw();
 }
@@ -3082,7 +3209,7 @@ function openShop(back) {
       } else {
         if (!S.giftsOwned) S.giftsOwned = {};
         S.giftsOwned[giftId(pick)] = true;
-        if (!S.gift) S.gift = giftId(pick);
+        if (!giftOnList().length) { S.giftOn = [giftId(pick)]; S.gift = giftId(pick); }
         msg = stars(pick.star) + " " + pick.name + " 획득 — " + pick.desc;
       }
       saveVault(); render();
@@ -3117,7 +3244,7 @@ function openShop(back) {
       } else {
         if (!S.advisorsOwned) S.advisorsOwned = {};
         S.advisorsOwned[key] = true;
-        if (!S.advisor) S.advisor = key;
+        if (!advisorOnList().length) { S.advisorOn = [key]; S.advisor = key; }
         msg = stars(pick.star) + " " + pick.title + " " + pick.name + " 합류 — " + pick.desc;
       }
       saveVault(); render();
@@ -3343,7 +3470,7 @@ function openGacha(done, pk, deal) {
       if (isNew) {
         if (!S.advisorsOwned) S.advisorsOwned = {};
         S.advisorsOwned[k] = true;
-        if (!S.advisor) S.advisor = k;
+        if (!advisorOnList().length) { S.advisorOn = [k]; S.advisor = k; }
       } else S.money += dupRefund(a.star);
       return { kind: "adv", key: k, adv: a, isNew };
     };
@@ -3402,17 +3529,37 @@ function readSave() { return Store.get(SAVE_KEY); }
 function save() {
   if (vaultLocked()) { say("보관함이 잠겨 있어 기록하지 않았습니다.", "todo"); return; }
   try {
-    const c = JSON.parse(JSON.stringify(S));
-    c.battle = null; c.waiting = false;
-    Store.set(SAVE_KEY, JSON.stringify(c));
+    /* «자리» 만 적습니다. 모은 것은 보관함이 임자입니다 (load 의 주석 참고) */
+    const c = {};
+    SAVE_KEEPS.forEach(k => { if (S[k] !== undefined) c[k] = S[k]; });
+    Store.set(SAVE_KEY, JSON.stringify(JSON.parse(JSON.stringify(c))));
+    saveVault();                     // 기록할 때 모은 것도 함께 굳혀 둡니다
     say("기록했다. (" + curChapter().no + ")", "sys");
   } catch (e) { say("기록 실패.", "todo"); }
 }
+/* 기록(이어하기)에는 «어디까지 읽었나» 만 들어 있어야 합니다.
+ * 모은 것은 보관함이 임자입니다.
+ *
+ *  예전에는 기록을 통째로 S 에 덮어썼습니다. 그러면 기록해 둔 뒤에 얻은 것이
+ *  — 업적·인격·기프트·우편·원고료 — 이어하기 한 번에 옛것으로 되돌아갔고,
+ *  그다음 saveVault() 가 그 옛것을 보관함에 도로 써 넣어 아주 사라졌습니다.
+ *  「새로고침하면 업적이 없어진다」던 것이 이것입니다.
+ *
+ *  이제 보관함에서 새로 읽은 것 위에 «자리» 만 얹습니다.
+ */
+const SAVE_KEEPS = ["ch", "sc", "flags", "hp", "party", "equip",
+                    "mirror", "mirrorHard", "mirrorTier", "ended"];
+
 function load() {
   const raw = readSave();
   if (!raw) return false;
   try {
-    S = JSON.parse(raw);
+    const spot = JSON.parse(raw);
+    S = newState();                       // 모은 것은 보관함에서
+    SAVE_KEEPS.forEach(k => { if (spot[k] !== undefined) S[k] = spot[k]; });
+    /* 인격을 잃었거나 이름이 바뀌었으면 기록해 둔 장착은 버립니다 */
+    for (const w in (S.equip || {}))
+      if (S.equip[w] && !S.owned[S.equip[w]]) S.equip[w] = firstOwned(w, S.owned);
     S.battle = null; S.waiting = false;
     SCENES = buildScenes(CHAPTERS[S.ch]);   // 기록은 본편만 남는다
     clearLog();
@@ -4052,24 +4199,188 @@ function openAchieve(back) {
   };
 }
 
+/* ── 저장해 둔 편성 ────────────────────────────────────────────
+ *  작성위원 셋과 그들이 낀 인격, 지닌 기프트, 세운 교육위원을 통째로 담아 둡니다.
+ *  세 칸이고, 누르면 그 자리에서 그대로 갈아 끼웁니다.
+ *
+ *  칸 이름은 «가장 많이 공명하는 시너지» 를 씁니다 — 수가 같으면 가나다 순으로 앞선 것.
+ *  이름을 직접 적게 하지 않는 것은, 편성을 바꾸면 이름도 따라 바뀌는 편이
+ *  무엇을 담아 두었는지 알아보기 쉽기 때문입니다.
+ *
+ *  기프트·교육위원 칸이 나중에 늘어나도 그대로 삽니다 — 배열로 담아 두고,
+ *  불러올 때 그때의 칸 수만큼만 끼웁니다.
+ */
+const PRESET_MAX = 3;
+
+function presetList() {
+  if (!S.presets || !Array.isArray(S.presets)) S.presets = [];
+  while (S.presets.length < PRESET_MAX) S.presets.push(null);
+  return S.presets;
+}
+
+/* 지금 편성을 그대로 담아 낸다 */
+function presetSnapshot() {
+  const equip = {};
+  S.party.forEach(w => { if (w && !isSupport(w)) equip[w] = S.equip[w] || null; });
+  return {
+    party:     S.party.slice(),
+    equip:     equip,
+    giftOn:    giftOnList().slice(),
+    advisorOn: advisorOnList().slice()
+  };
+}
+
+/* 담아 둔 편성에서 «가장 많이 공명하는 시너지» 이름을 찾는다.
+ * 지금 편성이 아니라 그 편성 기준이어야 하므로, S 를 잠깐 바꿔 끼웠다 되돌립니다. */
+function presetLabel(p) {
+  if (!p) return null;
+  const 켠 = { party: S.party, equip: S.equip, giftOn: S.giftOn, advisorOn: S.advisorOn };
+  let best = null;
+  try {
+    presetApplyRaw(p);
+    const list = activeSynergies();
+    /* 사람 수가 많은 것 우선, 같으면 가나다 순 */
+    list.sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name, "ko"));
+    best = list[0] || null;
+  } catch (e) { best = null; }
+  S.party = 켠.party; S.equip = 켠.equip; S.giftOn = 켠.giftOn; S.advisorOn = 켠.advisorOn;
+  return best ? best.name : null;
+}
+
+/* 담아 둔 것을 S 에 얹기만 합니다 (저장도, 다시 그리기도 안 합니다) */
+function presetApplyRaw(p) {
+  if (!p) return;
+  S.party = (p.party || []).slice();
+  S.equip = Object.assign({}, S.equip);
+  for (const w in (p.equip || {})) if (p.equip[w]) S.equip[w] = p.equip[w];
+  /* 그때보다 칸이 줄었으면 앞에서부터 그만큼만 */
+  S.giftOn    = (p.giftOn    || []).slice(0, giftSlots());
+  S.advisorOn = (p.advisorOn || []).slice(0, advisorSlots());
+  S.gift    = S.giftOn[0]    || null;
+  S.advisor = S.advisorOn[0] || null;
+}
+
+/* 담아 둔 것 중 지금 못 쓰는 것이 있는가 (인격을 잃었다든지) */
+function presetBroken(p) {
+  if (!p) return null;
+  const bad = [];
+  (p.party || []).forEach(w => {
+    if (!w) return;
+    if (isSupport(w)) { if (!(S.supportsOwned && S.supportsOwned[w])) bad.push(memberName(w)); return; }
+    if (!SINNERS[w]) { bad.push(w); return; }
+    const k = (p.equip || {})[w];
+    if (k && !S.owned[k]) bad.push(SINNERS[w].name);
+  });
+  (p.giftOn    || []).forEach(k => { if (!(S.giftsOwned && S.giftsOwned[k])) bad.push(k); });
+  (p.advisorOn || []).forEach(k => { if (!(S.advisorsOwned && S.advisorsOwned[k])) bad.push(k.split("|").pop()); });
+  return bad.length ? bad : null;
+}
+
+function presetApply(p) {
+  presetApplyRaw(p);
+  S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+  saveVault(); render();
+}
+
+function presetSave(i) {
+  presetList()[i] = presetSnapshot();
+  saveVault();
+}
+function presetClear(i) {
+  presetList()[i] = null;
+  saveVault();
+}
+
+/* 편성 화면 맨 위에 서는 세 칸 */
+function presetBarHTML() {
+  const ps = presetList();
+  let h = '<div style="margin:2px 0 6px;color:#e8e4de;font-weight:700">저장해 둔 편성</div>' +
+          '<div class="hint">눌러서 그대로 갈아 끼웁니다. 아래 [편성 저장] 으로 담아 둡니다.</div>' +
+          '<div class="grid">';
+  ps.forEach((p, i) => {
+    if (!p) {
+      h += '<div class="slot"><div class="lock">' + (i + 1) + '　비어 있음</div>' +
+             '<div class="sub">아직 담아 둔 것이 없습니다</div></div>';
+      return;
+    }
+    const 이름 = presetLabel(p);
+    const 깨짐 = presetBroken(p);
+    const names = (p.party || []).filter(Boolean).map(memberName).join("　");
+    h += '<div class="slot' + (깨짐 ? '' : ' sel') + '"' +
+           (깨짐 ? '' : ' data-preset="' + i + '"') + '>' +
+           '<div class="' + (깨짐 ? 'lock' : 'nm') + '">' + (i + 1) + '　' +
+             (이름 || '시너지 없음') + '</div>' +
+           '<div class="sub">' + names + '</div>' +
+           '<div class="sub">' +
+             (깨짐 ? '<span style="color:#c8403a">지금 쓸 수 없습니다 — ' + 깨짐.join(", ") + '</span>'
+                   : '기프트 ' + (p.giftOn || []).length + '　·　교육위원 ' + (p.advisorOn || []).length) +
+           '</div>' +
+         '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
+/* [편성 저장] 을 누르면 어느 칸에 담을지 고릅니다 */
+function openPresetSave(back) {
+  $modal.classList.add("on");
+  const ps = presetList();
+  const 지금 = presetSnapshot();
+  const 지금이름 = presetLabel(지금);
+
+  let h = '<h2>편 성 저 장</h2>' +
+          '<div class="hint">지금 편성을 어느 칸에 담을지 고르십시오. ' +
+          '이미 담긴 칸을 고르면 덮어씁니다.<br>지금 편성 — <b>' +
+          (지금이름 || '시너지 없음') + '</b>　' +
+          (지금.party || []).filter(Boolean).map(memberName).join("　") + '</div>' +
+          '<div class="grid one">';
+  ps.forEach((p, i) => {
+    const 이름 = p ? presetLabel(p) : null;
+    h += '<div class="slot" data-save="' + i + '">' +
+           '<div class="nm">' + (i + 1) + '　' + (p ? (이름 || '시너지 없음') : '비어 있음') + '</div>' +
+           '<div class="sub">' + (p ? (p.party || []).filter(Boolean).map(memberName).join("　")
+                                    : '여기에 담습니다') + '</div>' +
+           '<div class="sub mailfoot">' + (p ? '<b>덮어쓰기</b>' : '<b>담기</b>') +
+             (p ? '　·　<span data-wipe="' + i + '" style="color:#c8403a;cursor:pointer">비우기</span>' : '') +
+           '</div>' +
+         '</div>';
+  });
+  h += '</div><div class="modalfoot"><button id="psclose">돌아가기</button></div>';
+  $sheet.innerHTML = h;
+
+  $sheet.querySelectorAll("[data-wipe]").forEach(el => {
+    el.onclick = ev => { ev.stopPropagation(); presetClear(+el.dataset.wipe); openPresetSave(back); };
+  });
+  $sheet.querySelectorAll(".slot[data-save]").forEach(el => {
+    el.onclick = () => { presetSave(+el.dataset.save); if (back) back(); };
+  });
+  document.getElementById("psclose").onclick = () => { if (back) back(); else { closeModal(); render(); } };
+}
+
 /* ── 보조 교육위원 편성 ────────────────────────────────────── */
 function openAdvisor(back) {
   $modal.classList.add("on");
   const all = advisorList();
   const mine = all.filter(a => S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
 
-  let h = '<h2>보 조 교 육 위 원</h2>' +
-          '<div class="hint">관리자 옆에 한 명만 세울 수 있습니다. 직접 싸우지는 않고, ' +
-          '편성된 작성위원 전원에게 상시 효과를 겁니다.　보유 ' + mine.length + ' / ' +
-          all.length + '</div><div class="grid">';
+  const cap = advisorSlots();
+  const nowOn = advisorOnList();
+  const 다음 = nextSlotChapter("advisor");
 
-  h += '<div class="slot' + (!S.advisor ? ' sel' : '') + '" data-pick="">' +
-         '<div class="nm">세우지 않음</div><div class="sub">효과 없음</div></div>';
+  let h = '<h2>보 조 교 육 위 원</h2>' +
+          '<div class="hint">관리자 옆에 <b>' + cap + '명</b>까지 세울 수 있습니다. 직접 싸우지는 않고, ' +
+          '편성된 작성위원 전원에게 상시 효과를 겁니다.　세운 ' + nowOn.length + ' / ' + cap +
+          '　·　보유 ' + mine.length + ' / ' + all.length +
+          (다음 ? '<br>' + 다음 + '을 마치면 한 명 더 세울 수 있습니다.' : '') +
+          '</div><div class="grid">';
+
+  h += '<div class="slot' + (!nowOn.length ? ' sel' : '') + '" data-pick="">' +
+         '<div class="nm">모두 내리기</div><div class="sub">아무도 세우지 않습니다</div></div>';
 
   all.forEach(a => {
     const k = advisorId(a);
     const has = !!(S.advisorsOwned && S.advisorsOwned[k]);
-    const on  = S.advisor === k;
+    const on  = advisorIsOn(k);
     h += '<div class="slot' + (on ? ' sel' : '') + '"' + (has ? ' data-pick="' + k + '"' : '') + '>' +
            '<div class="' + (has ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name +
@@ -4083,7 +4394,18 @@ function openAdvisor(back) {
 
   $sheet.querySelectorAll(".slot[data-pick]").forEach(el => {
     el.onclick = () => {
-      S.advisor = el.dataset.pick || null;
+      const k = el.dataset.pick;
+      /* 빈 손잡이는 «모두 내리기» */
+      if (!k) S.advisorOn = [];
+      else if (advisorIsOn(k)) S.advisorOn = advisorOnList().filter(x => x !== k);
+      else {
+        const list = advisorOnList();
+        /* 칸이 다 찼으면 «맨 먼저 세운 사람» 이 물러납니다 */
+        if (list.length >= advisorSlots()) list.shift();
+        list.push(k);
+        S.advisorOn = list;
+      }
+      S.advisor = advisorOnList()[0] || null;   // 옛 이름도 맞춰 둡니다
       S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
       saveVault(); render();
       openAdvisor(back);
@@ -4097,16 +4419,23 @@ function openGiftPick(back) {
   $modal.classList.add("on");
   const mine = (typeof GIFTS !== "undefined" ? GIFTS : []).filter(g => S.giftsOwned && S.giftsOwned[giftId(g)]);
 
-  let h = '<h2>E . G . O   기 프 트</h2>' +
-          '<div class="hint">하나만 지닐 수 있습니다. 편성된 작성위원 전원에게 걸립니다.　보유 ' +
-          mine.length + ' / ' + (typeof GIFTS !== "undefined" ? GIFTS.length : 0) + '</div><div class="grid">';
+  const cap = giftSlots();
+  const nowOn = giftOnList();
+  const 다음 = nextSlotChapter("gift");
 
-  h += '<div class="slot' + (!S.gift ? ' sel' : '') + '" data-pick="">' +
-         '<div class="nm">지니지 않음</div><div class="sub">효과 없음</div></div>';
+  let h = '<h2>E . G . O   기 프 트</h2>' +
+          '<div class="hint"><b>' + cap + '개</b>까지 지닐 수 있습니다. 편성된 작성위원 전원에게 걸립니다.　' +
+          '지닌 ' + nowOn.length + ' / ' + cap +
+          '　·　보유 ' + mine.length + ' / ' + (typeof GIFTS !== "undefined" ? GIFTS.length : 0) +
+          (다음 ? '<br>' + 다음 + '을 마치면 하나 더 지닐 수 있습니다.' : '') +
+          '</div><div class="grid">';
+
+  h += '<div class="slot' + (!nowOn.length ? ' sel' : '') + '" data-pick="">' +
+         '<div class="nm">모두 내려놓기</div><div class="sub">아무것도 지니지 않습니다</div></div>';
 
   (typeof GIFTS !== "undefined" ? GIFTS : []).forEach(g => {
     const has = !!(S.giftsOwned && S.giftsOwned[giftId(g)]);
-    const on  = S.gift === giftId(g);
+    const on  = giftIsOn(giftId(g));
     h += '<div class="slot' + (on ? ' sel' : '') + '"' + (has ? ' data-pick="' + giftId(g) + '"' : '') + '>' +
            '<div class="' + (has ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(g.star) + '</span> ' + g.name +
@@ -4119,7 +4448,16 @@ function openGiftPick(back) {
 
   $sheet.querySelectorAll(".slot[data-pick]").forEach(el => {
     el.onclick = () => {
-      S.gift = el.dataset.pick || null;
+      const k = el.dataset.pick;
+      if (!k) S.giftOn = [];
+      else if (giftIsOn(k)) S.giftOn = giftOnList().filter(x => x !== k);
+      else {
+        const list = giftOnList();
+        if (list.length >= giftSlots()) list.shift();   // 다 찼으면 먼저 든 것을 내려놓습니다
+        list.push(k);
+        S.giftOn = list;
+      }
+      S.gift = giftOnList()[0] || null;
       S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
       saveVault(); render();
       openGiftPick(back);
@@ -4136,7 +4474,7 @@ function grantAdvisor(s) {
   if (!S.advisorsOwned) S.advisorsOwned = {};
   if (S.advisorsOwned[k]) { say("이미 함께하고 있는 교육위원이다.", "sys"); return; }
   S.advisorsOwned[k] = true;
-  if (!S.advisor) S.advisor = k;
+  if (!advisorOnList().length) { S.advisorOn = [k]; S.advisor = k; }
   say("보조 교육위원 합류 — " + stars(a.star) + " " + a.title + " " + a.name, "gain");
   say(a.desc, "sys");
   saveVault(); render();
