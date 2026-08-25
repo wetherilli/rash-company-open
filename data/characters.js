@@ -288,6 +288,7 @@ const SINNERS = {
       { star: 2, title: "S사 콘테스트 참가자",   atk: 17, def: 8,  hp: 74, note: "다음에는 꼭."  },
       { star: 3, title: "LST E.G.O :: 악어괴인", atk: 37, def: 13, hp: 124, note: "괴인이라는 말도" },
       { star: 3, title: "모나크 백룡야행",              atk: 36, def: 17, hp: 129, note: "다 찢어놓은 거야."  }
+
     ]
   },
 
