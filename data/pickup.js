@@ -25,13 +25,13 @@ const PICKUP_MAX = 2;
 const PICKUPS = [
   {
     on:   true,
-    name: "영덕의 요리사 특정 배정",
-    tag:  "영덕의 요리사",
+    name: "모나크 특정 배정",
+    tag:  "모나크",
     rate: 0.60,
     cost: 30,     // 일반 배정과 같은 값. 안 적으면 자동으로 RULE.pullCost 를 씁니다
-    line:   "즐거운 파티 시간입니다!",
-    banner: "assets/scene/영덕 평상시.jpg",
-    desc: "김하주 ★★★ 와 교육위원 이형우·강호영의 「영덕의 요리사」가 자주 나옵니다."
+    line:   "괴수는 아직 끝나지 않았습니다.",
+    banner: "assets/scene/모나크 저택.jpg",
+    desc: "이름에 「모나크」가 든 인격이 자주 나옵니다. 유아인 ★★★ · 차민준 ★★ · 이경원 ★★★."
   },
   {
     on:   true,
@@ -50,6 +50,16 @@ const PICKUPS = [
 /* 내려간 배정 — 기록용입니다. 게임에는 쓰이지 않습니다.
  * 다시 세우려면 그대로 베껴 PICKUPS 로 옮기면 됩니다. */
 const PICKUP_PAST = [
+  {
+    name: "영덕의 요리사 특정 배정",
+    tag:  "영덕의 요리사",
+    rate: 0.60,
+    cost: 30,
+    line:   "즐거운 파티 시간입니다!",
+    banner: "assets/scene/영덕 평상시.jpg",
+    desc: "김하주 ★★★ 와 교육위원 이형우·강호영의 「영덕의 요리사」가 자주 나옵니다.",
+    ver: "0.27.1 ~ 0.29.5"
+  },
   {
     name: "아라온호 특정 배정",
     tag:  "아라온호",

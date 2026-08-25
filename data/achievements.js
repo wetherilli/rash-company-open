@@ -18,6 +18,8 @@
  *                  적을 쓰러뜨리는 것과는 다른 사건이라, kill 과 같이 적지 마십시오.
  *      where       "story" 본편 · "mirror" 거울 던전(하드·익스트림 포함)
  *                  · "mirrorHard" 하드만 · "mirrorExtreme" 익스트림만
+ *                  여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
+ *                  where: ["mirrorHard", "mirrorExtreme"]
  *                  적지 않으면 어디서든.
  *      advisor     그 이름의 보조 교육위원을 세우고 있어야 합니다.
  *      party       그 작성위원이 편성에 있어야 합니다. 여럿이면 배열(모두 필요).
@@ -58,6 +60,13 @@ const ACHIEVEMENTS = [
     reward: "지원 작성위원 ★★★ L사 비포팀 정윤하",
     when: { clear: "mirrorExtreme" },
     give: { support: "L사 비포팀|정윤하" }
+  },
+  {
+    name: "번개는 이제 그만!",
+    desc: "하드 또는 익스트림 거울 던전에서 머리 없는 드래곤 케빈을 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ 모나크 버틀러 오은성",
+    when: { kill: "케빈", where: ["mirrorHard", "mirrorExtreme"] },
+    give: { support: "모나크 버틀러|오은성" }
   },
   {
     name: "큰 망치의 길",

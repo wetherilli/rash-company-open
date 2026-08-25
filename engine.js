@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.29.5";
-const VERSION_NAME = "편성 저장";
+const VERSION = "1.0.0";
+const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -191,7 +191,7 @@ function vaultToObject() {
     achieved: Object.keys(S.achieved || {}),
     cleared:  Object.keys(S.cleared || {}),
     equip:    S.equip,
-    party:    S.party,
+    party:    ownParty(),          /* 조력자는 «내 것» 이 아니라 담지 않습니다 */
     money:    S.money,
     codex:    S.codex,
     newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
@@ -801,7 +801,7 @@ function advisorEffect() {
   const out = {
     manage: 0, manageMax: 0, gain: 0,
     atk: 0, def: 0, hp: 0,
-    revive: 0, correct: 0, push: 0, cheap: 0,
+    revive: 0, correct: 0, push: 0, cheap: 0, arrest: 0,
     crit: 0,       // 치명타 확률 +
     critMult: 0    // 치명타 배율 +
   };
@@ -821,6 +821,7 @@ function advisorEffect() {
       correct:   e.correct   || 0,
       push:      e.push      || 0,
       cheap:     e.cheap     || 0,
+      arrest:    e.arrest    || 0,   // 체포로 깎는 적 방어 +
       crit:      e.crit      || 0,
       critMult:  e.critMult  || 0
     };
@@ -961,16 +962,19 @@ function synergyBonus() {
  * 보관함에만 있는 인격은 아무 영향도 주지 않는다. */
 function effStats(who) {
   /* 지원 작성위원은 인격이 없고, 수치가 제 줄에 그대로 적혀 있다 */
-  const sup = supportBy(who);
-  const s = sup ? { atk: sup.atk, def: sup.def, hp: sup.hp } : statsOf(S.equip[who]);
+  /* 지원과 조력자는 인격이 없고, 수치가 제 줄에 그대로 적혀 있다 */
+  const flat = allyBy(who) || supportBy(who);
+  const s = flat ? { atk: flat.atk, def: flat.def, hp: flat.hp } : statsOf(S.equip[who]);
   if (S.party.indexOf(who) < 0) return s;      // 편성 밖이면 시너지 없음
   const b = synergyBonus();
   const a = advisorEffect();                   // 보조 교육위원은 파티 전원에게 걸린다
   const gf = giftBonusFor(who);                // E.G.O 기프트
   const af = advisorBonusFor(who);             // 교육위원이 특정 인격에만 거는 보정
-  const atk = Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk));
-  const def = Math.round(s.def * (1 + b.def + a.def + gf.def + af.def));
-  const hp  = Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp));
+  /* 깎는 기프트가 있어 배수가 0 아래로 갈 수 있습니다. 바닥을 둡니다 —
+   * 공격과 체력은 1, 방어는 0 까지. */
+  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk)));
+  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def)));
+  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp)));
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   return { atk: atk + Math.round(def * conv), def: def, hp: hp };
@@ -999,6 +1003,58 @@ function rnd(n) { return Math.floor(Math.random() * n); }
  *  12명 밖에서 손을 빌려주는 사람들. 편성 칸에 「지원|제목|이름」으로 들어갑니다.
  *  인격을 갈아 끼우지 않고, 수치가 data/characters.js 에 그대로 적혀 있습니다.
  */
+/* ── 조력자 ────────────────────────────────────────────────────
+ *  이야기에서만 옆에 서 주는 사람들입니다. 내용은 data/allies.js.
+ *
+ *  편성 셋은 그대로 두고 «넷째» 로 붙습니다. 그래서 S.party 에 그냥 얹습니다 —
+ *  그러면 전투·회복·시너지·화면이 전부 손댈 것 없이 그대로 돌아갑니다.
+ *  대신 «내 것이 아니므로» 보관함과 저장해 둔 편성에는 넣지 않습니다.
+ */
+const ALLY_PREFIX = "조력|";
+function allyList() { return (typeof ALLIES !== "undefined" && ALLIES) ? ALLIES : []; }
+function allyId(a)  { return a ? ALLY_PREFIX + a.title + "|" + a.name : null; }
+function isAlly(w)  { return typeof w === "string" && w.indexOf(ALLY_PREFIX) === 0; }
+function allyBy(w) {
+  if (!isAlly(w)) return null;
+  return allyList().find(a => allyId(a) === w) || null;
+}
+/* 이름만 적어도 찾아 줍니다 — 이야기에는 「베르렐리우스」 라고만 적습니다 */
+function allyByName(n) { return allyList().find(a => a.name === n) || null; }
+function alliesOn()    { return (S && S.party || []).filter(isAlly); }
+/* 조력자를 뺀 «내 편성» — 보관함·저장해 둔 편성·편성 화면이 봅니다 */
+function ownParty(list) { return (list || (S && S.party) || []).filter(w => !isAlly(w)); }
+
+function allyJoin(name) {
+  const a = allyByName(name);
+  if (!a) { say("(조력자를 찾지 못했습니다: " + name + ")", "todo"); return; }
+  const id = allyId(a);
+  if (S.party.indexOf(id) >= 0) return;
+  S.party.push(id);
+  S.hp[id] = maxHp(id);
+  divider();
+  say(withJosa(a.name, "이") + " 곁에 선다.", "gain");
+  /* 여러 줄이면 차례로 */
+  (Array.isArray(a.line) ? a.line : (a.line ? [a.line] : [])).forEach(t => speak(id, t));
+  render();
+}
+function allyLeave(name) {
+  const gone = [];
+  S.party = S.party.filter(w => {
+    if (!isAlly(w)) return true;
+    const a = allyBy(w);
+    if (name !== true && (!a || a.name !== name)) return true;
+    if (a) gone.push(a);
+    return false;
+  });
+  gone.forEach(a => {
+    (Array.isArray(a.bye) ? a.bye : (a.bye ? [a.bye] : [])).forEach(t => speak(allyId(a), t));
+  });
+  if (gone.length) { divider(); say(gone.map(a => a.name).join("　·　") + " 물러난다.", "sys"); }
+  render();
+}
+/* 장을 시작하거나 마칠 때는 조력자를 남기지 않습니다 */
+function allyClear() { S.party = ownParty(); }
+
 const SUP_PREFIX = "지원|";
 function supportList() { return (typeof SUPPORTS !== "undefined" && SUPPORTS) ? SUPPORTS : []; }
 function supportId(s)  { return s ? SUP_PREFIX + s.title + "|" + s.name : null; }
@@ -1029,6 +1085,7 @@ function slotTakesSupport(i) {
 
 /* 편성에 든 사람 하나 — 작성위원이든 지원이든 */
 function memberOf(w) {
+  if (isAlly(w))    return allyBy(w);
   if (isSupport(w)) return supportBy(w);
   return SINNERS[w] || null;
 }
@@ -1038,15 +1095,19 @@ function memberName(w) {
 }
 /* 시너지가 보는 이름 — 작성위원은 장착한 인격, 지원은 제 title */
 function memberTitle(w) {
+  if (isAlly(w))    { const a = allyBy(w);     return a ? a.title : ""; }
   if (isSupport(w)) { const s = supportBy(w); return s ? s.title : ""; }
   const id = idByKey(S.equip[w]);
   return id ? id.title : "";
 }
 
 function nameOf(who) {
-  if (who === "manager") return CREW.manager.codename;
-  if (isSupport(who)) return memberName(who);
+  if (isAlly(who) || isSupport(who)) return memberName(who);
   if (SINNERS[who]) return SINNERS[who].name;
+  /* 승무원은 열쇠(manager · guide · driver · bus)로 적습니다.
+   * 예전에는 manager 만 챙겨서, who:"guide" 라고 적은 대사가 화면에
+   * 「guide」 라고 그대로 나오고 있었습니다. */
+  if (CREW[who]) return CREW[who].codename || CREW[who].name;
   return who;                                     // 원문에 그대로 적힌 이름
 }
 /* 초상 찾기.
@@ -1056,6 +1117,14 @@ function nameOf(who) {
 function portraitOf(who) {
   if (!who) return null;
   if (who === "manager") return CREW.manager.portrait;
+  if (isAlly(who)) {
+    const a = allyBy(who);
+    if (!a) return null;
+    if (a.portrait) return a.portrait;
+    /* 승무원이면 그쪽 그림을 빌립니다 — 베르렐리우스처럼 */
+    for (const k in CREW) if (CREW[k].codename === a.name || CREW[k].name === a.name) return CREW[k].portrait;
+    return null;
+  }
   if (isSupport(who)) { const s = supportBy(who); return s ? s.portrait : null; }
   if (SINNERS[who])  return SINNERS[who].portrait;
   if (CREW[who])     return CREW[who].portrait;
@@ -1219,6 +1288,8 @@ function renderHeader() {
 
 function renderParty() {
   $party.innerHTML = "";
+  /* 조력자가 붙어 넷이 되면 칸을 넷으로 (좁은 화면에서는 둘씩 두 줄) */
+  $party.classList.toggle("four", S.party.filter(Boolean).length > 3);
   S.party.forEach(who => {
     if (!who) return;
     const id = idByKey(S.equip[who]);
@@ -1236,9 +1307,10 @@ function renderParty() {
     const acting = !!(b && b.cur === who && hp > 0);
     const ready  = !!(cmd && !acting && hp > 0);
     const sup    = supportBy(who);
+    const ally   = allyBy(who);
     const div = document.createElement("div");
     div.className = "pcard" + (hp <= 0 ? " down" : "") +
-                    (sup ? " sup" : "") +
+                    (sup ? " sup" : "") + (ally ? " ally" : "") +
                     (acting ? " acting" : "") +
                     (aimed  ? " aimed"  : "") +
                     (ready ? (cmd === "guard" ? " cmd-guard" : " cmd-attack") : "");
@@ -1254,18 +1326,31 @@ function renderParty() {
         if (b.mods[who + "_push"])  mark += ' <span class="pushtag">독촉</span>';
       }
     }
-    if (sup) mark += ' <span class="suptag">지원</span>';
+    if (sup)  mark += ' <span class="suptag">지원</span>';
+    if (ally) mark += ' <span class="allytag">조력</span>';
+    /* 조력자는 이름을 제 색으로 강조하고, 별 자리에는 idText 를 적습니다
+     * (베르렐리우스라면 「길잡이 짧은시선」). data/allies.js 참고. */
+    const nameHTML = ally
+      ? '<span class="allyname" style="color:' + (ally.color || "#e07aa8") + '">' +
+          memberName(who) + '</span>'
+      : memberName(who);
+    const idHTML = ally
+      ? ally.title + (ally.idText ? ' 「' + ally.idText + '」' : "")
+      : '<span class="star">' +
+          (sup ? stars(sup.star) : (id ? stars(id.star) : "")) + '</span> ' +
+        (sup ? sup.title : (id ? id.title : "인격 없음"));
     div.innerHTML =
-      '<div class="nm">' + memberName(who) + mark + '</div>' +
-      '<div class="id"><span class="star">' +
-        (sup ? stars(sup.star) : (id ? stars(id.star) : "")) + '</span> ' +
-        (sup ? sup.title : (id ? id.title : "인격 없음")) + '</div>' +
-      '<div class="hpbar"><i style="width:' + Math.round(hp / mx * 100) + '%"></i></div>' +
+      '<div class="nm">' + nameHTML + mark + '</div>' +
+      '<div class="id">' + idHTML + '</div>' +
+      /* 조력자는 수치를 감춥니다 — 실제로는 그대로 쓰이지만 화면에는 ??? 로.
+       * 얼마나 센지 모르는 편이 «와 준 사람» 답습니다. */
+      '<div class="hpbar"><i style="width:' + (ally ? 100 : Math.round(hp / mx * 100)) + '%"></i></div>' +
       /* 좁은 화면에서는 ostat(공·방)을 감춥니다 — 체력만 남깁니다 */
       /* 고른 명령은 이름 옆 «공격»·«방어» 로 이미 보입니다.
        * 아래에 줄을 하나 더 붙이면 카드 높이가 들쭉날쭉해져 눌리는 자리가 흔들립니다. */
-      '<div class="st"><span class="hpnum">' + hp + ' / ' + mx + '</span>' +
-        '<span class="ostat">　공 ' + st.atk + '　방 ' + st.def + '</span></div>';
+      '<div class="st"><span class="hpnum">' + (ally ? "??? / ???" : hp + ' / ' + mx) + '</span>' +
+        '<span class="ostat">　공 ' + (ally ? "???" : st.atk) +
+          '　방 ' + (ally ? "???" : st.def) + '</span></div>';
     $party.appendChild(div);
   });
 }
@@ -1516,6 +1601,7 @@ function startChapter(i) {
   S.ch = i; S.sc = 0; S.ended = false;
   S.mirror = false; MIRROR = null;
   SCENES = buildScenes(c);
+  allyClear();                                            // 앞 장의 조력자는 데려가지 않습니다
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 장 시작 시 회복
   clearLog();
   $log.classList.remove("recalling");
@@ -1628,8 +1714,23 @@ function play(s) {
   if (s.shake) shakeScreen(s.shake === "hard");
 
   switch (s.t) {
-    case "n":     { const x = applyAlt(s); say(x.text, "n");        playExtras(x); return cont(); }
-    case "d":     { const x = applyAlt(s); speak(x.who, x.text);    playExtras(x); return cont(); }
+    /* shake 를 달면 그 줄에서 화면이 흔들립니다 — 번개·폭발 같은 자리에.
+     *   { t:"n", text:"…", shake:true }    한 번 흔들림
+     *   { t:"n", text:"…", shake:"hard" }  크게 흔들림 (강타와 같은 세기)
+     *   { t:"flash" }                       번쩍인 뒤 크게 흔들립니다 */
+    case "n":     { const x = applyAlt(s); say(x.text, "n");
+                    if (s.shake) shakeScreen(s.shake === "hard");
+                    playExtras(x); return cont(); }
+    case "d":     { const x = applyAlt(s); speak(x.who, x.text);
+                    if (s.shake) shakeScreen(s.shake === "hard");
+                    playExtras(x); return cont(); }
+
+    /* 번개 — 화면이 하얗게 터진 뒤 크게 흔들립니다 */
+    case "flash":
+      flashScreen(s.ms);
+      shakeScreen(true);
+      if (s.text) say(s.text, s.cls || "n");
+      return cont();
 
     case "place":
       showCard(s.img || (curChapter() || {}).img, s.name, s.name);
@@ -1683,6 +1784,12 @@ function play(s) {
         { label: "이대로 진행", fn: () => { S.waiting = false; next(); } }
       ]);
       return;
+
+    /* 조력자 — 이야기에서만 옆에 서 주는 사람 (data/allies.js) */
+    case "ally":
+      if (s.join) allyJoin(s.join);
+      if (s.leave) allyLeave(s.leave);
+      return cont();
 
     case "camera":  return doCamera(s);
     case "cook":    return doCook(s);
@@ -2111,7 +2218,10 @@ function beginTurn() {
    * 크게 휘두를 자세라는 말과 함께 모습이 달라지도록 한 것입니다. */
   {
     const f = FOES[b.id] || {};
-    const want = (b.heavy && f.heavyImg) ? f.heavyImg : (f.img || null);
+    /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg) */
+    const nowImg   = b.img      || f.img      || null;
+    const nowHeavy = b.heavyImg || f.heavyImg || null;
+    const want = (b.heavy && nowHeavy) ? nowHeavy : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name); }
   }
   if (b.aim)
@@ -2122,7 +2232,8 @@ function beginTurn() {
    * data/story.js 의 FOES 에 heavyLine 으로 적습니다. 여럿이면 배열로. */
   if (b.heavy && b.aim) {
     const f = FOES[b.id] || {};
-    let line = f.heavyLine;
+    /* 난입한 것이 있으면 그쪽 대사가 이깁니다 (b.heavyLine) */
+    let line = b.heavyLine || f.heavyLine;
     if (Array.isArray(line)) line = line[rnd(line.length)];
     if (line) {
       const w = document.createElement("p");
@@ -2254,7 +2365,9 @@ function askNext() {
         b.manage -= cArrest;
         b.mods.arrest = true;
         say(withJosa(CREW.manager.codename, "이") + " " + withJosa(b.name, "을") +
-            " 체포한다. 이번 턴 방어가 " + Math.round(RULE.arrestCut * 100) + "% 깎였다.", "good");
+            " 체포한다. 이번 턴 방어가 " +
+            Math.round(Math.min(0.9, RULE.arrestCut + advisorEffect().arrest) * 100) +
+            "% 깎였다.", "good");
         askNext();
       }
     });
@@ -2293,9 +2406,12 @@ function achieveMatches(a, foeName, cleared) {
   if (w.where) {
     const here = battleWhere();
     /* "mirror" 라고만 적으면 하드·익스트림까지 다 쳐 줍니다.
-     * 특정 갈래만 세고 싶으면 그 key 를 그대로 적으십시오. */
-    if (w.where === "mirror") { if (here === "story") return false; }
-    else if (here !== w.where) return false;
+     * 특정 갈래만 세고 싶으면 그 key 를 그대로 적으십시오.
+     * 여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
+     *   where: ["mirrorHard", "mirrorExtreme"] */
+    const want = Array.isArray(w.where) ? w.where : [w.where];
+    const ok = want.some(x => x === "mirror" ? here !== "story" : here === x);
+    if (!ok) return false;
   }
   if (w.advisor) {
     if (!equippedAdvisors().some(a => a.name === w.advisor)) return false;
@@ -2377,6 +2493,15 @@ function josa(word, kind) {
 function withJosa(word, kind) { return word + josa(word, kind); }
 
 /* 화면을 한 번 흔든다. 강타면 크게. */
+/* 번개 — 화면 위에 흰 겹을 한 번 덮었다 걷습니다.
+ * 무대 그림을 갈아 끼우지 않으므로 어느 장면에서나 쓸 수 있습니다. */
+function flashScreen(ms) {
+  const el = document.createElement("div");
+  el.className = "flashfx";
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms || 460);
+}
+
 function shakeScreen(hard) {
   const el = document.getElementById("app");
   if (!el) return;
@@ -2400,6 +2525,43 @@ function resolveTurn() {
   const hitters = S.party.filter(w => w && alive(w) && b.cmds[w] === "attack");
   let i = 0;
 
+  /* ── 난입 ────────────────────────────────────────────────────
+   *  적 체력이 어느 선 아래로 내려가면 다른 것이 끼어들어 «한 몸» 이 됩니다.
+   *  적을 둘로 늘리지 않고, 지금 적의 수치에 더해 이름을 바꾸는 방식입니다 —
+   *  전투 틀을 건드리지 않으면서 「둘째 판이 시작됐다」는 느낌을 줍니다.
+   *
+   *      { t:"battle", foe:"kevin",
+   *        joinIn: { at: 0.2, foe: "mawang_lee", text: "…", heal: 0.35 } }
+   *
+   *    at    이 비율 아래로 내려가면 (0.2 = 20%)
+   *    foe   끼어드는 적. 그쪽 공격·방어가 더해지고 이름과 그림이 그것으로 바뀝니다
+   *    heal  끼어들 때 적이 회복하는 양 (최대 체력 대비). 없으면 회복 없음
+   *    text  끼어들 때 적을 대신해 나오는 줄
+   */
+  const checkJoinIn = () => {
+    const j = b.scene && b.scene.joinIn;
+    if (!j || b.joined || b.hp <= 0) return;
+    if (b.hp > b.maxhp * (j.at != null ? j.at : 0.2)) return;
+    const f2 = FOES[j.foe];
+    if (!f2) { say("(난입할 적을 찾지 못했습니다: " + j.foe + ")", "todo"); b.joined = true; return; }
+    b.joined = true;
+
+    divider();
+    if (f2.intro) say(f2.intro, "bad");
+    if (j.text) say(j.text, "bad");
+    say("▶ " + withJosa(f2.name, "이") + " 끼어든다!", "bad");
+
+    b.atk += f2.atk;
+    b.def += f2.def;
+    if (j.heal) b.hp = Math.min(b.maxhp, b.hp + Math.round(b.maxhp * j.heal));
+    b.name = f2.name;
+    if (f2.heavyLine) b.heavyLine = f2.heavyLine;
+    if (f2.img) { b.img = f2.img; showFoe(f2.img, f2.name); b.shown = f2.img; }
+    if (f2.heavyImg) b.heavyImg = f2.heavyImg;
+    say("체력 " + b.hp + " / " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
+    shakeScreen(true);
+  };
+
   /* ① 아군이 하나씩 때린다 */
   const swing = () => {
     if (!same()) return;
@@ -2409,8 +2571,9 @@ function resolveTurn() {
     const st = effStats(who);
     /* 체포는 이번 턴 «적 방어» 를 깎습니다. 뺄셈 피해라 방어 한 점이 크게 먹히므로,
      * 방어가 두꺼운 상대에게 걸수록 효과가 큽니다. */
+    const arrestCut = Math.min(0.9, RULE.arrestCut + advisorEffect().arrest);
     const fdef = b.mods.arrest
-      ? Math.round(b.def * (1 - RULE.arrestCut))
+      ? Math.round(b.def * (1 - arrestCut))
       : b.def;
     let dmg = st.atk + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
@@ -2423,6 +2586,7 @@ function resolveTurn() {
         (b.mods[who + "_push"] ? " (독촉)" : "") +
         (b.mods.arrest ? " (체포)" : ""), crit ? "crit" : "hit");
     foeHit(0);
+    checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
     render();
 
     if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
@@ -2600,7 +2764,7 @@ function closeModal() { $modal.classList.remove("on"); }
 
 function openParty(done) {
   $modal.classList.add("on");
-  let picking = S.party.slice();
+  let picking = ownParty().slice();          /* 조력자는 고르는 목록에 두지 않습니다 */
 
   const draw = () => {
     let h = '<h2>편 성</h2>';
@@ -2751,7 +2915,7 @@ function openParty(done) {
     document.getElementById("pdone").onclick = () => {
       const chosen = picking.filter(Boolean);
       if (chosen.length !== 3) { alert("3명을 골라주세요."); return; }
-      S.party = picking.slice();
+      S.party = picking.slice().concat(alliesOn());   // 조력자는 그대로 옆에 남습니다
       S.party.forEach(w => { if (S.hp[w] == null) S.hp[w] = maxHp(w); });
       saveVault();
       closeModal(); render();
@@ -3854,9 +4018,18 @@ function buildMirrorFoes(rule) {
   const r = rule || MIRROR_RULE;
   const k = r.scale;
   const met = metFoes();
-  let keys = Object.keys(FOES).filter(x => x.indexOf("__mirror_") !== 0 && met[x]);
+  /* 거울에 세울 수 있는 적인가.
+   *
+   *  noMirror 를 단 적은 뺍니다. 각본 전투(lose:"story")로만 쓰는 적이 그렇습니다 —
+   *  그런 적은 «못 이긴다는 느낌» 을 주려고 체력을 크게 잡아 두는데,
+   *  거울에서 배수까지 곱하면 혼자만 터무니없이 길어집니다.
+   *  hp 를 안 적은 적(난입 전용)도 뺍니다 — 곱하면 NaN 이 됩니다. */
+  const 설수있나 = x =>
+    x.indexOf("__mirror_") !== 0 && !FOES[x].noMirror && typeof FOES[x].hp === "number";
+
+  let keys = Object.keys(FOES).filter(x => 설수있나(x) && met[x]);
   /* 만나 본 것이 하나도 없으면(있을 수 없는 일이지만) 옛 방식대로 전부에서 뽑습니다 */
-  if (!keys.length) keys = Object.keys(FOES).filter(x => x.indexOf("__mirror_") !== 0);
+  if (!keys.length) keys = Object.keys(FOES).filter(설수있나);
 
   const bosses  = keys.filter(x => FOES[x].boss);
   const normals = keys.filter(x => !FOES[x].boss);
@@ -4245,9 +4418,9 @@ function presetList() {
 /* 지금 편성을 그대로 담아 낸다 */
 function presetSnapshot() {
   const equip = {};
-  S.party.forEach(w => { if (w && !isSupport(w)) equip[w] = S.equip[w] || null; });
+  ownParty().forEach(w => { if (w && !isSupport(w)) equip[w] = S.equip[w] || null; });
   return {
-    party:     S.party.slice(),
+    party:     ownParty().slice(),
     equip:     equip,
     giftOn:    giftOnList().slice(),
     advisorOn: advisorOnList().slice()

@@ -125,7 +125,9 @@
   #log .divider{border-top:1px solid #26262c;margin:12px 0;}
 
   /* ── 파티 ─────────────────────────────── */
+  /* 셋이 기본. 조력자가 붙어 넷이 되면 넷이 나란히 섭니다 */
   #party{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+  #party.four{grid-template-columns:repeat(4,1fr);}
   /* 왼쪽 띠는 «누구인가» 를 말합니다 — 작성위원은 파랑, 지원은 연두.
      테두리 색은 «지금 무엇을 하는가» 를 말합니다. 둘은 겹치지 않습니다. */
   .pcard{
@@ -147,6 +149,11 @@
   /* 지원 작성위원 — 연두 */
   .pcard.sup{background:#101a10;border-left-color:#9ccc65;}
   .pcard .suptag {color:#9ccc65;font-size:11px;letter-spacing:.06em;}
+  /* 조력자 — 이야기에서만 옆에 서 주는 사람. 분홍 */
+  .pcard.ally{background:#1c1016;border-left-color:#e07aa8;}
+  .pcard .allytag{color:#e07aa8;font-size:11px;letter-spacing:.06em;}
+  /* 조력자는 이름도 제 색으로 강조합니다 — data/allies.js 의 color */
+  .pcard .nm .allyname{font-weight:700;}
   .pcard .aimtag  {color:#c8403a;font-size:11px;letter-spacing:.06em;}
   .pcard .turntag {color:#5ec26a;font-size:11px;letter-spacing:.1em;}
   .pcard .readytag{color:#b9b4ae;font-size:11px;letter-spacing:.06em;}
@@ -156,6 +163,18 @@
      독촉은 때리는 쪽이라 주황. 턴이 넘어가면 저절로 사라집니다. */
   .pcard .corrtag {color:#5aa8e0;font-size:11px;letter-spacing:.06em;}
   .pcard .pushtag {color:#e0a05a;font-size:11px;letter-spacing:.06em;}
+  /* 번개 — 화면 전체를 한 번 하얗게 덮었다 걷습니다 */
+  .flashfx{
+    position:fixed;inset:0;z-index:9999;pointer-events:none;
+    background:#fff;animation:flashfx 460ms ease-out forwards;
+  }
+  @keyframes flashfx{
+    0%  {opacity:0;}
+    8%  {opacity:.85;}
+    22% {opacity:.15;}
+    34% {opacity:.6;}
+    100%{opacity:0;}
+  }
   /* 적에게 맞을 때 화면이 흔들립니다. 강타면 크게. */
   #app.shake{animation:shake 320ms ease-in-out;}
   #app.shakehard{animation:shakehard 620ms ease-in-out;}
@@ -533,6 +552,8 @@
     #log .divider{margin:8px 0;}
 
     #party{grid-template-columns:repeat(3,1fr);gap:5px;}
+    /* 좁은 화면에서 넷을 한 줄에 넣으면 글씨가 뭉개집니다 — 둘씩 두 줄로 */
+    #party.four{grid-template-columns:repeat(2,1fr);}
     .pcard{padding:6px 7px;font-size:12px;}
     .pcard .nm{font-size:12.5px;}
     .pcard .id{display:none;}                   /* 장착한 인격 이름 */
@@ -590,6 +611,7 @@
 <script src="data/access.js"></script>
 <script src="data/vault.js"></script>
 <script src="data/characters.js"></script>
+<script src="data/allies.js"></script>
 <script src="data/gifts.js"></script>
 <script src="data/pickup.js"></script>
 <script src="data/achievements.js"></script>
