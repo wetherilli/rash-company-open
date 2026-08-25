@@ -338,6 +338,11 @@
   }
   .pkline.pic::before{content:"";position:absolute;inset:0;background:rgba(8,6,4,.5);}
   .pkline span{position:relative;}
+  /* 띠 안의 작은 두 번째 줄 — 장 이름 같은 것 */
+  .pkline .pksub{
+    display:block;font-style:normal;font-size:13px;font-weight:600;
+    letter-spacing:.06em;color:#e8dcc0;margin-top:4px;opacity:.9;
+  }
   /* 상점 칸 머리의 작은 띠 — 글씨 없이 그림만. 칸 크기를 서로 맞추는 몫입니다. */
   .pkline.small{
     height:56px;margin:0 0 8px;padding:0;letter-spacing:0;
@@ -616,6 +621,7 @@
 <script src="data/pickup.js"></script>
 <script src="data/achievements.js"></script>
 <script src="data/mail.js"></script>
+<script src="data/notice.js"></script>
 <script src="data/patch.js"></script>
 <script src="data/story.js"></script>
 <script src="engine.js"></script>

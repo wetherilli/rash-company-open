@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.4";
+const VERSION = "1.0.5";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2915,6 +2915,16 @@ function openParty(done) {
     document.getElementById("pdone").onclick = () => {
       const chosen = picking.filter(Boolean);
       if (chosen.length !== 3) { alert("3명을 골라주세요."); return; }
+      /* 그 장이 요구하는 사람은 «장 안에서도» 빼지 못합니다.
+       * 예전에는 들어갈 때만 봤습니다 — 5장 도중에 성시윤을 빼도 그냥 넘어갔습니다. */
+      const c = curChapter();
+      if (c && !S.mirror) {
+        const miss = chapterNeeds(c).filter(w => chosen.indexOf(w) < 0);
+        if (miss.length) {
+          alert(c.no + "은 " + nameList(miss) + " 없이는 진행할 수 없습니다.");
+          return;
+        }
+      }
       S.party = picking.slice().concat(alliesOn());   // 조력자는 그대로 옆에 남습니다
       S.party.forEach(w => { if (S.hp[w] == null) S.hp[w] = maxHp(w); });
       saveVault();
@@ -3266,6 +3276,57 @@ const SHOP_TRADES = [
     }
   }
 ];
+
+/* ── 상점 알림 ──────────────────────────────────────────────────
+ *  내용은 data/notice.js 의 SHOP_NOTICE 에 적습니다.
+ *  상점에 들어갈 때 한 번 뜨고, 「이번 판에서는 다시 보지 않음」을 누르면
+ *  그 판에 한해 안 뜹니다. 판이 올라가면 다시 뜹니다 — 패치 노트와 같은 방식입니다.
+ */
+const NOTICE_SEEN_KEY = "rash_company_notice_seen";
+function noticeData()  { return (typeof SHOP_NOTICE !== "undefined" && SHOP_NOTICE) ? SHOP_NOTICE : null; }
+function noticeHidden() { return Store.get(NOTICE_SEEN_KEY) === VERSION; }
+function noticeHide()   { Store.set(NOTICE_SEEN_KEY, VERSION); }
+function noticeDue() {
+  const n = noticeData();
+  if (!n || noticeHidden()) return false;
+  /* 적어 둔 판 «이상» 일 때만 — 옛 판으로 열었을 때 앞선 소식이 뜨지 않게 */
+  if (verCmp(VERSION, n.ver || "0") < 0) return false;
+  /* 처음 오신 분께는 «0장을 마친 뒤» 부터 보여 줍니다.
+   * 아무것도 모르는 채로 새 인격 목록을 받아 봐야 읽을 수가 없고,
+   * 유리창의 「처음이시라면」 안내와도 겹칩니다. */
+  return Object.keys(S.cleared || {}).length > 0;
+}
+
+function openNotice(then) {
+  const n = noticeData();
+  $modal.classList.add("on");
+  /* 그림 띠 — 특정 배정이 쓰는 .pkline 을 그대로 씁니다 */
+  const 띠 = n.banner
+    ? '<div class="pkline pic" style="background-image:url(\'' + assetURL(n.banner) + '\')">' +
+        '<span>' + (n.line || "") +
+          (n.sub ? '<i class="pksub">' + n.sub + '</i>' : "") +
+        '</span></div>'
+    : "";
+
+  $sheet.innerHTML =
+    '<h2>' + (n.title || "알림") + '</h2>' +
+    띠 +
+    '<div class="hint">이번 판에 새로 들어온 것들입니다.</div>' +
+    /* groups 로 적으면 무리마다 제목을 답니다. 옛 방식(lines)도 그대로 받습니다. */
+    (n.groups || [{ lines: n.lines || [] }]).map(g =>
+      (g.head ? '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + g.head + '</div>' : "") +
+      '<div class="grid one">' +
+        (g.lines || []).map(x => '<div class="slot"><div class="sub">' + x + '</div></div>').join("") +
+      '</div>'
+    ).join("") +
+    (n.tail ? '<div class="mailnote ok" style="margin-top:12px">' + n.tail + '</div>' : '') +
+    '<div class="modalfoot">' +
+      '<button id="ntgo" class="primary">상점으로</button>' +
+      '<button id="nthide" class="ghost">이번 판에서는 다시 보지 않음</button>' +
+    '</div>';
+  document.getElementById("ntgo").onclick   = () => then();
+  document.getElementById("nthide").onclick = () => { noticeHide(); then(); };
+}
 
 function openShop(back) {
   $modal.classList.add("on");
@@ -4896,6 +4957,14 @@ function glass() {
     say("[편성] 에서 누구를 데려갈지, [상점] 에서 새 인격을 뽑을 수 있습니다. " +
         "무엇을 눌러야 할지 모르겠으면 [운전석] 부터 누르십시오.", "sys");
   }
+  /* 이번 판에 새로 들어온 것들을 한 번 알려 줍니다.
+   * 유리창을 다 그린 뒤에 덮어씌우므로, 닫으면 바로 유리창이 보입니다. */
+  if (noticeDue()) {
+    render();
+    buttons([{ label: "…", cls: "primary", disabled: true }]);
+    return openNotice(() => { closeModal(); glass(); });
+  }
+
   /* 받지 않은 우편이 있으면 눈에 띄게 알려 줍니다 */
   if (mailWaiting()) {
     divider();
