@@ -105,6 +105,25 @@ const CREW = {
  *  caution  : 주의사항 태그
  *  brief    : 회사가 관리자에게 보낸 안내문
  *  ids      : 보유 인격 목록
+ * -------------------------------------------------------------
+ *
+ *  ■ 3성 안의 등급 — «만드는 사람만 아는 눈금»
+ *
+ *    화면에는 언제나 ★★★ 셋으로만 보입니다. 아래 이름은 수치를 잡을 때 쓰는
+ *    속내이지, 이용자에게 보여 주는 것이 아닙니다.
+ *    노트·상점·배정·업적 어디에도 「3.2성」 같은 말을 적지 마십시오.
+ *
+ *      3성      기본. 대체로 공 22~31 · 방 9~20 · 체 92~114
+ *      3.2성급  기본보다 20% 좋게 — E.G.O 인격 전부
+ *      3.3성급  기본보다 30% 좋게 — 하이라이트 셋
+ *                 · 아라온호 선장 (성시윤)
+ *                 · 모나크 백룡야행 (이경원)
+ *                 · H사 군주 (유아인)
+ *
+ *    올릴 때는 «그 인격이 지니던 결» 을 지키려고 공·방·체에 같은 배수를 곱했습니다.
+ *    갑옷공룡은 올린 뒤에도 갑옷이고, 공룡비는 올린 뒤에도 창입니다.
+ *
+ *    새 E.G.O 인격을 적을 때는 기본 3성 값을 먼저 잡고 1.2 를 곱하면 결이 맞습니다.
  * ------------------------------------------------------------- */
 const SINNERS = {
   park_suo: {
@@ -122,7 +141,7 @@ const SINNERS = {
       { star: 2, title: "우생회 노예",        atk: 20, def: 10,  hp: 80, note: "우생회의 돌쇠" },
       { star: 3, title: "I사 선봉3팀",         atk: 28, def: 15, hp: 105, note: "스페이스 마린의 꿈을 이룸" },
       { star: 3, title: "C사 해군 일등대리",   atk: 25, def: 13, hp: 102, note: "워해머 오타쿠로 살다가 현역병으로 입대" },
-      { star: 3, title: "LST E.G.O :: 공룡비",              atk: 31, def: 9,  hp: 94, note: "가장 어두운 곳, 퍼져라." }
+      { star: 3, title: "LST E.G.O :: 공룡비",              atk: 37, def: 11,  hp: 113, note: "가장 어두운 곳, 퍼져라." }
     ]
   },
 
@@ -140,7 +159,7 @@ const SINNERS = {
       { star: 2, title: "우생회 행동대장",        atk: 20, def: 10,  hp: 80, note: "우생회의 망치이자 못." },
       { star: 3, title: "N사 큰망치",             atk: 34, def: 9,  hp: 92,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, title: "I사 지원2팀 변신로봇", atk: 27, def: 17, hp: 104, note: "트랜스포머 오타쿠의 꿈을 이룸" },
-      { star: 3, title: "LST E.G.O :: 워커리",    atk: 26, def: 13, hp: 103, note: "워커리라는 이름에 부끄럽지 않은" },
+      { star: 3, title: "LST E.G.O :: 워커리",    atk: 31, def: 16, hp: 124, note: "워커리라는 이름에 부끄럽지 않은" },
       { star: 2, title: "아라온호 기관장",        atk: 19, def: 11, hp: 78, note: "엔진은, 제가 봅니다." }
     ]
   },
@@ -157,7 +176,7 @@ const SINNERS = {
       { star: 2, title: "C사 해군 과장",          atk: 17, def: 10, hp: 77,  note: "건담 오타쿠로 살다가 현역병으로 입대" },
       { star: 2, title: "남부협회 과커플",        atk: 19, def: 8,  hp: 73,  note: "대학에 들어가고 과CC에 성공한 세계선" },
       { star: 3, title: "N사 중간망치",           atk: 30, def: 11, hp: 96,  note: "경북대 진학 후 야외조사 다니는 세계선" },
-      { star: 3, title: "LST E.G.O :: 기동전사",  atk: 29, def: 14, hp: 98,  note: "건담 오타쿠의 꿈을 이룸" },
+      { star: 3, title: "LST E.G.O :: 기동전사",  atk: 35, def: 17, hp: 118,  note: "건담 오타쿠의 꿈을 이룸" },
       { star: 3, title: "신해수랜드 실장",        atk: 24, def: 15, hp: 106, note: "여왕의 기사란." }
     ]
   },
@@ -173,10 +192,10 @@ const SINNERS = {
       { star: 2, title: "이블죠 사무소 실장",          atk: 17, def: 10, hp: 78, note: "언제까지 보조 일만 맡길거죠?" },
       { star: 2, title: "공룡의날 과장",               atk: 16, def: 10, hp: 80, note: "내가 없이는 안 돌아가는군" },
       { star: 2, title: "북부 총기 협회 4과",          atk: 22, def: 6,  hp: 68, note: "화력으로 밀어보죠." },
-      { star: 3, title: "LST E.G.O :: 너 대머리",      atk: 28, def: 11, hp: 97, note: "대머리 아니라고." },
+      { star: 3, title: "LST E.G.O :: 너 대머리",      atk: 34, def: 13, hp: 116, note: "대머리 아니라고." },
       { star: 3, title: "제4발톱 도슨트",                 atk: 23, def: 15, hp: 105 , note: "이 미학을 아시겠어요?" },
-      { star: 3, title: "LST E.G.O :: 아누로그나투스", atk: 30, def: 10, hp: 92, note: "날아오를 준비." },
-      { star: 3, title: "N사 E.G.O :: 강철, 털",       atk: 27, def: 16, hp: 101, note: "털, 그리고 강철" }
+      { star: 3, title: "LST E.G.O :: 아누로그나투스", atk: 36, def: 12, hp: 110, note: "날아오를 준비." },
+      { star: 3, title: "N사 E.G.O :: 강철, 털",       atk: 32, def: 19, hp: 121, note: "털, 그리고 강철" }
     ]
   },
 
@@ -190,7 +209,7 @@ const SINNERS = {
       { star: 1, title: "L사 작성위원장",            atk: 11, def: 7,  hp: 58, note: "이정도는" },
       { star: 2, title: "남부협회 4과",              atk: 20, def: 7,  hp: 73, note: "바다 냄새가 좋다." },
       { star: 2, title: "L사 학생회장",              atk: 16, def: 10, hp: 80, note: "제게 맡기시오." },
-      { star: 3, title: "LST E.G.O :: 올챙이",       atk: 22, def: 10, hp: 95, note: "올챙이의 미." },
+      { star: 3, title: "LST E.G.O :: 올챙이",       atk: 26, def: 12, hp: 114, note: "올챙이의 미." },
       { star: 3, title: "J사 3등급 강력징수직 직원", atk: 31, def: 12, hp: 96, note: "추민수 주일한국대사" },
       { star: 3, title: "신해수랜드 왕자",                atk: 26, def: 14, hp: 108, note: "몰락의 길을."},
       { star: 2, title: "아라온호 갑판원",           atk: 18, def: 10, hp: 79, note: "갑판은 늘 젖어 있다." }
@@ -208,8 +227,8 @@ const SINNERS = {
       { star: 2, title: "제5발톱 제자",                       atk: 17, def: 9,  hp: 79, note: "베어낸다."  },
       { star: 2, title: "공룡의날 부장",                       atk: 16, def: 10, hp: 81, note: "제가 총괄해보죠." },
       { star: 2, title: "신해수랜드 경비",                atk: 20, def: 7,  hp: 73, note: "퍼레이드를 지키는 것." },
-      { star: 3, title: "LST E.G.O :: 사랑과 증오의 이름으로", atk: 30, def: 11, hp: 99, note: "마법소녀, 너무 좋잖아?" },
-      { star: 3, title: "H사 군주",                            atk: 25, def: 14, hp: 114, note: "다 부질없는 것들, 부쉈다." }
+      { star: 3, title: "LST E.G.O :: 사랑과 증오의 이름으로", atk: 36, def: 13, hp: 119, note: "마법소녀, 너무 좋잖아?" },
+      { star: 3, title: "H사 군주",                            atk: 32, def: 18, hp: 148, note: "다 부질없는 것들, 부쉈다." }
     ]
   },
 
@@ -224,8 +243,8 @@ const SINNERS = {
       { star: 2, title: "제3발톱 큰아우",       atk: 19, def: 8,  hp: 76, note: "꼭 해야되나요?"  },
       { star: 2, title: "L사 에프터팀",          atk: 16, def: 11, hp: 80, note: "길을 치우는 일"  },
       { star: 2, title: "S사 콘테스트 참가자",   atk: 17, def: 8,  hp: 74, note: "다음에는 꼭."  },
-      { star: 3, title: "LST E.G.O :: 악어괴인", atk: 31, def: 11, hp: 103, note: "괴인이라는 말도" },
-      { star: 3, title: "모나크 백룡야행",              atk: 28, def: 13, hp: 99, note: "다 찢어놓은 거야."  }
+      { star: 3, title: "LST E.G.O :: 악어괴인", atk: 37, def: 13, hp: 124, note: "괴인이라는 말도" },
+      { star: 3, title: "모나크 백룡야행",              atk: 36, def: 17, hp: 129, note: "다 찢어놓은 거야."  }
     ]
   },
 
@@ -242,8 +261,8 @@ const SINNERS = {
       { star: 2, title: "L사 부작성위원장",          atk: 15, def: 11, hp: 90, note: "꽤나 중책을..." },
       { star: 2, title: "L사 비포팀",            atk: 18, def: 9,  hp: 77, note: "미리 준비하는 게 중요한건 상식이죠." },
       { star: 3, title: "공룡의날 실장",         atk: 23, def: 16, hp: 104, note: "축제를 시작하지." },
-      { star: 3, title: "LST E.G.O :: 갑옷공룡", atk: 22, def: 20, hp: 110, note: "갑옷만큼은 가장 단단하다" },
-      { star: 3, title: "아라온호 선장",         atk: 25, def: 15, hp: 106, note: "승선을, 환영한다." }
+      { star: 3, title: "LST E.G.O :: 갑옷공룡", atk: 26, def: 24, hp: 132, note: "갑옷만큼은 가장 단단하다" },
+      { star: 3, title: "아라온호 선장",         atk: 32, def: 20, hp: 138, note: "승선을, 환영한다." }
     ]
   },
 
@@ -258,7 +277,7 @@ const SINNERS = {
       { star: 2, title: "남부협회 3과 인파이터", atk: 22, def: 7,  hp: 71, note: "바다, 주먹, 그리고"  },
       { star: 2, title: "L사 에프터팀",          atk: 16, def: 11, hp: 80, note: "이런 것까지 시킨다고요?"  },
       { star: 3, title: "C사 육군 특수임무대대", atk: 30, def: 13, hp: 97, note: "보고드립니다."  },
-      { star: 3, title: "LST E.G.O :: 점박이",   atk: 28, def: 12, hp: 104, note: "벌레의 노래." },
+      { star: 3, title: "LST E.G.O :: 점박이",   atk: 34, def: 14, hp: 125, note: "벌레의 노래." },
     ]
   },
 
@@ -274,7 +293,7 @@ const SINNERS = {
       { star: 3, title: "제3발톱 작은아우",       atk: 25, def: 16, hp: 105, note: "여기서는 할매를..."   },
       { star: 2, title: "외국곤충사육자",        atk: 19, def: 7,  hp: 72, note: "키우고 싶었는데!"  },
       { star: 3, title: "남부협회 길잡이",       atk: 27, def: 13, hp: 100, note: "이번 필드는 제게 맡기세요."  },
-      { star: 3, title: "LST E.G.O :: 깃털공룡", atk: 30, def: 10, hp: 95, note: "날아올라라."  },
+      { star: 3, title: "LST E.G.O :: 깃털공룡", atk: 36, def: 12, hp: 114, note: "날아올라라."  },
       { star: 3, title: "쥐어진 자",             atk: 33, def: 11, hp: 98, note: "우생회의 또다른 거울"  }
     ]
   },
@@ -308,7 +327,7 @@ const SINNERS = {
       { star: 2, title: "L사 비포팀",                   atk: 19, def: 8,  hp: 76, note: "이런 것까지 내가 해야돼?" },
       { star: 2, title: "N사 작은망치",                 atk: 22, def: 7,  hp: 70,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, title: "이블죠 사무소 해결사",         atk: 29, def: 12, hp: 99, note: "이블죠 정도는 이제 간단하지" },
-      { star: 3, title: "개화 E.G.O :: 궁극의 도마뱀",  atk: 28, def: 14, hp: 112, note: "울티마 그 자체가 됨" },
+      { star: 3, title: "개화 E.G.O :: 궁극의 도마뱀",  atk: 34, def: 17, hp: 134, note: "울티마 그 자체가 됨" },
       { star: 3, title: "구C사 일등대리",               atk: 25, def: 14, hp: 103, note: "보고드립니다!" }
     ]
   }

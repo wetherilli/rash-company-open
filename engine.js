@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.28.0";
+const VERSION = "0.28.2";
 const VERSION_NAME = "조각난 거울";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -177,6 +177,7 @@ function vaultToObject() {
     party:    S.party,
     money:    S.money,
     codex:    S.codex,
+    newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
     enk:      S.enk || null,
     ver:      VERSION
   };
@@ -202,6 +203,7 @@ function loadVault() {
     party:    v.party || null,
     money:    v.money,
     codex:    v.codex,
+    newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     ver:      v.ver || null
   };
@@ -211,7 +213,20 @@ function saveVault() {
   if (vaultLocked()) return;   // 뒤에서 온 보관함은 절대 덮어쓰지 않습니다
   Store.set(VAULT_KEY, JSON.stringify(vaultToObject()));
 }
-function clearVault() { Store.del(VAULT_KEY); }
+/* 보관함을 아주 비웁니다.
+ *
+ *  저장소만 지우고 말면 **머릿속에 든 S 가 그대로** 남아, 다음에 무엇이든 저장하는 순간
+ *  지운 것이 통째로 되살아납니다. 그래서 진행 기록까지 지우고 S 를 새로 세웁니다.
+ *
+ *  data/vault.js 에 VAULT_SEED 를 적어 두었다면 «그 지점» 으로 돌아갑니다.
+ *  아무것도 안 적혀 있으면(기본) 맨 처음으로 돌아갑니다 —
+ *  신입 관리자 기념 배정도 다시 열립니다. */
+function clearVault() {
+  Store.del(VAULT_KEY);
+  Store.del(SAVE_KEY);      // 어디까지 읽었나 하는 기록도 함께
+  S = newState();           // 머릿속도 같이 비워야 곧바로 되살아나지 않습니다
+  enkSync();
+}
 
 /* data/vault.js 에 붙여 넣을 수 있는 형태로 뽑아낸다 */
 function vaultExportText() {
@@ -233,6 +248,7 @@ function vaultExportText() {
     "  party: " + arr(o.party, "  ") + ",\n" +
     "  money: " + o.money + ",\n" +
     "  codex: " + (o.codex || 0) + ",\n" +
+    "  newbie: " + (o.newbie || 0) + ",\n" +
     "  enk: " + (o.enk
       ? "{ n: " + o.enk.n + ", at: " + o.enk.at + ", day: " + q(o.enk.day) + " }"
       : "null") + ",\n" +
@@ -413,6 +429,7 @@ function newState() {
     money,
     verNote,                // 판이 올라갔을 때 한 번 알려 줄 내용
     codex: v && typeof v.codex === "number" ? v.codex : 0,   // 황금교본 — 보관함에 남는다
+    newbie: v && typeof v.newbie === "number" ? v.newbie : 0, // 신입 관리자 기념 배정을 쓴 횟수
     enk: (v && v.enk && typeof v.enk.n === "number") ? v.enk : null,  // 엔케팔린 — enkSync() 가 채운다
     cleared: v && v.cleared ? v.cleared : {},
     flags: {},
@@ -1355,6 +1372,22 @@ function play(s) {
 
     case "mirrorClear": return mirrorClear();
 
+    /* ── 길잡이가 들러 세워 놓고 간다 ──────────────────────────
+     *  { t:"rest", who:"베르렐리우스", say:"...", text:"..." }
+     *
+     *  쓰러진 사람까지 전부 일으켜 체력을 가득 채우고,
+     *  다음 전투는 관리력이 가득 찬 채로 시작합니다.
+     *  거울 던전처럼 쉬지 않고 이어지는 자리 가운데에 숨 돌릴 곳을 두려는 것입니다. */
+    case "rest": {
+      divider();
+      if (s.who) speak(s.who, s.say);
+      S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 쓰러진 사람도 함께 일어납니다
+      S.restManage = true;                                     // 다음 전투는 관리력을 가득 채우고 연다
+      say(s.text || "길잡이가 관리력과 체력을 전부 회복시켰다.", "good");
+      render();
+      return cont();
+    }
+
     case "advisor":
       grantAdvisor(s);
       return cont();
@@ -1740,10 +1773,13 @@ function startBattle(scene) {
     id: scene.foe, name: f.name, def: f.def, atk: f.atk,
     hp: f.hp, maxhp: f.hp, boss: !!f.boss,
     loseOk: scene.lose === "story",
-    manage: RULE.manageStart + advisorEffect().manage,
+    /* 길잡이가 다녀간 뒤라면 관리력을 가득 채우고 엽니다 (t:"rest" 참고) */
+    manage: S.restManage ? manageCap()
+                         : RULE.manageStart + advisorEffect().manage,
     turn: 0, cmds: {}, cur: null, mods: {},
     scene: scene
   };
+  S.restManage = false;
   const b = S.battle;            // 딜레이가 끝났을 때 같은 전투인지 확인용
 
   /* 전투에 들어서면 판을 한 번 비운다 —
@@ -1757,6 +1793,7 @@ function startBattle(scene) {
   if (f.intro && f.intro !== "TODO") say(f.intro, "bad");
   else if (f.intro === "TODO") say("(등장 대사 미작성)", "todo");
   showFoe(f.img || null, f.name);          // 적은 배경 가운데에 선다
+  S.battle.shown = f.img || null;          // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
   say("▶ " + withJosa(f.name, "이") + " 나타났다!", "bad");
   say("체력 " + f.hp + "　공격 " + f.atk + "　방어 " + f.def, "sys");
 
@@ -1785,6 +1822,15 @@ function beginTurn() {
   const standing = S.party.filter(w => w && alive(w));
   b.heavy = !!(b.boss && b.turn % 3 === 0);
   b.aim   = standing.length ? standing[rnd(standing.length)] : null;
+
+  /* 강타를 준비하는 턴에는 그림이 바뀝니다.
+   * data/story.js 의 FOES 에 heavyImg 로 적습니다. 안 적은 적은 그대로 서 있습니다.
+   * 크게 휘두를 자세라는 말과 함께 모습이 달라지도록 한 것입니다. */
+  {
+    const f = FOES[b.id] || {};
+    const want = (b.heavy && f.heavyImg) ? f.heavyImg : (f.img || null);
+    if (want !== b.shown) { b.shown = want; showFoe(want, b.name); }
+  }
   if (b.aim)
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
         (b.heavy ? "  크게 휘두를 자세다." : ""), "bad");
@@ -2641,14 +2687,59 @@ function openNote(back, focus) {
  * 판마다 갈아 끼우고 싶으면 여기만 고치면 됩니다. */
 const GACHA_STRIP = "assets/scene/거울던전.jpg";
 
+/* ── 신입 관리자 기념 배정 ─────────────────────────────────────
+ *  원고료 벌이를 크게 줄인 뒤라 처음에 배정 재화가 마릅니다.
+ *  그 자리를 메우려고 둔, «통틀어 두 번만» 열리는 묶음 배정입니다.
+ *
+ *    · 200 원고료로 10회 — 낱개(1회 30)로 사면 300 이니 3분의 1이 깎인 값입니다
+ *    · 10회 묶음이므로 ★★ 이상 하나가 확정으로 들어갑니다
+ *    · 참여 횟수는 보관함에 남습니다. 두 번 쓰고 나면 상점에서 아주 사라집니다
+ *
+ *  다시 열어 주고 싶으면 보관함의 newbie 를 0 으로 되돌리면 됩니다.
+ */
+const NEWBIE_RULE = {
+  name:   "신입 관리자 기념 배정",
+  line:   "신입 관리자를 환영합니다",
+  desc:   "처음 오신 분께 드리는 묶음입니다. 통틀어 두 번만 열립니다.",
+  cost:   200,   // 묶음 하나에 드는 원고료 (낱개 값이 아닙니다)
+  pulls:  10,    // 한 묶음에 몇 회
+  limit:  2,     // 통틀어 몇 묶음까지
+  banner: "assets/logo/작성위원 전원.png"
+};
+function newbieLeft() { return Math.max(0, NEWBIE_RULE.limit - (S.newbie || 0)); }
+
+/* 황금교본으로 바꿀 수 있는 것들. 값은 여기 한 곳에서 고칩니다. */
+const CODEX_PRICE = 70;    // 교본 1권을 되팔 때 받는 원고료 — 고정값입니다 (earn 을 타지 않습니다)
+const CODEX_ENK   = { codex: 5, enk: 2 };   // 교본 5권 → 엔케팔린 2
+
 const SHOP_TRADES = [
   {
     id: "codex_to_money",
     name: "황금교본 되팔기",
-    desc: "황금교본 1권을 " + 100 + " " + "원고료로 바꾼다.",
+    desc: "황금교본 1권을 " + CODEX_PRICE + " 원고료로 바꾼다.",
     can:  () => S.codex >= 1,
     need: () => "황금교본 1권",
-    give: () => { S.codex -= 1; S.money += 100; return "황금교본 1권을 넘기고 원고료 100을 받았다."; }
+    give: () => { S.codex -= 1; S.money += CODEX_PRICE;
+                  return "황금교본 1권을 넘기고 원고료 " + CODEX_PRICE + "을 받았다."; }
+  },
+  {
+    id: "codex_to_enk",
+    name: ENK_RULE.name + " 보충",
+    desc: "황금교본 " + CODEX_ENK.codex + "권으로 " + ENK_RULE.name + " " + CODEX_ENK.enk + "를 채운다.",
+    can:  () => S.codex >= CODEX_ENK.codex && enkCount() < ENK_RULE.max,
+    need: () => "황금교본 " + CODEX_ENK.codex + "권" +
+                (enkCount() >= ENK_RULE.max ? "　— 이미 가득 찼습니다" : ""),
+    give: () => {
+      const e = enkSync();
+      const before = e.n;
+      S.codex -= CODEX_ENK.codex;
+      /* 가득에서 흘러넘치지 않게 상한에 맞춥니다.
+       * 가득이 아니었다가 차오르는 것이므로 시계는 건드리지 않습니다 —
+       * 그래야 저절로 차던 몫을 잃지 않습니다. */
+      e.n = Math.min(ENK_RULE.max, e.n + CODEX_ENK.enk);
+      return "황금교본 " + CODEX_ENK.codex + "권을 태워 " + ENK_RULE.name +
+             " " + (e.n - before) + "를 채웠다.  (" + e.n + " / " + ENK_RULE.max + ")";
+    }
   }
 ];
 
@@ -2661,6 +2752,25 @@ function openShop(back) {
             '　·　황금교본 <b>' + S.codex + '</b></div>';
 
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    /* ── 신입 관리자 기념 배정 — 맨 위, 가로로 통째 ──────────────
+     * 두 번 다 쓰고 나면 이 덩이 자체를 그리지 않습니다. 아주 사라집니다. */
+    if (newbieLeft() > 0) {
+      const canBuy = S.money >= NEWBIE_RULE.cost;
+      h += '<div class="grid">' +
+             '<div class="slot pk wide"' + (canBuy ? ' data-newbie="1"' : '') + '>' +
+               '<div class="pkline pic" style="background-image:url(\'' +
+                 assetURL(NEWBIE_RULE.banner) + '\')"><span>' + NEWBIE_RULE.line + '</span></div>' +
+               '<div class="' + (canBuy ? 'nm' : 'lock') + '">' + NEWBIE_RULE.name + '</div>' +
+               '<div class="sub" style="color:#d8b26a">' +
+                 NEWBIE_RULE.pulls + '회 묶음에 ' + NEWBIE_RULE.cost + ' ' + CURRENCY +
+                 '　·　낱개로 사면 ' + (RULE.pullCost * NEWBIE_RULE.pulls) + '</div>' +
+               '<div class="sub">' + NEWBIE_RULE.desc +
+                 '　남은 횟수 <b>' + newbieLeft() + '</b> / ' + NEWBIE_RULE.limit + '</div>' +
+               (canBuy ? '' : '<div class="sub" style="color:#c8403a">' + CURRENCY + '가 모자랍니다</div>') +
+             '</div>' +
+           '</div>';
+    }
 
     h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">인격 배정</div>' +
          '<div class="grid">' +
@@ -2718,13 +2828,19 @@ function openShop(back) {
       h += '<div class="slot"' + (ok ? ' data-trade="' + t.id + '"' : '') + '>' +
              '<div class="' + (ok ? 'nm' : 'lock') + '">' + t.name + '</div>' +
              '<div class="sub">' + t.desc + '</div>' +
-             '<div class="sub">' + (ok ? '필요: ' + t.need() : '가진 것이 모자랍니다') + '</div>' +
+             /* 못 누르는 까닭은 need() 가 스스로 말합니다 —
+              * 「가진 것이 모자랍니다」로 뭉뚱그리면 이미 가득 찬 경우에 거짓말이 됩니다. */
+             '<div class="sub"' + (ok ? '' : ' style="color:#c8403a"') + '>' +
+               '필요: ' + t.need() + '</div>' +
            '</div>';
     });
     h += '</div>';
 
     h += '<div class="modalfoot"><button id="shclose">닫기</button></div>';
     $sheet.innerHTML = h;
+
+    const nb = $sheet.querySelector(".slot[data-newbie]");
+    if (nb) nb.onclick = () => openGacha(() => draw(null), null, NEWBIE_RULE);
 
     const g = $sheet.querySelector(".slot[data-gacha]");
     if (g) g.onclick = () => openGacha(() => draw(null));
@@ -2889,10 +3005,11 @@ function pkBannerHTML(p) {
  *  잠긴 칸에는 그림을 깔지 않습니다. 아직 못 본 곳을 미리 보여 주지 않으려는 것이고,
  *  그래도 빈 띠는 남겨서 칸끼리 높이가 어긋나지 않게 합니다.
  */
-function slotStrip(img) {
-  if (!img) return '<div class="pkline small blank"></div>';
+function slotStrip(img, label) {
+  const inner = label ? '<span>' + label + '</span>' : "";
+  if (!img) return '<div class="pkline small blank">' + inner + '</div>';
   return '<div class="pkline small pic" style="background-image:url(\'' +
-         assetURL(img) + '\')"></div>';
+         assetURL(img) + '\')">' + inner + '</div>';
 }
 
 /* 그 장을 대표할 그림 — 맨 처음 나오는 place 장면의 배경을 씁니다.
@@ -2904,11 +3021,18 @@ function chapterBanner(c) {
   return s ? s.img : null;
 }
 
-/* pk 에 특정 배정 하나를 넘기면 그 배정으로 엽니다. 없으면 일반 배정입니다. */
-function openGacha(done, pk) {
+/* pk 에 특정 배정 하나를 넘기면 그 배정으로 엽니다. 없으면 일반 배정입니다.
+ *
+ * deal 을 넘기면 «묶음 배정» 이 됩니다 (신입 관리자 기념 배정).
+ *   · 낱개 값이 아니라 묶음 값을 한 번에 받습니다 — cost 는 묶음 하나의 값입니다
+ *   · 손잡이가 하나뿐입니다. 1회 배정은 없습니다
+ *   · 쓸 때마다 S.newbie 가 올라가고, 다 쓰면 상점에서 칸이 사라집니다
+ */
+function openGacha(done, pk, deal) {
   $modal.classList.add("on");
   const pickup = pk || null;
-  const cost   = pickup ? pickupCost(pickup) : RULE.pullCost;
+  const cost   = deal ? deal.cost
+               : pickup ? pickupCost(pickup) : RULE.pullCost;
   const rate   = pickup ? (typeof pickup.rate === "number" ? pickup.rate : 0.5) : 0;
 
   /* 1성도 포함 — 1성은 전원 보유 상태라 중복으로 나와 환급된다 */
@@ -2919,7 +3043,12 @@ function openGacha(done, pk) {
   const pct = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + "%";
 
   const draw = (result) => {
-    let h = '<h2>' + (pickup ? '특 정 배 정' : '인 격 배 정') + '</h2>';
+    let h = '<h2>' + (deal ? '기 념 배 정' : pickup ? '특 정 배 정' : '인 격 배 정') + '</h2>';
+    if (deal) {
+      h += '<div class="pkline pic" style="background-image:url(\'' +
+             assetURL(deal.banner) + '\')"><span>' + deal.line + '</span></div>' +
+           '<div class="hint" style="color:#d8b26a">' + deal.name + '　·　' + deal.desc + '</div>';
+    }
     if (pickup) {
       /* 이 판의 광고 문구 — data/pickup.js 의 line·banner 에서 갈아 끼웁니다 */
       if (pickup.line) h += pkBannerHTML(pickup);
@@ -2928,7 +3057,10 @@ function openGacha(done, pk) {
            '같은 성급 안에서 ' + pct(rate) + ' 확률로 대상이 먼저 나옵니다. ' +
            '성급 확률은 일반 배정과 같습니다.</div>';
     }
-    h +=    '<div class="hint">1회 ' + cost + ' ' + CURRENCY +
+    h +=    '<div class="hint">' +
+            (deal ? deal.pulls + '회 묶음 ' + cost + ' ' + CURRENCY +
+                    '　·　남은 횟수 <b>' + newbieLeft() + '</b> / ' + deal.limit
+                  : '1회 ' + cost + ' ' + CURRENCY) +
             '　·　중복 시 ' + dupRefundText() + '　·　보유 ' + CURRENCY + ' ' + S.money + '<br>' +
             '★ ' + pct(RULE.rate1) + '　★★ ' + pct(RULE.rate2) + '　★★★ ' + pct(RULE.rate3) +
             '　보조 교육위원 ' + pct(RULE.rateAdv) +
@@ -2952,9 +3084,13 @@ function openGacha(done, pk) {
       h += '</div>';
     }
     h += '<div class="modalfoot">' +
-         '<button id="g1" class="primary"' + (S.money < cost ? ' disabled' : '') + '>1회 배정</button>' +
-         '<button id="g10"' + (S.money < cost * RULE.guaranteePulls ? ' disabled' : '') + '>' +
-           RULE.guaranteePulls + '회 배정</button>' +
+         (deal
+           ? '<button id="gdeal" class="primary"' +
+               ((S.money < cost || newbieLeft() <= 0) ? ' disabled' : '') + '>' +
+               deal.pulls + '회 배정　(' + cost + ' ' + CURRENCY + ')</button>'
+           : '<button id="g1" class="primary"' + (S.money < cost ? ' disabled' : '') + '>1회 배정</button>' +
+             '<button id="g10"' + (S.money < cost * RULE.guaranteePulls ? ' disabled' : '') + '>' +
+               RULE.guaranteePulls + '회 배정</button>') +
          '<button id="gclose" class="ghost">닫기</button></div>';
     $sheet.innerHTML = h;
 
@@ -3006,9 +3142,18 @@ function openGacha(done, pk) {
       const guaranteed = n >= RULE.guaranteePulls;      // 이 묶음에 확정 칸이 있는가
       let gotHigh = false;
 
-      for (let i = 0; i < n; i++) {
-        if (S.money < cost) break;
+      /* 묶음 배정은 값을 한 번만 받고, 참여 횟수를 보관함에 새깁니다 */
+      if (deal) {
+        if (S.money < cost || newbieLeft() <= 0) return;
         S.money -= cost;
+        S.newbie = (S.newbie || 0) + 1;
+      }
+
+      for (let i = 0; i < n; i++) {
+        if (!deal) {
+          if (S.money < cost) break;
+          S.money -= cost;
+        }
 
         const last = (i === n - 1);
         const force = guaranteed && last && !gotHigh;   // 마지막까지 안 나왔으면 확정
@@ -3026,6 +3171,9 @@ function openGacha(done, pk) {
       if (win) starFlash(3, bigWinLine(win), () => draw(out), !!onBanner);
       else draw(out);
     };
+
+    const gd = document.getElementById("gdeal");
+    if (gd && !gd.disabled) gd.onclick = () => pull(deal.pulls);
 
     const g1 = document.getElementById("g1");
     const g5 = document.getElementById("g10");
@@ -3142,10 +3290,13 @@ function openChapterSelect(back) {
     const canGo = open && enkNow >= rule.cost;
     return '<div class="slot' + (open && !canGo ? ' sel' : '') + '"' +
              (canGo ? ' ' + attr : '') + '>' +
-             slotStrip(open ? MIRROR_BG : null) +
-             '<div class="' + (canGo ? 'nm' : 'lock') + '">' + rule.name + '　' + rule.sub + '</div>' +
+             /* 이름은 띠 안에 넣습니다 — 「익스트림 거울 던전 산산이 부서진…」이
+              * 한 줄에 안 들어가 줄이 갈리던 것을 없애려는 것입니다. */
+             slotStrip(open ? mirrorBG(rule) : null, rule.name) +
+             '<div class="' + (canGo ? 'nm' : 'lock') + '">' + rule.sub + '</div>' +
              '<div class="sub">' + (open
-               ? ('이미 만난 적 ' + countWord(rule.count) + ' 연달아 상대합니다. ' +
+               /* 나오는 수는 «만나 본 적» 만큼입니다. 적게 만났으면 그만큼만 섭니다. */
+               ? ('이미 만난 적 ' + countWord(Math.min(rule.count, metCount())) + ' 연달아 상대합니다. ' +
                   '본편의 ' + rule.scale + '배 세기입니다.' +
                   (rule.maxBoss >= rule.count ? ' 셋 다 보스일 수 있습니다.'
                    : rule.maxBoss > 1 ? ' 보스가 ' + rule.maxBoss + '까지 섞입니다.' : ''))
@@ -3197,8 +3348,10 @@ function openChapterSelect(back) {
  *
  *  누가 나올지는 들어가기 전에 알려 주지 않습니다. 부딪쳐 봐야 압니다.
  */
-/* 거울 던전 배경 — 보통과 하드가 같은 그림을 씁니다 */
+/* 거울 던전 배경 — 갈래마다 다른 그림입니다.
+ * 갈래에 bg 를 적지 않으면 이 그림으로 갑니다. */
 const MIRROR_BG = "assets/scene/거울던전.jpg";
+function mirrorBG(rule) { return (rule && rule.bg) || MIRROR_BG; }
 
 const MIRROR_RULE = {
   key:  "mirror",
@@ -3219,6 +3372,7 @@ const MIRROR_HARD = {
   key:  "mirrorHard",
   name: "하드 거울 던전",
   sub:  "깨진 유리창에 비친 것들",
+  bg:   "assets/scene/하드거울던전.jpg",
   prefix: "깨진 거울의 ",
   count:  3,
   scale:  2.0,    // 본편의 2배
@@ -3234,15 +3388,25 @@ const MIRROR_EXTREME = {
   key:  "mirrorExtreme",
   name: "익스트림 거울 던전",
   sub:  "산산이 부서진 유리창에 비친 것들",
+  bg:   "assets/scene/익스트림거울던전.jpg",
   prefix: "조각난 거울의 ",
-  count:  3,
-  scale:  3.0,    // 본편의 3배
+  count:  5,      // 다섯을 연달아 상대합니다
+  scale:  3.0,    // 본편의 3배 — 가운데 회복이 있어 견딜 만합니다
   bonus:  700,
   codex:  7,
-  maxBoss: 3,     // 셋 다 보스일 수 있습니다
+  maxBoss: 3,     // 보스는 셋까지 섞입니다
   bossChance: 1.0,  // 보스가 반드시 섞입니다
   needCleared: 5, // 본편을 다섯 장 마쳐야 열립니다
-  cost: ENK_RULE.costExtreme
+  cost: ENK_RULE.costExtreme,
+
+  /* 셋을 넘기면 길잡이가 한 번 들릅니다.
+   * 다섯을 쉬지 않고 붙는 것은 사람이 할 짓이 아니라, 가운데에 숨 돌릴 자리를 둔 것입니다. */
+  rest: {
+    after: 3,
+    who:  "베르렐리우스",
+    say:  "이런 곳에서 시간만 죽이고 있었나...",
+    text: "길잡이가 관리력과 체력을 전부 회복시켰다."
+  }
 };
 
 /* 갈래를 늘리려면 여기에 얹으면 됩니다. 순서가 곧 화면에 서는 순서입니다. */
@@ -3271,10 +3435,31 @@ function mirrorUnlocked(rule) {
 }
 
 /* 본편 적을 강화해 임시 적으로 만든다 */
+/* ── 만나 본 적 ────────────────────────────────────────────────
+ *  거울은 «유리창에 비친 것» 입니다. 아직 보지도 못한 것이 비칠 수는 없습니다.
+ *  그래서 «클리어한 장에 나왔던 적» 만 뽑습니다 — 앞으로 나올 이야기의 보스가
+ *  거울에서 먼저 튀어나와 스포일러가 되던 것을 막으려는 것이기도 합니다.
+ */
+function metFoes() {
+  const m = {};
+  const walk = list => (list || []).forEach(s => {
+    if (!s) return;
+    if (s.t === "recall") return walk(s.scenes);
+    if (s.t === "battle" && s.foe) m[s.foe] = true;
+  });
+  CHAPTERS.forEach(c => { if (S.cleared && S.cleared[c.id]) walk(c.scenes); });
+  return m;
+}
+function metCount() { return Object.keys(metFoes()).length; }
+
 function buildMirrorFoes(rule) {
   const r = rule || MIRROR_RULE;
   const k = r.scale;
-  const keys = Object.keys(FOES).filter(x => x.indexOf("__mirror_") !== 0);
+  const met = metFoes();
+  let keys = Object.keys(FOES).filter(x => x.indexOf("__mirror_") !== 0 && met[x]);
+  /* 만나 본 것이 하나도 없으면(있을 수 없는 일이지만) 옛 방식대로 전부에서 뽑습니다 */
+  if (!keys.length) keys = Object.keys(FOES).filter(x => x.indexOf("__mirror_") !== 0);
+
   const bosses  = keys.filter(x => FOES[x].boss);
   const normals = keys.filter(x => !FOES[x].boss);
   const picked = [];
@@ -3289,6 +3474,10 @@ function buildMirrorFoes(rule) {
   const bag = normals.slice();
   while (picked.length < r.count && bag.length)
     picked.push(bag.splice(rnd(bag.length), 1)[0]);
+
+  /* 만나 본 것이 count 보다 적으면 그만큼만 나옵니다.
+   * 같은 것을 두 번 세우기보다 짧게 끝나는 편이 낫습니다 —
+   * 안내 글월도 실제로 나오는 수를 말합니다. */
 
   /* 약한 것부터 나오도록 — 보스가 있으면 자연히 마지막이 된다 */
   picked.sort((a, b) => FOES[a].hp - FOES[b].hp);
@@ -3336,12 +3525,15 @@ function startMirror(tier) {
     : rule === MIRROR_HARD
       ? "유리창에 금이 간다. 갈라진 틈마다 다른 것이 서 있다."
       : "메카고질라의 유리창이 흐려지더니, 비친 것들이 걸어 나온다.";
-  const scenes = [{ t: "place", img: MIRROR_BG, name: rule.name },
+  const scenes = [{ t: "place", img: mirrorBG(rule), name: rule.name },
                   { t: "n", text: 첫줄 },
-                  { t: "n", text: "쉴 틈은 없다. " + countWord(rule.count) + " 연달아 상대해야 한다." }];
+                  { t: "n", text: "쉴 틈은 없다. " + countWord(ids.length) + " 연달아 상대해야 한다." }];
   ids.forEach((id, i) => {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
     scenes.push({ t: "battle", foe: id });
+    /* 정해진 수를 넘기면 길잡이가 한 번 들러 세워 놓고 갑니다 */
+    if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length)
+      scenes.push({ t: "rest", who: rule.rest.who, say: rule.rest.say, text: rule.rest.text });
   });
   scenes.push({ t: "mirrorClear" });
 
@@ -3357,7 +3549,7 @@ function startMirror(tier) {
   S.ended = false;
   SCENES = buildScenes(MIRROR);
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
-  setBackdrop(MIRROR_BG, null);
+  setBackdrop(mirrorBG(rule), null);
   clearLog();
   $log.classList.remove("recalling");
   showCard(null);
@@ -3628,12 +3820,80 @@ function openVault(back) {
   });
   document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
-  document.getElementById("vreset").onclick = () => {
-    if (!confirm("보관함을 비웁니다. 모은 인격과 " + withJosa(CURRENCY, "이") + " 모두 사라집니다. 계속할까요?")) return;
-    clearVault();
-    closeModal();
-    title();
+  document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
+}
+
+/* ── 보관함 비우기 — 되돌릴 수 없는 자리 ────────────────────────
+ *  창 하나 띄우고 「예/아니오」로 끝낼 일이 아닙니다.
+ *  무엇이 사라지는지 수를 세어 보여 주고, 손잡이를 «두 번» 거치게 했습니다.
+ *  기본 손잡이는 「그만두기」쪽입니다 — 잘못 눌러 날리는 일이 없도록.
+ */
+function openReset(back) {
+  $modal.classList.add("on");
+
+  const t = vaultStats();
+  const ids  = t[1][0] + t[2][0] + t[3][0];
+  const adv  = Object.keys(S.advisorsOwned || {}).length;
+  const gif  = Object.keys(S.giftsOwned || {}).length;
+  const sup  = Object.keys(S.supportsOwned || {}).length;
+  const ach  = Object.keys(S.achieved || {}).length;
+  const done = mainChapters().filter(c => S.cleared && S.cleared[c.id]).length;
+
+  const row = (a, b) => '<div class="slot"><div class="nm">' + a + '</div>' +
+                        '<div class="sub">' + b + '</div></div>';
+
+  const draw = (sure) => {
+    let h = '<h2>보 관 함 비 우 기</h2>' +
+            '<div class="hint" style="color:#c8403a">' +
+              '<b>되돌릴 수 없습니다.</b> 아래 것이 모두 사라지고 맨 처음으로 돌아갑니다.</div>' +
+            '<div class="grid">' +
+              row("인격", ids + "종") +
+              row("보조 교육위원", adv + "명") +
+              row("지원 작성위원", sup + "명") +
+              row("E.G.O 기프트", gif + "개") +
+              row("업적", ach + "개") +
+              row("클리어한 장", done + "/" + mainChapters().length + "장") +
+              row(CURRENCY, S.money) +
+              row("황금교본", S.codex + "권") +
+            '</div>' +
+            '<div class="hint">' +
+              "읽던 자리도 함께 지워집니다. " +
+              NEWBIE_RULE.name + "은 <b>다시 열립니다</b>." +
+              (typeof VAULT_SEED !== "undefined" && VAULT_SEED
+                ? "<br>data/vault.js 에 적어 둔 자리가 있어 <b>그 지점</b>으로 돌아갑니다."
+                : "") +
+            '</div>';
+
+    if (!sure) {
+      h += '<div class="hint">먼저 <b>내보내기</b>로 지금 것을 받아 두면 나중에 되돌릴 수 있습니다.</div>' +
+           '<div class="modalfoot">' +
+             '<button id="rcancel" class="primary">그만두기</button>' +
+             '<button id="rexport">먼저 내보내기</button>' +
+             '<button id="rnext" class="ghost">비우겠습니다</button></div>';
+    } else {
+      h += '<div class="hint" style="color:#c8403a">' +
+             '<b>정말 비울까요?</b> 이 손잡이를 누르면 그대로 사라집니다.</div>' +
+           '<div class="modalfoot">' +
+             '<button id="rcancel" class="primary">아니오, 그만두겠습니다</button>' +
+             '<button id="rdo" class="ghost">예, 비웁니다</button></div>';
+    }
+    $sheet.innerHTML = h;
+
+    document.getElementById("rcancel").onclick = () => { closeModal(); if (back) back(); };
+    const ex = document.getElementById("rexport");
+    if (ex) ex.onclick = () => openRecord(() => openReset(back));
+    const nx = document.getElementById("rnext");
+    if (nx) nx.onclick = () => draw(true);
+    const dv = document.getElementById("rdo");
+    if (dv) dv.onclick = () => {
+      clearVault();
+      closeModal();
+      render();
+      title();
+      say("보관함을 비웠다. 맨 처음으로 돌아간다.", "sys");
+    };
   };
+  draw(false);
 }
 
 /* ── 유리창 ────────────────────────────────────────────────────

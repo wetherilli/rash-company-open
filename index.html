@@ -313,13 +313,20 @@
     height:56px;margin:0 0 8px;padding:0;letter-spacing:0;
     border-color:#3a3a44;
   }
-  .pkline.small::before{background:rgba(8,6,4,.28);}
+  .pkline.small::before{background:rgba(8,6,4,.45);}
+  /* 띠 안에 이름을 얹을 때 — 큰 띠보다 작게, 자간도 좁게 */
+  .pkline.small span{
+    font-size:18px;font-weight:700;letter-spacing:.04em;color:#f2ece2;
+    text-shadow:0 2px 8px #000, 0 0 14px rgba(0,0,0,.95);
+  }
   /* 잠긴 칸 — 그림 없이 빈 띠만. 칸 높이를 맞추는 몫입니다. */
   .pkline.small.blank{
     background:repeating-linear-gradient(135deg,#141419,#141419 6px,#101015 6px,#101015 12px);
     border-color:#26262e;
   }
   .pkline.small.blank::before{background:none;}
+  /* 잠긴 칸의 이름은 죽여서 — 아직 못 가는 곳임을 색으로 알립니다 */
+  .pkline.small.blank span{color:#6c6c78;text-shadow:none;}
   .slot.pk .pkline.small{border-color:#7a5c22;}
   .slot.pk{border-color:#7a5c22;background:#171208;}
 
@@ -407,6 +414,9 @@
   .slot{border:1px solid #2a2a30;background:#121218;padding:9px 11px;cursor:pointer;font-size:13px;}
   .slot:hover{border-color:#c8403a;}
   .slot.sel{border-color:#d8b26a;background:#17151a;}
+  /* 가로로 통째를 차지하는 칸 — 상점 맨 위 기념 배정에 씁니다 */
+  .slot.wide{grid-column:1 / -1;}
+  .slot.wide .pkline{margin:-2px 0 8px;height:150px;}
   .slot .nm{color:#e8e4de;font-weight:700;}
   .slot .sub{color:#8b8681;font-size:11.5px;}
   .slot .lock{color:#55524e;font-size:11.5px;}
@@ -533,6 +543,9 @@
     /* 배정 광고 띠도 화면에 맞춰 낮춥니다 */
     .pkline{height:92px;font-size:16px;letter-spacing:.06em;padding:0 10px;}
     .pkline.small{height:46px;}
+    .pkline.small span{font-size:15px;}
+    /* 가로 통째 칸도 좁은 화면에서는 띠를 낮춥니다 */
+    .slot.wide .pkline{height:104px;}
   }
 </style>
 </head>

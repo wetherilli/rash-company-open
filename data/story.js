@@ -55,7 +55,11 @@ const FOES = {
     intro: "꿈틀거리는 모습이 부담스럽다.",
     heavyLine: "네가 가져갈 건 내 허물 뿐이다!"      // 강타를 준비할 때 하는 말
   },
-  hwangjeo_phantasm: { name: "그림에서 나온 환상체", hp: 120, atk: 14, def: 5, img: null },
+  hwangjeo_phantasm: {
+    name: "그림에서 나온 환상체", hp: 120, atk: 14, def: 5,
+    img:      "assets/enemy/익룡 환상체.png",
+    heavyImg: "assets/enemy/익룡 환상체_강타.gif"    // 강타를 준비하는 턴에만 이 그림
+  },
   hwangjeo: {
     name: "파문당한 제2발톱 솔다토 황저", hp: 380, atk: 22, def: 7, boss: true,
     img: null,
@@ -131,6 +135,7 @@ const FOES = {
   },
   lee_seojin_shark: {
     name: "제3발톱 작은형님 이서진", hp: 430, atk: 27, def: 9, boss: true, img: "assets/enemy/이서진.png",
+    heavyImg: "assets/enemy/이서진_필살.png",   // 강타를 준비하는 턴에만 이 그림
     desc: "상어고기 냄새를 맡고 바다 건너까지 쫓아왔다. 상슝좍.",
     intro: "상어 지식이 밀려 들어온다.",
     heavyLine: "전원! 입수다!"      // 강타를 준비할 때 하는 말
@@ -149,6 +154,7 @@ const FOES = {
   },
   twisted_mosasaur: {
     name: "뒤틀린 모사사우루스 :: 강호영", hp: 640, atk: 30, def: 10, boss: true, img: "assets/enemy/뒤틀린 모사사우루스.png",
+    heavyImg: "assets/enemy/뒤틀린 모사사우루스_강타1.png",   // 강타를 준비하는 턴에만 이 그림
     desc: "황금교본과 선원들과 강호영이 한 덩어리로 엉겨붙은 것. 이제 메카고질라를 노린다.",
     intro: "바다가 통째로 이쪽을 바라본다.",
     heavyLine: "자! 막아내라!"      // 강타를 준비할 때 하는 말
