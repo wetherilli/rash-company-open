@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.29.0";
+const VERSION = "0.29.1";
 const VERSION_NAME = "육참골탄";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1346,10 +1346,99 @@ function next() {
   play(s);
 }
 
+/* ── 조건이 맞을 때만 나오는 말 ────────────────────────────────
+ *
+ *  누구를 데려왔느냐, 무엇을 끼웠느냐에 따라 대사가 달라집니다.
+ *  나레이션(n)과 대사(d) 어디에나 붙일 수 있습니다.
+ *
+ *    alt    조건이 맞으면 «그 줄을 대신합니다». 먼저 맞는 하나만 씁니다.
+ *    extra  조건이 맞으면 «그 줄 뒤에 덧붙습니다». 맞는 것이 여럿이면 차례로 다 나옵니다.
+ *
+ *  ── 적는 법 ────────────────────────────────────────────────
+ *
+ *    // 성시윤이 「아라온호 선장」을 끼고 있으면 대사가 통째로 바뀝니다
+ *    { t: "d", who: "seong_siyun", text: "…그만해.",
+ *      alt: [ { when: { equip: { who: "seong_siyun", titleHas: "아라온호 선장" } },
+ *               text: "아니, 모든 것은 내 덕이다." } ] }
+ *
+ *    // I사 인격을 낀 사람이 편성에 있으면 «그 사람이» 한마디 덧붙입니다
+ *    { t: "d", who: "park_suo", text: "…I사군.",
+ *      extra: [ { when: { titleHas: "I사" }, text: "역시 그랬군요." } ] }
+ *
+ *  ── when 에 적을 수 있는 것 ─────────────────────────────────
+ *
+ *    titleHas   편성한 누군가의 «인격 이름» 에 그 말이 들어 있으면 맞습니다.
+ *               → 그 사람이 «걸린 사람» 이 되어, who 를 안 적으면 그가 말합니다.
+ *    equip      { who: "열쇠", titleHas: "말" } — 그 사람이 그 인격을 끼고 있어야 합니다.
+ *    party      그 사람이 편성에 있어야 합니다. 여럿이면 배열(모두 필요).
+ *    advisor    그 이름의 보조 교육위원을 세우고 있어야 합니다.
+ *    synergy    그 이름의 편성 시너지가 지금 발동 중이어야 합니다.
+ *    flag       S.flags 에 그 표가 서 있어야 합니다.
+ *
+ *  여럿을 함께 적으면 «모두» 맞아야 합니다.
+ *  말하는 사람은 who 로 못박을 수 있고, 안 적으면 걸린 사람 → 원래 화자 순으로 찾습니다.
+ */
+function sceneWhen(c) {
+  if (!c) return { ok: true, who: null };
+  let hit = null;
+
+  if (c.titleHas) {
+    const w = S.party.find(x => x && memberTitle(x).indexOf(c.titleHas) >= 0);
+    if (!w) return null;
+    hit = w;
+  }
+  if (c.equip) {
+    const e = c.equip;
+    if (S.party.indexOf(e.who) < 0) return null;
+    if (e.titleHas && memberTitle(e.who).indexOf(e.titleHas) < 0) return null;
+    hit = hit || e.who;
+  }
+  if (c.party) {
+    const need = Array.isArray(c.party) ? c.party : [c.party];
+    if (!need.every(w => S.party.indexOf(w) >= 0)) return null;
+    hit = hit || need[0];
+  }
+  if (c.advisor) {
+    const a = advisorById(S.advisor);
+    if (!a || a.name !== c.advisor) return null;
+  }
+  if (c.synergy && !activeSynergies().some(x => x.name === c.synergy)) return null;
+  if (c.flag && !(S.flags && S.flags[c.flag])) return null;
+
+  return { ok: true, who: hit };
+}
+
+/* 조건이 맞는 alt 를 찾아 그 줄을 갈아 끼웁니다. 없으면 원래 줄 그대로. */
+function applyAlt(s) {
+  if (!s.alt) return s;
+  for (const a of s.alt) {
+    const m = sceneWhen(a.when);
+    if (!m) continue;
+    return { t: s.t, who: a.who || m.who || s.who, text: a.text, extra: s.extra };
+  }
+  return s;
+}
+
+/* 조건이 맞는 extra 를 원래 줄 뒤에 붙입니다. */
+function playExtras(s) {
+  if (!s.extra) return;
+  s.extra.forEach(x => {
+    const m = sceneWhen(x.when);
+    if (!m) return;
+    const who = x.who || m.who || s.who;
+    if (who) speak(who, x.text);
+    else say(x.text, "n");
+  });
+}
+
 function play(s) {
+  /* 화면을 흔듭니다. shake: true 는 가볍게, "hard" 면 크게.
+   * 어느 장면에나 붙일 수 있습니다 — 포격을 맞는 대목 같은 데 씁니다. */
+  if (s.shake) shakeScreen(s.shake === "hard");
+
   switch (s.t) {
-    case "n":     say(s.text, "n"); return cont();
-    case "d":     speak(s.who, s.text); return cont();
+    case "n":     { const x = applyAlt(s); say(x.text, "n");        playExtras(x); return cont(); }
+    case "d":     { const x = applyAlt(s); speak(x.who, x.text);    playExtras(x); return cont(); }
 
     case "place":
       showCard(s.img || (curChapter() || {}).img, s.name, s.name);
