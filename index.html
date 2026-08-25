@@ -291,6 +291,17 @@
   .patch .pv .pd{color:#6e6a66;font-weight:400;font-size:11.5px;margin-left:10px;letter-spacing:0;}
   .patch .pl{margin:7px 0 0;padding-left:18px;color:#c2bfba;font-size:13px;line-height:1.75;}
   .patch .pl li{margin:0 0 3px;}
+  /* 접기 — 머리는 누를 수 있는 자리이므로 손 모양을 줍니다 */
+  .patch .pv{cursor:pointer;user-select:none;}
+  .patch .pv:hover{color:#f0d79c;}
+  .patch .pv .pfold{display:inline-block;width:14px;color:#8b8681;font-weight:400;}
+  .patch.folded .pl{display:none;}
+  .patch.folded{padding:8px 14px;}
+  /* 지난번 접속 뒤에 새로 나온 덩이 */
+  .patch .pv .pnew{
+    color:#0a0a0c;background:#d8b26a;font-size:10px;font-weight:700;
+    letter-spacing:.08em;padding:1px 5px;margin-left:8px;vertical-align:1px;
+  }
 
   /* ── 특정 배정 광고 문구 ─────────────────
    *  문구 자체는 data/pickup.js 의 line 에서 갈아 끼웁니다. */
@@ -411,6 +422,10 @@
   .sheet h2{margin:0 0 4px;color:#c8403a;font-size:16px;letter-spacing:.14em;}
   .sheet .hint{color:#6e6a66;font-size:12.5px;margin-bottom:14px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;}
+  /* 글이 긴 칸은 창 너비를 다 씁니다 — 우편함처럼 줄글이 들어가는 곳 */
+  .grid.one{grid-template-columns:1fr;}
+  /* 우편 칸의 마지막 줄 — 남은 날과 「눌러서 받기」를 오른쪽에 붙입니다 */
+  .slot .mailfoot{text-align:right;margin-top:4px;}
   .slot{border:1px solid #2a2a30;background:#121218;padding:9px 11px;cursor:pointer;font-size:13px;}
   .slot:hover{border-color:#c8403a;}
   .slot.sel{border-color:#d8b26a;background:#17151a;}
@@ -574,6 +589,7 @@
 <script src="data/gifts.js"></script>
 <script src="data/pickup.js"></script>
 <script src="data/achievements.js"></script>
+<script src="data/mail.js"></script>
 <script src="data/patch.js"></script>
 <script src="data/story.js"></script>
 <script src="engine.js"></script>

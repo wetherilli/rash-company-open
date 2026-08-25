@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "0.29.1";
+const VERSION = "0.29.2";
 const VERSION_NAME = "육참골탄";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -41,6 +41,13 @@ const RULE = {
   healRatio:   0.30,   // 퇴고로 회복하는 양 (최대 체력 대비)
   correctCut:  0.25,   // 교정 대상이 받는 피해 비율
   pushMult:    1.5,    // 독촉 배수
+  startMoney:  400,    // 보관함이 아예 없을 때 손에 쥐고 시작하는 원고료
+  /* 장을 마칠 때 주는 원고료. «처음 마칠 때만» 나옵니다 (storyPays 참고).
+   * 장마다 다르게 주고 싶으면 그 장에 clearPay 를 적으면 그것이 이깁니다. */
+  clearPay:    40,
+  /* 체포로 깎는 적 방어 비율. 이번 턴에만 걸립니다.
+   * data/characters.js 의 「체포」 설명 글에도 같은 수가 적혀 있습니다 — 함께 고치십시오. */
+  arrestCut:   0.20,
   winHeal:     0.25,   // 전투에 이기면 최대 체력의 이만큼 회복
   scriptedOut: 0.20,   // 각본 전투(lose:"story")에서 적이 물러나는 체력 비율
   battleDelay: 700,    // 전투 시작 시 버튼이 잠기는 시간(ms). 0 이면 바로 시작
@@ -122,6 +129,10 @@ function verCmp(a, b) {
  */
 let VAULT_LOCK = null;   // { from, to } — 잠겼을 때만 채워집니다
 function vaultLocked() { return !!VAULT_LOCK; }
+
+/* 지난번 접속 때의 판 번호. 보관함을 읽을 때 붙잡아 둡니다 (newState 참고).
+ * 보관함이 아예 없으면 null — 처음 오신 분입니다. */
+let LAST_VER = null;
 
 const SAVE_KEY  = "rash_company_save_v1";    // 진행 기록 (어디까지 읽었나)
 const VAULT_KEY = "rash_company_vault_v1";   // 보관함 (모은 인격 — 회차가 바뀌어도 남는다)
@@ -408,8 +419,13 @@ function newState() {
   if (v && v.ver && verCmp(v.ver, VERSION) > 0)
     VAULT_LOCK = { from: v.ver, to: VERSION };
 
+  /* 지난번에 어느 판으로 놀았는지 — 보관함에는 그때 판 번호가 찍혀 있습니다.
+   * saveVault() 가 곧 지금 판으로 덮어쓰므로, 여기서 붙잡아 둡니다.
+   * 패치 노트가 «그 뒤로 새로 나온 것» 만 펼쳐 보이는 데 씁니다. */
+  LAST_VER = (v && v.ver) ? v.ver : null;
+
   /* 옛 판에서 만든 보관함이면 원고료가 절반만 넘어온다 */
-  let money = (v && typeof v.money === "number") ? v.money : 120;
+  let money = (v && typeof v.money === "number") ? v.money : RULE.startMoney;
   let verNote = null;
   if (v && VERSION_RULE.on && !vaultLocked() && verKey(v.ver) !== verKey(VERSION)) {
     const before = money;
@@ -453,16 +469,38 @@ function patchList() { return (typeof PATCH_NOTES !== "undefined" && PATCH_NOTES
 function patchHidden() { return Store.get(PATCH_SEEN_KEY) === VERSION; }
 function patchHide()   { Store.set(PATCH_SEEN_KEY, VERSION); }
 
+/* 그 덩이가 «지난번 접속 뒤에 새로 나온 것» 인가.
+ * 보관함이 없으면(처음 오신 분) 맨 위 하나만 새것으로 봅니다 —
+ * 다 펼쳐 놓으면 첫 화면부터 글이 쏟아집니다. */
+function patchIsNew(p, i) {
+  if (!LAST_VER) return i === 0;
+  return verCmp(p.ver, LAST_VER) > 0;
+}
+
 function openPatch(back) {
   $modal.classList.add("on");
   const list = patchList();
+  const news = list.filter(patchIsNew);
+
   let h = '<h2>패 치 노 트</h2>' +
-          '<div class="hint">지금 판은 <b>v' + VERSION + ' «' + VERSION_NAME + '»</b> 입니다.</div>';
+          '<div class="hint">지금 판은 <b>v' + VERSION + ' «' + VERSION_NAME + '»</b> 입니다.' +
+          (LAST_VER
+            ? (news.length
+                ? '　지난번에 보신 <b>v' + LAST_VER + '</b> 뒤로 <b style="color:#d8b26a">' +
+                  news.length + '개</b>가 새로 나왔습니다. 그것만 펼쳐 두었습니다.'
+                : '　지난번 <b>v' + LAST_VER + '</b> 뒤로 새로 나온 것은 없습니다.')
+            : '　머리를 누르면 접었다 펼 수 있습니다.') +
+          '</div>';
 
   if (!list.length) h += '<div class="hint">아직 적어 둔 것이 없습니다.</div>';
   list.forEach((p, i) => {
-    h += '<div class="patch' + (i === 0 ? ' now' : '') + '">' +
-           '<div class="pv">v' + p.ver + (p.name ? '　«' + p.name + '»' : '') +
+    const 새것 = patchIsNew(p, i);
+    h += '<div class="patch' + (i === 0 ? ' now' : '') + (새것 ? '' : ' folded') +
+           '" data-patch="' + i + '">' +
+           '<div class="pv">' +
+             '<span class="pfold">' + (새것 ? '▾' : '▸') + '</span>' +
+             'v' + p.ver + (p.name ? '　«' + p.name + '»' : '') +
+             (새것 ? '<span class="pnew">NEW</span>' : '') +
              (p.date ? '<span class="pd">' + p.date + '</span>' : '') + '</div>' +
            '<ul class="pl">' +
              (p.lines || []).map(x => '<li>' + x + '</li>').join("") +
@@ -472,9 +510,30 @@ function openPatch(back) {
 
   h += '<div class="modalfoot">' +
          '<button id="ptclose">닫기</button>' +
+         '<button id="ptall" class="ghost">모두 펼치기</button>' +
          '<button id="pthide" class="ghost">다음부터 표시하지 않음</button>' +
        '</div>';
   $sheet.innerHTML = h;
+
+  /* 머리를 누르면 그 덩이만 접었다 펼칩니다 */
+  $sheet.querySelectorAll(".patch .pv").forEach(el => {
+    el.onclick = () => {
+      const box = el.parentElement;
+      const 접힘 = box.classList.toggle("folded");
+      const 화살 = el.querySelector(".pfold");
+      if (화살) 화살.textContent = 접힘 ? "▸" : "▾";
+    };
+  });
+  const 모두 = document.getElementById("ptall");
+  모두.onclick = () => {
+    const 펼칠까 = !!$sheet.querySelector(".patch.folded");
+    $sheet.querySelectorAll(".patch").forEach(box => {
+      box.classList.toggle("folded", !펼칠까);
+      const 화살 = box.querySelector(".pfold");
+      if (화살) 화살.textContent = 펼칠까 ? "▾" : "▸";
+    });
+    모두.textContent = 펼칠까 ? "모두 접기" : "모두 펼치기";
+  };
 
   document.getElementById("ptclose").onclick = () => { closeModal(); if (back) back(); };
   document.getElementById("pthide").onclick = () => {
@@ -677,6 +736,16 @@ function storyPays() {
 }
 
 function manageCap()  { return RULE.manageMax + advisorEffect().manageMax; }
+
+/* 관리자 능력 중에는 어떤 장을 마쳐야 열리는 것이 있습니다 (needCleared).
+ * 열리기 전에는 전투 손잡이에도, 아래 설명 줄에도 나오지 않습니다 —
+ * 아직 없는 것을 미리 보여 주지 않으려는 것입니다. */
+function skillOpen(s) {
+  if (!s || !s.needCleared) return true;
+  return !!(S && S.cleared && S.cleared[s.needCleared]);
+}
+function managerSkills() { return (CREW.manager.skills || []).filter(skillOpen); }
+function skillBy(id) { return (CREW.manager.skills || []).find(s => s.id === id); }
 function skillCost(base) { return Math.max(1, base - advisorEffect().cheap); }
 
 /* 중복으로 나왔을 때 돌려줄 원고료 — 성급을 넣으면 됩니다 */
@@ -1239,7 +1308,7 @@ function renderManage() {
     pips += '<i class="' + (i < now ? 'on' : '') + '"></i>';
 
   /* 관리자 능력이 무엇을 하는지 한 줄씩 — 지금 쓸 수 있는 것은 밝게 */
-  const help = CREW.manager.skills.map(s => {
+  const help = managerSkills().map(s => {
     const c  = skillCost(s.cost);
     const ok = now >= c;
     return '<span class="mgsk' + (ok ? '' : ' off') + '">' +
@@ -2051,6 +2120,23 @@ function askNext() {
       askNext();
     }
   });
+  /* 체포 — 5장을 마쳐야 열립니다. 겨누는 곳이 적이라 고를 사람이 없습니다.
+   * 한 턴에 한 번만 걸리고, 두 번 걸어도 겹쳐 쌓이지 않습니다. */
+  const arrest = skillBy("arrest");
+  if (skillOpen(arrest)) {
+    const cArrest = skillCost(arrest.cost);
+    list.push({
+      label: "체포 · " + b.name + " (" + cArrest + ")", cls: "ghost",
+      disabled: b.manage < cArrest || !!b.mods.arrest,
+      fn: () => {
+        b.manage -= cArrest;
+        b.mods.arrest = true;
+        say(withJosa(CREW.manager.codename, "이") + " " + withJosa(b.name, "을") +
+            " 체포한다. 이번 턴 방어가 " + Math.round(RULE.arrestCut * 100) + "% 깎였다.", "good");
+        askNext();
+      }
+    });
+  }
 
   buttons(list);
   renderHeader();
@@ -2200,7 +2286,12 @@ function resolveTurn() {
 
     const who = hitters[i++];
     const st = effStats(who);
-    let dmg = st.atk + rnd(4) - b.def;
+    /* 체포는 이번 턴 «적 방어» 를 깎습니다. 뺄셈 피해라 방어 한 점이 크게 먹히므로,
+     * 방어가 두꺼운 상대에게 걸수록 효과가 큽니다. */
+    const fdef = b.mods.arrest
+      ? Math.round(b.def * (1 - RULE.arrestCut))
+      : b.def;
+    let dmg = st.atk + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
     const crit = Math.random() < critRate();
     if (crit) dmg *= critMult();
@@ -2208,7 +2299,8 @@ function resolveTurn() {
     b.hp -= dmg;
     say((crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
               : (memberName(who) + "의 공격 — " + dmg + " 피해")) +
-        (b.mods[who + "_push"] ? " (독촉)" : ""), crit ? "crit" : "hit");
+        (b.mods[who + "_push"] ? " (독촉)" : "") +
+        (b.mods.arrest ? " (체포)" : ""), crit ? "crit" : "hit");
     foeHit(0);
     render();
 
@@ -2338,15 +2430,36 @@ function chapterEnd() {
   const c = curChapter();
   if (S.mirror) return mirrorClear();
   if (!S.cleared) S.cleared = {};
+  /* «처음» 마쳤는지는 표시를 남기기 전에 봐 두어야 합니다 */
+  const first = !S.cleared[c.id];
   S.cleared[c.id] = true;
-  saveVault();
   say("── " + c.no + " 종료 ──", "place");
+  /* 마칠 때 주는 원고료 — 처음 마칠 때만. 장에 clearPay 를 적으면 그것이 이깁니다. */
+  const pay = (typeof c.clearPay === "number") ? c.clearPay : RULE.clearPay;
+  if (first && pay > 0) {
+    S.money += pay;
+    say(c.no + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
+  }
+  saveVault();
   save();
   const hasNext = S.ch + 1 < CHAPTERS.length;
+
+  /* 첫 장을 처음 마쳤을 때만 — 다음에 무엇을 하면 되는지 일러 둡니다.
+   * 여기서 상점을 한 번 열어 보지 않으면 인격이 하나도 없는 채로 1장에 갑니다. */
+  const firstEver = first && CHAPTERS[0] && c.id === CHAPTERS[0].id;
+  if (firstEver) {
+    divider();
+    say("이제 [상점] 에서 인격을 배정받아 보십시오.", "good");
+    say("모은 " + CURRENCY + "로 새 인격을 뽑고, [편성] 에서 갈아 끼우면 " +
+        "작성위원이 훨씬 강해집니다. 뽑은 인격은 회차가 바뀌어도 남습니다.", "sys");
+  }
+
   buttons([
-    hasNext ? { label: "다음 장으로", cls: "primary", fn: () => startChapter(S.ch + 1) } : null,
+    firstEver ? { label: "상점 — 인격 배정받기", cls: "primary", fn: () => openShop(() => chapterEnd()) } : null,
+    hasNext ? { label: "다음 장으로", cls: firstEver ? "" : "primary",
+                fn: () => startChapter(S.ch + 1) } : null,
     { label: "편성", fn: () => openParty(() => {}) },
-    { label: "상점", fn: () => openShop(() => {}) },
+    firstEver ? null : { label: "상점", fn: () => openShop(() => {}) },
     { label: "보관함", fn: () => openVault(() => chapterEnd()) },
     { label: "노트", cls: "ghost", fn: () => openNote(() => chapterEnd()) },
     { label: "운전석", cls: "ghost", fn: () => openChapterSelect(() => chapterEnd()) },
@@ -3528,6 +3641,22 @@ function mirrorUnlocked(rule) {
   return Object.keys(S.cleared || {}).length >= r.needCleared;
 }
 
+/* ── 방어에는 배수를 덜 먹입니다 ────────────────────────────────
+ *  피해가 «공격 − 방어» 라, 방어에 배수를 그대로 곱하면 어느 지점부터
+ *  갑자기 한 대에 1씩밖에 안 들어갑니다. 벽이 서 버리는 것입니다.
+ *
+ *  체력과 공격은 배수를 그대로 받습니다 — 오래 버티고 아프게 때립니다.
+ *  방어만 완만하게 올려서, 세진 것이 «단단해서 못 뚫는 것» 이 아니라
+ *  «질겨서 오래 걸리는 것» 이 되도록 합니다.
+ *
+ *    DEF_SCALE = 0.4 일 때
+ *      ×1.3 → 방어 ×1.12      ×2 → 방어 ×1.4      ×3 → 방어 ×1.8
+ *
+ *  숫자를 0 으로 두면 방어는 본편 그대로, 1 로 두면 예전처럼 똑같이 곱합니다.
+ */
+const DEF_SCALE = 0.4;
+function defK(k) { return 1 + (k - 1) * DEF_SCALE; }
+
 /* 본편 적을 강화해 임시 적으로 만든다 */
 /* ── 만나 본 적 ────────────────────────────────────────────────
  *  거울은 «유리창에 비친 것» 입니다. 아직 보지도 못한 것이 비칠 수는 없습니다.
@@ -3583,7 +3712,7 @@ function buildMirrorFoes(rule) {
       name: (r.prefix || "거울의 ") + f.name,
       hp:  Math.round(f.hp  * k),
       atk: Math.round(f.atk * k),
-      def: Math.round(f.def * k),
+      def: Math.round(f.def * defK(k)),
       boss: !!f.boss,
       img: f.img || null,
       /* 등장 대사와 강타 대사는 본래 것을 그대로 가져옵니다.
@@ -3729,6 +3858,153 @@ function openRecord(back) {
  *  제목·조건·보상을 그대로 보여 줍니다.
  *  보상으로 받는 사람의 수치와 설명은 손에 넣기 전까지 가립니다.
  */
+/* ── 우편함 ────────────────────────────────────────────────────
+ *  내용은 data/mail.js 의 MAILS 에 적습니다.
+ *  받은 것은 보관함에 id 로 남아, 판이 올라가도 다시 받히지 않습니다.
+ *
+ *  기간은 «보낸 날 0시 ~ days 일 뒤 0시» 입니다. 기기 시계를 봅니다.
+ */
+function mailList() { return (typeof MAILS !== "undefined" && MAILS) ? MAILS : []; }
+function mailRule() { return (typeof MAIL_RULE !== "undefined" && MAIL_RULE)
+                             ? MAIL_RULE : { name: "우편함", days: 7 }; }
+function mailTaken(m) { return !!(S && S.mailTaken && S.mailTaken[m.id]); }
+
+/* 그 우편이 열려 있는 마지막 순간 (밀리초). 넘기면 닫힙니다. */
+function mailUntil(m) {
+  const p = String(m.from || "").split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return Infinity;   // 날짜가 없으면 늘 열어 둡니다
+  const days = (typeof m.days === "number") ? m.days : mailRule().days;
+  return new Date(p[0], p[1] - 1, p[2]).getTime() + days * 24 * 60 * 60 * 1000;
+}
+function mailLive(m)   { return Date.now() < mailUntil(m); }
+function mailOpen(m)   { return !mailTaken(m) && mailLive(m); }
+function mailWaiting() { return mailList().filter(mailOpen).length; }
+
+/* 얼마나 남았는지 — 「3일 남음」 / 「오늘까지」 */
+function mailLeftText(m) {
+  const ms = mailUntil(m) - Date.now();
+  if (ms === Infinity) return "기한 없음";
+  if (ms <= 0) return "기간이 지났습니다";
+  const d = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (d >= 1) return d + "일 남음";
+  const h = Math.floor(ms / (60 * 60 * 1000));
+  return h >= 1 ? h + "시간 남음" : "오늘까지";
+}
+
+/* 무엇을 주는지 한 줄로 */
+function mailGiveText(m) {
+  const g = m.give || {}, out = [];
+  if (g.money) out.push(CURRENCY + " " + g.money);
+  if (g.codex) out.push("황금교본 " + g.codex);
+  if (g.enk)   out.push(ENK_RULE.name + " " + g.enk);
+  if (g.support) {
+    const sp = supportBy(SUP_PREFIX + g.support);
+    out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
+                                   : g.support.replace("|", " ")));
+  }
+  return out.join("　·　") || "—";
+}
+
+/* 지금 받으면 헛되이 버려지는가.
+ * 엔케팔린은 보유 상한이 있어, 가득 찬 채로 받으면 한 개도 안 남고 우편만 사라집니다.
+ * 그래서 «받을 것이 하나도 없는» 우편은 아예 열지 않고 돌려보냅니다. */
+function mailWasted(m) {
+  const g = m.give || {};
+  if (g.money || g.codex || g.support) return false;   // 다른 것이 있으면 버려질 일 없습니다
+  if (!g.enk) return false;
+  enkSync();
+  return enkCount() >= ENK_RULE.max;
+}
+
+function mailTake(m) {
+  if (!mailOpen(m)) return false;
+  if (mailWasted(m)) {
+    divider();
+    say(ENK_RULE.name + "이 이미 가득 차 있습니다. (" + enkCount() + " / " + ENK_RULE.max + ")", "bad");
+    say("한 개도 받지 못하고 우편만 사라지므로, 조금 쓰신 뒤에 받으십시오.", "sys");
+    return false;
+  }
+  const g = m.give || {};
+  if (!S.mailTaken) S.mailTaken = {};
+  S.mailTaken[m.id] = true;
+
+  divider();
+  say("우편을 받았다 — " + m.title, "gain");
+  if (g.money) { S.money += g.money; say(CURRENCY + " " + g.money + " 획득.", "gain"); }
+  if (g.codex) { S.codex += g.codex; say("황금교본 " + g.codex + "권 획득.", "gain"); }
+  if (g.enk) {
+    enkSync();
+    const before = enkCount();
+    S.enk.n = Math.min(ENK_RULE.max, before + g.enk);
+    const got = enkCount() - before;
+    say(ENK_RULE.name + " " + got + " 획득." +
+        (got < g.enk ? "  (상한 " + ENK_RULE.max + " 을 넘겨 받지는 못합니다)" : ""), "gain");
+  }
+  if (g.support) {
+    const sp = supportBy(SUP_PREFIX + g.support);
+    if (sp) {
+      if (!S.supportsOwned) S.supportsOwned = {};
+      S.supportsOwned[SUP_PREFIX + g.support] = true;
+      say("지원 작성위원 합류 — " + stars(sp.star) + " " + sp.title + " " + sp.name, "gain");
+    } else say("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")", "todo");
+  }
+  saveVault();
+  return true;
+}
+
+function openMail(back) {
+  $modal.classList.add("on");
+  const all = mailList();
+  const 기다림 = mailWaiting();
+
+  let h = '<h2>우 편 함</h2>' +
+          '<div class="hint">불편을 끼쳤을 때 얹어 드리는 자리입니다. ' +
+          '하나에 한 번씩만 받습니다.' +
+          (기다림 ? '　<b style="color:#d8b26a">받지 않은 우편 ' + 기다림 + '통</b>' : '') +
+          '</div>';
+
+  const live = all.filter(m => mailLive(m) || mailTaken(m));
+  if (!live.length) h += '<div class="box dim">온 우편이 없습니다.</div>';
+
+  /* 우편은 줄글이 들어가므로 한 줄에 하나씩, 창 너비를 다 씁니다 */
+  h += '<div class="grid one">';
+  live.forEach((m, i) => {
+    const got = mailTaken(m), open = mailOpen(m);
+    h += '<div class="slot' + (got ? ' sel' : '') + '"' +
+           (open ? ' data-mail="' + i + '"' : '') + '>' +
+           '<div class="' + (open || got ? 'nm' : 'lock') + '">' +
+             (got ? '✓ ' : open ? '● ' : '') + m.title + '</div>' +
+           (m.body ? '<div class="sub">' + m.body + '</div>' : '') +
+           '<div class="sub"><span class="star">보상</span> ' + mailGiveText(m) + '</div>' +
+           /* 남은 날과 받는 손잡이는 오른쪽으로 몰아 둡니다 — 눈이 가는 자리라 */
+           '<div class="sub mailfoot"' + (open ? ' style="color:#d8b26a"' : '') + '>' +
+             (got ? '받았습니다'
+                  : open ? mailLeftText(m) + '　·　<b>눌러서 받기</b>'
+                         : '기간이 지났습니다') + '</div>' +
+         '</div>';
+  });
+  h += '</div>';
+
+  h += '<div class="hint" style="margin-top:14px">' +
+       '받을 수 있는 기간은 보낸 날부터 ' + mailRule().days + '일입니다. ' +
+       '기간이 지난 우편은 받을 수 없습니다.</div>' +
+       '<div class="modalfoot"><button id="mlclose">닫기</button></div>';
+  $sheet.innerHTML = h;
+
+  $sheet.querySelectorAll(".slot[data-mail]").forEach(el => {
+    el.onclick = () => {
+      const m = live[+el.dataset.mail];
+      /* 못 받는 까닭(가득 참·기간 지남)은 로그에 적히므로 창을 닫고 보여 줍니다 */
+      closeModal(); render();
+      mailTake(m);
+      if (back) back();
+    };
+  });
+  document.getElementById("mlclose").onclick = () => {
+    closeModal(); render(); if (back) back();
+  };
+}
+
 function openAchieve(back) {
   $modal.classList.add("on");
   const all = achieveList();
@@ -4047,6 +4323,21 @@ function glass() {
   say(ENK_RULE.name + " " + enkCount() + " / " + ENK_RULE.max + "　·　" + enkNextText(), "sys");
   versionNotice();          // 옛 판 보관함을 열었으면 여기서 한 번 알린다
 
+  /* 처음 오신 분께 — 어디를 눌러야 하는지 일러 둡니다.
+   * 한 장이라도 마쳤으면 나오지 않습니다. 아는 사람에게는 잔소리이니. */
+  if (!done && !sides) {
+    divider();
+    say("처음이시라면 —", "place");
+    say("아래 [운전석] 을 누르고 «0장 왕지성» 을 고르면 이야기가 시작됩니다.", "good");
+    say("[편성] 에서 누구를 데려갈지, [상점] 에서 새 인격을 뽑을 수 있습니다. " +
+        "무엇을 눌러야 할지 모르겠으면 [운전석] 부터 누르십시오.", "sys");
+  }
+  /* 받지 않은 우편이 있으면 눈에 띄게 알려 줍니다 */
+  if (mailWaiting()) {
+    divider();
+    say(MAIL_RULE.name + "에 받지 않은 우편이 " + mailWaiting() + "통 있습니다.", "gain");
+  }
+
   render();
   buttons([
     { label: "운전석", cls: "primary", fn: () => openChapterSelect(() => glass()) },
@@ -4054,6 +4345,9 @@ function glass() {
     { label: "상점",   fn: () => openShop(() => glass()) },
     { label: "노트",   fn: () => openNote(() => glass()) },
     { label: "업적",   fn: () => openAchieve(() => glass()) },
+    /* 받지 않은 우편이 있으면 몇 통인지 손잡이에 적습니다 */
+    { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
+      cls: mailWaiting() ? "" : "ghost", fn: () => openMail(() => glass()) },
     { label: "보관함", fn: () => openVault(() => glass()) },
     /* 「다음부터 표시하지 않음」을 누른 판에서는 이 손잡이가 사라집니다 */
     patchHidden() ? null

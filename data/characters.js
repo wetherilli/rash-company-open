@@ -81,7 +81,13 @@ const CREW = {
       { id: "guard",  name: "교정", cost: 1, short: "받는 피해 감소",
         desc: "이번 턴, 작성위원 하나가 받는 피해를 크게 줄인다." },
       { id: "push",   name: "독촉", cost: 1, short: "공격력 상승",
-        desc: "작성위원 하나의 이번 턴 공격력을 올린다." }
+        desc: "작성위원 하나의 이번 턴 공격력을 올린다." },
+      /* needCleared 를 적으면 그 장을 마쳐야 손잡이가 섭니다.
+       * 그 전에는 전투 화면에도, 아래 설명 줄에도 나오지 않습니다.
+       * 깎는 비율은 engine.js 의 RULE.arrestCut 에 있습니다 — 아래 글과 함께 고치십시오. */
+      { id: "arrest", name: "체포", cost: 1, short: "적 방어 20% 감소",
+        desc: "이번 턴, 적의 방어를 20% 깎는다.",
+        needCleared: "ch5" }
     ]
   },
   guide: {
