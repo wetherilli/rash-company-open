@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.9";
+const VERSION = "1.0.10";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -313,10 +313,49 @@ function clearVault() {
   enkSync();
 }
 
-/* data/vault.js 에 붙여 넣을 수 있는 형태로 뽑아낸다 */
+/* ── 값 하나를 vault.js 에 적을 글자로 ────────────────────────
+ *  ind 는 그 값이 «놓이는 줄» 의 들여쓰기입니다.
+ *
+ *  ■ 줄머리의 «};» 는 파일 끝에 한 번뿐이어야 합니다
+ *    되읽는 parseVaultSeedText() 가 그것으로 덩이의 끝을 찾습니다.
+ *    그래서 안쪽 덩이의 닫는 괄호는 반드시 들여씁니다.
+ */
+function vaultQuote(s) { return JSON.stringify(String(s)); }
+
+function vaultValueText(v, ind) {
+  if (v === null || v === undefined) return "null";
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (typeof v === "string") return vaultQuote(v);
+  if (Array.isArray(v)) {
+    if (!v.length) return "[]";
+    return "[\n" + v.map(x => ind + "  " + vaultValueText(x, ind + "  ")).join(",\n") +
+           "\n" + ind + "]";
+  }
+  /* 표 안의 빈 칸(null)은 적지 않습니다 — 장착하지 않은 자리까지 줄줄이 적히면 읽기 나쁩니다.
+   * 맨 바깥 칸은 이 길로 오지 않으므로(아래 vaultExportText 참고) 빈 채로도 그대로 남습니다. */
+  const keys = Object.keys(v).filter(k => v[k] !== null && v[k] !== undefined);
+  if (!keys.length) return "{}";
+  const key = k => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : vaultQuote(k);
+  return "{\n" + keys.map(k =>
+      ind + "  " + key(k) + ": " + vaultValueText(v[k], ind + "  ")).join(",\n") +
+    "\n" + ind + "}";
+}
+
+/* ── data/vault.js 에 붙여 넣을 수 있는 형태로 뽑아낸다 ────────
+ *
+ *  ■ 담을 칸을 손으로 세지 않습니다
+ *    예전에는 여기에 «ids, advisors, gifts, cleared …» 하고 이름을 하나하나 적어
+ *    두었습니다. 그래서 vaultBody() 에 칸이 새로 생겨도 이쪽은 따라오지 않았고,
+ *    업적 · 지원 작성위원 · 받은 우편 · 편성 3칸 · 둘째 셋째 교육위원이
+ *    내보낸 파일에서 통째로 빠져 있었습니다. 그 파일로 되돌리면 업적이 사라졌습니다.
+ *    요약값 sig 는 업적과 지원까지 세고 있었으므로, 되읽으면 내용과 어긋나
+ *    «손댄 흔적» 으로도 잘못 떴습니다.
+ *
+ *    이제는 vaultToObject() 가 내놓는 칸을 그대로 훑어 적습니다.
+ *    보관함에 칸을 더하면 내보내기도 저절로 따라옵니다 — 여기는 안 고쳐도 됩니다.
+ */
 function vaultExportText() {
   const o = vaultToObject();
-  const q = s => '"' + String(s).replace(/"/g, '\\"') + '"';
   const head =
     "/* =====================================================================\n" +
     " *  라슈 컴퍼니 — 보관함\n" +
@@ -328,35 +367,38 @@ function vaultExportText() {
     " *\n" +
     " *    단, 브라우저에 저장된 것이 먼저입니다. 이 파일로 되돌리려면\n" +
     " *    보관함 화면에서 [보관함 비우기] 를 한 번 하고 새로고침하십시오.\n" +
+    " *    (기록 화면의 [가져오기] 를 쓰면 그 손질 없이 바로 옮겨 담습니다)\n" +
+    " *\n" +
+    " *  ■ 여기 담기는 것\n" +
+    " *    보관함에 남는 것 «전부» 입니다 — 인격 · 교육위원 · 기프트 · 지원 작성위원 ·\n" +
+    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린.\n" +
     " *\n" +
     " *  ■ 무언가 없어진 것 같으면\n" +
     " *    고칠 것 없이 이 파일을 그대로 보내 주십시오.\n" +
     " *    아래에 «판이 바뀌기 전» 의 보관함과 무엇이 없어졌는지가 함께 적혀 있습니다.\n" +
     " * ===================================================================== */\n\n";
-  const arr = (a, ind) => a.length
-    ? "[\n" + a.map(x => ind + "  " + q(x)).join(",\n") + "\n" + ind + "]"
-    : "[]";
-  const eq = Object.keys(o.equip).filter(k => o.equip[k])
-    .map(k => "    " + k + ": " + q(o.equip[k])).join(",\n");
-  return head + "const VAULT_SEED = {\n" +
-    "  ids: " + arr(o.ids, "  ") + ",\n" +
-    "  advisors: " + arr(o.advisors, "  ") + ",\n" +
-    "  advisor: " + (o.advisor ? q(o.advisor) : "null") + ",\n" +
-    "  gifts: " + arr(o.gifts, "  ") + ",\n" +
-    "  gift: " + (o.gift ? q(o.gift) : "null") + ",\n" +
-    "  cleared: " + arr(o.cleared, "  ") + ",\n" +
-    "  equip: {\n" + eq + "\n  },\n" +
-    "  party: " + arr(o.party, "  ") + ",\n" +
-    "  money: " + o.money + ",\n" +
-    "  codex: " + (o.codex || 0) + ",\n" +
-    "  newbie: " + (o.newbie || 0) + ",\n" +
-    "  enk: " + (o.enk
-      ? "{ n: " + o.enk.n + ", at: " + o.enk.at + ", day: " + q(o.enk.day) + " }"
-      : "null") + ",\n" +
-    "  ver: " + q(o.ver) + ",\n" +
-    /* 내용을 요약한 값. 손으로 위를 고치면 이 값과 어긋나 «손댐» 으로 뜹니다. */
-    "  sig: " + q(o.sig) + "\n" +
-    "};\n" +
+
+  /* 맨 바깥 칸은 빈 것(null)이라도 그대로 적습니다 — 무엇이 담기는 자리인지
+   * 파일만 봐도 알 수 있도록. 안쪽 표는 vaultValueText 가 빈 칸을 걸러 냅니다. */
+  const seed =
+    "/* sig 는 위 내용을 요약한 값입니다.\n" +
+    " * 손으로 아래를 고치면 이 값과 어긋나 기록 화면에 «손댄 흔적» 으로 뜹니다. */\n" +
+    "const VAULT_SEED = {\n" +
+    Object.keys(o).map(k => "  " + k + ": " + vaultValueText(o[k], "  ")).join(",\n") +
+    "\n};\n";
+
+  /* ── 적자마자 스스로 되읽어 봅니다 ───────────────────────────
+   *  방금 만든 글을 그 자리에서 parseVaultSeedText() 로 되읽어, 칸이 하나도
+   *  빠지지 않았는지 봅니다. 빠진 것이 있으면 파일 «맨 위» 에 그대로 적습니다 —
+   *  못 쓰는 파일을 모르고 건네는 일이 없도록. */
+  const back = parseVaultSeedText(seed);
+  const miss = back ? Object.keys(o).filter(k => !(k in back)) : Object.keys(o);
+  const warn = (back && !miss.length) ? "" :
+    "/* ★ 이 파일은 온전하지 않습니다 — " +
+    (back ? "다음 칸이 빠졌습니다: " + miss.join(", ") : "스스로 되읽지 못했습니다") + "\n" +
+    " *   이대로 쓰지 마시고, 이 파일을 그대로 보내 주십시오. */\n\n";
+
+  return warn + head + seed +
     /* ── 아래는 «되돌리기» 가 아니라 «따져 보기» 용입니다 ──────────
      *  게임은 VAULT_SEED 만 읽습니다. 아래 것은 읽지 않으므로,
      *  이 파일을 data/vault.js 에 그대로 덮어써도 아무 탈이 없습니다.
