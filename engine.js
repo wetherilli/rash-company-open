@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.5";
+const VERSION = "1.0.7";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -175,8 +175,14 @@ const Store = {
  *  읽는 순서: 브라우저 저장소 → 없으면 data/vault.js 의 VAULT_SEED
  */
 function vaultToObject() {
+  const o = vaultBody();
+  o.sig = vaultSig(o);      // 내용을 요약한 값 — 손댄 흔적을 알아보는 몫
+  return o;
+}
+function vaultBody() {
   return {
-    ids:      Object.keys(S.owned).filter(k => idByKey(k)),
+    /* 걸러 내지 않습니다 — 지금 못 알아보는 열쇠를 지워 버리면 되살릴 길이 없어집니다 */
+    ids:      Object.keys(S.owned),
     advisors: Object.keys(S.advisorsOwned || {}),
     /* advisor / gift 는 «첫째 칸» 입니다. 옛 판이 읽을 수 있게 남겨 둡니다.
      * 실제로 세운 것 전부는 advisorOn / giftOn 에 있습니다. */
@@ -232,9 +238,64 @@ function loadVault() {
     ver:      v.ver || null
   };
 }
+/* ── 판이 바뀔 때 보관함을 한 벌 떠 둡니다 ──────────────────────
+ *
+ *  판이 올라간 뒤 처음 저장할 때, «덮어쓰기 전의 것» 을 따로 보관합니다.
+ *  이렇게 해 두면 「업데이트하고 나서 뭐가 없어졌다」는 말을 실제로 견줘 볼 수 있습니다.
+ *
+ *  내보내기로는 이 몫을 할 수 없습니다. 내보내기는 «지금 상태» 를 뽑는 것이고,
+ *  기록 화면은 열리자마자 saveVault() 를 부르므로 그때는 이미 덮어쓴 뒤입니다.
+ *
+ *  판마다 한 벌씩, 최근 셋까지만 둡니다.
+ */
+const VAULT_BACK_KEY = "rash_company_vault_backup_v1";
+
+/* ── 손댄 흔적 ────────────────────────────────────────────────
+ *
+ *  보관함에 «내용을 요약한 값» 을 하나 함께 적어 둡니다.
+ *  다음에 열 때 그 값이 안 맞으면 «손댄 것» 으로 봅니다.
+ *
+ *  ■ 이것은 잠금이 아닙니다. 막으려는 것이 아니라 «알아보려는» 것입니다.
+ *    셈하는 법이 이 파일에 그대로 적혀 있으니, 마음먹으면 값도 같이 고칠 수 있습니다.
+ *    손으로 슬쩍 고친 것을 가려내 오류 보고를 헛짚지 않으려는 몫입니다.
+ */
+function vaultSig(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
+    o.money, o.codex, o.ver
+  ].join("|"));
+}
+/* 저장된 값과 지금 셈한 값이 다른가 */
+function vaultTouched(o) {
+  if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
+  return o.sig !== vaultSig(o);
+}
+
+function vaultBackups() {
+  try { return JSON.parse(Store.get(VAULT_BACK_KEY)) || []; } catch (e) { return []; }
+}
+
+function backupVault() {
+  const raw = Store.get(VAULT_KEY);
+  if (!raw) return;                       // 뜰 것이 없습니다
+  let o = null;
+  try { o = JSON.parse(raw); } catch (e) { o = null; }
+  const ver = (o && o.ver) || "(판 없음)";
+  if (ver === VERSION) return;            // 같은 판이면 덮어써도 잃는 것이 없습니다
+
+  const list = vaultBackups();
+  if (list.some(b => b.ver === ver)) return;   // 그 판은 이미 떠 두었습니다
+  list.unshift({ at: Date.now(), ver: ver, to: VERSION, raw: raw });
+  try { Store.set(VAULT_BACK_KEY, JSON.stringify(list.slice(0, 3))); } catch (e) {}
+}
+
 function saveVault() {
   if (!S) return;
   if (vaultLocked()) return;   // 뒤에서 온 보관함은 절대 덮어쓰지 않습니다
+  backupVault();               // 덮어쓰기 «전에» 한 벌 떠 둡니다
   Store.set(VAULT_KEY, JSON.stringify(vaultToObject()));
 }
 /* 보관함을 아주 비웁니다.
@@ -256,12 +317,28 @@ function clearVault() {
 function vaultExportText() {
   const o = vaultToObject();
   const q = s => '"' + String(s).replace(/"/g, '\\"') + '"';
+  const head =
+    "/* =====================================================================\n" +
+    " *  라슈 컴퍼니 — 보관함\n" +
+    " * ---------------------------------------------------------------------\n" +
+    " *  ■ 이 파일을 다시 읽히려면\n" +
+    " *    게임 폴더의  data/vault.js  에 이 파일을 통째로 덮어쓰십시오.\n" +
+    " *    (index.html 이 있는 곳 아래의 data 폴더입니다)\n" +
+    " *    덮어쓴 뒤 index.html 을 새로고침하면 그 지점부터 이어집니다.\n" +
+    " *\n" +
+    " *    단, 브라우저에 저장된 것이 먼저입니다. 이 파일로 되돌리려면\n" +
+    " *    보관함 화면에서 [보관함 비우기] 를 한 번 하고 새로고침하십시오.\n" +
+    " *\n" +
+    " *  ■ 무언가 없어진 것 같으면\n" +
+    " *    고칠 것 없이 이 파일을 그대로 보내 주십시오.\n" +
+    " *    아래에 «판이 바뀌기 전» 의 보관함과 무엇이 없어졌는지가 함께 적혀 있습니다.\n" +
+    " * ===================================================================== */\n\n";
   const arr = (a, ind) => a.length
     ? "[\n" + a.map(x => ind + "  " + q(x)).join(",\n") + "\n" + ind + "]"
     : "[]";
   const eq = Object.keys(o.equip).filter(k => o.equip[k])
     .map(k => "    " + k + ": " + q(o.equip[k])).join(",\n");
-  return "const VAULT_SEED = {\n" +
+  return head + "const VAULT_SEED = {\n" +
     "  ids: " + arr(o.ids, "  ") + ",\n" +
     "  advisors: " + arr(o.advisors, "  ") + ",\n" +
     "  advisor: " + (o.advisor ? q(o.advisor) : "null") + ",\n" +
@@ -276,8 +353,19 @@ function vaultExportText() {
     "  enk: " + (o.enk
       ? "{ n: " + o.enk.n + ", at: " + o.enk.at + ", day: " + q(o.enk.day) + " }"
       : "null") + ",\n" +
-    "  ver: " + q(o.ver) + "\n" +
-    "};\n";
+    "  ver: " + q(o.ver) + ",\n" +
+    /* 내용을 요약한 값. 손으로 위를 고치면 이 값과 어긋나 «손댐» 으로 뜹니다. */
+    "  sig: " + q(o.sig) + "\n" +
+    "};\n" +
+    /* ── 아래는 «되돌리기» 가 아니라 «따져 보기» 용입니다 ──────────
+     *  게임은 VAULT_SEED 만 읽습니다. 아래 것은 읽지 않으므로,
+     *  이 파일을 data/vault.js 에 그대로 덮어써도 아무 탈이 없습니다.
+     *
+     *  판이 바뀔 때 떠 둔 «덮어쓰기 전» 보관함이 여기 함께 들어갑니다.
+     *  「업데이트하고 나서 뭐가 없어졌다」는 말이 나오면 이 파일 하나만 받으면 됩니다. */
+    "\n" + vaultDiffText() + "\n" +
+    "\n/* 판이 바뀌기 «전» 의 보관함 — 게임은 읽지 않습니다 */\n" +
+    "const VAULT_BACKUPS = " + JSON.stringify(vaultBackups(), null, 2) + ";\n";
 }
 
 /* ── 엔케팔린 계산 ─────────────────────────────────────────────
@@ -392,7 +480,10 @@ function newState() {
     SINNERS[who].ids.forEach(id => { if (id.star === 1) owned[idKey(who, id)] = true; });
 
   const v = loadVault();
-  if (v && v.owned) for (const k in v.owned) if (idByKey(k)) owned[k] = true;
+  /* 모르는 열쇠도 버리지 않고 담아 둡니다.
+   * 이름이 바뀌었는데 was 를 아직 안 적어 둔 경우, 나중에 적으면 그때 되살아납니다.
+   * 못 알아보는 열쇠는 아무 데도 안 걸리므로 그대로 있어도 해롭지 않습니다. */
+  if (v && v.owned) for (const k in v.owned) owned[canonIdKey(k)] = true;
 
   const equip = {};
   for (const who in SINNERS) {
@@ -892,12 +983,61 @@ function critMult() { return RULE.critMult + advisorEffect().critMult + giftCrit
 function idKey(who, id)  { return who + "|" + id.star + "|" + id.title; }
 function parseKey(key)   { const a = key.split("|"); return { who: a[0], star: +a[1], title: a[2] }; }
 
+/* ── 인격이 이름을 바꿔도 보관함이 잃지 않도록 ──────────────────
+ *
+ *  보관함은 인격을 «누구|성급|제목» 이라는 글자 열쇠로 적어 둡니다.
+ *  줄 순서와는 상관이 없습니다 — 줄을 지우거나 옮겨도 밀리지 않습니다.
+ *  다만 «제목이나 성급이 바뀌면» 그 열쇠가 아무것도 가리키지 못하게 되어,
+ *  가지고 있던 사람에게서 그 인격이 조용히 사라졌습니다.
+ *
+ *  교육위원에는 진작 was 가 있었는데 인격에는 없었습니다. 이제 같게 맞춥니다.
+ *
+ *    { star: 2, title: "공룡의날 올림피아드 우승자",
+ *      was: "올림피아드 우승자",              // 제목만 적으면 같은 사람·같은 성급
+ *      ... }
+ *
+ *    { star: 2, title: "모나크 버틀러",
+ *      was: ["seong_siyun|2|모나크 집사"],    // 사람이나 성급까지 바뀌었으면 열쇠 통째로
+ *      ... }
+ *
+ *  ■ 제목이나 성급을 고칠 때는 반드시 옛 이름을 was 에 남기십시오.
+ *    안 남기면 그것을 가진 사람의 보관함에서 그냥 없어집니다.
+ */
+function idWas(who, id) {
+  if (!id || !id.was) return [];
+  const list = Array.isArray(id.was) ? id.was : [id.was];
+  /* 제목만 적었으면 같은 사람·같은 성급으로 채워 줍니다 */
+  return list.map(x => x.indexOf("|") >= 0 ? x : (who + "|" + id.star + "|" + x));
+}
+
 function idByKey(key) {
   if (!key) return null;
   const k = parseKey(key);
   const s = SINNERS[k.who];
-  if (!s) return null;
-  return s.ids.find(i => i.star === k.star && i.title === k.title) || null;
+  /* ① 지금 이름으로 찾습니다 */
+  if (s) {
+    const now = s.ids.find(i => i.star === k.star && i.title === k.title);
+    if (now) return now;
+  }
+  /* ② 못 찾으면 옛 이름을 뒤집니다. 사람이 바뀐 경우도 있으므로 전부 봅니다. */
+  for (const w in SINNERS) {
+    for (const id of SINNERS[w].ids)
+      if (idWas(w, id).indexOf(key) >= 0) return id;
+  }
+  return null;
+}
+
+/* 저장된 열쇠를 «지금 열쇠» 로 옮겨 적습니다. 모르는 것은 그대로 돌려줍니다. */
+function canonIdKey(key) {
+  if (!key) return key;
+  const k = parseKey(key);
+  const s = SINNERS[k.who];
+  if (s && s.ids.some(i => i.star === k.star && i.title === k.title)) return key;
+  for (const w in SINNERS) {
+    for (const id of SINNERS[w].ids)
+      if (idWas(w, id).indexOf(key) >= 0) return idKey(w, id);
+  }
+  return key;
 }
 /* 인격 고유 수치 — data/characters.js 에 적힌 값을 그대로 씁니다.
  * 값을 안 적은 인격은 성급 평균값으로 대체됩니다. */
@@ -4232,6 +4372,82 @@ function mirrorClear() {
 }
 
 /* ── 기록 (진행 저장 + 보관함 파일 내보내기) ───────────────── */
+/* ── 내보낸 파일에 붙는 «판이 바뀌며 잃은 것» ────────────────────
+ *
+ *  떠 둔 백업과 지금 보관함을 견줘, 없어진 열쇠를 글로 적어 둡니다.
+ *  「업데이트했더니 뭐가 없어졌다」는 말을 이 줄만 보면 바로 확인할 수 있습니다.
+ *
+ *  게임은 이 부분을 읽지 않습니다. 사람이 읽으라고 붙이는 것입니다.
+ */
+function vaultDiffText() {
+  const parse = s => { try { return JSON.parse(s); } catch (e) { return null; } };
+  const now  = parse(Store.get(VAULT_KEY)) || (S ? vaultToObject() : null);
+  const back = vaultBackups();
+  const L = [];
+
+  L.push("/* ── 이 파일을 만든 때 ──────────────────────────────");
+  L.push(" *  판       " + VERSION + " (" + VERSION_NAME + ")");
+  L.push(" *  시각     " + new Date().toISOString());
+  L.push(" *  브라우저 " + ((navigator && navigator.userAgent) || "").slice(0, 120));
+  L.push(" *  저장소   " + (Store.ok ? "쓸 수 있음" : "막혀 있음 — 창을 닫으면 사라집니다"));
+  L.push(" *  손댄 흔적 " + (vaultTouched(now) ? "★ 있음 — 요약값이 내용과 안 맞습니다"
+                            : (now && now.sig) ? "없음" : "알 수 없음 (요약값이 없는 옛 판)"));
+
+  /* 지금 자료로 아무것도 가리키지 못하는 열쇠 */
+  if (now) {
+    const dead = []
+      .concat((now.ids      || []).filter(k => !idByKey(k)).map(k => "인격 " + k))
+      .concat((now.advisors || []).filter(k => !advisorById(k)).map(k => "교육위원 " + k))
+      .concat((now.gifts    || []).filter(k => !giftById(k)).map(k => "기프트 " + k))
+      .concat((now.supports || []).filter(k => !supportBy(k)).map(k => "지원 " + k));
+    L.push(" *");
+    L.push(" *  못 알아보는 열쇠 " + dead.length + "개" +
+           (dead.length ? "" : " — 없습니다"));
+    dead.forEach(k => L.push(" *    " + k));
+    if (dead.length)
+      L.push(" *    (지워졌거나 이름이 바뀐 것입니다. was 를 적어 주면 되살아납니다)");
+  }
+
+  /* ★ 백업에는 있었는데 지금은 없는 것 */
+  L.push(" *");
+  if (!back.length) {
+    L.push(" *  떠 둔 백업이 없습니다 — 이 기기에서는 아직 판이 안 바뀌었습니다.");
+  } else back.forEach(b => {
+    const o = parse(b.raw);
+    L.push(" *  " + b.ver + " → " + b.to + "  (" + new Date(b.at).toISOString().slice(0, 16) + ")");
+    if (!o) { L.push(" *    백업을 읽지 못했습니다"); return; }
+    let any = false;
+    [["ids", "인격"], ["advisors", "교육위원"], ["gifts", "기프트"],
+     ["supports", "지원"], ["achieved", "업적"], ["cleared", "클리어"]].forEach(([f, 이름]) => {
+      const after = (now && now[f]) || [];
+      const miss  = (o[f] || []).filter(k => after.indexOf(k) < 0);
+      if (!miss.length) return;
+      /* 이름이 바뀌어 «옮겨간» 것과 아주 «잃은» 것을 갈라 적습니다.
+       * 둘을 한 덩이로 세면 멀쩡히 옮겨간 것까지 사고로 보입니다. */
+      const moved = [], lostK = [];
+      miss.forEach(k => {
+        const c = (f === "ids") ? canonIdKey(k) : k;
+        if (c !== k && after.indexOf(c) >= 0) moved.push(k + "  →  " + c);
+        else lostK.push(k);
+      });
+      if (moved.length) {
+        L.push(" *    옮겨감 · " + 이름 + " " + moved.length + "개 (이름이 바뀐 것 — 잃지 않았습니다)");
+        moved.forEach(k => L.push(" *      " + k));
+      }
+      if (lostK.length) {
+        any = true;
+        L.push(" *    잃음 · " + 이름 + " " + lostK.length + "개");
+        lostK.forEach(k => L.push(" *      " + k));
+      }
+    });
+    if (o.money != null && now && now.money != null && now.money !== o.money)
+      L.push(" *    " + CURRENCY + " " + o.money + " → " + now.money);
+    if (!any) L.push(" *    잃은 것 없음");
+  });
+  L.push(" * ------------------------------------------------- */");
+  return L.join("\n");
+}
+
 function openRecord(back) {
   save();
   saveVault();
@@ -4240,6 +4456,8 @@ function openRecord(back) {
   const total = t[1][0] + t[2][0] + t[3][0];
   const adv = Object.keys(S.advisorsOwned || {}).length;
   const cl  = Object.keys(S.cleared || {}).length;
+  let touched = false;
+  try { touched = vaultTouched(JSON.parse(Store.get(VAULT_KEY))); } catch (e) {}
 
   $sheet.innerHTML =
     '<h2>기 록</h2>' +
@@ -4252,7 +4470,28 @@ function openRecord(back) {
       '<div class="slot"><div class="nm">클리어한 장</div><div class="sub">' + cl + '개</div></div>' +
       '<div class="slot"><div class="nm">' + CURRENCY + '</div><div class="sub">' + S.money + '</div></div>' +
     '</div>' +
-    '<div class="hint" style="margin-top:16px">저장을 내보내시겠습니까?</div>' +
+    (touched
+      ? '<div class="hint" style="color:#d9705f;margin-top:14px">' +
+          '<b>손댄 흔적이 있습니다.</b> 저장된 내용이 요약값과 맞지 않습니다. ' +
+          '파일을 손으로 고치셨다면 그 때문입니다.</div>'
+      : '') +
+    '<div class="hint" style="margin-top:16px">' +
+      '<b>내보내기</b> 를 누르면 <code>vault.js</code> 파일이 ' +
+      '브라우저가 쓰는 <b>내려받기 폴더</b>에 떨어집니다 (보통 «다운로드»).' +
+    '</div>' +
+    '<div class="hint">' +
+      '<b>다시 읽히려면</b> 그 파일을 게임 폴더의 <code>data/vault.js</code> 에 덮어쓰고 ' +
+      '새로고침하십시오. <code>index.html</code> 이 있는 곳 아래의 <code>data</code> 폴더입니다.<br>' +
+      '<span class="dim">브라우저에 저장된 것이 먼저 읽힙니다. 파일 쪽으로 되돌리려면 ' +
+      '[보관함 비우기] 를 한 번 하고 새로고침하세요.</span>' +
+    '</div>' +
+    '<div class="hint">' +
+      '<span class="dim">판이 바뀌기 <b>전</b>의 보관함도 이 파일에 함께 담깁니다. ' +
+      '무언가 없어진 것 같으면 고칠 것 없이 그대로 보내 주시면 됩니다.' +
+      (vaultBackups().length
+        ? '　(떠 둔 것 ' + vaultBackups().length + '벌)'
+        : '　(아직 떠 둔 것은 없습니다 — 이 기기에서는 판이 안 바뀌었습니다)') + '</span>' +
+    '</div>' +
     '<div class="modalfoot">' +
       '<a id="vdl" class="dl" download="vault.js">내보내기</a>' +
       '<button id="rclose">닫기</button>' +
