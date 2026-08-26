@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.7";
+const VERSION = "1.0.8";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -368,6 +368,43 @@ function vaultExportText() {
     "const VAULT_BACKUPS = " + JSON.stringify(vaultBackups(), null, 2) + ";\n";
 }
 
+/* ── 내보낸 파일을 도로 읽기 ──────────────────────────────────
+ *  vaultExportText() 가 뽑아낸 vault.js 는 «const VAULT_SEED = {...};» 로
+ *  시작하는 진짜 자바스크립트입니다(JSON 이 아닙니다 — 키에 따옴표가 없습니다).
+ *  그 덩이만 잘라내 Function 으로 읽습니다. 이 파일은 이용자가 방금 고른
+ *  자기 파일이지 남이 준 것이 아니므로, eval 급 실행이라도 위험하지 않습니다.
+ */
+function parseVaultSeedText(text) {
+  const m = /const\s+VAULT_SEED\s*=\s*(\{[\s\S]*?\n\};)/.exec(text || "");
+  if (!m) return null;
+  try {
+    const obj = new Function("return " + m[1])();
+    return (obj && typeof obj === "object") ? obj : null;
+  } catch (e) { return null; }
+}
+
+/* 고른 파일을 읽어 보관함을 통째로 갈아 끼운다. 성공하면 새로고침한다 —
+ * S 를 그 자리에서 다시 짜 맞추는 대신, 평소 켤 때와 똑같은 길로
+ * 보관함 → S 순서를 타게 하는 편이 안전하다. */
+function importVaultFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const seed = parseVaultSeedText(String(reader.result || ""));
+    if (!seed) {
+      alert("이 파일에서 보관함을 읽지 못했습니다. [기록 · 내보내기] 로 받은 vault.js 가 맞는지 확인하십시오.");
+      return;
+    }
+    if (!confirm("지금 이 브라우저에 저장된 보관함을 방금 고른 파일 내용으로 덮어씁니다.\n" +
+                 "지금 것은 되돌릴 수 없습니다 — 계속하기 전에 걱정되면 먼저 [내보내기] 로 받아 두십시오.\n\n계속할까요?")) return;
+    /* sig 는 손대지 않는다 — 파일이 만들어질 때(내보낼 때) 찍힌 값을 그대로 두어야
+     * 다음에 열었을 때 «그 사이 손을 댔는지» 를 여전히 가려낼 수 있다. */
+    Store.set(VAULT_KEY, JSON.stringify(seed));
+    location.reload();
+  };
+  reader.onerror = () => alert("파일을 읽지 못했습니다.");
+  reader.readAsText(file, "utf-8");
+}
+
 /* ── 엔케팔린 계산 ─────────────────────────────────────────────
  *  저장된 { n: 남은 개수, at: 마지막으로 정산한 시각, day: 그날 }
  *  과 지금 시각을 비교해 그동안 찬 만큼을 더해 줍니다.
@@ -582,7 +619,9 @@ function newState() {
     ended: false,
     mirror: false,
     mirrorHard: false,
-    mirrorTier: null
+    mirrorTier: null,
+    partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
+    battleForced: false
   };
 }
 
@@ -1195,6 +1234,40 @@ function allyLeave(name) {
 /* 장을 시작하거나 마칠 때는 조력자를 남기지 않습니다 */
 function allyClear() { S.party = ownParty(); }
 
+/* ── 강제 편성 ────────────────────────────────────────────────
+ *  이야기가 특정 인원만으로 돌아가야 할 때 씁니다. 원래 편성은 스택에
+ *  쌓아 두었다가 forcePartyPop() 으로 그대로 되돌립니다 — 장 강제 위에
+ *  전투 강제가 겹쳐도(예: 3명 중 1명으로 더 줄이는 전투) 순서대로 풀립니다.
+ *
+ *    장에서    { forceParty: ["cha_minjun"] }
+ *              장 시작 시 밀어 넣고, 다음 장을 시작할 때(=allyClear 와 같은 자리) 되돌립니다.
+ *    전투에서  { t: "battle", foe: "…", party: ["cha_minjun"] }
+ *              그 전투가 끝날 때(승리·각본상 후퇴·이야기용 패배) 되돌립니다.
+ *              진짜로 전멸해 「다시 도전」을 고르면 강제는 풀지 않고 그대로 재도전시킵니다 —
+ *              그래야 패배 후 편성을 바꿔 강제를 우회하는 일이 없습니다. 그래서 이때는
+ *              「편성 바꾸기」 버튼 자체를 감춥니다 (defeat() 참고).
+ *
+ *  조력자(ally)는 그대로 얹힙니다 — 강제 목록 + 지금 붙어 있는 조력자로 편성을 짭니다.
+ *  처음 불려 오는 사람은 체력이 없을 수 있어 maxHp 로 채워 둡니다(이미 있으면 그대로).
+ *
+ *  누가 올지는 못 고르지만, «어떤 인격(장착)으로 올지» 는 강제가 걸리는 그 순간
+ *  한 번 openEquip() 을 띄워 손보게 합니다 — startChapter()/startBattle() 참고.
+ *  「다시 도전」 재시도에는 다시 띄우지 않습니다(S.battleForced 로 막습니다).
+ *
+ *  ■ 알려진 한계 — 이야기 진행 중(cont() 화면)에는 편성 버튼이 없어 안전하지만,
+ *    유리창을 거쳐 운전석 → 편성으로 들어가면 강제 도중에도 편성을 바꿀 수 있습니다.
+ *    작은 팬 프로젝트 규모에서는 손보지 않고 두었습니다 — 다음 장을 시작하면
+ *    startChapter() 의 안전망이 원래 편성 계산을 다시 정리합니다.
+ */
+function forcePartyPush(list) {
+  S.partyStack.push(S.party.slice());
+  S.party = list.filter(Boolean).concat(alliesOn());
+  S.party.forEach(w => { if (w && S.hp[w] == null) S.hp[w] = maxHp(w); });
+}
+function forcePartyPop() {
+  if (S.partyStack.length) S.party = S.partyStack.pop();
+}
+
 const SUP_PREFIX = "지원|";
 function supportList() { return (typeof SUPPORTS !== "undefined" && SUPPORTS) ? SUPPORTS : []; }
 function supportId(s)  { return s ? SUP_PREFIX + s.title + "|" + s.name : null; }
@@ -1734,6 +1807,11 @@ function chapterGate(i, miss) {
 function startChapter(i) {
   const c = CHAPTERS[i];
 
+  /* 앞 장이 강제 편성을 걸어 둔 채 끝났으면(전투 도중 이탈 등) 뿌리까지 되돌린다 —
+   * 그래야 아래 chapterMissing() 이 «진짜 편성» 을 보고 판단한다. */
+  if (S.partyStack.length) { S.party = S.partyStack[0]; S.partyStack = []; }
+  S.battleForced = false;
+
   /* 들어가기 전에 편성부터 확인한다 */
   const miss = chapterMissing(c);
   if (miss.length) return chapterGate(i, miss);
@@ -1742,19 +1820,31 @@ function startChapter(i) {
   S.mirror = false; MIRROR = null;
   SCENES = buildScenes(c);
   allyClear();                                            // 앞 장의 조력자는 데려가지 않습니다
-  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 장 시작 시 회복
-  clearLog();
-  $log.classList.remove("recalling");
-  showCard(c.img || null, c.no + "  " + c.title);
-  divider();
-  say(c.no + "  " + c.title, "place");
-  if (c.subtitle) say("— " + c.subtitle + " —", "sys");
-  if (c.place)    say("무대: " + c.place, "sys");
-  const needs = chapterNeeds(c);
-  if (needs.length) say("편성 확인 — " + nameList(needs) + " 동행.", "good");
-  divider();
-  render();
-  next();
+
+  const enter = () => {
+    S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 장 시작 시 회복
+    clearLog();
+    $log.classList.remove("recalling");
+    showCard(c.img || null, c.no + "  " + c.title);
+    divider();
+    say(c.no + "  " + c.title, "place");
+    if (c.subtitle) say("— " + c.subtitle + " —", "sys");
+    if (c.place)    say("무대: " + c.place, "sys");
+    const needs = chapterNeeds(c);
+    if (needs.length) say("편성 확인 — " + nameList(needs) + " 동행.", "good");
+    divider();
+    render();
+    next();
+  };
+
+  if (c.forceParty) {
+    forcePartyPush(c.forceParty);   // 이 장은 정해진 인원만으로 돌아간다
+    /* 누가 올지는 못 고르지만, 어떤 인격으로 올지는 한 번 손보게 한다 */
+    $modal.classList.add("on");
+    openEquip(() => { closeModal(); enter(); });
+  } else {
+    enter();
+  }
 }
 
 function next() {
@@ -1847,6 +1937,12 @@ function playExtras(s) {
     else say(x.text, "n");
   });
 }
+
+/* 특정 장면 하나만을 위한 새 t 를 붙이는 자리 — SCENE_EXT.무엇 = function(s){...} 로
+ * 등록해 두면, 아래 switch 의 default 가 그걸 찾아 대신 부릅니다. 엔진의 switch 문
+ * 자체는 wip 로 못 늘리므로(코드 중간을 짜깁기하는 셈이라), 새 장면 종류가 필요한
+ * 한 번짜리 기믹은 여기 등록하는 식으로 풉니다. 두루 쓰일 것이면 case 를 그냥 더하십시오. */
+const SCENE_EXT = {};
 
 function play(s) {
   /* 화면을 흔듭니다. shake: true 는 가볍게, "hard" 면 크게.
@@ -1964,6 +2060,7 @@ function play(s) {
       return chapterEnd();
 
     default:
+      if (SCENE_EXT[s.t]) return SCENE_EXT[s.t](s);
       return next();
   }
 }
@@ -2298,6 +2395,19 @@ function startBattle(scene) {
   const f = FOES[scene.foe];
   if (!f) { say("(적 데이터 없음: " + scene.foe + ")", "todo"); return cont(); }
 
+  /* 이 전투만 정해진 인원으로 — 「다시 도전」으로 되돌아와도 두 번 밀어 넣거나
+   * 인격 장착 화면을 두 번 보여 주지 않는다(S.battleForced 가 이미 서 있다) */
+  if (scene.party && !S.battleForced) {
+    forcePartyPush(scene.party);
+    S.battleForced = true;
+    $modal.classList.add("on");
+    openEquip(() => { closeModal(); startBattleFight(scene, f); });
+    return;
+  }
+  startBattleFight(scene, f);
+}
+
+function startBattleFight(scene, f) {
   S.waiting = true;
   S.battle = {
     id: scene.foe, name: f.name, def: f.def, atk: f.atk,
@@ -2790,6 +2900,7 @@ function victory() {
   checkAchievements(b.name);
   saveVault();
   healParty(RULE.winHeal, "숨을 고른다.");
+  if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
   S.waiting = true;                 // 쓰러지는 동안은 손잡이를 잠근다
   render();
@@ -2803,6 +2914,7 @@ function scriptedEnd() {
   divider();
   say(b.scene.endText || (withJosa(b.name, "은") + " 더 상대하지 않고 물러난다."), "sys");
   healParty(RULE.winHeal, null);
+  if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
   S.waiting = true;
   render();
@@ -2828,6 +2940,7 @@ function defeat() {
   if (b.loseOk) {
     say("…하지만 이야기는 멈추지 않는다.", "sys");
     S.party.forEach(w => { if (w) S.hp[w] = Math.max(1, Math.floor(maxHp(w) * 0.3)); });
+    if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
     S.battle = null; S.waiting = false;
     render(); cont();
     return;
@@ -2839,7 +2952,9 @@ function defeat() {
         S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
         S.waiting = false; startBattle(scene);
       } },
-    { label: "편성 바꾸기", fn: () => openParty(() => {
+    /* 이 전투가 정해진 인원으로만 돌아가는 것이면, 패배 후 편성을 바꿔
+     * 강제를 우회하지 못하도록 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
+    scene.party ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
         S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
         S.waiting = false; startBattle(scene);
       }) },
@@ -3937,7 +4052,8 @@ function save() {
  *  이제 보관함에서 새로 읽은 것 위에 «자리» 만 얹습니다.
  */
 const SAVE_KEEPS = ["ch", "sc", "flags", "hp", "party", "equip",
-                    "mirror", "mirrorHard", "mirrorTier", "ended"];
+                    "mirror", "mirrorHard", "mirrorTier", "ended",
+                    "partyStack", "battleForced"];
 
 function load() {
   const raw = readSave();
@@ -4492,13 +4608,23 @@ function openRecord(back) {
         ? '　(떠 둔 것 ' + vaultBackups().length + '벌)'
         : '　(아직 떠 둔 것은 없습니다 — 이 기기에서는 판이 안 바뀌었습니다)') + '</span>' +
     '</div>' +
+    '<div class="hint">' +
+      '<b>가져오기</b> 는 다른 곳(오프라인 완전판 등)에서 내보낸 <code>vault.js</code> 를 ' +
+      '파일 그대로 골라 <b>이 브라우저</b>에 바로 옮겨 담습니다 — data 폴더를 만질 필요가 없습니다. ' +
+      '지금 이 브라우저에 있던 보관함은 그 자리에서 덮어써집니다.' +
+    '</div>' +
     '<div class="modalfoot">' +
       '<a id="vdl" class="dl" download="vault.js">내보내기</a>' +
+      '<button id="vimp" class="ghost">가져오기</button>' +
+      '<input id="vimpfile" type="file" accept=".js,text/javascript,text/plain" style="display:none">' +
       '<button id="rclose">닫기</button>' +
     '</div>';
 
   const a = document.getElementById("vdl");
   a.href = "data:text/javascript;charset=utf-8," + encodeURIComponent(vaultExportText());
+  const impFile = document.getElementById("vimpfile");
+  document.getElementById("vimp").onclick = () => impFile.click();
+  impFile.onchange = () => { if (impFile.files && impFile.files[0]) importVaultFile(impFile.files[0]); };
   document.getElementById("rclose").onclick = () => { closeModal(); if (back) back(); };
 }
 
@@ -5286,5 +5412,23 @@ function gate(msg) {
 }
 
 function boot() { if (gateOpen()) glass(); else gate(); }
+
+/* ── wip 확장 자리 ────────────────────────────────────────────
+ *  특정 장·전투만을 위해 엔진을 손봐야 할 때, 매번 여기 engine.js 를
+ *  직접 고치는 대신 wip 꾸러미의 package.js 에 이렇게 적으면 이 줄
+ *  바로 뒤에 새 함수로 옮겨 붙습니다 (tools/wip-merge.js 참고).
+ *
+ *      /* @wip into: engine.js · EXT *\/
+ *      SCENE_EXT.무엇 = function(s) { ... say(s.text, "n"); return next(); };
+ *      /* @wip end *\/
+ *
+ *  그러면 그 장의 데이터에 { t: "무엇", … } 라고 적어 새 장면 종류를 씁니다 —
+ *  switch 문 자체를 늘리지 않고도(짜깁기라 wip 로는 못 합니다) 이야기 쪽에서
+ *  새 t 를 부를 수 있는 이유입니다. SCENE_EXT 정의는 위 「play()」 바로 앞에 있습니다.
+ *
+ *  두루 쓰일 만한 것(강제 편성처럼)은 옮겨 붙이지 말고 위쪽 제자리에
+ *  바로 넣으십시오 — 여기는 «그 장 하나만을 위한» 자리입니다.
+ */
+/* @wip anchor: EXT */
 
 boot();   // 코드를 통과하면 유리창부터
