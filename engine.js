@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.11";
+const VERSION = "1.0.12";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -265,13 +265,26 @@ function vaultSig(o) {
   return codeHash([
     j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
     j(o.achieved), j(o.cleared),
+    /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다. */
+    j(o.mailTaken), o.newbie,
+    o.money, o.codex, o.ver
+  ].join("|"));
+}
+/* v1.0.11 까지 쓰던 셈법입니다. 그때 나간 보관함이 «판을 올렸다» 는 이유만으로
+ * 손댐으로 뜨면 안 되므로 남겨 둡니다. */
+function vaultSigOld(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
     o.money, o.codex, o.ver
   ].join("|"));
 }
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o);
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld(o);
 }
 
 function vaultBackups() {
@@ -425,6 +438,34 @@ function parseVaultSeedText(text) {
   } catch (e) { return null; }
 }
 
+/* ── 한 번만 받는 것은 되돌리기로 도로 열리지 않습니다 ────────
+ *
+ *  받기 «전» 에 내보내 둔 파일을 받은 «뒤» 에 도로 읽으면, 그 파일에는 아직
+ *  안 받은 것으로 적혀 있으니 우편이 다시 열립니다. 원고료까지 그때로 돌아가니
+ *  보통은 남는 것이 없지만, 파일을 손으로 고쳐 원고료만 지금 것으로 두면
+ *  같은 우편을 몇 번이고 받을 수 있습니다.
+ *
+ *  그래서 «이미 받았다» 는 표시만은 덮어쓰지 않고 «합칩니다».
+ *  받은 적 없는 것을 받은 것으로 만들지는 않으니, 기기를 옮기는 분은 손해가 없습니다.
+ *  신입 관리자 기념 배정은 쓴 횟수라, 둘 중 많은 쪽을 남깁니다.
+ */
+function vaultMergeOnce(seed) {
+  let now = null;
+  try { now = JSON.parse(Store.get(VAULT_KEY)); } catch (e) { now = null; }
+  if (!now) return seed;
+
+  const union = (a, b) => {
+    const m = {};
+    (a || []).forEach(k => m[k] = true);
+    (b || []).forEach(k => m[k] = true);
+    return Object.keys(m);
+  };
+  seed.mailTaken = union(seed.mailTaken, now.mailTaken);
+  seed.achieved  = union(seed.achieved,  now.achieved);
+  seed.newbie    = Math.max(Number(seed.newbie) || 0, Number(now.newbie) || 0);
+  return seed;
+}
+
 /* 고른 파일을 읽어 보관함을 통째로 갈아 끼운다. 성공하면 새로고침한다 —
  * S 를 그 자리에서 다시 짜 맞추는 대신, 평소 켤 때와 똑같은 길로
  * 보관함 → S 순서를 타게 하는 편이 안전하다. */
@@ -437,10 +478,20 @@ function importVaultFile(file) {
       return;
     }
     if (!confirm("지금 이 브라우저에 저장된 보관함을 방금 고른 파일 내용으로 덮어씁니다.\n" +
-                 "지금 것은 되돌릴 수 없습니다 — 계속하기 전에 걱정되면 먼저 [내보내기] 로 받아 두십시오.\n\n계속할까요?")) return;
-    /* sig 는 손대지 않는다 — 파일이 만들어질 때(내보낼 때) 찍힌 값을 그대로 두어야
-     * 다음에 열었을 때 «그 사이 손을 댔는지» 를 여전히 가려낼 수 있다. */
-    Store.set(VAULT_KEY, JSON.stringify(seed));
+                 "지금 것은 되돌릴 수 없습니다 — 계속하기 전에 걱정되면 먼저 [내보내기] 로 받아 두십시오.\n\n" +
+                 "이미 받으신 우편과 이미 달성한 업적은 지워지지 않고 그대로 남습니다.\n\n계속할까요?")) return;
+
+    /* 들어온 파일이 «이미» 어긋나 있었는가. 합치기 전에 봐 두어야 합니다. */
+    const 어긋남 = vaultTouched(seed);
+    /* 한 번만 받는 것은 합칩니다 — 되돌리기로 다시 받히지 않도록 */
+    const merged = vaultMergeOnce(seed);
+    /* 합치면서 내용이 달라졌으니 요약값도 다시 찍습니다. 그냥 두면 «손댐» 으로 뜨는데,
+     * 손댄 것은 이용자가 아니라 이 코드니까요.
+     * 다만 들어올 때 «이미» 어긋나 있던 파일은 그대로 둡니다 —
+     * 여기서 새로 찍어 주면 손댄 자국을 이쪽이 지워 주는 꼴이 됩니다. */
+    if (!어긋남) merged.sig = vaultSig(merged);
+
+    Store.set(VAULT_KEY, JSON.stringify(merged));
     location.reload();
   };
   reader.onerror = () => alert("파일을 읽지 못했습니다.");
