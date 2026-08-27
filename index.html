@@ -32,6 +32,13 @@
   :root{ --stageh:300px; }
   #stage{display:none;border:1px solid #2a2a30;background:#0b0b0f;margin-bottom:10px;overflow:hidden;}
   #stage.on{display:block;}
+  /* 적이 나타났을 때만 뜨는 체력바 — 이름은 왼쪽 아래, 공·방은 오른쪽 아래 */
+  #foehp{display:none;margin-bottom:8px;}
+  #foehp.on{display:block;}
+  #foehp .row{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;}
+  #foehp .nm{color:#c9c5c0;font-weight:700;font-size:12.5px;}
+  #foehp .stat{color:#8b8681;font-size:11.5px;}
+  body.battling #foehp .nm{color:#dcd0ce;}
   /* 배경 한 겹, 그 위에 사람 한 겹 */
   .scenebox{position:relative;height:var(--stageh);overflow:hidden;background:#08080b;}
   .scenebox img.scene{
@@ -210,6 +217,17 @@
   .eqhead .wearing{color:#8b8681;font-size:12px;}
   .eqhead .cnt{margin-left:auto;color:#6e6a66;font-size:11.5px;}
   .eqbody{margin-top:6px;}
+
+  /* ── 동기화 — 작성위원마다 한 줄 ─────────── */
+  .syncrow{
+    display:flex;align-items:center;gap:12px;
+    border:1px solid #2a2a30;background:#131318;padding:9px 11px;margin-top:8px;
+  }
+  .syncrow button{flex:none;white-space:nowrap;}
+  .syncrow .body{flex:1;min-width:0;}
+  .syncrow .nm{color:#e8e4de;font-weight:700;}
+  .syncrow .sub{color:#8b8681;font-size:11.5px;margin-top:2px;}
+
   .pcard .nm{color:#e8e4de;font-weight:700;}
   .pcard .id{color:#8b8681;font-size:11.5px;margin:1px 0 5px;}
   .pcard .st{color:#7d7a76;font-size:11.5px;}
@@ -602,6 +620,7 @@
     <span class="right" id="wallet"></span>
   </header>
 
+  <div id="foehp"></div>
   <div id="stage"></div>
   <div id="log"></div>
   <div id="party"></div>

@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.13";
-const VERSION_NAME = "기대가 어긋나는";
+const VERSION = "1.1.0";
+const VERSION_NAME = "동기화";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -24,9 +24,10 @@ const RULE = {
   critRate:    0.05,   // 치명타 확률
   critMult:    1.3,    // 치명타 배율
   pullCost:    30,     // 뽑기 1회 비용
-  /* 중복으로 나왔을 때 돌려주는 원고료 — 성급마다 다릅니다.
+  /* 중복으로 나왔을 때 돌려주는 값 — 성급마다 다릅니다.
    * 여기 적은 값이 그대로 나갑니다 (아래 moneyGain 을 타지 않습니다).
-   * 인격·교육위원·E.G.O 기프트 모두 이 표를 씁니다. */
+   * 교육위원·E.G.O 기프트는 원고료로, 인격은 그 인격의 주인(작성위원) 파편으로
+   * 이 표를 그대로 씁니다 — dupRefund() · addFrag() 참고. */
   dupRefund:   { 1: 3, 2: 15, 3: 50 },
   /* 원고료로 들어오는 수입에 곱하는 값.
    * 타지 않는 것 셋 — 황금교본 교환, 위 dupRefund, 거울 던전 완주 보상(고정값). */
@@ -146,6 +147,7 @@ const $modal   = document.getElementById("modal");
 const $sheet   = document.getElementById("sheet");
 const $chap    = document.getElementById("chaplabel");
 const $wallet  = document.getElementById("wallet");
+const $foehp   = document.getElementById("foehp");
 
 /* ── 상태 ─────────────────────────────────────────────────── */
 let S = null;
@@ -200,6 +202,12 @@ function vaultBody() {
     party:    ownParty(),          /* 조력자는 «내 것» 이 아니라 담지 않습니다 */
     money:    S.money,
     codex:    S.codex,
+    /* 인격 파편 — 뽑기에서 중복이 나오면 원고료 대신 그 인격의 주인 이름이 붙은
+     * 파편을 받는다. { who: 개수 }. 쓰임은 차차 늘어날 자리다. */
+    frags:    S.frags || {},
+    /* 동기화 — 작성위원마다 파편을 태워 올리는 단계. { who: 단계 }. 0단계(안 적힘)는
+     * 담지 않는다 — vaultValueText 가 어차피 null·undefined 를 걸러 낸다. */
+    sync:     S.sync || {},
     newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
     enk:      S.enk || null,
     /* 이미 받은 우편. 이것을 빠뜨리면 받은 표시가 안 남아 무한정 다시 받힙니다. */
@@ -233,6 +241,8 @@ function loadVault() {
     party:    v.party || null,
     money:    v.money,
     codex:    v.codex,
+    frags:    v.frags || {},
+    sync:     v.sync || {},
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     ver:      v.ver || null
@@ -262,10 +272,26 @@ const VAULT_BACK_KEY = "rash_company_vault_backup_v1";
 function vaultSig(o) {
   if (!o) return "";
   const j = a => (a || []).slice().sort().join(",");
+  /* frags · sync 는 배열이 아니라 { who: 값 } 표입니다 — 키로 정렬해 문자열로 폅니다. */
+  const jm = m => Object.keys(m || {}).sort().map(k => k + ":" + m[k]).join(",");
   return codeHash([
     j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
     j(o.achieved), j(o.cleared),
     /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다. */
+    j(o.mailTaken), o.newbie,
+    o.money, o.codex, jm(o.frags), jm(o.sync), o.ver
+  ].join("|"));
+}
+/* v1.0.13 까지 쓰던 셈법입니다 (frags·sync 가 생기기 전 것). 그때 나간
+ * 보관함이 «판을 올렸다» 는 이유만으로 손댐으로 뜨면 안 되므로 남겨 둡니다.
+ * frags 는 sync 와 같은 판(아직 안 나간 패치) 안에서 생겼으므로 따로 얼려 두지 않습니다 —
+ * frags 만 있고 sync 는 없는 보관함이 실제로 나간 적이 없습니다. */
+function vaultSigOld2(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
     j(o.mailTaken), o.newbie,
     o.money, o.codex, o.ver
   ].join("|"));
@@ -284,7 +310,7 @@ function vaultSigOld(o) {
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld(o);
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
 }
 
 function vaultBackups() {
@@ -383,7 +409,7 @@ function vaultExportText() {
     " *    (기록 화면의 [가져오기] 를 쓰면 그 손질 없이 바로 옮겨 담습니다)\n" +
     " *\n" +
     " *  ■ 여기 담기는 것\n" +
-    " *    보관함에 남는 것 «전부» 입니다 — 인격 · 교육위원 · 기프트 · 지원 작성위원 ·\n" +
+    " *    보관함에 남는 것 «전부» 입니다 — 인격 · 인격 파편 · 동기화 · 교육위원 · 기프트 · 지원 작성위원 ·\n" +
     " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린.\n" +
     " *\n" +
     " *  ■ 무언가 없어진 것 같으면\n" +
@@ -626,6 +652,24 @@ function newState() {
   if (v && v.supports) for (const k in v.supports) if (supportBy(k)) supportsOwned[k] = true;
   const achievedMap = (v && v.achieved) ? v.achieved : {};
 
+  /* 인격 파편 · 동기화 — who 는 SINNERS 의 고정 키라(제목과 달리 안 바뀝니다)
+   * 옮겨 담을 것 없이 지금 있는 사람 것만 골라 받습니다. */
+  const frags = {};
+  if (v && v.frags) for (const who in v.frags) if (SINNERS[who]) frags[who] = v.frags[who];
+  const sync = {};
+  if (v && v.sync) for (const who in v.sync) if (SINNERS[who]) sync[who] = v.sync[who];
+
+  /* 받은 우편 — 기간이 지난 것은 저장소에서도 지운다. mailLive() 가 이미 시간으로
+   * 화면을 가리므로 «막으려는» 목적은 아니고, 다 지난 열쇠를 언제까지고 안고 갈
+   * 까닭이 없어서다. 우편 정의 자체가 사라졌으면(먼 훗날 data/mail.js 에서 뺀 경우)
+   * 기간을 잴 수 없으니 손대지 않는다 — 못 알아보는 열쇠를 버리지 않는 것과 같은 결이다. */
+  const mailTaken = {};
+  if (v && v.mailTaken) for (const id in v.mailTaken) {
+    const m = mailList().find(x => x.id === id);
+    if (m && !mailLive(m)) continue;
+    mailTaken[id] = true;
+  }
+
   let party = STARTING_PARTY.slice();
   const okMember = (w, i) =>
     isSupport(w) ? (supportBy(w) && supportsOwned[w] && slotTakesSupport(i))
@@ -698,7 +742,9 @@ function newState() {
     presets: (v && v.presets) || [null, null, null],
     supportsOwned,
     achieved: achievedMap,
-    mailTaken: (v && v.mailTaken) ? v.mailTaken : {},
+    frags,
+    sync,
+    mailTaken,
     hp: {},                 // who -> 현재 체력 (없으면 최대)
     money,
     verNote,                // 판이 올라갔을 때 한 번 알려 줄 내용
@@ -1099,12 +1145,79 @@ function dupRefund(star) {
   if (typeof t === "number") return t;          // 옛 방식(하나로 정해 둔 값)도 받아 줍니다
   return t[star] || t[1] || 0;
 }
-/* 화면에 적을 때 — 「★ 3　★★ 15　★★★ 50」 */
-function dupRefundText() {
+/* 화면에 적을 때, 숫자만 — 「★ 3　★★ 15　★★★ 50」 */
+function dupAmountText() {
   const t = RULE.dupRefund;
-  if (typeof t === "number") return t + " 환급";
+  if (typeof t === "number") return String(t);
   return [1, 2, 3].filter(s => t[s] != null)
-                  .map(s => stars(s) + " " + t[s]).join("　") + " 환급";
+                  .map(s => stars(s) + " " + t[s]).join("　");
+}
+/* 화면에 적을 때 — 「★ 3　★★ 15　★★★ 50 환급」.
+ * 교육위원·기프트 중복은 지금도 원고료로 돌려주므로 그 자리에서 씁니다. */
+function dupRefundText() { return dupAmountText() + " 환급"; }
+
+/* ── 인격 파편 ─────────────────────────────────────────────────
+ *  뽑기에서 이미 가진 인격이 또 나오면, 원고료 대신 그 인격의 주인(작성위원)
+ *  이름이 붙은 파편을 받는다. 12명 각자의 파편이라 따로 센다.
+ *  개수는 dupRefund() 와 같은 표를 그대로 쓴다 — 이전에 원고료로 나가던 값 그대로다.
+ *  쓰임은 아직 없다. 나중에 무엇과 바꿀지는 차차 정한다. */
+function fragName(who) { return SINNERS[who].name + " 파편"; }
+function fragCount(who) { return (S.frags && S.frags[who]) || 0; }
+function addFrag(who, n) {
+  if (!n) return;
+  if (!S.frags) S.frags = {};
+  S.frags[who] = (S.frags[who] || 0) + n;
+}
+
+/* ── 동기화 ────────────────────────────────────────────────────
+ *  작성위원마다 그 사람 몫의 파편을 태워 «동기화» 단계를 올린다.
+ *  0단계(안 적힘)에서 1단계로 올리는 값이 base, 단계가 하나 오를 때마다 step 만큼 늘어난다.
+ *  전투에서는 statPct 만큼 — 단계 1당 모든 능력치(공·방·체)가 그 비율만큼 강해진다. */
+const SYNC_RULE = {
+  base: 100,     // 0 → 1단계에 드는 파편
+  step: 20,      // 단계가 하나 오를 때마다 늘어나는 값
+  statPct: 0.05, // 단계 1당 능력치 상승 비율 (5%)
+  /* 상한 — SLOT_RULE(기프트·교육위원 칸 수)과 같은 모양입니다.
+   * needCleared 를 안 적은 줄이 기본값이고, 본편을 그 장까지 마치면 그 max 로 올라갑니다.
+   * 지금은 여기까지만 정했습니다 — 더 늘리려면 줄만 얹으면 됩니다. */
+  tiers: [
+    { max: 4 },
+    { max: 8,  needCleared: "ch7" },
+    { max: 12, needCleared: "ch8" }
+  ]
+};
+function syncLevel(who) { return (S.sync && S.sync[who]) || 0; }
+function syncCost(level) { return SYNC_RULE.base + SYNC_RULE.step * level; }
+function syncMax() {
+  let n = 0;
+  SYNC_RULE.tiers.forEach(r => {
+    if (!r.needCleared || (S && S.cleared && S.cleared[r.needCleared])) n = Math.max(n, r.max);
+  });
+  return n;
+}
+/* 다음 상한이 몇 장을 마치면 열리는가 — 화면에 일러 주려고 씁니다. 다 열렸으면 null.
+ * nextSlotChapter() 와 같은 모양입니다. */
+function nextSyncChapter() {
+  const now = syncMax();
+  const r = SYNC_RULE.tiers.filter(x => x.max > now).sort((a, b) => a.max - b.max)[0];
+  if (!r || !r.needCleared) return null;
+  const c = CHAPTERS.find(x => x.id === r.needCleared);
+  if (c) return c.no;
+  /* 아직 안 만든 장이면 id 에서 번호만 뽑아 적습니다 — ch7 → 7장, ch5_5 → 5.5장 */
+  const m = String(r.needCleared).match(/^ch(\d+)(?:_(\d+))?$/);
+  return m ? (m[1] + (m[2] ? "." + m[2] : "") + "장") : r.needCleared;
+}
+/* 전투에서 이 사람에게 적용할 동기화 단계.
+ * 작성위원 본인은 자기 단계를 그대로 쓴다. 지원 작성위원은 자기 단계가 없으므로,
+ * 함께 편성된 다른 두 작성위원 중 «낮은 쪽»을 빌려 쓴다 — 사용자 지침.
+ * (편성 3칸 중 지원은 셋째 칸에만 서므로, 나머지 둘은 늘 작성위원입니다.) */
+function effSyncLevel(who) {
+  if (SINNERS[who]) return syncLevel(who);
+  if (isSupport(who)) {
+    const levels = S.party.filter(w => w && w !== who && SINNERS[w]).map(syncLevel);
+    return levels.length ? levels.reduce((a, b) => Math.min(a, b)) : 0;
+  }
+  return 0;   // 조력자 등 — 아직 동기화가 없는 자리
 }
 
 /* 치명타 — 지금은 보조 교육위원만 손대지만, 나중에 인격·장비 효과를 더 얹으려면 여기에 더하면 됩니다 */
@@ -1242,11 +1355,12 @@ function effStats(who) {
   const a = advisorEffect();                   // 보조 교육위원은 파티 전원에게 걸린다
   const gf = giftBonusFor(who);                // E.G.O 기프트
   const af = advisorBonusFor(who);             // 교육위원이 특정 인격에만 거는 보정
+  const sy = effSyncLevel(who) * SYNC_RULE.statPct;   // 동기화 — 단계 1당 능력치 전부 +5%
   /* 깎는 기프트가 있어 배수가 0 아래로 갈 수 있습니다. 바닥을 둡니다 —
    * 공격과 체력은 1, 방어는 0 까지. */
-  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk)));
-  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def)));
-  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp)));
+  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy)));
+  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy)));
+  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp  + sy)));
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   return { atk: atk + Math.round(def * conv), def: def, hp: hp };
@@ -1592,6 +1706,21 @@ function renderHeader() {
   $wallet.innerHTML = right;
 }
 
+/* 적이 나타났을 때만 뜨는 체력바 — 이름은 왼쪽 아래, 공·방은 오른쪽 아래.
+ * S.battle 이 없으면(전투 밖) 아예 감춥니다. */
+function renderFoeBar() {
+  const b = S.battle;
+  if (!b) { $foehp.classList.remove("on"); $foehp.innerHTML = ""; return; }
+  $foehp.classList.add("on");
+  const pct = Math.max(0, Math.round(b.hp / b.maxhp * 100));
+  $foehp.innerHTML =
+    '<div class="hpbar"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="row">' +
+      '<span class="nm">' + b.name + '</span>' +
+      '<span class="stat">공 ' + b.atk + '　방 ' + b.def + '</span>' +
+    '</div>';
+}
+
 function renderParty() {
   $party.innerHTML = "";
   /* 조력자가 붙어 넷이 되면 칸을 넷으로 (좁은 화면에서는 둘씩 두 줄) */
@@ -1800,7 +1929,7 @@ function renderSynergy() {
   }).join("");
 }
 
-function render() { renderMood(); renderHeader(); renderParty(); renderSynergy(); renderManage(); }
+function render() { renderMood(); renderHeader(); renderFoeBar(); renderParty(); renderSynergy(); renderManage(); }
 
 /* 전투 중에는 화면 전체가 붉게 가라앉는다 — 색은 index.html 의 body.battling */
 function renderMood() {
@@ -2189,8 +2318,8 @@ function grant(who, star, title) {
   divider();
   if (S.owned[key]) {
     const rf = dupRefund(star);
-    S.money += rf;
-    say("이미 가진 인격이다. " + CURRENCY + " " + rf + " 환급.", "sys");
+    addFrag(who, rf);
+    say("이미 가진 인격이다. " + fragName(who) + " " + rf + " 획득.  (보유 " + fragCount(who) + ")", "sys");
   } else {
     S.owned[key] = true;
     say("인격 획득 — " + stars(star) + " " + title + " " + s.name, "gain");
@@ -3996,7 +4125,8 @@ function openGacha(done, pk, deal) {
             (deal ? deal.pulls + '회 묶음 ' + cost + ' ' + CURRENCY +
                     '　·　남은 횟수 <b>' + newbieLeft() + '</b> / ' + deal.limit
                   : '1회 ' + cost + ' ' + CURRENCY) +
-            '　·　중복 시 ' + dupRefundText() + '　·　보유 ' + CURRENCY + ' ' + S.money + '<br>' +
+            '　·　중복이면 인격은 그 인격 파편을, 교육위원은 ' + CURRENCY + '을 돌려받습니다 (' +
+              dupAmountText() + ')　·　보유 ' + CURRENCY + ' ' + S.money + '<br>' +
             '★ ' + pct(RULE.rate1) + '　★★ ' + pct(RULE.rate2) + '　★★★ ' + pct(RULE.rate3) +
             '　보조 교육위원 ' + pct(RULE.rateAdv) +
             '　·　' + RULE.guaranteePulls + '회 배정에는 ★★ 이상이 하나 확정</div>';
@@ -4051,7 +4181,7 @@ function openGacha(done, pk, deal) {
           S.equip[pick.who] = key;
           if (S.party.indexOf(pick.who) >= 0) S.hp[pick.who] = maxHp(pick.who);
         }
-      } else S.money += dupRefund(pick.id.star);
+      } else addFrag(pick.who, dupRefund(pick.id.star));
       return { kind: "id", who: pick.who, id: pick.id, isNew };
     };
 
@@ -4946,7 +5076,9 @@ function openMail(back, note) {
           (기다림 ? '　<b style="color:#d8b26a">받지 않은 우편 ' + 기다림 + '통</b>' : '') +
           '</div>';
 
-  const live = all.filter(m => mailLive(m) || mailTaken(m));
+  /* 기간이 지나면 받았든 안 받았든 화면에서 뺀다 — 지난 우편을 언제까지고
+   * 「받았습니다」로 늘어놓을 까닭이 없다. */
+  const live = all.filter(mailLive);
   if (!live.length) h += '<div class="box dim">온 우편이 없습니다.</div>';
 
   /* 우편은 줄글이 들어가므로 한 줄에 하나씩, 창 너비를 다 씁니다 */
@@ -5318,6 +5450,77 @@ function grantAdvisor(s) {
   saveVault(); render();
 }
 
+/* ── 동기화 화면 ─────────────────────────────────────────────
+ *  작성위원 12명을 줄로 늘어놓고, 각자의 동기화 단계·파편 보유량과
+ *  다음 단계로 올리는 손잡이를 보여 준다.
+ *
+ *  손잡이는 파편이 모자라도 눌립니다 — 눌러야 «부족합니다» 안내가 뜹니다.
+ *  (상점처럼 아예 못 누르게 막지 않은 것은, 얼마나 모자란지 그 자리에서
+ *  바로 알려 주고 싶어서입니다.) */
+function openSync(back) {
+  $modal.classList.add("on");
+
+  const draw = (msg) => {
+    const cap = syncMax();
+    const next = nextSyncChapter();
+    let h = '<h2>동 기 화</h2>' +
+      '<div class="hint">인격 파편으로 작성위원의 동기화 단계를 올립니다. ' +
+      '단계 1당 그 작성위원의 공격·방어·체력이 모두 ' + Math.round(SYNC_RULE.statPct * 100) +
+      '%씩 강해집니다. 지원 작성위원은 자기 단계가 없어, 함께 편성된 두 작성위원 중 ' +
+      '낮은 쪽의 단계를 빌려 씁니다.<br>' +
+      '지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
+      (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</div>';
+
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    Object.keys(SINNERS).forEach(who => {
+      const s = SINNERS[who];
+      const lv = syncLevel(who);
+      const maxed = lv >= cap;
+      const cost = syncCost(lv);
+      h += '<div class="syncrow">' +
+             (maxed ? '<button disabled>상한 도달</button>'
+                    : '<button data-sync="' + who + '">동기화　' + cost + '</button>') +
+             '<div class="body">' +
+               '<div class="nm">' + s.name + '</div>' +
+               '<div class="sub">' +
+                 (lv > 0 ? '동기화 ' + lv + '단계' : '아직 동기화되지 않음') +
+                 (maxed ? ' (상한)' : '') +
+                 '　·　파편 ' + fragCount(who) + '개' +
+               '</div>' +
+             '</div>' +
+           '</div>';
+    });
+
+    h += '<div class="modalfoot"><button id="syclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll("[data-sync]").forEach(el => {
+      el.onclick = () => {
+        const who = el.dataset.sync;
+        const s = SINNERS[who];
+        const lv = syncLevel(who);
+        if (lv >= syncMax()) {           // 손잡이를 이미 감췄지만, 만약을 대비해 한 번 더
+          draw(s.name + " — 지금은 " + syncMax() + "단계가 상한입니다.");
+          return;
+        }
+        const cost = syncCost(lv);
+        if (fragCount(who) < cost) {
+          draw(s.name + " — 파편이 모자랍니다.  (" + fragCount(who) + " / " + cost + ")");
+          return;
+        }
+        S.frags[who] -= cost;
+        if (!S.sync) S.sync = {};
+        S.sync[who] = lv + 1;
+        saveVault(); render();
+        draw(s.name + " — 동기화 " + (lv + 1) + "단계에 이르렀다.");
+      };
+    });
+    document.getElementById("syclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  };
+  draw(null);
+}
+
 /* ── 보관함 ──────────────────────────────────────────────── */
 function vaultStats() {
   const t = { 1: [0, 0], 2: [0, 0], 3: [0, 0] };
@@ -5340,44 +5543,23 @@ function openVault(back) {
           '★ ' + t[1][0] + '/' + t[1][1] + '　★★ ' + t[2][0] + '/' + t[2][1] +
           '　★★★ ' + t[3][0] + '/' + t[3][1] + '　·　' +
           CURRENCY + ' ' + S.money + '<br>' +
-          '여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. 눌러서 장착합니다.</div>';
+          '여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. ' +
+          '무엇을 가졌는지·장착은 편성 화면의 [인격 장착]에서 봅니다.</div>';
 
+  /* 인격 파편 — 뽑기에서 중복이 나오면 작성위원마다 따로 쌓입니다.
+   * 쓰임은 아직 없어 여기와, 앞으로 그것을 쓰는 화면에서만 보입니다 — 메인 화면에는 안 냅니다. */
+  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">인격 파편</div><div class="grid">';
   Object.keys(SINNERS).forEach(who => {
-    const s = SINNERS[who];
-    const mine = ownedIds(who).length;
-    const tot  = s.ids.filter(i => !i.todo).length;
-    h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + s.name +
-         ' <span class="sub" style="font-weight:400">' + mine + '/' + tot + '</span></div><div class="grid">';
-    s.ids.forEach(id => {
-      const key = idKey(who, id);
-      if (id.todo) { h += '<div class="slot"><div class="lock">' + stars(id.star) + ' (미작성)</div></div>'; return; }
-      const has = !!S.owned[key];
-      const on  = S.equip[who] === key;
-      const st  = baseStatsOf(key);
-      h += '<div class="slot' + (on ? ' sel' : '') + '"' + (has ? ' data-key="' + key + '"' : '') + '>' +
-             '<div class="' + (has ? 'nm' : 'lock') + '">' +
-               '<span class="star">' + stars(id.star) + '</span> ' + id.title +
-               (on ? ' <span class="sub">· 장착</span>' : '') + '</div>' +
-             '<div class="sub">' + (has ? ('공 ' + st.atk + '　방 ' + st.def + '　체 ' + st.hp) : '미보유') + '</div>' +
-             (has && id.note ? '<div class="sub">' + id.note + '</div>' : '') +
-           '</div>';
-    });
-    h += '</div>';
+    h += '<div class="slot"><div class="nm">' + SINNERS[who].name + '</div>' +
+           '<div class="sub">' + fragCount(who) + '개</div></div>';
   });
+  h += '</div>';
+
   h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
        '<button id="vrec">기록 · 내보내기</button>' +
        '<button id="vreset" class="ghost">보관함 비우기</button></div>';
   $sheet.innerHTML = h;
 
-  $sheet.querySelectorAll(".slot[data-key]").forEach(el => {
-    el.onclick = () => {
-      const key = el.dataset.key;
-      S.equip[parseKey(key).who] = key;
-      S.hp[parseKey(key).who] = maxHp(parseKey(key).who);
-      saveVault(); render();
-      openVault(back);
-    };
-  });
   document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
   document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
@@ -5546,6 +5728,7 @@ function glass() {
     /* 받지 않은 우편이 있으면 몇 통인지 손잡이에 적습니다 */
     { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
       cls: mailWaiting() ? "" : "ghost", fn: () => openMail(() => glass()) },
+    { label: "동기화", fn: () => openSync(() => glass()) },
     { label: "보관함", fn: () => openVault(() => glass()) },
     /* 「다음부터 표시하지 않음」을 누른 판에서는 이 손잡이가 사라집니다 */
     patchHidden() ? null

@@ -1435,6 +1435,11 @@ const CHAPTERS = [
   { t: "ally", join: "베르렐리우스" },
   { t: "n", text: "길잡이가 한 걸음 내디뎠다. 그 한 걸음에 앞줄이 무너졌다." },
 
+  /* 조금 전까지 «아무리 베어도 줄지 않던» 그 무리다. 이번에는 미는 쪽이 바뀌었다. */
+  { t: "battle", foe: "monarch_c" },
+  { t: "n", text: "숨 돌릴 틈도 없이, 다음 무리가 밀고 들어왔다. 결과는 같았다." },
+  { t: "battle", foe: "monarch_c" },
+
   { t: "battle", foe: "monarch_b" },
 
   { t: "n", text: "길잡이는 숨도 고르지 않았다." },
