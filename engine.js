@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.0.12";
+const VERSION = "1.0.13";
 const VERSION_NAME = "기대가 어긋나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4280,7 +4280,7 @@ function openChapterSelect(back) {
   const rs = $sheet.querySelector(".slot[data-resume]");
   if (rs) rs.onclick = () => { closeModal(); if (!load()) { glass(); say("기록이 손상되었다.", "todo"); } };
   $sheet.querySelectorAll(".slot[data-mirror]").forEach(el => {
-    el.onclick = () => { closeModal(); startMirror(el.dataset.mirror); };
+    el.onclick = () => { openMirrorGate(el.dataset.mirror, () => openChapterSelect(back)); };
   });
   document.getElementById("csclose").onclick = () => { closeModal(); if (back) back(); };
 }
@@ -4467,7 +4467,7 @@ function buildMirrorFoes(rule) {
     const f = FOES[src];
     const id = "__mirror_" + i;
     FOES[id] = {
-      name: (r.prefix || "거울의 ") + f.name,
+      name: f.mirrorName || ((r.prefix || "거울의 ") + f.name),
       hp:  Math.round(f.hp  * k),
       atk: Math.round(f.atk * k),
       def: Math.round(f.def * defK(k)),
@@ -4478,6 +4478,7 @@ function buildMirrorFoes(rule) {
       intro: f.intro || null,
       quote: f.quote || null,
       heavyLine: f.heavyLine || null,
+      heavyImg: f.heavyImg || null,
       desc: "유리창에 비쳐 나온 것. 본래보다 " +
             Math.round((k - 1) * 100) + "% 강하다."
     };
@@ -4485,7 +4486,110 @@ function buildMirrorFoes(rule) {
   });
 }
 
-function startMirror(tier) {
+/* ── 거울 던전에 들어가기 전 ──────────────────────────────────
+ *  엔케팔린을 쓰기 «전» 에 할 수 있는 일들입니다. 여기서 무엇을 해도
+ *  아직 던전에 들어간 것이 아니므로 엔케팔린은 그대로입니다.
+ *
+ *  늘리려면 MIRROR_PREP_ACTIONS 에 한 덩이 더 얹으면 됩니다.
+ *  can·need·give 를 갖춘 덩이 하나가 할 일 하나이고, 화면(openMirrorGate)은
+ *  그 배열을 그냥 훑어 그리므로 새로 늘어도 화면 쪽은 손댈 것이 없습니다. */
+const MIRROR_SCOUT_COST = 3;    // 적 관측에 드는 황금교본
+
+/* 관측해 둔 상대. 갈래(rule.key)마다 하나씩만 남습니다 — 갈래를 바꾸면
+ * 그 갈래를 다시 관측해야 합니다. MIRROR 처럼 보관함에는 담기지 않는
+ * 값이라, 새로고침하면 사라집니다 (다시 관측하면 됩니다). */
+let MIRROR_SCOUT = null;   // { tier: rule.key, ids: [...] }
+
+function mirrorScouted(rule) {
+  return (MIRROR_SCOUT && MIRROR_SCOUT.tier === rule.key) ? MIRROR_SCOUT.ids : null;
+}
+
+const MIRROR_PREP_ACTIONS = [
+  {
+    id: "scout",
+    name: "적 관측",
+    desc: "황금교본 " + MIRROR_SCOUT_COST + "권으로 이번에 만날 상대의 낌새를 미리 엿봅니다. " +
+          "누구인지는 알려 주지 않습니다.",
+    can:  rule => !mirrorScouted(rule) && S.codex >= MIRROR_SCOUT_COST,
+    need: rule => mirrorScouted(rule) ? "이미 관측했습니다"
+                : "황금교본 " + MIRROR_SCOUT_COST + "권" +
+                  (S.codex < MIRROR_SCOUT_COST ? "　— 모자랍니다" : ""),
+    give: rule => {
+      S.codex -= MIRROR_SCOUT_COST;
+      /* 실제로 들어갈 때(startMirror)와 같은 함수로 뽑아 두므로,
+       * 여기서 본 그대로가 그때 나옵니다. */
+      MIRROR_SCOUT = { tier: rule.key, ids: buildMirrorFoes(rule) };
+      return "황금교본의 힘으로 거울 속을 들여다보았다. 새어나오는 소리가 있다.";
+    }
+  }
+];
+
+function openMirrorGate(tier, back) {
+  const rule = mirrorTier(tier);
+  $modal.classList.add("on");
+
+  const draw = (msg) => {
+    const scouted = mirrorScouted(rule);
+    const canGo = enkCount() >= rule.cost;
+
+    let h = '<h2>' + rule.name + ' — 들어가기 전</h2>' +
+      '<div class="hint">' + rule.sub + '. 들어가면 ' + ENK_RULE.name + ' ' + rule.cost +
+      '를 씁니다. 쓰기 전에 할 수 있는 일이 아래에 있습니다.</div>';
+
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">할 수 있는 일</div>' +
+         '<div class="grid">';
+    MIRROR_PREP_ACTIONS.forEach(a => {
+      const ok = a.can(rule);
+      h += '<div class="slot"' + (ok ? ' data-act="' + a.id + '"' : '') + '>' +
+             '<div class="' + (ok ? 'nm' : 'lock') + '">' + a.name + '</div>' +
+             '<div class="sub">' + a.desc + '</div>' +
+             '<div class="sub"' + (ok ? '' : ' style="color:#c8403a"') + '>' + a.need(rule) + '</div>' +
+           '</div>';
+    });
+    h += '</div>';
+
+    if (scouted) {
+      /* 누구인지는 알려 주지 않습니다 — 이름·수치 대신 «새어나오는 소리»(intro) 만 들려줍니다.
+       * intro 가 없는 잡졸은 그만큼 낌새도 흐릿하다는 뜻으로 둡니다. */
+      h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">새어나오는 소리</div>' +
+           '<div class="grid one">' +
+           scouted.map((id, i) => {
+             const f = FOES[id];
+             const line = f.intro || "낌새가 흐릿하다. 대단한 것은 아닌 듯하다.";
+             return '<div class="slot sel">' +
+                      '<div class="nm">' + (i + 1) + '번째</div>' +
+                      '<div class="sub">' + line + '</div>' +
+                    '</div>';
+           }).join('') +
+           '</div>';
+    }
+
+    h += '<div class="modalfoot">' +
+           '<button id="mgback" class="ghost">돌아가기</button>' +
+           '<button id="mgenter" class="primary"' + (canGo ? '' : ' disabled') + '>' +
+             '입장　(' + ENK_RULE.name + ' ' + rule.cost + (canGo ? '' : '　— 모자랍니다') + ')</button>' +
+         '</div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-act]").forEach(el => {
+      el.onclick = () => {
+        const a = MIRROR_PREP_ACTIONS.find(x => x.id === el.dataset.act);
+        if (!a || !a.can(rule)) return;
+        const said = a.give(rule);
+        saveVault(); render();
+        draw(said);
+      };
+    });
+    document.getElementById("mgback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
+    const enterBtn = document.getElementById("mgenter");
+    if (canGo) enterBtn.onclick = () => { closeModal(); startMirror(rule.key, scouted); };
+  };
+  draw(null);
+}
+
+function startMirror(tier, preIds) {
   const rule = mirrorTier(tier);
   const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
 
@@ -4500,7 +4604,10 @@ function startMirror(tier) {
     return;
   }
 
-  const ids = buildMirrorFoes(rule);
+  /* 관측해 둔 것이 있으면 그대로 씁니다 — 다시 뽑으면 관측한 것과 달라져 버립니다.
+   * 관측 없이 바로 들어왔으면(preIds 없음) 여기서 새로 뽑습니다 — 예전처럼 부딪쳐 봐야 압니다. */
+  const ids = (preIds && preIds.length) ? preIds : buildMirrorFoes(rule);
+  if (MIRROR_SCOUT && MIRROR_SCOUT.tier === rule.key) MIRROR_SCOUT = null;
   const 첫줄 = rule === MIRROR_EXTREME
     ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
     : rule === MIRROR_HARD
