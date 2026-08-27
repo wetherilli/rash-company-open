@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.1.0";
-const VERSION_NAME = "동기화";
+const VERSION = "1.2.0";
+const VERSION_NAME = "거울굴절철도";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -82,7 +82,8 @@ const ENK_RULE = {
   everyMs:   2 * 60 * 60 * 1000,  // 1개가 차는 데 걸리는 시간 (2시간)
   cost:        1,                 // 거울 던전 1회 입장에 드는 양
   costHard:    1,                 // 하드 거울 던전 1회 입장에 드는 양
-  costExtreme: 2                  // 익스트림 거울 던전 1회 입장에 드는 양
+  costExtreme: 2,                 // 익스트림 거울 던전 1회 입장에 드는 양
+  costRail:    3                  // 거울굴절철도 1회 입장에 드는 양
 };
 
 /* ── 판이 올라갔을 때 ──────────────────────────────────────────
@@ -2682,8 +2683,13 @@ function beginTurn() {
    * 노려진 사람을 방어시키거나 교정해 두는 판단을 하라는 뜻입니다.
    * 실제로 때리는 것은 resolveTurn 이고, 여기서 정한 표적을 그대로 씁니다. */
   const standing = S.party.filter(w => w && alive(w));
-  b.heavy = !!(b.boss && b.turn % 3 === 0);
-  b.aim   = standing.length ? standing[rnd(standing.length)] : null;
+  /* 광역 공격 — aoeEvery 턴마다. 강타와 겹치는 턴에는 광역이 이깁니다.
+   * 겨누는 곳이 «전원» 이라 노려지는 사람이 없고, 그래서 aim 을 비웁니다. */
+  const fnow = FOES[b.id] || {};
+  const every = b.aoeEvery || fnow.aoeEvery || 0;
+  b.aoe   = !!(b.boss && every && b.turn % every === 0);
+  b.heavy = !b.aoe && !!(b.boss && b.turn % 3 === 0);
+  b.aim   = b.aoe ? null : (standing.length ? standing[rnd(standing.length)] : null);
 
   /* 강타를 준비하는 턴에는 그림이 바뀝니다.
    * data/story.js 의 FOES 에 heavyImg 로 적습니다. 안 적은 적은 그대로 서 있습니다.
@@ -2693,19 +2699,25 @@ function beginTurn() {
     /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg) */
     const nowImg   = b.img      || f.img      || null;
     const nowHeavy = b.heavyImg || f.heavyImg || null;
-    const want = (b.heavy && nowHeavy) ? nowHeavy : nowImg;
+    const want = ((b.heavy || b.aoe) && nowHeavy) ? nowHeavy : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name); }
   }
-  if (b.aim)
+  if (b.aoe) {
+    /* 노려지는 사람이 없으므로 «누구를 노린다» 대신 판 전체를 겨눈다고 알립니다.
+     * 미리 알려 주어야 방어를 깔든 교정을 걸든 손쓸 자리가 생깁니다. */
+    const f = FOES[b.id] || {};
+    say("▷ " + withJosa(b.name, "이") + " " + (b.aoeWarn || f.aoeWarn ||
+        "숨을 크게 들이쉰다.  광역 공격을 준비하는 듯하다."), "bad");
+  } else if (b.aim)
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
         (b.heavy ? "  크게 휘두를 자세다." : ""), "bad");
 
-  /* 보스가 강타를 준비하는 턴에는 한마디 한다.
-   * data/story.js 의 FOES 에 heavyLine 으로 적습니다. 여럿이면 배열로. */
-  if (b.heavy && b.aim) {
+  /* 보스가 강타나 광역을 준비하는 턴에는 한마디 한다.
+   * data/story.js 의 FOES 에 heavyLine · aoeLine 으로 적습니다. 여럿이면 배열로. */
+  if (b.aoe || (b.heavy && b.aim)) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 대사가 이깁니다 (b.heavyLine) */
-    let line = b.heavyLine || f.heavyLine;
+    let line = b.aoe ? (b.aoeLine || f.aoeLine) : (b.heavyLine || f.heavyLine);
     if (Array.isArray(line)) line = line[rnd(line.length)];
     if (line) {
       const w = document.createElement("p");
@@ -3079,6 +3091,31 @@ function resolveTurn() {
   /* ③ 적이 되받아친다 — 이때 화면이 흔들린다 */
   const foeTurn = (targets) => {
     if (!same()) return;
+
+    /* ── 광역 공격 ─────────────────────────────────────────────
+     *  한 사람이 아니라 서 있는 «전원» 을 칩니다. 한 대씩은 강타보다 가볍게(1.2배)
+     *  잡았습니다 — 셋이 한꺼번에 맞으므로 강타와 같은 배수를 쓰면 그 자리에서 끝납니다.
+     *  방어와 교정은 사람마다 그대로 쳐 줍니다. */
+    if (b.aoe) {
+      shakeScreen(true);
+      say("▶ " + b.name + "의 광역 공격!", "heavy");
+      targets.forEach(t => {
+        const st = effStats(t);
+        let dmg = b.atk * 1.2 + rnd(4) - st.def;
+        if (b.cmds[t] === "guard") dmg *= RULE.guardCut;
+        if (b.mods[t + "_guard"]) dmg *= Math.max(0.05, RULE.correctCut - advisorEffect().correct);
+        dmg = Math.max(1, Math.floor(dmg));
+        setHp(t, curHp(t) - dmg);
+        say("　" + memberName(t) + "에게 " + dmg + " 피해" +
+            (b.cmds[t] === "guard" ? " (방어)" : "") +
+            (b.mods[t + "_guard"] ? " (교정)" : ""), "heavy");
+        if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+      });
+      render();
+      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+    }
+
     /* 턴 머리에서 예고한 그 표적을 그대로 친다.
      * 그 사이 쓰러졌다면(첨삭 전이라면) 서 있는 사람 중에서 다시 고른다. */
     const heavy = !!b.heavy;
@@ -4395,11 +4432,22 @@ function openChapterSelect(back) {
            '</div>';
   };
 
+  const mirrorOnly = MIRROR_TIERS.filter(r => r.group !== "rail");
+  const railOnly   = MIRROR_TIERS.filter(r => r.group === "rail");
+
   h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">거울</div>' +
        '<div class="grid">' +
-         MIRROR_TIERS.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
-       '</div>' +
-       '<div style="margin:10px 0 0">' + enkBarHTML() + '</div>';
+         mirrorOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+       '</div>';
+
+  /* 거울굴절철도 — 거울 아래 제 줄에 섭니다. 호선이 늘면 이 줄이 그대로 늘어납니다. */
+  if (railOnly.length)
+    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">거울굴절철도</div>' +
+         '<div class="grid">' +
+           railOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+         '</div>';
+
+  h += '<div style="margin:10px 0 0">' + enkBarHTML() + '</div>';
 
   h += '<div class="modalfoot"><button id="csclose" class="ghost">닫기</button></div>';
   $sheet.innerHTML = h;
@@ -4495,8 +4543,50 @@ const MIRROR_EXTREME = {
   }
 };
 
+/* ── 거울굴절철도 ──────────────────────────────────────────────
+ *  거울 던전과 같은 틀을 쓰되 «선» 으로 이어지는 갈래입니다.
+ *  group: "rail" 을 달면 운전석에서 거울 아래 제 줄에 따로 섭니다.
+ *  2호선·3호선을 늘릴 때는 이 덩이를 본떠 MIRROR_TIERS 에 얹으면 됩니다.
+ *
+ *  거울과 다른 점 셋
+ *    maxNormal  잡졸은 맨 앞 한 번만. 나머지는 전부 보스입니다
+ *    finalFoe   종점은 정해져 있습니다 — 세기와 상관없이 맨 뒤에 섭니다
+ *    defScale   3.5배에서 방어가 벽이 되지 않도록 공통값보다 낮게 잡았습니다
+ *               (데스리퍼가 하드에서 46턴 걸리던 그 일을 되풀이하지 않으려는 것)
+ */
+const MIRROR_RAIL1 = {
+  key:  "railLine1",
+  group: "rail",
+  name: "거울굴절철도 1호선",
+  sub:  "굴절되어 이어지는 선로",
+  /* 임시 — 익스트림 것을 그대로 씁니다. 전용 그림이 생기면 여기만 갈면 됩니다. */
+  bg:   "assets/scene/익스트림거울던전.jpg",
+  prefix: "굴절된 ",
+  count:  7,        // 일곱을 연달아 상대합니다 (종점 포함)
+  scale:  3.5,      // 본편의 3.5배
+  defScale: 0.25,   // 방어에만 덜 먹입니다 — ×3.5 일 때 방어 ×1.625
+  bonus:  1000,
+  codex:  10,
+  maxBoss: 5,       // 종점을 뺀 여섯 중 다섯까지 보스
+  maxNormal: 1,     // 잡졸은 맨 앞 한 번만
+  bossChance: 1.0,  // 보스가 반드시 섞입니다
+  finalFoe: "ju3pino",   // 종점 — 만나 봐야 압니다
+  needCleared: 5,
+  cost: ENK_RULE.costRail,
+
+  /* 넷을 넘기면 길잡이가 들릅니다. 체력·관리력을 채우고, 편성도 손볼 수 있습니다 —
+   * 앞의 넷을 겪어 보고 뒤의 셋을 다시 짤 자리를 주려는 것입니다. */
+  rest: {
+    after: 4,
+    who:  "베르렐리우스",
+    say:  "여기서부터는 선로가 굽어 있습니다. 준비를 고치십시오.",
+    text: "길잡이가 관리력과 체력을 전부 회복시켰다.",
+    party: true
+  }
+};
+
 /* 갈래를 늘리려면 여기에 얹으면 됩니다. 순서가 곧 화면에 서는 순서입니다. */
-const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME];
+const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME, MIRROR_RAIL1];
 
 /* 갈래를 어떻게 부르든 받아 줍니다 — 번호, key 문자열, 규칙 그 자체,
  * 그리고 예전에 쓰던 참/거짓(하드인가 아닌가)까지. */
@@ -4571,20 +4661,35 @@ function buildMirrorFoes(rule) {
   /* 만나 본 것이 하나도 없으면(있을 수 없는 일이지만) 옛 방식대로 전부에서 뽑습니다 */
   if (!keys.length) keys = Object.keys(FOES).filter(설수있나);
 
-  const bosses  = keys.filter(x => FOES[x].boss);
+  const bosses  = keys.filter(x => FOES[x].boss && x !== r.finalFoe);
   const normals = keys.filter(x => !FOES[x].boss);
   const picked = [];
+
+  /* 마지막을 정해 둔 갈래(finalFoe)는 그 한 자리를 빼고 뽑습니다 —
+   * 뽑기가 끝난 뒤 맨 뒤에 그것을 붙입니다. */
+  const want = r.finalFoe ? Math.max(0, r.count - 1) : r.count;
+  /* 잡졸을 몇까지 세울 것인가. 안 적으면 상한 없음(예전 그대로). */
+  const maxNormal = (r.maxNormal != null) ? r.maxNormal : want;
 
   /* 보스는 최대 maxBoss 명까지만 */
   if (bosses.length && Math.random() < r.bossChance) {
     const bag = bosses.slice();
-    for (let i = 0; i < r.maxBoss && bag.length; i++)
+    for (let i = 0; i < r.maxBoss && bag.length && picked.length < want; i++)
       picked.push(bag.splice(rnd(bag.length), 1)[0]);
   }
-  /* 나머지는 보스가 아닌 적으로 채운다 */
+  /* 나머지는 보스가 아닌 적으로 채운다 — 다만 maxNormal 까지만 */
   const bag = normals.slice();
-  while (picked.length < r.count && bag.length)
+  let nUsed = 0;
+  while (picked.length < want && bag.length && nUsed < maxNormal) {
     picked.push(bag.splice(rnd(bag.length), 1)[0]);
+    nUsed++;
+  }
+  /* 잡졸 상한에 걸려 아직 모자라면 남은 보스로 더 채웁니다 */
+  if (picked.length < want) {
+    const more = bosses.filter(x => picked.indexOf(x) < 0);
+    while (picked.length < want && more.length)
+      picked.push(more.splice(rnd(more.length), 1)[0]);
+  }
 
   /* 만나 본 것이 count 보다 적으면 그만큼만 나옵니다.
    * 같은 것을 두 번 세우기보다 짧게 끝나는 편이 낫습니다 —
@@ -4593,6 +4698,15 @@ function buildMirrorFoes(rule) {
   /* 약한 것부터 나오도록 — 보스가 있으면 자연히 마지막이 된다 */
   picked.sort((a, b) => FOES[a].hp - FOES[b].hp);
 
+  /* 마지막을 정해 둔 갈래는 여기서 붙입니다 — 세기와 상관없이 «종점» 이라야 하므로
+   * 정렬 뒤에 얹습니다. */
+  if (r.finalFoe && FOES[r.finalFoe]) picked.push(r.finalFoe);
+
+  /* 방어에 먹이는 배수는 갈래마다 따로 정할 수 있습니다 (defScale).
+   * 안 적으면 공통값(DEF_SCALE)을 씁니다 — 배수가 클수록 방어가 벽이 되기 쉬워,
+   * 배수가 큰 갈래일수록 이 값을 낮춰 잡습니다. */
+  const dk = (r.defScale != null) ? (1 + (k - 1) * r.defScale) : defK(k);
+
   return picked.map((src, i) => {
     const f = FOES[src];
     const id = "__mirror_" + i;
@@ -4600,7 +4714,7 @@ function buildMirrorFoes(rule) {
       name: f.mirrorName || ((r.prefix || "거울의 ") + f.name),
       hp:  Math.round(f.hp  * k),
       atk: Math.round(f.atk * k),
-      def: Math.round(f.def * defK(k)),
+      def: Math.round(f.def * dk),
       boss: !!f.boss,
       img: f.img || null,
       /* 등장 대사와 강타 대사는 본래 것을 그대로 가져옵니다.
@@ -4609,6 +4723,10 @@ function buildMirrorFoes(rule) {
       quote: f.quote || null,
       heavyLine: f.heavyLine || null,
       heavyImg: f.heavyImg || null,
+      /* 광역 공격도 함께 옮깁니다 — 빠뜨리면 거울에서만 광역을 안 씁니다 */
+      aoeEvery: f.aoeEvery || 0,
+      aoeLine: f.aoeLine || null,
+      aoeWarn: f.aoeWarn || null,
       desc: "유리창에 비쳐 나온 것. 본래보다 " +
             Math.round((k - 1) * 100) + "% 강하다."
     };
@@ -4750,8 +4868,13 @@ function startMirror(tier, preIds) {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
     scenes.push({ t: "battle", foe: id });
     /* 정해진 수를 넘기면 길잡이가 한 번 들러 세워 놓고 갑니다 */
-    if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length)
+    if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length) {
       scenes.push({ t: "rest", who: rule.rest.who, say: rule.rest.say, text: rule.rest.text });
+      /* 편성까지 손볼 수 있는 자리라면 쉬는 김에 한 번 물어봅니다 —
+       * 앞의 것들을 겪어 보고 뒤를 다시 짜라는 뜻입니다. */
+      if (rule.rest.party)
+        scenes.push({ t: "party", text: "여기서 편성을 고칠 수 있습니다." });
+    }
   });
   scenes.push({ t: "mirrorClear" });
 

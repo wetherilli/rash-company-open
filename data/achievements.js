@@ -82,5 +82,14 @@ const ACHIEVEMENTS = [
     /* synergy 는 시너지의 «이름» 으로 찾습니다. I사 태그의 이름은 「우주정복의 의지」입니다. */
     when: { kill: "데스리퍼", where: "mirrorHard", synergy: "우주정복의 의지" },
     give: { support: "I사 선봉3팀|이유건" }
+  },
+  {
+    /* 종점에서 무엇을 만나는지는 적지 않습니다 — 직접 닿아야 압니다.
+     * clear 는 «끝까지 돌았을 때» 만 봅니다 (kill 과 같이 적지 마십시오). */
+    name: "익숙한 전화벨",
+    desc: "거울굴절철도 1호선을 끝까지 돈다.",
+    reward: "지원 작성위원 ★★★ 이집티쿠스 모니터",
+    when: { clear: "railLine1" },
+    give: { support: "이집티쿠스|모니터" }
   }
 ];
