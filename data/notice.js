@@ -25,7 +25,7 @@ const SHOP_NOTICE = {
   ver: "1.3.0",
   title: "새로 들어온 것들",
   /* 맨 위에 깔리는 그림 띠와 그 위에 얹히는 문구 — 거울굴절철도 1호선이 쓰는 그림을 함께 씁니다 */
-  banner: "assets/scene/익스트림거울던전.jpg",
+  banner: "assets/scene/거울굴절철도1호선.jpg",
   line:   "선로가 거울 너머로 이어집니다.",
   sub:    "동기화 · 거울굴절철도 · 정가",
   /* 무리마다 제목을 달아 나눕니다. head 없이 lines 만 적어도 됩니다. */
