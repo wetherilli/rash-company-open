@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const VERSION_NAME = "거울굴절철도";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -38,6 +38,8 @@ const RULE = {
   rate3:       0.03,   // 3성
   rateAdv:     0.01,   // 보조 교육위원
   guaranteePulls: 10,  // 이 횟수만큼 한 번에 뽑으면 ★★ 이상이 하나 확정
+  stockMulti:  5,       // 기프트·교육위원 배정에서 묶음으로 뽑는 개수 (확정 없이 그냥 5개)
+  fragExchange: 400,    // 인격 교환(정가)에 드는 그 사람 몫 파편 개수 — 뽑기와 달리 무엇을 얻을지 고른다
   reviveRatio: 0.2,    // 첨삭으로 일어날 때 체력
   healRatio:   0.30,   // 퇴고로 회복하는 양 (최대 체력 대비)
   correctCut:  0.25,   // 교정 대상이 받는 피해 비율
@@ -94,10 +96,13 @@ const ENK_RULE = {
  *    compare: "minor"  0.13.x → 0.14.0 처럼 가운뎃자리가 달라질 때만
  *             "patch"  0.13.1 → 0.13.2 처럼 뒷자리만 달라져도
  *             "major"  앞자리가 달라질 때만
+ *
+ *  compare 가 "major" 일 때는 인격 파편도 절반(버림)으로 줄어듭니다 — newState() 참고.
+ *  다른 값으로 바꾸면 파편은 그대로 두고 원고료만 깎입니다.
  */
 const VERSION_RULE = {
   on:        true,
-  compare:   "minor",
+  compare:   "major",
   moneyKeep: 0.5      // 넘어오는 비율 (0.5 = 절반)
 };
 
@@ -732,6 +737,18 @@ function newState() {
     const before = money;
     money = Math.floor(money * VERSION_RULE.moneyKeep);
     verNote = { from: v.ver || null, to: VERSION, before, after: money };
+
+    /* compare 가 "major" 일 때만 — 인격 파편도 절반(버림)으로 줄인다.
+     * frags 는 바로 위에서 이미 채워 둔 것을 여기서 고쳐 쓴다. */
+    if (VERSION_RULE.compare === "major") {
+      let fBefore = 0, fAfter = 0;
+      for (const who in frags) {
+        fBefore += frags[who];
+        frags[who] = Math.floor(frags[who] / 2);
+        fAfter += frags[who];
+      }
+      if (fBefore > 0) verNote.frags = { before: fBefore, after: fAfter };
+    }
   }
 
   return {
@@ -863,6 +880,8 @@ function versionNotice() {
   say("다만 " + CURRENCY + "는 " +
       Math.round(VERSION_RULE.moneyKeep * 100) + "% 만 넘어옵니다 — " +
       n.before + " → " + n.after, "bad");
+  if (n.frags)
+    say("인격 파편도 절반으로 줄었습니다 — " + n.frags.before + " → " + n.frags.after, "bad");
   divider();
 }
 
@@ -3892,6 +3911,12 @@ function openShop(back) {
 
     const gTotal = (typeof GIFTS !== "undefined") ? GIFTS.length : 0;
     const gMine  = Object.keys(S.giftsOwned || {}).length;
+    /* 파편이 그 사람 몫으로 RULE.fragExchange 개를 넘고, 아직 못 가진(그리고 지금
+     * 특정 배정 중이 아닌) 인격이 있는 사람이 하나라도 있으면 눌러 볼 수 있습니다 —
+     * 구체적인 대상 고르기는 openExchange() 안에서. */
+    const exCan = Object.keys(SINNERS).some(w =>
+      fragCount(w) >= RULE.fragExchange &&
+      SINNERS[w].ids.some(id => !S.owned[idKey(w, id)] && !pickupOnTitle(id.title)));
     h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">E.G.O 기프트</div>' +
          '<div class="grid">' +
            '<div class="slot"' + (S.codex >= GIFT_RULE.cost ? ' data-gift="1"' : '') + '>' +
@@ -3902,6 +3927,13 @@ function openShop(back) {
              '<div class="sub">' + (S.codex >= GIFT_RULE.cost
                ? '중복이면 ' + CURRENCY + ' ' + dupRefundText()
                : '황금교본이 모자랍니다') + '</div>' +
+           '</div>' +
+           '<div class="slot"' + (exCan ? ' data-exchange="1"' : '') + '>' +
+             '<div class="' + (exCan ? 'nm' : 'lock') + '">인격 교환</div>' +
+             '<div class="sub">그 사람 몫 파편 ' + RULE.fragExchange + '개로 미보유 인격 하나를 정가로 바꿉니다</div>' +
+             '<div class="sub">' + (exCan
+               ? '뽑기와 달리 무엇을 얻을지 직접 고릅니다'
+               : '파편이 모자라거나, 이미 전부 지녔습니다') + '</div>' +
            '</div>' +
          '</div>';
 
@@ -3950,73 +3982,13 @@ function openShop(back) {
     });
 
     const gp = $sheet.querySelector(".slot[data-gift]");
-    if (gp) gp.onclick = () => {
-      if (S.codex < GIFT_RULE.cost) return;
-      S.codex -= GIFT_RULE.cost;
+    if (gp) gp.onclick = () => openStockGacha("gift", () => draw(null));
 
-      const r = Math.random();
-      const star = r < GIFT_RULE.rate3 ? 3
-                 : r < GIFT_RULE.rate3 + GIFT_RULE.rate2 ? 2 : 1;
-      let cand = GIFTS.filter(x => x.star === star && !(S.giftsOwned && S.giftsOwned[giftId(x)]));
-      if (!cand.length) cand = GIFTS.filter(x => x.star === star);
-      if (!cand.length) cand = GIFTS;
-      const pick = cand[rnd(cand.length)];
-
-      let msg;
-      const isNew = !(S.giftsOwned && S.giftsOwned[giftId(pick)]);
-      if (!isNew) {
-        const back2 = dupRefund(pick.star);
-        S.money += back2;
-        msg = stars(pick.star) + " " + pick.name + " — 이미 지닌 것이다. " +
-              CURRENCY + " " + back2 + " 환급.";
-      } else {
-        if (!S.giftsOwned) S.giftsOwned = {};
-        S.giftsOwned[giftId(pick)] = true;
-        if (!giftOnList().length) { S.giftOn = [giftId(pick)]; S.gift = giftId(pick); }
-        msg = stars(pick.star) + " " + pick.name + " 획득 — " + pick.desc;
-      }
-      saveVault(); render();
-      /* 중복은 축하할 일이 아니니 연출을 넣지 않습니다.
-       * 이름은 알리지 않습니다 — 눌러 봐야 무엇을 얻었는지 알도록. */
-      if (pick.star >= 3 && isNew)
-        starFlash(3, pick.desc || null, () => draw(msg));
-      else draw(msg);
-    };
+    const ex = $sheet.querySelector(".slot[data-exchange]");
+    if (ex) ex.onclick = () => openExchange(() => draw(null));
 
     const ap = $sheet.querySelector(".slot[data-adv]");
-    if (ap) ap.onclick = () => {
-      if (S.codex < ADVISOR_RULE.cost) return;
-      const all = advisorList();
-      if (!all.length) return;
-      S.codex -= ADVISOR_RULE.cost;
-
-      const star = Math.random() < ADVISOR_RULE.rate3 ? 3 : 2;
-      let cand = all.filter(a => a.star === star && !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
-      if (!cand.length) cand = all.filter(a => a.star === star);
-      if (!cand.length) cand = all;
-      const pick = cand[rnd(cand.length)];
-      const key = advisorId(pick);
-
-      let msg;
-      const isNew = !(S.advisorsOwned && S.advisorsOwned[key]);
-      if (!isNew) {
-        const backA = dupRefund(pick.star);
-        S.money += backA;
-        msg = stars(pick.star) + " " + pick.title + " " + pick.name +
-              " — 이미 함께하고 있다. " + CURRENCY + " " + backA + " 환급.";
-      } else {
-        if (!S.advisorsOwned) S.advisorsOwned = {};
-        S.advisorsOwned[key] = true;
-        if (!advisorOnList().length) { S.advisorOn = [key]; S.advisor = key; }
-        msg = stars(pick.star) + " " + pick.title + " " + pick.name + " 합류 — " + pick.desc;
-      }
-      saveVault(); render();
-      /* 중복은 축하할 일이 아니니 연출을 넣지 않습니다 */
-      /* 이름은 알리지 않습니다 — 눌러 봐야 무엇을 얻었는지 알도록 */
-      if (pick.star >= 3 && isNew)
-        starFlash(3, pick.note || pick.desc || null, () => draw(msg));
-      else draw(msg);
-    };
+    if (ap) ap.onclick = () => openStockGacha("adv", () => draw(null));
 
     $sheet.querySelectorAll(".slot[data-trade]").forEach(el => {
       el.onclick = () => {
@@ -4078,6 +4050,9 @@ function pickupCost(p) {
   if (p && typeof p.cost === "number") return p.cost;
   return RULE.pullCost;
 }
+/* 지금 서 있는 특정 배정 중 하나라도 그 인격을 대상으로 삼고 있는가.
+ * 인격 교환(정가)에서 씁니다 — 뽑기로 끌어야 할 인격을 파편으로 지름길 삼지 못하게. */
+function pickupOnTitle(title) { return pickupList().some(p => pickupHit(p, title)); }
 
 /* 상점 칸 머리에 얹는 작은 그림 띠 — 글씨 없이 그림만.
  * 칸마다 이것을 하나씩 달아 두면 칸 크기가 서로 어긋나지 않습니다. */
@@ -4282,6 +4257,207 @@ function openGacha(done, pk, deal) {
     if (g1 && !g1.disabled) g1.onclick = () => pull(1);
     if (g5 && !g5.disabled) g5.onclick = () => pull(RULE.guaranteePulls);
     document.getElementById("gclose").onclick = () => { closeModal(); if (done) done(); };
+  };
+  draw(null);
+}
+
+/* ── 기프트 · 교육위원 배정 ────────────────────────────────────
+ *  인격 배정과 같은 틀입니다 — 1회 / RULE.stockMulti 회를 고르고
+ *  한 판에 펼칩니다. 다만 여기엔 확정 칸이 없습니다(보조 교육위원이 섞이는
+ *  인격 배정과 달리, 성급 확률이 이미 낮지 않아 굳이 보장할 필요가 없습니다).
+ *  kind 는 "gift"(E.G.O 기프트) 또는 "adv"(보조 교육위원).
+ */
+function pullGiftOnce() {
+  const r = Math.random();
+  const star = r < GIFT_RULE.rate3 ? 3
+             : r < GIFT_RULE.rate3 + GIFT_RULE.rate2 ? 2 : 1;
+  let cand = GIFTS.filter(x => x.star === star && !(S.giftsOwned && S.giftsOwned[giftId(x)]));
+  if (!cand.length) cand = GIFTS.filter(x => x.star === star);
+  if (!cand.length) cand = GIFTS;
+  const pick = cand[rnd(cand.length)];
+  const isNew = !(S.giftsOwned && S.giftsOwned[giftId(pick)]);
+  if (isNew) {
+    if (!S.giftsOwned) S.giftsOwned = {};
+    S.giftsOwned[giftId(pick)] = true;
+    if (!giftOnList().length) { S.giftOn = [giftId(pick)]; S.gift = giftId(pick); }
+  } else S.money += dupRefund(pick.star);
+  return { star: pick.star, name: pick.name, desc: pick.desc, isNew };
+}
+
+function pullAdvisorOnce() {
+  const all = advisorList();
+  if (!all.length) return null;
+  const star = Math.random() < ADVISOR_RULE.rate3 ? 3 : 2;
+  let cand = all.filter(a => a.star === star && !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
+  if (!cand.length) cand = all.filter(a => a.star === star);
+  if (!cand.length) cand = all;
+  const pick = cand[rnd(cand.length)];
+  const key = advisorId(pick);
+  const isNew = !(S.advisorsOwned && S.advisorsOwned[key]);
+  if (isNew) {
+    if (!S.advisorsOwned) S.advisorsOwned = {};
+    S.advisorsOwned[key] = true;
+    if (!advisorOnList().length) { S.advisorOn = [key]; S.advisor = key; }
+  } else S.money += dupRefund(pick.star);
+  return { star: pick.star, name: pick.title + " " + pick.name, desc: pick.note || pick.desc, isNew };
+}
+
+function openStockGacha(kind, done) {
+  $modal.classList.add("on");
+  const isGift = kind === "gift";
+  const rule   = isGift ? GIFT_RULE : ADVISOR_RULE;
+  const cost   = rule.cost;
+  const multi  = RULE.stockMulti;
+  const pct    = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + "%";
+
+  const draw = (result) => {
+    const total = isGift ? GIFTS.length : advisorList().length;
+    const mine  = Object.keys((isGift ? S.giftsOwned : S.advisorsOwned) || {}).length;
+
+    let h = '<h2>' + (isGift ? '기 프 트 배 정' : '교 육 위 원 파 견') + '</h2>' +
+            '<div class="hint">1회 황금교본 ' + cost + '　·　보유 황금교본 ' + S.codex +
+              '　·　보유 ' + mine + ' / ' + total + '<br>' +
+            (isGift
+              ? '★ ' + pct(rule.rate1) + '　★★ ' + pct(rule.rate2) + '　★★★ ' + pct(rule.rate3)
+              : '★★ ' + pct(rule.rate2) + '　★★★ ' + pct(rule.rate3)) +
+            '　·　중복이면 ' + CURRENCY + ' ' + dupRefundText() + '</div>';
+
+    if (result) {
+      h += '<div class="grid">';
+      result.forEach(r => {
+        h += '<div class="slot' + (r.isNew ? ' sel' : '') + '">' +
+               '<div class="nm"><span class="star">' + stars(r.star) + '</span> ' + r.name + '</div>' +
+               '<div class="sub">' + (r.isNew ? '신규 — ' + r.desc : '중복') + '</div>' +
+             '</div>';
+      });
+      h += '</div>';
+    }
+
+    h += '<div class="modalfoot">' +
+         '<button id="s1" class="primary"' + (S.codex < cost ? ' disabled' : '') + '>1회 배정</button>' +
+         '<button id="s5"' + (S.codex < cost * multi ? ' disabled' : '') + '>' +
+           multi + '회 배정</button>' +
+         '<button id="sclose" class="ghost">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    const pull = (n) => {
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        if (S.codex < cost) break;
+        if (!isGift && !advisorList().length) break;   // 교육위원이 하나도 없으면 멈춥니다
+        S.codex -= cost;
+        out.push(isGift ? pullGiftOnce() : pullAdvisorOnce());
+      }
+      saveVault();
+      render();
+      /* 중복은 축하할 일이 아니니 연출을 넣지 않습니다.
+       * 이름은 알리지 않습니다 — 눌러 봐야 무엇을 얻었는지 알도록. */
+      const win = out.find(r => r.isNew && r.star >= 3) || null;
+      if (win) starFlash(3, win.desc || null, () => draw(out));
+      else draw(out);
+    };
+
+    const s1 = document.getElementById("s1");
+    const s5 = document.getElementById("s5");
+    if (s1 && !s1.disabled) s1.onclick = () => pull(1);
+    if (s5 && !s5.disabled) s5.onclick = () => pull(multi);
+    document.getElementById("sclose").onclick = () => { closeModal(); if (done) done(); };
+  };
+  draw(null);
+}
+
+/* ── 인격 교환 (정가) ──────────────────────────────────────────
+ *  뽑기와 달리 무엇을 얻을지 직접 고릅니다. 그 사람 몫 파편을
+ *  RULE.fragExchange 개 내면, 아직 못 가진 그 사람의 인격 하나를 받습니다.
+ *  다른 게임에서 흔히 «정가» 라 부르는 것 — 확률에 기대지 않고 값을 다 치릅니다.
+ *
+ *  먼저 사람 12명이 파편 보유량과 함께 죽 나오고(openExchange),
+ *  한 사람을 누르면 그 사람의 미보유 인격 목록이 펼쳐집니다(openExchangePick).
+ */
+function openExchange(back) {
+  $modal.classList.add("on");
+  let h = '<h2>인 격 교 환</h2>' +
+          '<div class="hint">그 사람 몫 인격 파편 <b>' + RULE.fragExchange + '개</b>로, ' +
+          '아직 못 가진 그 사람의 인격 하나를 정가로 바꿉니다. 무엇을 받을지는 다음 화면에서 직접 고릅니다.</div>' +
+          '<div class="grid">';
+
+  Object.keys(SINNERS).forEach(who => {
+    const s = SINNERS[who];
+    const have = fragCount(who);
+    const missing = s.ids.filter(id => !S.owned[idKey(who, id)]);
+    const exchangeable = missing.filter(id => !pickupOnTitle(id.title));
+    const can = have >= RULE.fragExchange && exchangeable.length > 0;
+    h += '<div class="slot"' + (can ? ' data-who="' + who + '"' : '') + '>' +
+           '<div class="' + (can ? 'nm' : 'lock') + '">' + s.name + '</div>' +
+           '<div class="sub">보유 파편 <b>' + have + '</b> / ' + RULE.fragExchange + '</div>' +
+           '<div class="sub">' + (exchangeable.length ? '교환 가능한 인격 ' + exchangeable.length + '개'
+                                  : missing.length ? '미보유 인격이 지금 전부 특정 배정 중입니다'
+                                  : '모든 인격을 이미 지녔습니다') + '</div>' +
+         '</div>';
+  });
+
+  h += '</div><div class="modalfoot"><button id="exclose" class="ghost">닫기</button></div>';
+  $sheet.innerHTML = h;
+
+  $sheet.querySelectorAll(".slot[data-who]").forEach(el => {
+    el.onclick = () => openExchangePick(el.dataset.who, () => openExchange(back));
+  });
+  document.getElementById("exclose").onclick = () => { closeModal(); if (back) back(); };
+}
+
+function openExchangePick(who, back) {
+  $modal.classList.add("on");
+  const s = SINNERS[who];
+
+  const draw = (msg) => {
+    const have = fragCount(who);
+    let h = '<h2>' + s.name + ' — 인 격 교 환</h2>' +
+            '<div class="hint">보유 파편 <b>' + have + '</b>　·　1회 ' + RULE.fragExchange + '개</div>';
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    const missing = s.ids.filter(id => !S.owned[idKey(who, id)]);
+    if (!missing.length) {
+      h += '<div class="hint">더 바꿀 인격이 없습니다 — 이미 전부 지녔습니다.</div>';
+    } else {
+      h += '<div class="grid">';
+      missing.forEach(id => {
+        const key = idKey(who, id);
+        const pickedUp = pickupOnTitle(id.title);
+        const can = have >= RULE.fragExchange && !pickedUp;
+        h += '<div class="slot"' + (can ? ' data-id="' + key + '"' : '') + '>' +
+               '<div class="' + (can ? 'nm' : 'lock') + '">' +
+                 '<span class="star">' + stars(id.star) + '</span> ' + id.title + '</div>' +
+               (id.note ? '<div class="sub">' + id.note + '</div>' : '') +
+               (pickedUp ? '<div class="sub" style="color:#d8b26a">지금 특정 배정 중인 인격입니다 — 정가로는 못 바꿉니다</div>'
+                : can ? '' : '<div class="sub" style="color:#c8403a">파편이 모자랍니다</div>') +
+             '</div>';
+      });
+      h += '</div>';
+    }
+
+    h += '<div class="modalfoot"><button id="expback" class="ghost">뒤로</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-id]").forEach(el => {
+      el.onclick = () => {
+        const key = el.dataset.id;
+        const id = idByKey(key);
+        if (!id || S.owned[key] || fragCount(who) < RULE.fragExchange || pickupOnTitle(id.title)) return;
+
+        S.frags[who] -= RULE.fragExchange;
+        S.owned[key] = true;
+        /* 뽑기와 같은 규칙 — 지금 장착한 것보다 성급이 높으면 갈아 끼웁니다 */
+        const cur = idByKey(S.equip[who]);
+        if (!cur || cur.star < id.star) {
+          S.equip[who] = key;
+          if (S.party.indexOf(who) >= 0) S.hp[who] = maxHp(who);
+        }
+        saveVault();
+        render();
+        draw(stars(id.star) + " " + withJosa(id.title, "을") + " 정가로 얻었다.");
+      };
+    });
+    document.getElementById("expback").onclick = () => { closeModal(); if (back) back(); };
   };
   draw(null);
 }
@@ -4574,6 +4750,11 @@ const MIRROR_RAIL1 = {
   needCleared: 5,
   cost: ENK_RULE.costRail,
 
+  /* 들어가기 전(openMirrorGate) 맨 위에 붉게 뜨는 경고. 값을 안 적으면 아무것도 안 뜬다 —
+   * 다른 갈래에는 없는 것이 정상입니다. defScale 로 덜어내도 3.5배는 여전히 세서,
+   * 편성이 안 갖춰지면 종점까지 가기 전에 막힐 수 있습니다. */
+  warn: "본편보다 훨씬 강한 갈래입니다. 동기화 단계와 시너지를 충분히 갖추지 않으면 버티기 어렵습니다.",
+
   /* 넷을 넘기면 길잡이가 들릅니다. 체력·관리력을 채우고, 편성도 손볼 수 있습니다 —
    * 앞의 넷을 겪어 보고 뒤의 셋을 다시 짤 자리를 주려는 것입니다. */
   rest: {
@@ -4783,6 +4964,10 @@ function openMirrorGate(tier, back) {
     let h = '<h2>' + rule.name + ' — 들어가기 전</h2>' +
       '<div class="hint">' + rule.sub + '. 들어가면 ' + ENK_RULE.name + ' ' + rule.cost +
       '를 씁니다. 쓰기 전에 할 수 있는 일이 아래에 있습니다.</div>';
+
+    /* 갈래에 warn 을 적어 두었으면 여기, 관측(적 관측)보다 먼저 보이는 자리에 붉게 띄웁니다. */
+    if (rule.warn)
+      h += '<div class="hint" style="color:#c8403a;font-weight:700">' + rule.warn + '</div>';
 
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
 
