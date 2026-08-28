@@ -91,5 +91,13 @@ const ACHIEVEMENTS = [
     reward: "지원 작성위원 ★★★ 이집티쿠스 모니터",
     when: { clear: "railLine1" },
     give: { support: "이집티쿠스|모니터" }
+  },
+  {
+    name: "망해버린 시리즈",
+    desc: "가면라이더 시너지가 발동한 채로, 하드 또는 익스트림 거울 던전에서 타나콘다를 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★ G사 촬영전문가 박준정",
+    /* synergy 는 시너지의 «이름» 으로 찾습니다 — data/characters.js SYNERGIES 의 "가면라이더 연계기" */
+    when: { kill: "타나콘다", where: ["mirrorHard", "mirrorExtreme"], synergy: "가면라이더 연계기" },
+    give: { support: "G사 촬영전문가|박준정" }
   }
 ];

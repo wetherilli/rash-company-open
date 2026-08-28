@@ -114,6 +114,11 @@ const GIFTS = [
     desc: "남부협회 인격들의 공격력 +20%",
     effect: { tag: "남부협회", atk: 0.20 }
   },
+  {
+    star: 2, name: "가면라이더의 품격",
+    desc: "가면라이더 인격의 방어력 20% 강화",
+    effect: { tag: "가면라이더", def: 0.20 }
+  },
 
   /* ── 3성 ── */
   {
@@ -145,6 +150,11 @@ const GIFTS = [
     star: 3, name: "명경지수",
     desc: "크리티컬 확률 +10%",
     effect: { crit: 0.10 }
+  },
+  {
+    star: 3, name: "G사의 초대형 소품",
+    desc: "G사 인격의 체력 35% 강화",
+    effect: { tag: "G사", hp: 0.35 }
   }
 ];
 
