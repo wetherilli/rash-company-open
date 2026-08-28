@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.3.1";
+const VERSION = "1.3.2";
 const VERSION_NAME = "거울굴절철도";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5840,27 +5840,38 @@ function vaultStats() {
   return t;
 }
 
+/* 보관함이 보여 줄 아이템 종류. 인격 파편처럼 「모아 두는 것」이 늘어날 때마다
+ * 여기 한 칸 더 얹으면 됩니다 — openVault() 는 손대지 않아도 됩니다.
+ * (쿠폰 · 이벤트 상품 등은 실제 상태값이 생기면 그때 추가) */
+function vaultItemCategories() {
+  return [
+    {
+      label: "인격 파편",
+      note: "뽑기에서 중복이 나오면 작성위원마다 따로 쌓입니다.",
+      items: Object.keys(SINNERS).map(who => ({
+        name: SINNERS[who].name,
+        sub:  fragCount(who) + "개"
+      }))
+    }
+  ];
+}
+
 function openVault(back) {
   $modal.classList.add("on");
-  const t = vaultStats();
-  const total = t[1][0] + t[2][0] + t[3][0];
-  const all   = t[1][1] + t[2][1] + t[3][1];
   let h = '<h2>보 관 함</h2>' +
-          '<div class="hint">모은 인격 <b>' + total + ' / ' + all + '</b>　·　' +
-          '★ ' + t[1][0] + '/' + t[1][1] + '　★★ ' + t[2][0] + '/' + t[2][1] +
-          '　★★★ ' + t[3][0] + '/' + t[3][1] + '　·　' +
-          CURRENCY + ' ' + S.money + '<br>' +
-          '여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. ' +
+          '<div class="hint">여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. ' +
           '무엇을 가졌는지·장착은 편성 화면의 [인격 장착]에서 봅니다.</div>';
 
-  /* 인격 파편 — 뽑기에서 중복이 나오면 작성위원마다 따로 쌓입니다.
-   * 쓰임은 아직 없어 여기와, 앞으로 그것을 쓰는 화면에서만 보입니다 — 메인 화면에는 안 냅니다. */
-  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">인격 파편</div><div class="grid">';
-  Object.keys(SINNERS).forEach(who => {
-    h += '<div class="slot"><div class="nm">' + SINNERS[who].name + '</div>' +
-           '<div class="sub">' + fragCount(who) + '개</div></div>';
+  vaultItemCategories().forEach(cat => {
+    h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + cat.label + '</div>';
+    if (cat.note) h += '<div class="hint">' + cat.note + '</div>';
+    h += '<div class="grid">';
+    cat.items.forEach(it => {
+      h += '<div class="slot"><div class="nm">' + it.name + '</div>' +
+             '<div class="sub">' + it.sub + '</div></div>';
+    });
+    h += '</div>';
   });
-  h += '</div>';
 
   h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
        '<button id="vrec">기록 · 내보내기</button>' +
