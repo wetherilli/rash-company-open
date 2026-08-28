@@ -309,6 +309,10 @@ const FOES = {
   ju3pino: {
     name: "쥬3피노", hp: 800, atk: 34, def: 13, boss: true, noMirror: true,
     img: "assets/enemy/쥬3피노.png",
+    sound: "assets/sound/거울굴절철도 1호선 보스.mp3",   // 등장할 때 한 번 재생
+    /* 그냥 나타나는 대신 startBossCine 을 거칩니다 — 암전 · 등장 음성 · 흔들리며 등장.
+     * 이 판에서 처음 만날 때만 자동으로 흐르고, 그 뒤로는 「계속」으로 넘길 수 있습니다. */
+    cineEntrance: true,
     desc: "받을 사람이 없는 전화가 계속 울린다.",
     intro: "익숙한 전화벨소리가 들린다.",
     heavyLine: "크워어어어",
@@ -324,7 +328,7 @@ const CHAPTERS = [
 
 /* ═══════════════ 0장 ═══════════════════════════════════════ */
 {
-  id: "ch0", no: "0장", title: "왕지성", lead: "manager", subtitle: null,
+  id: "ch0", no: "0장", title: "돌아갈 수 없는", lead: "manager", subtitle: null,
   img: "assets/scene/메카고질라 내부.jpg",
   summary: "관리자가 되다.",
   scenes: [

@@ -118,8 +118,8 @@ const GIFTS = [
   /* ── 3성 ── */
   {
     star: 3, name: "L사 교육위원회 지짐",
-    desc: "모든 교육위원 능력 횟수 +1",
-    effect: { manage: 1 }
+    desc: "전투 시작 관리력 +2, 최대 관리력 +2",
+    effect: { manage: 2, manageMax: 2 }
   },
   {
     star: 3, name: "달의 기억",

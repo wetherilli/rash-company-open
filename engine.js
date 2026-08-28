@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.3.3";
+const VERSION = "1.3.4";
 const VERSION_NAME = "거울굴절철도";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -63,8 +63,14 @@ const RULE = {
   turnGapMs:   380,    // 적이 친 뒤 다음 턴 명령을 받기까지(ms)
   shakeMs:     320,    // 맞을 때 화면이 흔들리는 시간(ms)
   shakeHardMs: 620,    // 강타를 맞을 때(ms)
-  gachaFxMs:   900     // 배정에서 ★★★ 이 나왔을 때 빛이 터지는 시간(ms).
+  gachaFxMs:   900,    // 배정에서 ★★★ 이 나왔을 때 빛이 터지는 시간(ms).
                        // 그 뒤로는 누를 때까지 머뭅니다. 0 이면 연출을 아예 안 합니다
+  /* 보스 등장 연출(startBossCine) — 맨 처음 만날 때만 자동으로 흐릅니다.
+   * cineBlackoutMs   암전으로 머무는 시간
+   * cineVoiceMaxMs   등장 음성이 안 들리거나(막힌 자동재생) 아주 길 때를 대비한 최대 대기 —
+   *                  음성이 먼저 끝나면(ended) 그쪽을 따릅니다. */
+  cineBlackoutMs: 1000,
+  cineVoiceMaxMs: 15000
 };
 
 /* ── 엔케팔린 ──────────────────────────────────────────────────
@@ -1124,8 +1130,14 @@ function advisorEffect() {
     for (const k in one) out[k] += one[k];
   });
 
-  /* 기프트가 자원을 그냥 더해 주는 경우 — 교육위원과 무관합니다 */
-  gifts.forEach(g => { if (g.effect && g.effect.manage) out.manage += g.effect.manage; });
+  /* 기프트가 자원을 그냥 더해 주는 경우 — 교육위원과 무관합니다.
+   * manageMax 를 함께 올리지 않으면 beginTurn() 의 첫 턴 클램프에서
+   * 늘려 준 시작 관리력이 그대로 깎여 나갑니다(교육위원 manage/manageMax 짝과 같은 사정). */
+  gifts.forEach(g => {
+    if (!g.effect) return;
+    if (g.effect.manage)    out.manage    += g.effect.manage;
+    if (g.effect.manageMax) out.manageMax += g.effect.manageMax;
+  });
   return out;
 }
 /* 원고료 수입은 전부 이 문을 지나갑니다. RULE.moneyGain 하나로 조절됩니다.
@@ -1670,6 +1682,18 @@ function hideStage() { $stage.className = ""; $stage.innerHTML = ""; CUR_BG = nu
 function showSpeaker(src, tag) { drawStage(src, "left", tag); }
 /* 적을 가운데에 세운다 */
 function showFoe(src, tag)     { drawStage(src, "mid", tag); }
+
+/* 효과음을 한 번 재생한다. assets/sound/ 의 파일을 씁니다.
+ * 자동재생이 막혀 있어도(브라우저 정책) 조용히 넘어갑니다 — 화면을 막지 않습니다.
+ * 만든 Audio 를 돌려줍니다 — «끝나면」을 기다려야 하는 자리(startBossCine)에서 씁니다. */
+function playSound(src) {
+  if (!src) return null;
+  try {
+    const a = new Audio(src);
+    a.play().catch(() => {});
+    return a;
+  } catch (e) { return null; }
+}
 
 /* 맞는 연출 — 참격이 한 번 그어지고, 적이 좌우로 흔들리며 점멸한다 */
 function foeHit(delay) {
@@ -2282,6 +2306,7 @@ function play(s) {
     case "cook":    return doCook(s);
     case "choice":  return doChoice(s);
     case "battle":  return startBattle(s);
+    case "bossCine": return startBossCine(s);
 
     case "gain": {
       const g = s.starter ? STARTER_ID : s;
@@ -2639,6 +2664,67 @@ function doChoice(s) {
   })));
 }
 
+/* ── 보스 등장 연출 ────────────────────────────────────────────
+ *  { t:"bossCine", foe:"ju3pino" }   — 거울굴절철도 1호선 종점처럼
+ *  «만나 봐야 아는» 보스를 극적으로 들이려는 자리에 씁니다.
+ *
+ *  진입 → 암전(1초, 깜빡임) → 등장 대사 + 등장 음성(FOES 의 sound) →
+ *  음성이 끝나면 화면이 흔들리며 보스가 서고 바로 전투가 시작됩니다.
+ *
+ *  이 판(save)에서 처음 만나는 것이면 위 흐름이 그대로 자동으로 흐르고,
+ *  S.flags 에 «봤다» 표를 남깁니다. 그 뒤로 같은 보스를 다시 만나면(패배 후
+ *  재도전 등) 기다리는 대신 「계속」을 눌러 그때그때 넘어갈 수 있습니다. */
+function startBossCine(s) {
+  const f = FOES[s.foe];
+  if (!f) { say("(적 데이터 없음: " + s.foe + ")", "todo"); return cont(); }
+  if (!S.flags) S.flags = {};
+  const flag = "cine_" + s.foe;
+  const seen = !!S.flags[flag];
+
+  S.waiting = true;
+  clearLog();
+  $log.classList.remove("recalling");
+
+  const blackout = () => {
+    $stage.className = "on";
+    $stage.innerHTML = '<div class="scenebox blackout"></div>';
+  };
+
+  /* 배경을 도로 보이며 등장 대사를 적고 음성을 튼다.
+   * onDone 은 음성이 끝나거나(ended), 못 틀거나, 너무 길 때(cineVoiceMaxMs) 한 번만 불린다. */
+  const showVoice = onDone => {
+    drawStage(null, null, null);              // 배경만 도로 보인다. 보스 그림은 아직 안 낸다
+    if (f.intro && f.intro !== "TODO") say(f.intro, "bad");
+    const audio = playSound(f.sound);
+    let done = false;
+    const finish = () => { if (done) return; done = true; onDone(); };
+    if (audio) { audio.addEventListener("ended", finish); audio.addEventListener("error", finish); }
+    setTimeout(finish, RULE.cineVoiceMaxMs);
+  };
+
+  const reveal = () => {
+    S.flags[flag] = true;
+    shakeScreen(true);
+    S.waiting = false;
+    startBattle(Object.assign({}, s, { t: "battle", cineDone: true }));
+  };
+
+  if (!seen) {
+    blackout();
+    render();
+    buttons([{ label: "…", cls: "primary", disabled: true }]);   // 처음 보는 동안은 손잡이를 잠근다
+    setTimeout(() => showVoice(reveal), RULE.cineBlackoutMs);
+  } else {
+    blackout();
+    render();
+    buttons([{ label: "계속", cls: "primary", fn: () => {
+      showVoice(() => {});
+      render();
+      buttons([{ label: "계속", cls: "primary", fn: reveal }]);
+    } }]);
+  }
+}
+
 /* =====================================================================
  *  전투
  * ===================================================================== */
@@ -2673,16 +2759,21 @@ function startBattleFight(scene, f) {
   S.restManage = false;
   const b = S.battle;            // 딜레이가 끝났을 때 같은 전투인지 확인용
 
-  /* 전투에 들어서면 판을 한 번 비운다 —
-   * 앞서 이야기하던 사람의 초상과 그때까지의 대화록이 남아 있으면 정신이 없다. */
-  clearLog();
-  $log.classList.remove("recalling");
-  drawStage(null, null, null);
+  /* startBossCine 을 거쳐 온 전투는 등장 연출에서 이미 판을 비우고 등장 대사·음성까지
+   * 냈습니다 — 여기서 또 지우거나 되풀이하면 방금 본 대사가 사라지거나 음성이 겹칩니다. */
+  if (!scene.cineDone) {
+    /* 전투에 들어서면 판을 한 번 비운다 —
+     * 앞서 이야기하던 사람의 초상과 그때까지의 대화록이 남아 있으면 정신이 없다. */
+    clearLog();
+    $log.classList.remove("recalling");
+    drawStage(null, null, null);
 
-  if (f.desc) say(f.desc, "sys");
-  if (f.quote) say("“" + f.quote + "”", "d");
-  if (f.intro && f.intro !== "TODO") say(f.intro, "bad");
-  else if (f.intro === "TODO") say("(등장 대사 미작성)", "todo");
+    if (f.desc) say(f.desc, "sys");
+    if (f.quote) say("“" + f.quote + "”", "d");
+    if (f.intro && f.intro !== "TODO") say(f.intro, "bad");
+    else if (f.intro === "TODO") say("(등장 대사 미작성)", "todo");
+    playSound(f.sound);                    // 등장할 때 한 번 — FOES 에 sound 를 적어 둔 적만
+  }
   showFoe(f.img || null, f.name);          // 적은 배경 가운데에 선다
   S.battle.shown = f.img || null;          // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
   say("▶ " + withJosa(f.name, "이") + " 나타났다!", "bad");
@@ -5085,7 +5176,8 @@ function startMirror(tier, preIds) {
   S.mirrorCheckpoint = null;
   ids.forEach((id, i) => {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
-    scenes.push({ t: "battle", foe: id });
+    /* cineEntrance 를 단 적(쥬3피노 등)은 그냥 세우는 대신 등장 연출을 거칩니다 */
+    scenes.push(FOES[id] && FOES[id].cineEntrance ? { t: "bossCine", foe: id } : { t: "battle", foe: id });
     /* 정해진 수를 넘기면 길잡이가 한 번 들러 세워 놓고 갑니다 */
     if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length) {
       S.mirrorCheckpoint = scenes.length;   // 이 rest 장면이 설 자리
@@ -6055,7 +6147,7 @@ function glass() {
   if (!done && !sides) {
     divider();
     say("처음이시라면 —", "place");
-    say("아래 [운전석] 을 누르고 «0장 왕지성» 을 고르면 이야기가 시작됩니다.", "good");
+    say("아래 [운전석] 을 누르고 «0장 돌아갈 수 없는» 을 고르면 이야기가 시작됩니다.", "good");
     say("[편성] 에서 누구를 데려갈지, [상점] 에서 새 인격을 뽑을 수 있습니다. " +
         "무엇을 눌러야 할지 모르겠으면 [운전석] 부터 누르십시오.", "sys");
   }

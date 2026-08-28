@@ -47,6 +47,15 @@
   .scenebox img.scene.fit{object-fit:contain;opacity:1;}
   /* 흰 종이에 그린 그림은 칸 바탕도 흰색으로 — 검은 여백이 생기지 않게 */
   .scenebox.paper{background:#f2efe9;}
+  /* 암전 — 보스가 나오기 전, 배경이 잠깐 꺼지며 깜빡인다 (startBossCine 참고) */
+  .scenebox.blackout{background:#000;animation:blackoutFlicker 1s steps(1,end);}
+  @keyframes blackoutFlicker{
+    0%,55%  {background:#000;}
+    62%     {background:#141416;}
+    68%,80% {background:#000;}
+    86%     {background:#0e0e11;}
+    100%    {background:#000;}
+  }
   .scenebox.paper .placename{
     color:#5a5148;background:linear-gradient(to top, rgba(242,239,233,.95), rgba(242,239,233,0));
   }
