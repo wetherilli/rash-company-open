@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.3.6";
-const VERSION_NAME = "거울굴절철도";
+const VERSION = "1.4.0";
+const VERSION_NAME = "작성위원 고유 능력";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -784,7 +784,12 @@ function newState() {
     mirrorHard: false,
     mirrorTier: null,
     partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
-    battleForced: false
+    battleForced: false,
+    /* 「이번 갈래」 — 광신(처치 수)·보복(아군 사망 수, 작성위원별) 이 쌓이는 자리.
+     * 거울 던전 들어갈 때(startMirror) 0으로 리셋됩니다. 본편 연전에도 쌓이게
+     * 정했지만, 본편 쪽은 아직 "갈래가 여기서 끊긴다"는 지점이 정해져 있지
+     * 않아 — 지금은 거울 던전 진입 때 말고는 리셋하지 않습니다. */
+    arc: { kills: 0, retribution: {} }
   };
 }
 
@@ -1396,6 +1401,60 @@ function synergyBonus() {
   return b;
 }
 
+/* ── 작성위원 고유 능력 — 패시브 (광신·격노·배임·보복) ─────────────
+ *  atk 는 effStats() 의 다른 배수들과 같은 자리에 더하는 배수(0.05 = +5%),
+ *  def 는 배임만 쓰는 정수 플랫 보정(방어 +n)입니다. 액티브(흡혈·반격·회피·
+ *  도발·갑주·강공·책임·겹살)는 손잡이로 직접 고르는 것이라 resolveTurn()
+ *  쪽에 있습니다 (skillAvailable, useUniqueSkill 참고).
+ *
+ *  effHp 는 이 사람의 지금 최대 체력(effStats 안에서 이미 구한 값)을 그대로
+ *  받습니다 — 여기서 maxHp()를 다시 부르면 effStats가 자기 자신을 부르는
+ *  순환이 생기기 때문입니다. */
+function passiveSkillBonus(who, effHp) {
+  const out = { atk: 0, def: 0 };
+  const skill = UNIQUE_SKILLS[who];
+  if (!skill || skill.kind !== "passive") return out;
+  const level = syncLevel(who);
+  if (level < 1) return out;
+  const v = skillTierValue(skill, level);
+  const curRaw = S.hp[who] != null ? S.hp[who] : effHp;
+  const lostPct = Math.max(0, (1 - curRaw / effHp) * 100);
+
+  switch (who) {
+    case "kim_taeseong":                          // 광신 — 이번 갈래 처치 수만큼 누적
+      out.atk = ((S.arc && S.arc.kills) || 0) * v / 100;
+      break;
+    case "yu_ain":                                // 보복 — 아군 사망마다, 자신이 죽으면 초기화
+      out.atk = ((S.arc && S.arc.retribution[who]) || 0) * v / 100;
+      break;
+    case "lee_hanbeom":                           // 격노 — 잃은 체력 v%마다 추가 피해 1%
+      out.atk = Math.floor(lostPct / v) * 0.01;
+      break;
+    case "lee_sojeong":                           // 배임 — 잃은 체력 v%마다 방어 +1 (플랫)
+      out.def = Math.floor(lostPct / v);
+      break;
+  }
+  return out;
+}
+
+/* 파티 카드에 「광신 n」 처럼 보일 스택 수 — 표시 전용이라 curHp/maxHp를
+ * 그대로 씁니다(effStats 밖에서 부르므로 순환 걱정이 없습니다). 해당 없으면
+ * null (능력이 없거나, 패시브가 아니거나, 아직 1단계가 안 됐거나). */
+function passiveStackCount(who) {
+  const skill = UNIQUE_SKILLS[who];
+  if (!skill || skill.kind !== "passive") return null;
+  const level = syncLevel(who);
+  if (level < 1) return null;
+  const v = skillTierValue(skill, level);
+  if (who === "kim_taeseong") return (S.arc && S.arc.kills) || 0;
+  if (who === "yu_ain") return (S.arc && S.arc.retribution.yu_ain) || 0;
+  if (who === "lee_hanbeom" || who === "lee_sojeong") {
+    const lostPct = Math.max(0, (1 - curHp(who) / maxHp(who)) * 100);
+    return Math.floor(lostPct / v);
+  }
+  return null;
+}
+
 /* 실제 전투에 쓰이는 수치 — 인격 고유값 × 편성 시너지.
  * 시너지는 '편성된 3명' 의 인격 이름만 보고 계산되므로,
  * 보관함에만 있는 인격은 아무 영향도 주지 않는다. */
@@ -1410,11 +1469,16 @@ function effStats(who) {
   const gf = giftBonusFor(who);                // E.G.O 기프트
   const af = advisorBonusFor(who);             // 교육위원이 특정 인격에만 거는 보정
   const sy = effSyncLevel(who) * SYNC_RULE.statPct;   // 동기화 — 단계 1당 능력치 전부 +5%
+  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp  + sy)));
+  /* 작성위원 고유 능력(패시브) — 광신·격노·보복은 공격력에 얹는 배수,
+   * 배임만 방어에 정수를 더하는 플랫 보정이라 따로 더한다. hp는 이미
+   * 위에서 구했으므로 그걸 넘겨 준다 (maxHp()를 다시 부르면 effStats가
+   * 자기 자신을 부르는 순환이 생긴다). */
+  const pv = passiveSkillBonus(who, hp);
   /* 깎는 기프트가 있어 배수가 0 아래로 갈 수 있습니다. 바닥을 둡니다 —
    * 공격과 체력은 1, 방어는 0 까지. */
-  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy)));
-  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy)));
-  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp  + sy)));
+  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy + pv.atk)));
+  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy)) + pv.def);
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   return { atk: atk + Math.round(def * conv), def: def, hp: hp };
@@ -1434,8 +1498,31 @@ function ownedIds(who) {
 }
 function maxHp(who) { return effStats(who).hp; }
 function curHp(who) { return S.hp[who] != null ? S.hp[who] : maxHp(who); }
-function setHp(who, v) { S.hp[who] = Math.max(0, Math.min(maxHp(who), Math.round(v))); }
+function setHp(who, v) {
+  const wasAlive = curHp(who) > 0;
+  S.hp[who] = Math.max(0, Math.min(maxHp(who), Math.round(v)));
+  if (wasAlive && S.hp[who] <= 0) onAllyDown(who);
+}
 function alive(who) { return curHp(who) > 0; }
+
+/* 유리창(newState)·상점·편성처럼 «전투에서 완전히 벗어난» 자리로 돌아오면
+ * 「이번 갈래」 스택(광신·보복)을 지운다 — 던전·전투 도중(defeat 뒤의 「편성
+ * 바꾸기」처럼 S.mirror·S.battle 이 아직 서 있는 자리)에는 지우면 안 되므로
+ * 거기서는 그냥 둔다. */
+function resetArcIfIdle() {
+  if (!S.battle && !S.mirror) S.arc = { kills: 0, retribution: {} };
+}
+
+/* 유아인의 「보복」— 아군이 죽을 때마다 스택, 자신이 죽으면 초기화.
+ * setHp()가 살아있음→쓰러짐으로 바뀌는 순간에만 부르므로, 어느 경로로
+ * 죽든(단일 표적·광역·강타 다 setHp를 거칩니다) 한 곳에서 잡힙니다. */
+function onAllyDown(who) {
+  if (!S.arc) S.arc = { kills: 0, retribution: {} };
+  if (!S.arc.retribution) S.arc.retribution = {};
+  if (who === "yu_ain") S.arc.retribution.yu_ain = 0;
+  else if (S.party.indexOf("yu_ain") >= 0)
+    S.arc.retribution.yu_ain = (S.arc.retribution.yu_ain || 0) + 1;
+}
 function stars(n) { return "★".repeat(n); }
 function rnd(n) { return Math.floor(Math.random() * n); }
 
@@ -1804,7 +1891,8 @@ function renderParty() {
      *   정함   — 이미 명령을 골라 둔 사람 (초록 테두리, 흐리게)
      * 여기에 관리자 능력이 걸린 자국을 덧붙인다 — 교정·독촉은 이번 턴에만
      * 사는 것이라, 걸어 놓고도 걸렸는지 알 수 없으면 안 쓴 것과 같다. */
-    const aimed  = !!(b && b.aim === who && hp > 0);
+    /* 광역 공격 턴은 노려지는 한 사람이 없고 전원이 맞으므로, 전원에게 노려짐을 켠다 */
+    const aimed  = !!(b && hp > 0 && (b.aoe || b.aim === who));
     const acting = !!(b && b.cur === who && hp > 0);
     const ready  = !!(cmd && !acting && hp > 0);
     const sup    = supportBy(who);
@@ -1827,6 +1915,8 @@ function renderParty() {
         if (b.mods[who + "_push"])  mark += ' <span class="pushtag">독촉</span>';
       }
     }
+    const stack = passiveStackCount(who);
+    if (stack !== null) mark += ' <span class="stacktag">' + UNIQUE_SKILLS[who].name + ' ' + stack + '</span>';
     if (sup)  mark += ' <span class="suptag">지원</span>';
     if (ally) mark += ' <span class="allytag">조력</span>';
     /* 조력자는 이름을 제 색으로 강조하고, 별 자리에는 idText 를 적습니다
@@ -1920,6 +2010,18 @@ function syncFlash(level, quote, after) {
   flashFx("동기화 " + level + "단계", quote, after, "red");
 }
 
+/* 동기화 1·4·8·12단계 — 고유 능력이 해금되거나 강화되는 자리라, 이번엔 붉은빛
+ * 대신 흰빛 하나로 뜨고, "동기화 n단계"는 큰 글자 아래 작은 글자로 붙는다.
+ * 대사(quote)는 그대로 유지 — flashFx 의 line 자리(따옴표로 감싸는 자리)에 둔다.
+ * (UNIQUE_SKILL_TIERS, UNIQUE_SKILLS 는 data/skills.js 에 있습니다) */
+function uniqueSkillFlash(level, quote, skillName, after) {
+  const big = "「" + skillName + "」 " + (level === 1 ? "해금" : "강화");
+  const headlineHTML = big +
+    '<span style="display:block;font-size:15px;letter-spacing:.18em;opacity:.75;margin-top:12px;">' +
+    '동기화 ' + level + '단계</span>';
+  flashFx(headlineHTML, quote, after, "white");
+}
+
 /* 이번 묶음에서 처음 손에 넣은 ★★★ — 없으면 null.
  * 중복으로 나온 것은 축하할 일이 아니라 세지 않습니다. */
 function bigWin(out) {
@@ -2004,7 +2106,11 @@ function renderSynergy() {
   }).join("");
 }
 
-function render() { renderMood(); renderHeader(); renderFoeBar(); renderParty(); renderSynergy(); renderManage(); }
+function render() {
+  renderMood(); renderHeader(); renderFoeBar(); renderParty(); renderSynergy(); renderManage();
+  /* 고유 능력 설명 칸은 askNext()가 그 차례에만 채운다 — 전투 밖에서는 비워 둔다 */
+  if (!S.battle) { const box = document.getElementById("uniqueskills"); if (box) box.innerHTML = ""; }
+}
 
 /* 전투 중에는 화면 전체가 붉게 가라앉는다 — 색은 index.html 의 body.battling */
 function renderMood() {
@@ -2776,6 +2882,13 @@ function startBattleFight(scene, f) {
     manage: S.restManage ? manageCap()
                          : RULE.manageStart + advisorEffect().manage,
     turn: 0, cmds: {}, cur: null, mods: {},
+    /* 고유 능력(액티브) 사용 횟수 — 이 전투(=이 적 개체) 동안만 삽니다.
+     * 매번 새 S.battle 을 만드므로, 같은 적이 다시 나오면(거울 던전 반복 등장
+     * 등) 자연히 0부터 다시 셉니다 — "개체 단위" 리셋을 그냥 얻는 셈입니다. */
+    skillUsed: {},
+    /* 회피처럼 "다음 공격"에 걸리는 것 — b.mods 와 달리 턴이 넘어가도
+     * (beginTurn 이 b.mods 를 비워도) 그대로 남습니다. */
+    persist: {},
     scene: scene
   };
   S.restManage = false;
@@ -2895,6 +3008,92 @@ function pickTarget(cands, done) {
   buttons(list);
 }
 
+/* ── 작성위원 고유 능력 — 액티브 손잡이 ─────────────────────────
+ *  같은 적에게 한 번(갑주만 8·12단계에서 두 번·세 번까지 — v.uses 참고).
+ *  b.skillUsed 는 이 전투(=이 적 개체) 동안만 살아, 새 전투마다 0부터
+ *  다시 셉니다 — "개체 단위" 리셋을 그대로 얻는 자리입니다. */
+function skillUsesAllowed(v) {
+  return (v && typeof v === "object" && v.uses) ? v.uses : 1;
+}
+function skillAvailable(who) {
+  const skill = UNIQUE_SKILLS[who];
+  const b = S.battle;
+  if (!skill || skill.kind !== "active" || !b) return null;
+  const level = syncLevel(who);
+  if (level < 1) return null;
+  /* 도발은 이번 턴이 광역이면 노려지는 대상 자체가 없어 쓸 수 없다 */
+  if (who === "song_hamin" && b.aoe) return null;
+  const v = skillTierValue(skill, level);
+  const used = (b.skillUsed && b.skillUsed[who]) || 0;
+  if (used >= skillUsesAllowed(v)) return null;
+  return { skill, level, v };
+}
+
+/* who 가 손잡이를 눌러 고유 능력을 쓴다. 손해 볼 일이 없는(교정·독촉 같은)
+ * 관리력과 달리 이건 그 사람의 이번 차례를 대신하는 명령이라, 고르고 나면
+ * 바로 askNext() 로 다음 사람에게 넘어갑니다(공격·방어와 같은 자리). */
+function useUniqueSkill(who) {
+  const b = S.battle;
+  const avail = skillAvailable(who);
+  if (!avail) return askNext();
+  const { skill, v } = avail;
+  b.skillUsed[who] = (b.skillUsed[who] || 0) + 1;
+
+  switch (who) {
+    case "cha_minjun":                     // 흡혈 — 공격으로 치고, 준 피해의 v% 회복
+      b.cmds[who] = "attack";
+      b.mods[who + "_vamp"] = v;
+      break;
+    case "kim_haju":                       // 반격 — 맞고 살아 있으면 ×v 확정 치명타로 반격
+      b.cmds[who] = "counter";
+      b.mods[who + "_counter"] = v;
+      break;
+    case "park_suo":                       // 회피 — 이번 공격 완전 회피, 다음 공격 ×v 확정 치명타
+      b.cmds[who] = "evade";
+      b.mods[who + "_evadeActive"] = v;
+      break;
+    case "song_hamin":                     // 도발 — 표적을 자신으로, 받는 피해 v% 감소
+      b.cmds[who] = "taunt";
+      b.mods[who + "_taunt"] = v;
+      b.aim = who;
+      break;
+    case "chu_minsu":                      // 책임 — 아군 전체 피해를 대신, v% 경감
+      b.cmds[who] = "sacrifice";
+      b.mods._sacrificeBy = who;
+      b.mods._sacrificePct = v;
+      break;
+    case "lee_gyeongwon":                  // 겹살 — 공격 두 번, 공격력은 v%(음수)만큼 반영
+      b.cmds[who] = "attack";
+      b.mods[who + "_double"] = true;
+      b.mods[who + "_atkMult"] = 1 + v / 100;
+      break;
+    case "kim_duhyeon":                    // 강공 — 공격력 ×v, 받는 피해는 늘 ×2.0
+      b.cmds[who] = "attack";
+      b.mods[who + "_atkMult"] = v;
+      b.mods[who + "_fragile"] = 2.0;
+      break;
+    case "seong_siyun":                    // 갑주 — 받는 피해 v.pct 만큼 감소(1이면 완전 무효)
+      b.cmds[who] = "shield";
+      b.mods[who + "_immune"] = v.pct;
+      break;
+  }
+  say(withJosa(memberName(who), "이") + " 「" + skill.name + "」을 쓴다.", "good");
+  askNext();
+}
+
+/* 손잡이보다 아래, 화면 맨 아래 — 지금 차례인 사람의 고유 능력 설명만
+ * (회색 바탕에 흰 글자, .uskill). 전투 밖이거나 그 사람에게 능력이 없거나
+ * 아직 1단계가 안 됐으면 아예 비운다. */
+function renderUniqueSkillInfo(who) {
+  const box = document.getElementById("uniqueskills");
+  if (!box) return;
+  const skill = who && UNIQUE_SKILLS[who];
+  const level = who ? syncLevel(who) : 0;
+  if (!S.battle || !skill || level < 1) { box.innerHTML = ""; return; }
+  const v = skillTierValue(skill, level);
+  box.innerHTML = '<span class="uskill"><b>' + skill.name + '</b> ' + skill.desc(v) + '</span>';
+}
+
 function askNext() {
   const b = S.battle;
   const pending = S.party.filter(w => w && alive(w) && !b.cmds[w]);
@@ -2903,6 +3102,7 @@ function askNext() {
   render();
 
   const who = b.cur;
+  renderUniqueSkillInfo(who);
   /* 손잡이는 늘 같은 자리에 섭니다 — 남은 사람 수에 따라 사라지지 않도록 */
   const list = [];
 
@@ -2918,6 +3118,13 @@ function askNext() {
       b.manage = Math.min(manageCap(), b.manage + RULE.guardManage);
       askNext();
     } });
+
+  /* 작성위원 고유 능력 — 방어 바로 옆, 편성된 그 사람에게만 뜬다 */
+  const skillNow = skillAvailable(who);
+  if (skillNow) {
+    list.push({ label: skillNow.skill.name, cls: "skill",
+                fn: () => useUniqueSkill(who) });
+  }
 
   /* 관리자 능력 — 비용과 성능은 세워둔 보조 교육위원에 따라 달라진다 */
   const ae = advisorEffect();
@@ -3192,7 +3399,7 @@ function resolveTurn() {
     if (!same()) return;
     if (i >= hitters.length) return setTimeout(afterAllies, RULE.foePauseMs);
 
-    const who = hitters[i++];
+    const who = hitters[i];
     const st = effStats(who);
     /* 체포는 이번 턴 «적 방어» 를 깎습니다. 뺄셈 피해라 방어 한 점이 크게 먹히므로,
      * 방어가 두꺼운 상대에게 걸수록 효과가 큽니다. */
@@ -3200,21 +3407,42 @@ function resolveTurn() {
     const fdef = b.mods.arrest
       ? Math.round(b.def * (1 - arrestCut))
       : b.def;
-    let dmg = st.atk + rnd(4) - fdef;
+    /* 강공·겹살 — 공격력 배율. 회피 보상 — 지난 턴에 걸어 둔 확정 치명타 */
+    const atkMult = b.mods[who + "_atkMult"] || 1;
+    const evadeBonus = b.persist[who + "_evadeBonus"];
+    let dmg = st.atk * atkMult + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
-    const crit = Math.random() < critRate();
-    if (crit) dmg *= critMult();
+    const crit = evadeBonus ? true : Math.random() < critRate();
+    if (crit) dmg *= evadeBonus || critMult();
     dmg = Math.max(1, Math.floor(dmg));
     b.hp -= dmg;
     say((crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
               : (memberName(who) + "의 공격 — " + dmg + " 피해")) +
         (b.mods[who + "_push"] ? " (독촉)" : "") +
-        (b.mods.arrest ? " (체포)" : ""), crit ? "crit" : "hit");
+        (b.mods.arrest ? " (체포)" : "") +
+        (atkMult !== 1 ? " (" + UNIQUE_SKILLS[who].name + ")" : "") +
+        (evadeBonus ? " (회피 보상)" : ""), crit ? "crit" : "hit");
+    if (evadeBonus) delete b.persist[who + "_evadeBonus"];
+
+    /* 흡혈 — 준 피해의 v% 만큼 회복 */
+    if (b.mods[who + "_vamp"]) {
+      const heal = Math.round(dmg * b.mods[who + "_vamp"] / 100);
+      setHp(who, curHp(who) + heal);
+      say(memberName(who) + " — " + heal + " 회복 (흡혈)", "good");
+    }
+
     foeHit(0);
     checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
     render();
 
     if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
+
+    /* 겹살 — 같은 사람이 한 번 더 친다(공격력은 이미 깎인 채로) */
+    if (b.mods[who + "_double"] && !b.mods[who + "_doubleDone"]) {
+      b.mods[who + "_doubleDone"] = true;
+      return setTimeout(swing, RULE.allyStepMs);   // i는 그대로 — 같은 사람을 다시
+    }
+    i++;
     setTimeout(swing, RULE.allyStepMs);
   };
 
@@ -3233,25 +3461,51 @@ function resolveTurn() {
   const foeTurn = (targets) => {
     if (!same()) return;
 
+    /* 책임 — 이번 턴 누가 맞든 추민수가 대신 받는다(경감까지) */
+    const hero = (b.mods._sacrificeBy && alive(b.mods._sacrificeBy)) ? b.mods._sacrificeBy : null;
+    const heroPct = b.mods._sacrificePct || 0;
+
     /* ── 광역 공격 ─────────────────────────────────────────────
      *  한 사람이 아니라 서 있는 «전원» 을 칩니다. 한 대씩은 강타보다 가볍게(1.2배)
      *  잡았습니다 — 셋이 한꺼번에 맞으므로 강타와 같은 배수를 쓰면 그 자리에서 끝납니다.
-     *  방어와 교정은 사람마다 그대로 쳐 줍니다. */
+     *  방어와 교정은 사람마다 그대로 쳐 줍니다. 도발·회피·반격은 "노려진 한 사람"이
+     *  전제라 광역에는 걸리지 않습니다(도발은 애초에 광역 턴엔 손잡이가 안 뜹니다). */
     if (b.aoe) {
       shakeScreen(true);
       say("▶ " + b.name + "의 광역 공격!", "heavy");
-      targets.forEach(t => {
+
+      const hitOne = t => {
         const st = effStats(t);
         let dmg = b.atk * 1.2 + rnd(4) - st.def;
         if (b.cmds[t] === "guard") dmg *= RULE.guardCut;
         if (b.mods[t + "_guard"]) dmg *= Math.max(0.05, RULE.correctCut - advisorEffect().correct);
-        dmg = Math.max(1, Math.floor(dmg));
-        setHp(t, curHp(t) - dmg);
-        say("　" + memberName(t) + "에게 " + dmg + " 피해" +
-            (b.cmds[t] === "guard" ? " (방어)" : "") +
-            (b.mods[t + "_guard"] ? " (교정)" : ""), "heavy");
-        if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
-      });
+        if (b.mods[t + "_immune"]) dmg *= (1 - b.mods[t + "_immune"]);
+        if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
+        return Math.max(1, Math.floor(dmg));
+      };
+
+      if (hero) {
+        /* 각자 몫을 계산해 경감한 뒤, 전부 추민수 한 명에게 몬다 */
+        let total = 0;
+        targets.forEach(t => {
+          const dmg = heroPct ? Math.max(1, Math.floor(hitOne(t) * (1 - heroPct / 100))) : hitOne(t);
+          total += dmg;
+        });
+        setHp(hero, curHp(hero) - total);
+        say("　" + memberName(hero) + "이 전원의 몫을 대신 받았다 — " + total + " 피해 (책임)", "heavy");
+        if (!alive(hero)) say(withJosa(memberName(hero), "이") + " 쓰러졌다.", "bad");
+      } else {
+        targets.forEach(t => {
+          const dmg = hitOne(t);
+          setHp(t, curHp(t) - dmg);
+          say("　" + memberName(t) + "에게 " + dmg + " 피해" +
+              (b.cmds[t] === "guard" ? " (방어)" : "") +
+              (b.mods[t + "_guard"] ? " (교정)" : "") +
+              (b.mods[t + "_immune"] ? " (갑주)" : "") +
+              (b.mods[t + "_fragile"] ? " (강공)" : ""), "heavy");
+          if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+        });
+      }
       render();
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
@@ -3260,11 +3514,29 @@ function resolveTurn() {
     /* 턴 머리에서 예고한 그 표적을 그대로 친다.
      * 그 사이 쓰러졌다면(첨삭 전이라면) 서 있는 사람 중에서 다시 고른다. */
     const heavy = !!b.heavy;
-    const t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
+    let t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
+
+    /* 책임 — 노려진 게 누구든 추민수가 대신 받는다 */
+    if (hero && t !== hero) t = hero;
+
+    /* 회피 — 노려진 사람이 회피를 골랐으면 이번 공격은 완전히 피한다.
+     * 다음 공격에 걸릴 확정 치명타는 b.persist 에 넣어 턴이 넘어가도 남긴다. */
+    if (b.mods[t + "_evadeActive"]) {
+      say(memberName(t) + " — 완전히 피했다! (회피)", "good");
+      b.persist[t + "_evadeBonus"] = b.mods[t + "_evadeActive"];
+      render();
+      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+    }
+
     const st = effStats(t);
     let dmg = (heavy ? b.atk * 1.7 : b.atk) + rnd(4) - st.def;
     if (b.cmds[t] === "guard") dmg *= RULE.guardCut;
     if (b.mods[t + "_guard"]) dmg *= Math.max(0.05, RULE.correctCut - advisorEffect().correct);
+    if (b.mods[t + "_taunt"]) dmg *= (1 - b.mods[t + "_taunt"] / 100);
+    if (b.mods[t + "_immune"]) dmg *= (1 - b.mods[t + "_immune"]);
+    if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
+    if (t === hero && heroPct) dmg *= (1 - heroPct / 100);
     dmg = Math.max(1, Math.floor(dmg));
     setHp(t, curHp(t) - dmg);
 
@@ -3274,10 +3546,26 @@ function resolveTurn() {
     say((heavy ? "▶ " + b.name + "의 강타! — " : b.name + "의 공격 — ") +
         memberName(t) + "에게 " + dmg + " 피해" +
         (b.cmds[t] === "guard" ? " (방어)" : "") +
-        (b.mods[t + "_guard"] ? " (교정)" : ""), heavy ? "heavy" : "bad");
+        (b.mods[t + "_guard"] ? " (교정)" : "") +
+        (b.mods[t + "_taunt"] ? " (도발)" : "") +
+        (b.mods[t + "_immune"] ? " (갑주)" : "") +
+        (b.mods[t + "_fragile"] ? " (강공)" : "") +
+        (t === hero && heroPct ? " (책임)" : ""), heavy ? "heavy" : "bad");
 
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     render();
+
+    /* 반격 — 맞고도 살아 있으면 확정 치명타(×v)로 되받아친다 */
+    if (b.mods[t + "_counter"] && alive(t)) {
+      const cst = effStats(t);
+      const cdmg = Math.max(1, Math.floor(cst.atk * b.mods[t + "_counter"] + rnd(4) - b.def));
+      b.hp -= cdmg;
+      say(memberName(t) + "의 반격! — " + cdmg + " 피해", "crit");
+      foeHit(0);
+      checkJoinIn();
+      render();
+      if (b.hp <= 0) return setTimeout(victory, RULE.turnGapMs);
+    }
 
     if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
     setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
@@ -3289,6 +3577,8 @@ function resolveTurn() {
 
 function victory() {
   const b = S.battle;
+  if (!S.arc) S.arc = { kills: 0, retribution: {} };
+  S.arc.kills = (S.arc.kills || 0) + 1;         // 광신 — 이번 갈래 처치 수
   const reward = storyPays()
     ? earn(Math.floor((b.maxhp + b.atk * 4) / 6) * (b.boss ? 2 : 1))
     : 0;
@@ -3434,6 +3724,7 @@ function chapterEnd() {
 function closeModal() { $modal.classList.remove("on"); }
 
 function openParty(done) {
+  resetArcIfIdle();
   $modal.classList.add("on");
   let picking = ownParty().slice();          /* 조력자는 고르는 목록에 두지 않습니다 */
 
@@ -4000,6 +4291,7 @@ function openNotice(then) {
 }
 
 function openShop(back) {
+  resetArcIfIdle();
   $modal.classList.add("on");
 
   const draw = (msg) => {
@@ -5182,6 +5474,9 @@ function startMirror(tier, preIds) {
     return;
   }
 
+  /* 거울 던전에 들어서는 자리라 「이번 갈래」를 새로 엽니다 — 광신·보복 스택 리셋 */
+  S.arc = { kills: 0, retribution: {} };
+
   /* 관측해 둔 것이 있으면 그대로 씁니다 — 다시 뽑으면 관측한 것과 달라져 버립니다.
    * 관측 없이 바로 들어왔으면(preIds 없음) 여기서 새로 뽑습니다 — 예전처럼 부딪쳐 봐야 압니다. */
   const ids = (preIds && preIds.length) ? preIds : buildMirrorFoes(rule);
@@ -5935,6 +6230,11 @@ function openSync(back) {
       const lv = syncLevel(who);
       const maxed = lv >= cap;
       const cost = syncCost(lv);
+      const skill = UNIQUE_SKILLS[who];
+      const skillHTML = (skill && lv >= 1)
+        ? '　·　<span class="uskill"><b>' + skill.name + '</b> ' +
+            skill.desc(skillTierValue(skill, lv)) + '</span>'
+        : '';
       h += '<div class="syncrow">' +
              (maxed ? '<button disabled>상한 도달</button>'
                     : '<button data-sync="' + who + '">동기화　' + cost + '</button>') +
@@ -5944,6 +6244,7 @@ function openSync(back) {
                  (lv > 0 ? '동기화 ' + lv + '단계' : '아직 동기화되지 않음') +
                  (maxed ? ' (상한)' : '') +
                  '　·　파편 ' + fragCount(who) + '개' +
+                 skillHTML +
                '</div>' +
              '</div>' +
            '</div>';
@@ -5970,8 +6271,12 @@ function openSync(back) {
         if (!S.sync) S.sync = {};
         S.sync[who] = lv + 1;
         saveVault(); render();
-        syncFlash(lv + 1, s.quote, () =>
-          draw(s.name + " — 동기화 " + (lv + 1) + "단계에 이르렀다."));
+        const newLevel = lv + 1;
+        const settled = () => draw(s.name + " — 동기화 " + newLevel + "단계에 이르렀다.");
+        const skill = UNIQUE_SKILLS[who];
+        if (skill && UNIQUE_SKILL_TIERS.includes(newLevel))
+          uniqueSkillFlash(newLevel, s.quote, skill.name, settled);
+        else syncFlash(newLevel, s.quote, settled);
       };
     });
     document.getElementById("syclose").onclick = () => { closeModal(); render(); if (back) back(); };

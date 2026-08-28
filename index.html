@@ -170,6 +170,8 @@
   .pcard .allytag{color:#e07aa8;font-size:11px;letter-spacing:.06em;}
   /* 조력자는 이름도 제 색으로 강조합니다 — data/allies.js 의 color */
   .pcard .nm .allyname{font-weight:700;}
+  /* 고유 능력 패시브 스택 — 광신 n, 격노 n 같은 것. 다른 태그와 안 겹치는 보라 */
+  .pcard .stacktag{color:#b48ce0;font-size:11px;letter-spacing:.06em;}
   .pcard .aimtag  {color:#c8403a;font-size:11px;letter-spacing:.06em;}
   .pcard .turntag {color:#5ec26a;font-size:11px;letter-spacing:.1em;}
   .pcard .readytag{color:#b9b4ae;font-size:11px;letter-spacing:.06em;}
@@ -232,8 +234,8 @@
     display:flex;align-items:center;gap:12px;
     border:1px solid #2a2a30;background:#131318;padding:9px 11px;margin-top:8px;
   }
-  .syncrow button{flex:none;white-space:nowrap;}
-  .syncrow .body{flex:1;min-width:0;}
+  .syncrow button{flex:none;white-space:nowrap;order:2;}
+  .syncrow .body{flex:1;min-width:0;order:1;}
   .syncrow .nm{color:#e8e4de;font-weight:700;}
   .syncrow .sub{color:#8b8681;font-size:11.5px;margin-top:2px;}
 
@@ -311,6 +313,16 @@
   .mgsk i{color:#8a7440;font-style:normal;font-size:11px;}
   .mgsk.off{opacity:.42;}
 
+  /* 작성위원 고유 능력 설명 — 관리력 칸(탠·금색)과 색으로 갈리게 회색·흰색 */
+  .uskill{
+    border:1px solid #4a4a54;background:#3a3a42;color:#f2f2f2;
+    font-size:11.5px;padding:2px 9px;display:inline-flex;gap:7px;align-items:baseline;
+  }
+  .uskill b{color:#ffffff;font-weight:700;}
+  /* 손잡이(#actions)보다도 아래, 화면 맨 아래 자리 */
+  .uskillbox{margin-top:10px;}
+  .uskillbox:not(:empty){border-top:1px dashed #2a2a30;padding-top:8px;}
+
   #actions{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;}
   button{
     background:#16161b;border:1px solid #34343c;color:#c9c5c0;
@@ -320,6 +332,9 @@
   button:disabled{opacity:.35;cursor:default;}
   button.primary{border-color:#7a2b28;color:#e6b0ac;}
   button.ghost{border-color:#2a2a30;color:#7d7a76;}
+  /* 작성위원 고유 능력 손잡이 — 보라색으로 따로 갈린다 */
+  button.skill{border-color:#6f4a91;color:#c9a8e6;}
+  body.battling button.skill{border-color:#7d55a8;color:#d3b6ef;}
   .codein{
     background:#0b0b0f;border:1px solid #34343c;color:#e8e4de;
     font-family:inherit;font-size:14px;padding:7px 12px;min-width:180px;outline:none;
@@ -437,6 +452,16 @@
   .flashfx.red .txt .line{color:#f0c4c0;text-shadow:0 0 14px rgba(224,80,72,.6);}
   .flashfx.red .txt .star{color:#ffb3ac;}
   .flashfx.red .tap{color:#cc8480;}
+  /* 동기화 1·4·8·12단계 — 고유 능력 해금·강화. 금빛도 붉은빛도 아닌 흰빛으로 */
+  .flashfx.white{
+    background:radial-gradient(circle at 50% 50%, rgba(255,255,255,.34), rgba(0,0,0,.88) 62%);
+  }
+  .flashfx.white .ring{border-color:#ffffff;box-shadow:0 0 40px 12px rgba(255,255,255,.6);}
+  .flashfx.white .beam{background:#ffffff;box-shadow:0 0 26px 7px rgba(255,255,255,.8);}
+  .flashfx.white .txt{color:#ffffff;text-shadow:0 0 24px rgba(255,255,255,.95);}
+  .flashfx.white .txt .line{color:#eaeaea;text-shadow:0 0 14px rgba(255,255,255,.6);}
+  .flashfx.white .txt .star{color:#ffffff;}
+  .flashfx.white .tap{color:#cfcfcf;}
   @keyframes flashbg{
     0%{opacity:0;} 12%{opacity:1;} 100%{opacity:1;}
   }
@@ -662,6 +687,7 @@
   <div id="manage"></div>
   <div id="enk"></div>
   <div id="actions"></div>
+  <div id="uniqueskills" class="mgskills uskillbox"></div>
 </div>
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
@@ -669,6 +695,7 @@
 <script src="data/access.js"></script>
 <script src="data/vault.js"></script>
 <script src="data/characters.js"></script>
+<script src="data/skills.js"></script>
 <script src="data/allies.js"></script>
 <script src="data/gifts.js"></script>
 <script src="data/pickup.js"></script>
