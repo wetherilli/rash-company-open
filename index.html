@@ -343,6 +343,21 @@
   .patch .pv .pfold{display:inline-block;width:14px;color:#8b8681;font-weight:400;}
   .patch.folded .pl{display:none;}
   .patch.folded{padding:8px 14px;}
+  /* 한참 지난 판들 — <details> 로 접어 두고, 기본은 닫힌 채입니다 */
+  .patchold{margin-top:8px;}
+  .patchold > summary{
+    cursor:pointer;color:#8b8681;font-size:12.5px;padding:6px 2px;user-select:none;
+  }
+  .patchold > summary:hover{color:#c2bfba;}
+  /* 창 오른쪽 위에 늘 떠 있는 닫기 — 패치 노트가 길어져도 스크롤 없이 바로 닫습니다.
+   * #modal 의 형제라 위치가 뷰포트 기준으로 고정됩니다(#app 의 흔들림과 무관). */
+  .modaltopclose{
+    position:fixed;top:16px;right:16px;z-index:21;
+    width:32px;height:32px;line-height:30px;text-align:center;padding:0;
+    background:#16161b;border:1px solid #3a3a42;color:#c9c5c0;
+    font-size:18px;font-family:inherit;cursor:pointer;
+  }
+  .modaltopclose:hover{border-color:#c8403a;color:#f0d79c;}
   /* 지난번 접속 뒤에 새로 나온 덩이 */
   .patch .pv .pnew{
     color:#0a0a0c;background:#d8b26a;font-size:10px;font-weight:700;

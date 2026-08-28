@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.3.4";
+const VERSION = "1.3.6";
 const VERSION_NAME = "거울굴절철도";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -794,6 +794,10 @@ function newState() {
  *  판이 새로 올라가면 다시 나타납니다.
  */
 const PATCH_SEEN_KEY = "rash_company_patch_seen";
+/* 판이 쌓일수록 목록이 계속 길어지므로, 최근 것만 바로 보여 주고
+ * 그보다 오래된 것은 <details> 로 접어 기본값을 «숨김»으로 둡니다.
+ * 새로 나온 판(patchIsNew)은 이 수보다 적어도 항상 다 보입니다. */
+const PATCH_RECENT = 6;
 
 function patchList() { return (typeof PATCH_NOTES !== "undefined" && PATCH_NOTES) ? PATCH_NOTES : []; }
 function patchHidden() { return Store.get(PATCH_SEEN_KEY) === VERSION; }
@@ -807,25 +811,9 @@ function patchIsNew(p, i) {
   return verCmp(p.ver, LAST_VER) > 0;
 }
 
-function openPatch(back) {
-  $modal.classList.add("on");
-  const list = patchList();
-  const news = list.filter(patchIsNew);
-
-  let h = '<h2>패 치 노 트</h2>' +
-          '<div class="hint">지금 판은 <b>v' + VERSION + ' «' + VERSION_NAME + '»</b> 입니다.' +
-          (LAST_VER
-            ? (news.length
-                ? '　지난번에 보신 <b>v' + LAST_VER + '</b> 뒤로 <b style="color:#d8b26a">' +
-                  news.length + '개</b>가 새로 나왔습니다. 그것만 펼쳐 두었습니다.'
-                : '　지난번 <b>v' + LAST_VER + '</b> 뒤로 새로 나온 것은 없습니다.')
-            : '　머리를 누르면 접었다 펼 수 있습니다.') +
-          '</div>';
-
-  if (!list.length) h += '<div class="hint">아직 적어 둔 것이 없습니다.</div>';
-  list.forEach((p, i) => {
-    const 새것 = patchIsNew(p, i);
-    h += '<div class="patch' + (i === 0 ? ' now' : '') + (새것 ? '' : ' folded') +
+/* 패치 항목 하나를 그린다 — 최근 목록과 <details> 안의 옛 목록이 함께 씁니다. */
+function patchEntryHtml(p, i, 새것) {
+  return '<div class="patch' + (i === 0 ? ' now' : '') + (새것 ? '' : ' folded') +
            '" data-patch="' + i + '">' +
            '<div class="pv">' +
              '<span class="pfold">' + (새것 ? '▾' : '▸') + '</span>' +
@@ -836,7 +824,39 @@ function openPatch(back) {
              (p.lines || []).map(x => '<li>' + x + '</li>').join("") +
            '</ul>' +
          '</div>';
-  });
+}
+
+function openPatch(back) {
+  $modal.classList.add("on");
+  const list = patchList();
+  const news = list.filter(patchIsNew);
+  /* 최근 것(새로 나온 판 포함)은 바로 보여 주고, 그보다 오래된 것은
+   * <details> 뒤로 접어 기본으로 숨겨 둡니다 — 목록이 길어질수록 여기서 갈립니다. */
+  const cut  = Math.max(PATCH_RECENT, news.length);
+  const recent = list.slice(0, cut);
+  const older  = list.slice(cut);
+
+  let h = '<button id="pttopclose" class="modaltopclose" title="닫기">×</button>' +
+          '<h2>패 치 노 트</h2>' +
+          '<div class="hint">지금 판은 <b>v' + VERSION + ' «' + VERSION_NAME + '»</b> 입니다.' +
+          (LAST_VER
+            ? (news.length
+                ? '　지난번에 보신 <b>v' + LAST_VER + '</b> 뒤로 <b style="color:#d8b26a">' +
+                  news.length + '개</b>가 새로 나왔습니다. 그것만 펼쳐 두었습니다.'
+                : '　지난번 <b>v' + LAST_VER + '</b> 뒤로 새로 나온 것은 없습니다.')
+            : '　머리를 누르면 접었다 펼 수 있습니다.') +
+          '</div>';
+
+  if (!list.length) h += '<div class="hint">아직 적어 둔 것이 없습니다.</div>';
+  recent.forEach((p, i) => { h += patchEntryHtml(p, i, patchIsNew(p, i)); });
+  if (older.length) {
+    h += '<details class="patchold"><summary>지난 판 더 보기 (' + older.length + '개)</summary>';
+    older.forEach((p, i0) => {
+      const i = cut + i0;
+      h += patchEntryHtml(p, i, patchIsNew(p, i));
+    });
+    h += '</details>';
+  }
 
   h += '<div class="modalfoot">' +
          '<button id="ptclose">닫기</button>' +
@@ -865,7 +885,9 @@ function openPatch(back) {
     모두.textContent = 펼칠까 ? "모두 접기" : "모두 펼치기";
   };
 
-  document.getElementById("ptclose").onclick = () => { closeModal(); if (back) back(); };
+  const doClose = () => { closeModal(); if (back) back(); };
+  document.getElementById("ptclose").onclick = doClose;
+  document.getElementById("pttopclose").onclick = doClose;
   document.getElementById("pthide").onclick = () => {
     patchHide();
     closeModal();
