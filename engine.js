@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.5.0";
+const VERSION = "1.5.1";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1795,13 +1795,13 @@ function showFoe(src, tag)     { drawStage(src, "mid", tag); }
 /* 효과음을 한 번 재생한다. assets/sound/ 의 파일을 씁니다.
  * 자동재생이 막혀 있어도(브라우저 정책) 조용히 넘어갑니다 — 화면을 막지 않습니다.
  * 만든 Audio 를 돌려줍니다 — «끝나면」을 기다려야 하는 자리(startBossCine)에서 씁니다. */
-function playSound(src) {
+function playSound(src, onBlocked) {
   if (!src) return null;
   try {
     const a = new Audio(src);
-    a.play().catch(() => {});
+    a.play().catch(() => { if (onBlocked) onBlocked(); });
     return a;
-  } catch (e) { return null; }
+  } catch (e) { if (onBlocked) onBlocked(); return null; }
 }
 
 /* 맞는 연출 — 참격이 한 번 그어지고, 적이 좌우로 흔들리며 점멸한다 */
@@ -2823,9 +2823,9 @@ function startBossCine(s) {
   const showVoice = onDone => {
     drawStage(null, null, null);              // 배경만 도로 보인다. 보스 그림은 아직 안 낸다
     if (f.intro && f.intro !== "TODO") say(f.intro, "bad");
-    const audio = playSound(f.sound);
     let done = false;
     const finish = () => { if (done) return; done = true; onDone(); };
+    const audio = playSound(f.sound, finish);   // 자동재생이 막히면 여기서 곧바로 넘어간다
     if (audio) { audio.addEventListener("ended", finish); audio.addEventListener("error", finish); }
     setTimeout(finish, RULE.cineVoiceMaxMs);
   };
