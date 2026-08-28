@@ -403,6 +403,16 @@
   .flashfx.green .txt .line{color:#c8ead2;text-shadow:0 0 14px rgba(189,246,206,.6);}
   .flashfx.green .txt .star{color:#bdf6ce;}
   .flashfx.green .tap{color:#8fbd9c;}
+  /* 동기화 단계가 오를 때 — 금빛 대신 붉은빛 (전투 화면과 같은 색) */
+  .flashfx.red{
+    background:radial-gradient(circle at 50% 50%, rgba(224,80,72,.30), rgba(0,0,0,.88) 62%);
+  }
+  .flashfx.red .ring{border-color:#f0928a;box-shadow:0 0 40px 12px rgba(224,80,72,.55);}
+  .flashfx.red .beam{background:#ffb3ac;box-shadow:0 0 26px 7px rgba(255,106,94,.75);}
+  .flashfx.red .txt{color:#ffb3ac;text-shadow:0 0 24px rgba(224,80,72,.9);font-size:32px;}
+  .flashfx.red .txt .line{color:#f0c4c0;text-shadow:0 0 14px rgba(224,80,72,.6);}
+  .flashfx.red .txt .star{color:#ffb3ac;}
+  .flashfx.red .tap{color:#cc8480;}
   @keyframes flashbg{
     0%{opacity:0;} 12%{opacity:1;} 100%{opacity:1;}
   }

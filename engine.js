@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.3.2";
+const VERSION = "1.3.3";
 const VERSION_NAME = "거울굴절철도";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1826,18 +1826,17 @@ function buttons(list) {
   });
 }
 
-/* ── 배정에서 ★★★ 이 나왔을 때 ─────────────────────────────────
+/* ── 화면이 한 번 크게 빛나는 연출 ───────────────────────────────
  *  결과를 바로 보여주지 않고, 한 번 크게 빛낸 뒤에 펼칩니다.
  *  길이는 RULE.gachaFxMs 에서 고칩니다. 0 으로 두면 그냥 넘어갑니다.
- */
-/* green 을 켜면 금빛 대신 초록빛으로 터집니다 — 특정 배정의 대상이 나왔을 때 */
-function starFlash(star, line, after, green) {
+ *  cls 로 색을 고릅니다 — 비우면 금빛, "green"/"red" 등 flashfx 변형 클래스. */
+function flashFx(headlineHTML, line, after, cls) {
   if (!RULE.gachaFxMs) { if (after) after(); return; }
   const el = document.createElement("div");
-  el.className = "flashfx" + (green ? " green" : "");
+  el.className = "flashfx" + (cls ? " " + cls : "");
   el.innerHTML = '<div class="ring"></div>' +
                  '<div class="beam"></div>' +
-                 '<div class="txt"><span class="star">' + stars(star) + '</span>' +
+                 '<div class="txt"><span class="star">' + headlineHTML + '</span>' +
                    (line ? '<div class="line">“' + line + '”</div>' : '') +
                  '</div>' +
                  '<div class="tap">눌러서 계속</div>';
@@ -1863,6 +1862,16 @@ function starFlash(star, line, after, green) {
     el.onclick = close;
     document.addEventListener("keydown", onKey, true);
   }, RULE.gachaFxMs);
+}
+
+/* 배정에서 ★★★ 이 나왔을 때. green 을 켜면 금빛 대신 초록빛 — 특정 배정의 대상이 나왔을 때 */
+function starFlash(star, line, after, green) {
+  flashFx(stars(star), line, after, green ? "green" : null);
+}
+
+/* 동기화 단계가 올랐을 때 — 붉게 빛나며 오른 단계와 그 작성위원의 대표 대사를 보여준다 */
+function syncFlash(level, quote, after) {
+  flashFx("동기화 " + level + "단계", quote, after, "red");
 }
 
 /* 이번 묶음에서 처음 손에 넣은 ★★★ — 없으면 null.
@@ -3225,14 +3234,30 @@ function defeat() {
   }
   const scene = b.scene;
   S.battle = null;
+
+  /* 익스트림 거울 던전·거울굴절철도처럼 길잡이가 중간에 들르는 갈래는, 그 자리를
+   * 지난 뒤에 지면 그 보스만 다시 하는 대신 «길잡이를 다시 만나는 자리»로 돌아갑니다
+   * — 체력·관리력을 다시 채우고(case "rest") 편성도 다시 손볼 수 있게(rest.party).
+   * 아직 그 자리를 지나지 않았으면(앞쪽 보스에서 졌으면) 예전처럼 그 보스만 다시 합니다. */
+  const mrule = S.mirror ? mirrorRuleNow() : null;
+  const cp = (mrule && mrule.rest && S.mirrorCheckpoint != null && S.sc - 1 > S.mirrorCheckpoint)
+    ? S.mirrorCheckpoint : null;
+
   buttons([
-    { label: "다시 도전", cls: "primary", fn: () => {
-        S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
-        S.waiting = false; startBattle(scene);
-      } },
-    /* 이 전투가 정해진 인원으로만 돌아가는 것이면, 패배 후 편성을 바꿔
-     * 강제를 우회하지 못하도록 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
-    scene.party ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
+    cp != null
+      ? { label: mrule.rest.who + "에게로", cls: "primary", fn: () => {
+          S.waiting = false;
+          S.sc = cp;
+          next();
+        } }
+      : { label: "다시 도전", cls: "primary", fn: () => {
+          S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+          S.waiting = false; startBattle(scene);
+        } },
+    /* 이 전투가 정해진 인원으로만 돌아가는 것이거나, 돌아갈 자리(cp)에서 편성을
+     * 다시 손볼 수 있으면, 패배 후 편성을 바꿔 강제를 우회하지 못하도록
+     * 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
+    (cp != null || scene.party) ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
         S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
         S.waiting = false; startBattle(scene);
       }) },
@@ -3928,6 +3953,10 @@ function openShop(back) {
                ? '중복이면 ' + CURRENCY + ' ' + dupRefundText()
                : '황금교본이 모자랍니다') + '</div>' +
            '</div>' +
+         '</div>';
+
+    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">인격 교환</div>' +
+         '<div class="grid">' +
            '<div class="slot"' + (exCan ? ' data-exchange="1"' : '') + '>' +
              '<div class="' + (exCan ? 'nm' : 'lock') + '">인격 교환</div>' +
              '<div class="sub">그 사람 몫 파편 ' + RULE.fragExchange + '개로 미보유 인격 하나를 정가로 바꿉니다</div>' +
@@ -4710,12 +4739,15 @@ const MIRROR_EXTREME = {
   cost: ENK_RULE.costExtreme,
 
   /* 셋을 넘기면 길잡이가 한 번 들릅니다.
-   * 다섯을 쉬지 않고 붙는 것은 사람이 할 짓이 아니라, 가운데에 숨 돌릴 자리를 둔 것입니다. */
+   * 다섯을 쉬지 않고 붙는 것은 사람이 할 짓이 아니라, 가운데에 숨 돌릴 자리를 둔 것입니다.
+   * party: true — 이 자리가 «패배해도 돌아오는 자리»(defeat() 의 mirrorCheckpoint)이기도
+   * 하므로, 다시 돌아왔을 때도 편성을 다시 짤 수 있게 열어 둡니다. */
   rest: {
     after: 3,
     who:  "베르렐리우스",
     say:  "이런 곳에서 시간만 죽이고 있었나...",
-    text: "길잡이가 관리력과 체력을 전부 회복시켰다."
+    text: "길잡이가 관리력과 체력을 전부 회복시켰다.",
+    party: true
   }
 };
 
@@ -4755,7 +4787,8 @@ const MIRROR_RAIL1 = {
   warn: "본편보다 훨씬 강한 갈래입니다. 동기화 단계와 시너지를 충분히 갖추지 않으면 버티기 어렵습니다.",
 
   /* 넷을 넘기면 길잡이가 들릅니다. 체력·관리력을 채우고, 편성도 손볼 수 있습니다 —
-   * 앞의 넷을 겪어 보고 뒤의 셋을 다시 짤 자리를 주려는 것입니다. */
+   * 앞의 넷을 겪어 보고 뒤의 셋을 다시 짤 자리를 주려는 것입니다.
+   * 이 자리가 «패배해도 돌아오는 자리»(defeat() 의 mirrorCheckpoint)이기도 합니다. */
   rest: {
     after: 4,
     who:  "베르렐리우스",
@@ -5048,11 +5081,14 @@ function startMirror(tier, preIds) {
   const scenes = [{ t: "place", img: mirrorBG(rule), name: rule.name },
                   { t: "n", text: 첫줄 },
                   { t: "n", text: "쉴 틈은 없다. " + countWord(ids.length) + " 연달아 상대해야 한다." }];
+  /* 길잡이가 들르는 자리(있으면) — 그 뒤로 지면 이 자리로 돌아옵니다. defeat() 참고. */
+  S.mirrorCheckpoint = null;
   ids.forEach((id, i) => {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
     scenes.push({ t: "battle", foe: id });
     /* 정해진 수를 넘기면 길잡이가 한 번 들러 세워 놓고 갑니다 */
     if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length) {
+      S.mirrorCheckpoint = scenes.length;   // 이 rest 장면이 설 자리
       scenes.push({ t: "rest", who: rule.rest.who, say: rule.rest.say, text: rule.rest.text });
       /* 편성까지 손볼 수 있는 자리라면 쉬는 김에 한 번 물어봅니다 —
        * 앞의 것들을 겪어 보고 뒤를 다시 짜라는 뜻입니다. */
@@ -5820,7 +5856,8 @@ function openSync(back) {
         if (!S.sync) S.sync = {};
         S.sync[who] = lv + 1;
         saveVault(); render();
-        draw(s.name + " — 동기화 " + (lv + 1) + "단계에 이르렀다.");
+        syncFlash(lv + 1, s.quote, () =>
+          draw(s.name + " — 동기화 " + (lv + 1) + "단계에 이르렀다."));
       };
     });
     document.getElementById("syclose").onclick = () => { closeModal(); render(); if (back) back(); };
