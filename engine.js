@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.5.1";
+const VERSION = "1.5.2";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -220,6 +220,8 @@ function vaultBody() {
     /* 동기화 — 작성위원마다 파편을 태워 올리는 단계. { who: 단계 }. 0단계(안 적힘)는
      * 담지 않는다 — vaultValueText 가 어차피 null·undefined 를 걸러 낸다. */
     sync:     S.sync || {},
+    /* 인격 파편 상자 — 보관함에서 바로 쓰는 소모품. { select: 개수, random: 개수 } */
+    fragBox:  S.fragBox || { select: 0, random: 0 },
     newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
     enk:      S.enk || null,
     /* 이미 받은 우편. 이것을 빠뜨리면 받은 표시가 안 남아 무한정 다시 받힙니다. */
@@ -255,6 +257,7 @@ function loadVault() {
     codex:    v.codex,
     frags:    v.frags || {},
     sync:     v.sync || {},
+    fragBox:  v.fragBox || { select: 0, random: 0 },
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     ver:      v.ver || null
@@ -291,7 +294,7 @@ function vaultSig(o) {
     j(o.achieved), j(o.cleared),
     /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다. */
     j(o.mailTaken), o.newbie,
-    o.money, o.codex, jm(o.frags), jm(o.sync), o.ver
+    o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), o.ver
   ].join("|"));
 }
 /* v1.0.13 까지 쓰던 셈법입니다 (frags·sync 가 생기기 전 것). 그때 나간
@@ -670,6 +673,10 @@ function newState() {
   if (v && v.frags) for (const who in v.frags) if (SINNERS[who]) frags[who] = v.frags[who];
   const sync = {};
   if (v && v.sync) for (const who in v.sync) if (SINNERS[who]) sync[who] = v.sync[who];
+  const fragBox = {
+    select: (v && v.fragBox && +v.fragBox.select) || 0,
+    random: (v && v.fragBox && +v.fragBox.random) || 0
+  };
 
   /* 받은 우편 — 기간이 지난 것은 저장소에서도 지운다. mailLive() 가 이미 시간으로
    * 화면을 가리므로 «막으려는» 목적은 아니고, 다 지난 열쇠를 언제까지고 안고 갈
@@ -754,6 +761,13 @@ function newState() {
         fAfter += frags[who];
       }
       if (fBefore > 0) verNote.frags = { before: fBefore, after: fAfter };
+
+      /* 인격 파편 상자도 같은 자리에서 절반(버림)으로 줄인다 — 사용자 지침 */
+      const bxBefore = fragBox.select + fragBox.random;
+      fragBox.select = Math.floor(fragBox.select / 2);
+      fragBox.random = Math.floor(fragBox.random / 2);
+      const bxAfter = fragBox.select + fragBox.random;
+      if (bxBefore > 0) verNote.fragBox = { before: bxBefore, after: bxAfter };
     }
   }
 
@@ -768,6 +782,7 @@ function newState() {
     achieved: achievedMap,
     frags,
     sync,
+    fragBox,
     mailTaken,
     hp: {},                 // who -> 현재 체력 (없으면 최대)
     money,
@@ -915,6 +930,8 @@ function versionNotice() {
       n.before + " → " + n.after, "bad");
   if (n.frags)
     say("인격 파편도 절반으로 줄었습니다 — " + n.frags.before + " → " + n.frags.after, "bad");
+  if (n.fragBox)
+    say("인격 파편 상자도 절반으로 줄었습니다 — " + n.fragBox.before + " → " + n.fragBox.after, "bad");
   divider();
 }
 
@@ -1226,6 +1243,29 @@ function addFrag(who, n) {
   if (!n) return;
   if (!S.frags) S.frags = {};
   S.frags[who] = (S.frags[who] || 0) + n;
+}
+
+/* ── 인격 파편 상자 ────────────────────────────────────────────
+ *  보관함에서 바로 쓰는 소모품. 열면 인격 파편이 나온다.
+ *    select  — 쓸 개수를 고른 뒤, «누구» 몫으로 받을지도 고른다. 그 한 명에게 몰아 준다.
+ *    random  — 쓸 개수만 고르면, 12명에게 임의로 흩어 나눠 준다.
+ *  둘 다 실제로는 «쓴 개수의 2배» 만큼 파편이 나오는 고정값이다.
+ *  화면에는 "1개당 1~3개" 라고만 적어 정확한 배율을 감춘다 — 사용자 지침.
+ *  무작위는 낱개(1개)씩 임의의 사람에게 얹는 방식으로 나누므로, 몫은 늘 자연수이고
+ *  합은 언제나 (쓴 개수 × 2) 와 정확히 같다. */
+const FRAGBOX_RULE = {
+  mult: 2,
+  desc: "상자 1개당 1~3개의 파편이 들어있습니다."
+};
+const FRAGBOX_KINDS = [
+  { key: "select", name: "인격 파편 상자 (선택)" },
+  { key: "random", name: "인격 파편 상자 (무작위)" }
+];
+function fragBoxCount(kind) { return (S.fragBox && S.fragBox[kind]) || 0; }
+function addFragBox(kind, n) {
+  if (!n) return;
+  if (!S.fragBox) S.fragBox = { select: 0, random: 0 };
+  S.fragBox[kind] = (S.fragBox[kind] || 0) + n;
 }
 
 /* ── 동기화 ────────────────────────────────────────────────────
@@ -1757,10 +1797,12 @@ function setBackdrop(src, placeName) {
   drawStage(null, null, null);
 }
 
-/* fig  : 배경 위에 얹을 그림 (없으면 배경만)
- * side : "left" 대사하는 사람 · "mid" 적
- * tag  : 그림에 붙일 이름 (지금은 화면에 쓰지 않고 alt 로만)      */
-function drawStage(fig, side, tag) {
+/* fig   : 배경 위에 얹을 그림 (없으면 배경만)
+ * side  : "left" 대사하는 사람 · "mid" 적
+ * tag   : 그림에 붙일 이름 (지금은 화면에 쓰지 않고 alt 로만)
+ * scale : 그림만 이 배수로 키운다 (자리는 그대로 — 바닥 가운데를 축으로 키운다).
+ *         원본 그림 안에서 몸집이 작게 잡혀 있는 적(FOES 의 imgScale)에만 씁니다.  */
+function drawStage(fig, side, tag, scale) {
   /* 칸의 높이는 그림에 따라 달라지지 않습니다.
    * 그릴 것이 하나도 없어도 칸은 그대로 있고, 안이 비어 있을 뿐입니다.
    * (그림이 사라질 때마다 화면이 덜컥 접히는 일이 없도록) */
@@ -1774,10 +1816,15 @@ function drawStage(fig, side, tag) {
   if (CUR_BG)
     html += '<img class="scene' + (wide ? '' : ' fit') + '" src="' + assetURL(CUR_BG) + '" alt="" ' +
             'onerror="this.style.display=\'none\'">';
-  if (fig)
+  if (fig) {
+    /* --imgscale 로 넘깁니다(직접 transform 을 박지 않습니다) — 맞을 때·쓰러질 때
+     * 애니메이션도 이 값을 keyframes 안에서 함께 곱하게 index.html 쪽에 맞춰 뒀습니다.
+     * 그래야 맞는 순간 확대가 풀렸다 돌아오는 깜빡임이 없습니다. */
+    const st = (scale && scale !== 1) ? ' style="--imgscale:' + scale + '"' : '';
     html += '<div class="figwrap ' + (side === "mid" ? "mid" : "left") + '">' +
-              '<img id="figure" src="' + assetURL(fig) + '" alt="' + (tag || "") + '" ' +
+              '<img id="figure" src="' + assetURL(fig) + '" alt="' + (tag || "") + '"' + st + ' ' +
               'onerror="this.style.display=\'none\'"></div>';
+  }
   /* 지명은 칸 안쪽 아래에 얹습니다 — 밖에 두면 있고 없고에 따라 높이가 흔들립니다 */
   if (CUR_NAME) html += '<div class="placename">' + CUR_NAME + '</div>';
   html += '</div>';
@@ -1790,7 +1837,7 @@ function hideStage() { $stage.className = ""; $stage.innerHTML = ""; CUR_BG = nu
 /* 대사하는 사람을 왼쪽에 세운다 */
 function showSpeaker(src, tag) { drawStage(src, "left", tag); }
 /* 적을 가운데에 세운다 */
-function showFoe(src, tag)     { drawStage(src, "mid", tag); }
+function showFoe(src, tag, scale) { drawStage(src, "mid", tag, scale); }
 
 /* 효과음을 한 번 재생한다. assets/sound/ 의 파일을 씁니다.
  * 자동재생이 막혀 있어도(브라우저 정책) 조용히 넘어갑니다 — 화면을 막지 않습니다.
@@ -2909,7 +2956,7 @@ function startBattleFight(scene, f) {
     else if (f.intro === "TODO") say("(등장 대사 미작성)", "todo");
     playSound(f.sound);                    // 등장할 때 한 번 — FOES 에 sound 를 적어 둔 적만
   }
-  showFoe(f.img || null, f.name);          // 적은 배경 가운데에 선다
+  showFoe(f.img || null, f.name, f.imgScale || null);   // 적은 배경 가운데에 선다
   S.battle.shown = f.img || null;          // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
   say("▶ " + withJosa(f.name, "이") + " 나타났다!", "bad");
   say("체력 " + f.hp + "　공격 " + f.atk + "　방어 " + f.def, "sys");
@@ -2950,11 +2997,12 @@ function beginTurn() {
    * 크게 휘두를 자세라는 말과 함께 모습이 달라지도록 한 것입니다. */
   {
     const f = FOES[b.id] || {};
-    /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg) */
+    /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg · b.imgScale) */
     const nowImg   = b.img      || f.img      || null;
     const nowHeavy = b.heavyImg || f.heavyImg || null;
+    const nowScale = b.imgScale || f.imgScale || null;
     const want = ((b.heavy || b.aoe) && nowHeavy) ? nowHeavy : nowImg;
-    if (want !== b.shown) { b.shown = want; showFoe(want, b.name); }
+    if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
   if (b.aoe) {
     /* 노려지는 사람이 없으므로 «누구를 노린다» 대신 판 전체를 겨눈다고 알립니다.
@@ -3388,8 +3436,9 @@ function resolveTurn() {
     if (j.heal) b.hp = Math.min(b.maxhp, b.hp + Math.round(b.maxhp * j.heal));
     b.name = f2.name;
     if (f2.heavyLine) b.heavyLine = f2.heavyLine;
-    if (f2.img) { b.img = f2.img; showFoe(f2.img, f2.name); b.shown = f2.img; }
+    if (f2.img) { b.img = f2.img; showFoe(f2.img, f2.name, f2.imgScale || null); b.shown = f2.img; }
     if (f2.heavyImg) b.heavyImg = f2.heavyImg;
+    if (f2.imgScale) b.imgScale = f2.imgScale;
     say("체력 " + b.hp + " / " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
     shakeScreen(true);
   };
@@ -3923,9 +3972,21 @@ let EQUIP_OPEN = {};        // who -> 펴 두었나
 let EQUIP_OWNED_ONLY = true;
 
 function openEquip(back) {
+  /* 강제 편성 중이면(장 강제·전투 강제 — forcePartyPush 참고) 알려 준다.
+   * 아래 각 줄도 지금 편성에 든 사람만 금테를 둘러 눈에 띄게 한다. */
+  const forced = S.partyStack && S.partyStack.length > 0;
+  const forcedNames = forced ? S.party.filter(Boolean).map(w =>
+    isSupport(w) ? (supportBy(w) || {}).name || w :
+    isAlly(w)    ? (allyBy(w)    || {}).name || w :
+    SINNERS[w]   ? SINNERS[w].name : w
+  ).join('・') : '';
+
   let h = '<h2>인 격 장 착</h2>' +
           '<div class="hint">사람 이름을 누르면 그 사람의 인격이 펴집니다. ' +
           '장착 중인 인격은 이름줄에 함께 적힙니다.</div>' +
+          (forced ? '<div class="hint" style="color:#d8b26a">' +
+            '지금은 <b>' + forcedNames + '</b> 으로만 전투에 나갑니다. ' +
+            '인격만 골라 두면, 편성 자체는 이미 짜여 있습니다.</div>' : '') +
           '<div class="eqbar">' +
             '<label class="eqchk"><input type="checkbox" id="eqowned"' +
               (EQUIP_OWNED_ONLY ? ' checked' : '') + '> 보유한 것만 보기</label>' +
@@ -3939,10 +4000,13 @@ function openEquip(back) {
     const cur  = idByKey(S.equip[who]);
     const mine = ownedIds(who).length;
     const tot  = s.ids.filter(i => !i.todo).length;
+    const inParty = forced && S.party.indexOf(who) >= 0;
 
-    h += '<div class="eqhead' + (open ? ' open' : '') + '" data-open="' + who + '">' +
+    h += '<div class="eqhead' + (open ? ' open' : '') + (inParty ? ' inparty' : '') +
+         '" data-open="' + who + '">' +
            '<span class="arrow">' + (open ? '▾' : '▸') + '</span>' +
            '<b>' + s.name + '</b>' +
+           (inParty ? '<span class="partytag">편성 중</span>' : '') +
            '<span class="wearing">' +
              (cur ? '<span class="star">' + stars(cur.star) + '</span> ' + cur.title : '인격 없음') +
            '</span>' +
@@ -5753,6 +5817,8 @@ function mailGiveText(m) {
   if (g.money) out.push(CURRENCY + " " + g.money);
   if (g.codex) out.push("황금교본 " + g.codex);
   if (g.enk)   out.push(ENK_RULE.name + " " + g.enk);
+  if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
+  if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
     out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
@@ -5789,6 +5855,8 @@ function mailTake(m) {
   const got = [];
   if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); }
   if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
+  if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
+  if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
   if (g.enk) {
     enkSync();
     const before = enkCount();
@@ -6329,6 +6397,22 @@ function openVault(back) {
     h += '</div>';
   });
 
+  /* 인격 파편 상자 — 보관함에서 바로 «사용» 하는 자리라 syncrow 로,
+   * 오른쪽 끝에 사용 손잡이를 둔다. 이런 손잡이가 필요 없는 항목은
+   * vaultItemCategories() 에 얹으면 되고, 여기는 손댈 것 없다. */
+  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">인격 파편 상자</div>' +
+       '<div class="hint">' + FRAGBOX_RULE.desc + '</div>';
+  FRAGBOX_KINDS.forEach(k => {
+    const cnt = fragBoxCount(k.key);
+    h += '<div class="syncrow">' +
+           '<button' + (cnt > 0 ? ' data-box="' + k.key + '"' : ' disabled') + '>사용</button>' +
+           '<div class="body">' +
+             '<div class="nm">' + k.name + '</div>' +
+             '<div class="sub">보유 ' + cnt + '개</div>' +
+           '</div>' +
+         '</div>';
+  });
+
   h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
        '<button id="vrec">기록 · 내보내기</button>' +
        '<button id="vreset" class="ghost">보관함 비우기</button></div>';
@@ -6337,6 +6421,107 @@ function openVault(back) {
   document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
   document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
+  $sheet.querySelectorAll("[data-box]").forEach(el => {
+    el.onclick = () => openFragBoxUse(el.dataset.box, back);
+  });
+}
+
+/* ── 인격 파편 상자 사용 ──────────────────────────────────────
+ *  1) 쓸 개수 — 바(슬라이더)로 고른다. 최소 1개, 최대는 지금 가진 개수.
+ *  2) select 만 — 어느 작성위원 몫으로 받을지 고른다.
+ *  3) 파편을 얹고 결과를 보여 준다.
+ */
+function openFragBoxUse(kind, back) {
+  $modal.classList.add("on");
+  const meta = FRAGBOX_KINDS.find(k => k.key === kind);
+  const owned = fragBoxCount(kind);
+  if (!meta || owned <= 0) { openVault(back); return; }
+
+  let h = '<h2>' + meta.name + '</h2>' +
+    '<div class="hint">' + FRAGBOX_RULE.desc + ' 사용할 개수를 고르십시오.  (보유 ' + owned + '개)</div>' +
+    '<div class="hint" id="bxamt" style="color:#e8e4de;font-weight:700;font-size:15px">1개 사용</div>' +
+    '<input type="range" id="bxrange" min="1" max="' + owned + '" value="1" ' +
+      'style="width:100%;accent-color:#c8403a">' +
+    '<div class="modalfoot">' +
+      '<button id="bxcancel" class="ghost">그만두기</button>' +
+      '<button id="bxnext" class="primary">다음</button>' +
+    '</div>';
+  $sheet.innerHTML = h;
+
+  const range = document.getElementById("bxrange");
+  const amt = document.getElementById("bxamt");
+  range.oninput = () => { amt.textContent = range.value + "개 사용"; };
+
+  document.getElementById("bxcancel").onclick = () => openVault(back);
+  document.getElementById("bxnext").onclick = () => {
+    const n = +range.value;
+    if (kind === "random") openFragBoxRandom(n, back);
+    else openFragBoxPickWho(n, back);
+  };
+}
+
+/* 무작위 — 개수(n)만큼 상자를 태워 n×mult 개를 낱개로 12명에게 임의로 흩는다.
+ * 낱개(1)씩 얹으므로 몫은 늘 자연수이고, 합은 언제나 n×mult 와 같다. */
+function openFragBoxRandom(n, back) {
+  if (fragBoxCount("random") < n) { openVault(back); return; }
+  S.fragBox.random -= n;
+  const total = n * FRAGBOX_RULE.mult;
+  const who12 = Object.keys(SINNERS);
+  const got = {};
+  for (let i = 0; i < total; i++) {
+    const w = who12[Math.floor(Math.random() * who12.length)];
+    got[w] = (got[w] || 0) + 1;
+    addFrag(w, 1);
+  }
+  saveVault(); render();
+  say("인격 파편 상자(무작위) " + n + "개를 열어, 파편 " + total + "개를 나눠 받았다.", "gain");
+
+  let h = '<h2>인격 파편 상자 (무작위)</h2>' +
+    '<div class="hint">상자 ' + n + '개를 열어 인격 파편 ' + total + '개를 얻었습니다.</div>' +
+    '<div class="grid">' +
+    Object.keys(got).sort((a, b) => got[b] - got[a]).map(w =>
+      '<div class="slot"><div class="nm">' + SINNERS[w].name + '</div>' +
+        '<div class="sub">+' + got[w] + '개　·　지금 ' + fragCount(w) + '개</div></div>'
+    ).join('') +
+    '</div>' +
+    '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
+  $sheet.innerHTML = h;
+  document.getElementById("bxdone").onclick = () => openVault(back);
+}
+
+/* 선택 — 개수(n)를 정한 뒤 12명 중 «누구 몫으로 받을지» 고르게 한다 */
+function openFragBoxPickWho(n, back) {
+  const gain = n * FRAGBOX_RULE.mult;
+  let h = '<h2>인격 파편 상자 (선택)</h2>' +
+    '<div class="hint">상자 ' + n + '개를 쓰면 인격 파편 ' + gain +
+      '개를 받습니다. 어느 작성위원 몫으로 받겠습니까?</div>' +
+    '<div class="grid">' +
+    Object.keys(SINNERS).map(w =>
+      '<div class="slot" data-who="' + w + '"><div class="nm">' + SINNERS[w].name + '</div>' +
+        '<div class="sub">지금 ' + fragCount(w) + '개</div></div>'
+    ).join('') +
+    '</div>' +
+    '<div class="modalfoot"><button id="bxback" class="ghost">되돌아가기</button></div>';
+  $sheet.innerHTML = h;
+
+  $sheet.querySelectorAll("[data-who]").forEach(el => {
+    el.onclick = () => {
+      if (fragBoxCount("select") < n) { openVault(back); return; }
+      const w = el.dataset.who;
+      S.fragBox.select -= n;
+      addFrag(w, gain);
+      saveVault(); render();
+      say(SINNERS[w].name + " 몫으로 인격 파편 상자(선택) " + n + "개를 써, 파편 " + gain + "개를 얻었다.", "gain");
+
+      let h2 = '<h2>인격 파편 상자 (선택)</h2>' +
+        '<div class="hint">' + SINNERS[w].name + ' 파편 ' + gain +
+          '개를 얻었습니다.  (지금 ' + fragCount(w) + '개)</div>' +
+        '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
+      $sheet.innerHTML = h2;
+      document.getElementById("bxdone").onclick = () => openVault(back);
+    };
+  });
+  document.getElementById("bxback").onclick = () => openFragBoxUse("select", back);
 }
 
 /* ── 보관함 비우기 — 되돌릴 수 없는 자리 ────────────────────────

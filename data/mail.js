@@ -14,10 +14,12 @@
  *    days    받을 수 있는 기간(날). 적지 않으면 아래 MAIL_RULE.days.
  *            from 날 0시부터 days 일 뒤 0시까지입니다 — 「일주일」이면 7.
  *    give    주는 것
- *      money    원고료
- *      codex    황금교본
- *      enk      엔케팔린 (보유 상한을 넘겨 받지는 못합니다)
- *      support  지원 작성위원 — "제목|이름"
+ *      money           원고료
+ *      codex           황금교본
+ *      enk             엔케팔린 (보유 상한을 넘겨 받지는 못합니다)
+ *      support         지원 작성위원 — "제목|이름"
+ *      fragBoxSelect   인격 파편 상자(선택) 개수
+ *      fragBoxRandom   인격 파편 상자(무작위) 개수
  *
  *  ■ 기간이 지나면
  *    목록에는 「기간이 지났습니다」로 남고 받을 수 없습니다.
@@ -34,6 +36,15 @@ const MAIL_RULE = {
 };
 
 const MAILS = [
+  {
+    id: "2026-08-29-unique-skills",
+    title: "작성위원 고유 능력 업데이트 기념 지급",
+    body: "작성위원 12명 모두에게 액티브·패시브 고유 능력이 생겼습니다. " +
+          "동기화를 올려 미리 겪어 보시라고 인격 파편 상자를 담아 드립니다.",
+    from: "2026-08-29",
+    days: 7,
+    give: { fragBoxSelect: 50 }
+  },
   {
     id: "2026-08-26-vault-export",
     title: "보관함 내보내기 오류 관련 보상",

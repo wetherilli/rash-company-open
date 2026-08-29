@@ -311,11 +311,13 @@ const FOES = {
     name: "정체불명의 그림자", hp: 200, atk: 20, def: 8,
     img: "assets/enemy/타나콘다 정체불명.png",
     desc: "어둠 속에서 튀어나온 무언가. 정체를 알아볼 틈도 주지 않는다.",
-    intro: "가로등이 닿지 않는 자리에서, 무언가 빠르게 튀어나온다."
+    intro: "가로등이 닿지 않는 자리에서, 무언가 빠르게 튀어나온다.",
+    noMirror: true   // 각본 전투(lose:"story") 전용 — 거울 던전에는 세우지 않는다
   },
   tanaconda: {
-    name: "타나콘다", hp: 600, atk: 29, def: 13, boss: true,
+    name: "타나콘다", hp: 720, atk: 33, def: 14, boss: true,
     img: "assets/enemy/타나콘다.png",
+    imgScale: 2,   // 원본 그림 안에서 몸집이 작게 잡혀 있어, 자리(위치)는 그대로 두고 키만 키운다
     desc: "구C사 시설에서 탈출한 혼종 괴수. 기다란 몸으로 어둠과 배수로를 미끄러진다.",
     intro: "그 골목의 그림자가 여기 있었다. 이번엔 놓치지 않는다.",
     heavyLine: "키이이이이익—!"
@@ -1803,6 +1805,7 @@ const CHAPTERS = [
     { t: "d", who: "yu_ain", text: "…뭔가 있어요." },
     { t: "n", text: "어둠 속에서 긴 무언가가 빠르게 튀어나와 셋을 덮친다. 어두워서 정체는 알아볼 수 없다." },
     { t: "d", who: "kim_taeseong", text: "뭐야, 이거!" },
+    { t: "n", text: "해당 전투에서는 김태성, 유아인, 이소정 작성위원만을 사용할 수 있습니다." },
 
     { t: "battle", foe: "tanaconda_shadow", party: ["kim_taeseong", "lee_sojeong", "yu_ain"], lose: "story",
       endText: "정체 모를 그것은 상처를 입자, 다시 어둠 속으로 미끄러져 사라진다." },
