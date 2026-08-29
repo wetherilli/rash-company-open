@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.7.3";
-const VERSION_NAME = "괴수살인괴수";
+const VERSION = "1.8.0";
+const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -68,9 +68,13 @@ const RULE = {
   /* 보스 등장 연출(startBossCine) — 맨 처음 만날 때만 자동으로 흐릅니다.
    * cineBlackoutMs   암전으로 머무는 시간
    * cineVoiceMaxMs   등장 음성이 안 들리거나(막힌 자동재생) 아주 길 때를 대비한 최대 대기 —
-   *                  음성이 먼저 끝나면(ended) 그쪽을 따릅니다. */
+   *                  음성이 먼저 끝나면(ended) 그쪽을 따릅니다.
+   * cineNoVoiceMs    애초에 등장 음성이 없는 보스(데이비드 피터스처럼)가 머무는 시간.
+   *                  기다릴 소리가 없는데 cineVoiceMaxMs 를 그대로 쓰면, 등장 대사 한 줄을
+   *                  띄워 놓고 손잡이가 잠긴 채 15초를 서 있게 됩니다. */
   cineBlackoutMs: 1000,
-  cineVoiceMaxMs: 15000
+  cineVoiceMaxMs: 15000,
+  cineNoVoiceMs:  2200
 };
 
 /* ── 엔케팔린 ──────────────────────────────────────────────────
@@ -1883,8 +1887,9 @@ function effStats(who) {
   const a = advisorEffect();                   // 보조 교육위원은 파티 전원에게 걸린다
   const gf = giftBonusFor(who);                // E.G.O 기프트
   const af = advisorBonusFor(who);             // 교육위원이 특정 인격에만 거는 보정
+  const rl = railBonus();                      // 거울굴절철도 2호선 순환 보너스 (밖에서는 전부 0)
   const sy = effSyncLevel(who) * SYNC_RULE.statPct;   // 동기화 — 단계 1당 능력치 전부 +5%
-  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp  + sy)));
+  const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp  + sy + rl.hp)));
   /* 작성위원 고유 능력(패시브) — 광신·격노·보복은 공격력에 얹는 배수,
    * 배임만 방어에 정수를 더하는 플랫 보정이라 따로 더한다. hp는 이미
    * 위에서 구했으므로 그걸 넘겨 준다 (maxHp()를 다시 부르면 effStats가
@@ -1892,8 +1897,8 @@ function effStats(who) {
   const pv = passiveSkillBonus(who, hp);
   /* 깎는 기프트가 있어 배수가 0 아래로 갈 수 있습니다. 바닥을 둡니다 —
    * 공격과 체력은 1, 방어는 0 까지. */
-  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy + pv.atk)));
-  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy)) + pv.def);
+  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy + pv.atk + rl.atk)));
+  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def)) + pv.def);
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   return { atk: atk + Math.round(def * conv), def: def, hp: hp };
@@ -1925,7 +1930,15 @@ function alive(who) { return curHp(who) > 0; }
  * 바꾸기」처럼 S.mirror·S.battle 이 아직 서 있는 자리)에는 지우면 안 되므로
  * 거기서는 그냥 둔다. */
 function resetArcIfIdle() {
-  if (!S.battle && !S.mirror) S.arc = { kills: 0, retribution: {} };
+  if (!S.battle && !S.mirror) {
+    S.arc = { kills: 0, retribution: {} };
+    /* 2호선을 도중에 빠져나온 자리이기도 합니다 — 순환 보너스도 여기서 함께 걷습니다.
+     * 「굴레」로 늘어나 있던 체력 상한이 도로 줄어드니 넘치는 몫을 깎아 맞춥니다. */
+    if (S.rail2) {
+      S.rail2 = null;
+      S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+    }
+  }
 }
 
 /* 유아인의 「보복」— 아군이 죽을 때마다 스택, 자신이 죽으면 초기화.
@@ -2366,10 +2379,20 @@ function renderFoeBar() {
   if (!b) { $foehp.classList.remove("on"); $foehp.innerHTML = ""; return; }
   $foehp.classList.add("on");
   const pct = Math.max(0, Math.round(b.hp / b.maxhp * 100));
+  /* ── 순환 눈금 (거울굴절철도 2호선) ────────────────────────────
+   *  열 몇 판을 내리 붙는 갈래라, 지금이 «몇 순환의 몇 번째» 인지 화면에 없으면
+   *  금세 길을 잃습니다. 장면에 붙여 둔 rail 을 그대로 읽어 적습니다
+   *  (railCycleScenes · railFinalScenes 참고). 다른 갈래에는 rail 이 없어 뜨지 않습니다. */
+  const rl = b.scene && b.scene.rail;
+  const 눈금 = !rl ? "" :
+    ' <i class="railtag">' +
+      (rl.final ? "종착역" : rl.cycle + "순환 · " + rl.no + "번째") +
+      '　' + railScaleText(rl.k) +
+    '</i>';
   $foehp.innerHTML =
     '<div class="hpbar"><i style="width:' + pct + '%"></i></div>' +
     '<div class="row">' +
-      '<span class="nm">' + b.name + '</span>' +
+      '<span class="nm">' + b.name + 눈금 + '</span>' +
       '<span class="stat">공 ' + b.atk + '　방 ' + b.def + '</span>' +
     '</div>';
 }
@@ -3348,7 +3371,11 @@ function startBossCine(s) {
       a.addEventListener("ended", finish, { once: true });   // 다시 쓰는 객체라 once 로 답니다
       a.addEventListener("error", finish, { once: true });
     };
-    const wait = () => { clearTimeout(timer); timer = setTimeout(finish, RULE.cineVoiceMaxMs); };
+    /* 기다릴 소리가 있으면 넉넉히, 애초에 소리가 없는 보스면 짧게 머물고 넘어갑니다 */
+    const wait = () => {
+      clearTimeout(timer);
+      timer = setTimeout(finish, f.sound ? RULE.cineVoiceMaxMs : RULE.cineNoVoiceMs);
+    };
 
     /* 막혔을 때 — 기다리기를 멈추고, 눌러서 듣거나 넘기게 한다 */
     const ask = () => {
@@ -3474,13 +3501,33 @@ function beginTurn() {
    * 노려진 사람을 방어시키거나 교정해 두는 판단을 하라는 뜻입니다.
    * 실제로 때리는 것은 resolveTurn 이고, 여기서 정한 표적을 그대로 씁니다. */
   const standing = S.party.filter(w => w && alive(w));
-  /* 광역 공격 — aoeEvery 턴마다. 강타와 겹치는 턴에는 광역이 이깁니다.
-   * 겨누는 곳이 «전원» 이라 노려지는 사람이 없고, 그래서 aim 을 비웁니다. */
+  /* ── 이번 턴에 적이 무엇을 하는가 ──────────────────────────────
+   *  셋 중 하나입니다. 겹치면 위에 적은 것이 이깁니다.
+   *
+   *    광역   aoeEvery 턴마다. aoeFrom 을 적으면 그 턴부터 셉니다 —
+   *           aoeEvery:6, aoeFrom:3 이면 3 · 9 · 15 …  안 적으면 예전처럼
+   *           aoeEvery 의 배수(9 턴마다면 9 · 18 …)입니다.
+   *    회복   healEvery / healFrom 도 같은 셈. 그 턴에는 때리지 않고 저를 되붙입니다.
+   *    강타   3턴마다. noHeavy 를 단 적은 아예 쓰지 않습니다.
+   *
+   *  광역과 회복은 겨누는 데가 «전원» 이거나 «저 자신» 이라 노려지는 사람이
+   *  없습니다. 그래서 aim 을 비웁니다. */
   const fnow = FOES[b.id] || {};
-  const every = b.aoeEvery || fnow.aoeEvery || 0;
-  b.aoe   = !!(b.boss && every && b.turn % every === 0);
-  b.heavy = !b.aoe && !!(b.boss && b.turn % 3 === 0);
-  b.aim   = b.aoe ? null : (standing.length ? standing[rnd(standing.length)] : null);
+  const 주기 = (every, from) => {
+    if (!every) return false;
+    const f = (from != null) ? from : every;
+    return b.turn >= f && (b.turn - f) % every === 0;
+  };
+  const aoeEvery = b.aoeEvery || fnow.aoeEvery || 0;
+  const aoeFrom  = (b.aoeFrom != null) ? b.aoeFrom : fnow.aoeFrom;
+  const hEvery   = b.healEvery || fnow.healEvery || 0;
+  const hFrom    = (b.healFrom != null) ? b.healFrom : fnow.healFrom;
+  b.aoe     = !!(b.boss && 주기(aoeEvery, aoeFrom));
+  b.foeHeal = !b.aoe && !!(b.boss && 주기(hEvery, hFrom));
+  b.heavy   = !b.aoe && !b.foeHeal &&
+              !(b.noHeavy || fnow.noHeavy) && !!(b.boss && b.turn % 3 === 0);
+  b.aim     = (b.aoe || b.foeHeal) ? null
+                                   : (standing.length ? standing[rnd(standing.length)] : null);
 
   /* 강타를 준비하는 턴에는 그림이 바뀝니다.
    * data/story.js 의 FOES 에 heavyImg 로 적습니다. 안 적은 적은 그대로 서 있습니다.
@@ -3494,7 +3541,13 @@ function beginTurn() {
     const want = ((b.heavy || b.aoe) && nowHeavy) ? nowHeavy : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
-  if (b.aoe) {
+  if (b.foeHeal) {
+    /* 이번 턴엔 때리지 않고 저를 되붙입니다 — 그 전에 얼마든 깎아 두라는 뜻으로
+     * 미리 알립니다. 노려지는 사람은 없습니다. */
+    const f = FOES[b.id] || {};
+    say("▷ " + withJosa(b.name, "이") + " " + (b.healWarn || f.healWarn ||
+        "흩어진 것을 그러모은다.  스스로를 되붙이려는 듯하다."), "bad");
+  } else if (b.aoe) {
     /* 노려지는 사람이 없으므로 «누구를 노린다» 대신 판 전체를 겨눈다고 알립니다.
      * 미리 알려 주어야 방어를 깔든 교정을 걸든 손쓸 자리가 생깁니다. */
     const f = FOES[b.id] || {};
@@ -3504,12 +3557,15 @@ function beginTurn() {
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
         (b.heavy ? "  크게 휘두를 자세다." : ""), "bad");
 
-  /* 보스가 강타나 광역을 준비하는 턴에는 한마디 한다.
-   * data/story.js 의 FOES 에 heavyLine · aoeLine 으로 적습니다. 여럿이면 배열로. */
-  if (b.aoe || (b.heavy && b.aim)) {
+  /* 보스가 강타·광역·회복을 준비하는 턴에는 한마디 한다.
+   * data/story.js 의 FOES 에 heavyLine · aoeLine · healLine 으로 적습니다.
+   * 여럿이면 배열로 — 그중 하나가 무작위로 나옵니다. */
+  if (b.aoe || b.foeHeal || (b.heavy && b.aim)) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 대사가 이깁니다 (b.heavyLine) */
-    let line = b.aoe ? (b.aoeLine || f.aoeLine) : (b.heavyLine || f.heavyLine);
+    let line = b.foeHeal ? (b.healLine || f.healLine)
+             : b.aoe     ? (b.aoeLine  || f.aoeLine)
+             :             (b.heavyLine || f.heavyLine);
     if (Array.isArray(line)) line = line[rnd(line.length)];
     if (line) {
       const w = document.createElement("p");
@@ -3838,6 +3894,13 @@ function countWord(n) {
   return w[n] || (n + "을");
 }
 
+/* 조사도 세는 말도 안 붙는 맨 꼴 — 「보스가 셋까지 섞입니다」의 그 «셋» */
+function countBare(n) {
+  const w = { 1: "하나", 2: "둘", 3: "셋", 4: "넷", 5: "다섯",
+              6: "여섯", 7: "일곱", 8: "여덟", 9: "아홉", 10: "열" };
+  return w[n] || String(n);
+}
+
 /* 「세 번」처럼 뒤에 세는 말이 붙을 때 쓰는 꼴 — 하나가 아니라 한, 셋이 아니라 세 */
 function countBefore(n) {
   const w = { 1: "한", 2: "두", 3: "세", 4: "네", 5: "다섯",
@@ -4013,6 +4076,25 @@ function resolveTurn() {
      *  잡았습니다 — 셋이 한꺼번에 맞으므로 강타와 같은 배수를 쓰면 그 자리에서 끝납니다.
      *  방어와 교정은 사람마다 그대로 쳐 줍니다. 도발·회피·반격은 "노려진 한 사람"이
      *  전제라 광역에는 걸리지 않습니다(도발은 애초에 광역 턴엔 손잡이가 안 뜹니다). */
+    /* ── 회복 ─────────────────────────────────────────────────
+     *  때리는 대신 저를 되붙입니다. 회복량은 수를 박지 않고 «제 공격력의
+     *  몇 배»(healAtk)로 적습니다 — 거울·철도가 공격력에 배수를 곱하므로,
+     *  배수가 오르면 회복량도 저절로 따라 오릅니다.
+     *  최대 체력을 넘겨 차지는 않습니다. */
+    if (b.foeHeal) {
+      const f = FOES[b.id] || {};
+      const k = b.healAtk || f.healAtk || 0;
+      const heal = Math.max(1, Math.round(b.atk * k));
+      const before = b.hp;
+      b.hp = Math.min(b.maxhp, b.hp + heal);
+      const 오른몫 = b.hp - before;
+      say("▶ " + withJosa(b.name, "이") + " 스스로를 되붙였다 — " +
+          (오른몫 > 0 ? "체력 " + 오른몫 + " 회복" : "더 채울 곳이 없다") +
+          "　(" + b.hp + " / " + b.maxhp + ")", 오른몫 > 0 ? "heavy" : "sys");
+      render();
+      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+    }
+
     if (b.aoe) {
       shakeScreen(true);
       say("▶ " + b.name + "의 광역 공격!", "heavy");
@@ -4186,12 +4268,16 @@ function defeat() {
    * — 체력·관리력을 다시 채우고(case "rest") 편성도 다시 손볼 수 있게(rest.party).
    * 아직 그 자리를 지나지 않았으면(앞쪽 보스에서 졌으면) 예전처럼 그 보스만 다시 합니다. */
   const mrule = S.mirror ? mirrorRuleNow() : null;
-  const cp = (mrule && mrule.rest && S.mirrorCheckpoint != null && S.sc - 1 > S.mirrorCheckpoint)
+  /* 2호선은 순환마다 이형우의 베이스캠프가 그 자리를 합니다 (SCENE_EXT.railCamp).
+   * 1순환 안에서 지면 아직 캠프가 없으므로, 다른 갈래처럼 그 보스만 다시 합니다. */
+  const 쉼표 = mrule && (mrule.rest || (mrule.loop && mrule.camp));
+  const cp = (쉼표 && S.mirrorCheckpoint != null && S.sc - 1 > S.mirrorCheckpoint)
     ? S.mirrorCheckpoint : null;
+  const 쉼표주인 = cp == null ? null : (mrule.rest ? mrule.rest.who : mrule.camp.who);
 
   buttons([
     cp != null
-      ? { label: mrule.rest.who + "에게로", cls: "primary", fn: () => {
+      ? { label: 쉼표주인 + "에게로", cls: "primary", fn: () => {
           S.waiting = false;
           S.sc = cp;
           next();
@@ -5926,6 +6012,43 @@ function chapterUnlocked(i) {
   return true;                       // 앞에 본편이 없다 = 첫 장
 }
 
+/* ── 운전석의 접힌 무리 ────────────────────────────────────────
+ *  갈래가 늘면서 운전석이 한 화면에 안 들어가게 됐습니다. 그래서 무리를 접어 두고,
+ *  맨 위의 「다음으로 추천」만 펴 둡니다 — 대개 거기 있는 것을 누르러 오니까요.
+ *
+ *  편 무리는 이 판이 도는 동안 기억합니다(보관함에는 담지 않습니다).
+ *  운전석을 닫았다 다시 열어도 방금 펴 둔 자리가 그대로 있게 하려는 것입니다.
+ */
+let CS_OPEN = {};
+
+/* 지금 «다음으로 할 만한» 것 셋. 없는 자리는 건너뜁니다.
+ *
+ *    본편        아직 안 마친 첫 본편
+ *    그밖의 이야기 아직 안 마친 곁가지 중 «가장 나중 것»
+ *    거울·철도    한 번도 완주하지 않은 갈래 중 «가장 낮은 급»
+ *
+ *  셋 다 «지금 들어갈 수 있는 것» 만 고릅니다. 잠긴 것을 추천 자리에 세우면
+ *  눌러도 아무 일이 안 일어나, 추천이라기보다 약 올리는 것이 됩니다.
+ *
+ *  이렇게 걸러도 「추천할 것이 없다」는 말은 «정말로 다 마쳤을 때» 만 나옵니다 —
+ *  아직 안 마친 본편이 있으면 그것은 반드시 열려 있고(앞 장을 마쳐야 열리므로),
+ *  본편을 다 마쳤으면 곁가지도 거울도 남김없이 열려 있기 때문입니다.
+ */
+function chapterPicks() {
+  const 마쳤나 = c => !!(S.cleared && S.cleared[c.id]);
+  const out = { main: -1, side: -1, mirror: null };
+
+  CHAPTERS.forEach((c, i) => {
+    if (마쳤나(c) || !chapterUnlocked(i)) return;
+    if (isSide(c)) out.side = i;                      // 곁가지는 «가장 나중 것»
+    else if (out.main < 0) out.main = i;              // 본편은 «가장 이른 것»
+  });
+
+  out.mirror = MIRROR_TIERS.find(r =>
+    !(S.mirrorDone && S.mirrorDone[r.key]) && mirrorUnlocked(r)) || null;
+  return out;
+}
+
 function openChapterSelect(back) {
   $modal.classList.add("on");
   let h = '<h2>운 전 석</h2><div class="hint">어디로 갈지 정합니다. ' +
@@ -5939,9 +6062,22 @@ function openChapterSelect(back) {
            '<div class="sub">기록해 둔 곳에서 이어서 읽습니다</div>' +
          '</div></div>';
 
-  const head = t => '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">' + t + '</div>';
+  /* 접히는 무리 하나. 눌러서 펴고 접습니다 — 펴 둔 자리는 CS_OPEN 이 기억합니다.
+   * 접혀 있을 때는 이름만 보이므로, 무엇이 든 무리인지 한 줄로 곁들입니다. */
+  const sec = (id, title, note, body) =>
+    '<div class="csec' + (CS_OPEN[id] ? ' on' : '') + '" data-sec="' + id + '">' +
+      '<div class="csechead"><b>' + title + '</b>' +
+        (note ? '<span>' + note + '</span>' : '') + '<i></i></div>' +
+      '<div class="csecbody">' + body + '</div>' +
+    '</div>';
 
-  const chapSlot = (c, i) => {
+  /* rich 를 세우면 그 장의 소개(data/story.js 의 pitch 세 줄, 없으면 summary 한 줄)를
+   * 함께 답니다. 「다음으로 추천」에서만 씁니다 — 거기서는 이야기 칸이 거울 칸과
+   * 나란히 서는데, 이야기 쪽이 두 줄뿐이라 옆이 허전해 보이던 것을 메우는 몫입니다.
+   * 접어 둔 「본편」 목록에서는 달지 않습니다. 열 몇 칸이 한꺼번에 길어집니다. */
+  const chapPitch = c =>
+    (c.pitch && c.pitch.length) ? c.pitch : (c.summary ? [c.summary] : []);
+  const chapSlot = (c, i, rich) => {
     const done  = S.cleared && S.cleared[c.id];
     const open  = chapterUnlocked(i);
     const needs = chapterNeeds(c);
@@ -5951,6 +6087,11 @@ function openChapterSelect(back) {
              '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no +
                (c.subtitle ? '　' + c.subtitle : (c.title ? '　' + c.title : '')) + '</div>' +
              '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능') : '잠김') + '</div>' +
+             (rich && chapPitch(c).length
+               ? '<div class="csum">' +
+                   chapPitch(c).map(x => '<span>' + x + '</span>').join('') +
+                 '</div>'
+               : '') +
              (c.note ? '<div class="sub">' + c.note + '</div>' : '') +
              (needs.length
                ? '<div class="sub"' + (miss.length ? ' style="color:#c8403a"' : '') + '>' +
@@ -5960,73 +6101,104 @@ function openChapterSelect(back) {
            '</div>';
   };
 
-  h += head("본편") + '<div class="grid">';
-  CHAPTERS.forEach((c, i) => { if (!isSide(c)) h += chapSlot(c, i); });
-  h += '</div>';
-
-  /* 곁가지 이야기 — 본편 아래에 따로 섭니다 */
-  if (CHAPTERS.some(isSide)) {
-    h += head("그밖의 이야기") + '<div class="grid">';
-    CHAPTERS.forEach((c, i) => { if (isSide(c)) h += chapSlot(c, i); });
-    h += '</div>';
-  }
-
   /* 거울 던전 — 보통과 하드가 나란히 섭니다 */
   const enkNow = enkCount();
   const slot = (rule, attr) => {
     const open  = mirrorUnlocked(rule);
     const canGo = open && enkNow >= rule.cost;
-    return '<div class="slot' + (open && !canGo ? ' sel' : '') + '"' +
+    const f = mirrorFacts(rule);
+
+    /* 잠긴 갈래는 «무엇을 해야 열리는가» 한 줄이면 됩니다.
+     * 세기도 보상도, 열기 전에는 고를 수 없는 것이라 적어 봐야 눈만 어지럽습니다. */
+    if (!open)
+      return '<div class="slot">' +
+               slotStrip(null, rule.name) +
+               '<div class="lock">' + mirrorNeedText(rule) + '</div>' +
+             '</div>';
+
+    const chip = (label, value, bad) =>
+      '<b' + (bad ? ' class="bad"' : '') + '><i>' + label + '</i>' + value + '</b>';
+
+    return '<div class="slot mslot' + (canGo ? '' : ' sel') + '"' +
              (canGo ? ' ' + attr : '') + '>' +
              /* 이름은 띠 안에 넣습니다 — 「익스트림 거울 던전 산산이 부서진…」이
               * 한 줄에 안 들어가 줄이 갈리던 것을 없애려는 것입니다. */
-             slotStrip(open ? mirrorBG(rule) : null, rule.name) +
-             '<div class="' + (canGo ? 'nm' : 'lock') + '">' + rule.sub + '</div>' +
-             '<div class="sub">' + (open
-               /* 나오는 수는 «만나 본 적» 만큼입니다. 적게 만났으면 그만큼만 섭니다. */
-               ? ('이미 만난 적 ' + countWord(Math.min(rule.count, metCount())) + ' 연달아 상대합니다. ' +
-                  '본편의 ' + rule.scale + '배 세기입니다.' +
-                  (rule.maxBoss >= rule.count ? ' 셋 다 보스일 수 있습니다.'
-                   : rule.maxBoss > 1 ? ' 보스가 ' + rule.maxBoss + '까지 섞입니다.' : ''))
-               : ('본편을 ' + rule.needCleared + '장 마치면 열립니다')) + '</div>' +
-             /* 돌 때마다 받는 몫을 먼저 적고, 처음 한 번뿐인 원고료는 뒤에 따로 적습니다 —
-              * 「완주 보상 원고료 150」만 크게 적혀 있으면 두 번째부터 속은 느낌이 듭니다. */
-             '<div class="sub">완주 보상 황금교본 ' + rule.codex +
-               (rule.fragBoxSelect ? '　·　인격 파편 상자(선택) ' + rule.fragBoxSelect + '개' : '') +
-               (openEvent() && rule.event ? '　·　' + eventCurName() + ' ' + rule.event : '') +
-               '</div>' +
-             (rule.bonus
-               ? '<div class="sub">' +
-                   (S.mirrorDone && S.mirrorDone[rule.key]
-                     ? CURRENCY + ' ' + rule.bonus + '은 이미 받았습니다 (처음 완주할 때만)'
-                     : '처음 완주하면 ' + CURRENCY + ' ' + rule.bonus + ' 을 더 받습니다') +
-                 '</div>'
-               : '') +
-             '<div class="sub"' + (canGo ? '' : ' style="color:#c8403a"') + '>' +
-               '입장 ' + ENK_RULE.name + ' ' + rule.cost +
-               (open && !canGo ? '　— ' + ENK_RULE.name + '이 모자랍니다' : '') + '</div>' +
+             slotStrip(mirrorBG(rule), rule.name) +
+             '<div class="msub">' + rule.sub + '</div>' +
+             /* 갈래를 «고를 때» 필요한 것만 눈금 셋으로. 자세한 것은 들어가기 전 화면이 말합니다 */
+             '<div class="mstats">' +
+               chip("세기", f.세기) +
+               chip(f.상대라벨, f.상대) +
+               chip("입장", ENK_RULE.name + ' ' + rule.cost, !canGo) +
+             '</div>' +
+             '<div class="mrew">' + f.보상 +
+               (f.첫몫 ? '<em' + (f.첫몫받음 ? ' class="done"' : '') + '>' +
+                         f.첫몫 + '</em>' : '') + '</div>' +
+             (canGo ? '' :
+               '<div class="mwarn">' + ENK_RULE.name + '이 모자랍니다</div>') +
            '</div>';
   };
 
   const mirrorOnly = MIRROR_TIERS.filter(r => r.group !== "rail");
   const railOnly   = MIRROR_TIERS.filter(r => r.group === "rail");
+  const sideList   = CHAPTERS.filter(isSide);
 
-  h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">거울</div>' +
-       '<div class="grid">' +
-         mirrorOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+  /* ── 다음으로 추천 ────────────────────────────────────────────
+   *  펴 둔 채로 맨 위에 섭니다. 접힌 무리를 일일이 펴 보지 않아도
+   *  «지금 할 만한 것» 이 바로 눈에 들어오게 하려는 것입니다. */
+  const pick = chapterPicks();
+  const rec = []
+    .concat(pick.main >= 0 ? [chapSlot(CHAPTERS[pick.main], pick.main, true)] : [])
+    .concat(pick.side >= 0 ? [chapSlot(CHAPTERS[pick.side], pick.side, true)] : [])
+    .concat(pick.mirror ? [slot(pick.mirror, 'data-mirror="' + pick.mirror.key + '"')] : []);
+
+  h += '<div class="csrec">' +
+         '<div class="csrechead">다음으로 추천</div>' +
+         (rec.length
+           ? '<div class="grid">' + rec.join('') + '</div>'
+           : '<div class="csnone">추천할 것이 없습니다<br>' +
+             '출시된 모든 컨텐츠를 충실하게 즐기셨군요!</div>') +
        '</div>';
+
+  h += sec("main", "본편", "라슈 컴퍼니의 메인 여정을 따라가 보세요",
+           '<div class="grid">' +
+             CHAPTERS.map((c, i) => isSide(c) ? "" : chapSlot(c, i)).join('') +
+           '</div>');
+
+  /* 곁가지 이야기 — 본편 아래에 따로 섭니다 */
+  if (sideList.length)
+    h += sec("side", "그밖의 이야기", "본편 곁에서 벌어진 짧은 이야기들을 만나 보세요",
+             '<div class="grid">' +
+               CHAPTERS.map((c, i) => isSide(c) ? chapSlot(c, i) : "").join('') +
+             '</div>');
+
+  h += sec("mirror", "거울 던전", "더 세져서 돌아온 것들과 겨뤄 보세요",
+           '<div class="grid">' +
+             mirrorOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+           '</div>');
 
   /* 거울굴절철도 — 거울 아래 제 줄에 섭니다. 호선이 늘면 이 줄이 그대로 늘어납니다. */
   if (railOnly.length)
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">거울굴절철도</div>' +
-         '<div class="grid">' +
-           railOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
-         '</div>';
+    h += sec("rail", "거울굴절철도", "종점까지 내리 달리는 가장 긴 갈래에 오르세요",
+             '<div class="grid">' +
+               railOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+             '</div>');
 
-  h += '<div style="margin:10px 0 0">' + enkBarHTML() + '</div>';
+  h += '<div style="margin:14px 0 0">' + enkBarHTML() + '</div>';
 
   h += '<div class="modalfoot"><button id="csclose" class="ghost">닫기</button></div>';
   $sheet.innerHTML = h;
+
+  /* 무리 이름을 누르면 접혔다 펴집니다. 편 자리는 CS_OPEN 이 기억하므로,
+   * 운전석을 닫았다 다시 열어도 그대로 있습니다. */
+  $sheet.querySelectorAll(".csec .csechead").forEach(el => {
+    el.onclick = () => {
+      const box = el.parentNode;
+      const id  = box.dataset.sec;
+      CS_OPEN[id] = !CS_OPEN[id];
+      box.classList.toggle("on", !!CS_OPEN[id]);
+    };
+  });
 
   $sheet.querySelectorAll(".slot[data-i]").forEach(el => {
     el.onclick = () => { closeModal(); startChapter(+el.dataset.i); };
@@ -6177,8 +6349,139 @@ const MIRROR_RAIL1 = {
   }
 };
 
+/* ── 거울굴절철도 2호선 · 순환 ─────────────────────────────────
+ *  1호선이 «한 줄로 늘어선 선로» 라면 2호선은 «돌아오는 선로» 입니다.
+ *  수도권 도시철도 2호선이 그렇듯, 같은 자리를 몇 번이고 다시 지납니다.
+ *
+ *  ■ 어떻게 도는가
+ *    들어올 때 보스 셋을 뽑아 «못박습니다». 그 셋을 순환마다 다시 만나되,
+ *    만날 때마다 세기만 올라갑니다.
+ *
+ *      1순환 ×3.0 → 2순환 ×3.5 → 3순환 ×4.0 → 4순환 ×4.5 → …  (loop.step 씩)
+ *
+ *    한 순환을 마칠 때마다 이형우가 베이스캠프에서 맞아 줍니다 —
+ *    체력과 관리력을 채우고, 편성을 고치고, 보너스를 하나 고릅니다.
+ *    loop.free 순환(셋)을 넘기면 그 자리에서 갈림길이 섭니다 —
+ *    종착역으로 갈 것인가, 한 순환 더 돌 것인가.
+ *
+ *  ■ 종착역
+ *    돌기만 해서는 끝나지 않습니다. 클리어는 종착역을 잡아야 성립합니다.
+ *    종착역에 서는 것은 «마지막으로 돈 순환과 같은 배수» 입니다 —
+ *    오래 돌면 보너스가 쌓이는 만큼 종착역도 함께 세집니다.
+ *
+ *  ■ 1호선과 다른 점
+ *    count · scale · maxBoss 를 적지 않습니다. 그 자리를 loop 가 대신합니다.
+ *    잡졸은 서지 않습니다 — 순환은 처음부터 끝까지 보스뿐입니다.
+ */
+const MIRROR_RAIL2 = {
+  key:  "railLine2",
+  group: "rail",
+  name: "거울굴절철도 2호선",
+  sub:  "돌아오고, 돌아오고, 또 돌아오는 선로",
+  bg:   "assets/scene/거울굴절철도2호선.jpg",
+  prefix: "굴절된 ",
+  defScale: 0.25,      // 1호선과 같게 — 배수가 클수록 방어가 벽이 되기 쉽습니다
+
+  /* 입장과 보상은 1호선과 같습니다 (사용자 지침).
+   * 다만 「행운의 부적」을 고른 만큼 여기 적힌 수보다 더 받습니다 — mirrorClear 참고. */
+  bonus:  1000,
+  codex:  10,
+  event:  300,
+  fragBoxSelect: 25,
+  cost: ENK_RULE.costRail,
+
+  /* 종착역 — 만나 봐야 압니다 */
+  finalFoe: "david_peters",
+  finalBg:  "assets/scene/거울굴절철도2호선종착역.jpg",
+  finalName: "거울굴절철도 2호선 종착역",
+
+  /* 본편 6장을 마쳐야 열립니다. 다른 갈래처럼 «몇 장을 마쳤나» 로 세지 않고
+   * 그 장을 콕 집습니다 — 곁가지(.5장)도 클리어 수에 들어가기 때문입니다. */
+  needChapter: "ch6",
+
+  warn: "1호선보다 길고 셉니다. 순환을 셋 돌아야 종착역이 열리고, 그 사이 쉼표는 " +
+        "순환과 순환 사이뿐입니다. 도중에 유리창으로 나가면 처음부터입니다.",
+
+  loop: {
+    foes:  3,     // 한 순환에 세우는 보스 수
+    free:  3,     // 이만큼 돌아야 종착역으로 갈 수 있습니다
+    scale: 3.0,   // 1순환 배수
+    step:  0.5    // 순환마다 오르는 몫
+  },
+
+  /* 순환과 순환 사이 — 이형우의 베이스캠프 */
+  camp: { who: "이형우" }
+};
+
+/* 순환을 마칠 때마다 하나씩 고르는 것.
+ * 이 2호선 한 판 안에서만 살고, 유리창으로 돌아가면 사라집니다.
+ * 같은 것을 여러 번 골라도 됩니다 — 그때는 더해집니다 (0.2 + 0.2 = +40%). */
+const RAIL2_BONUS_PCT = 0.20;
+const RAIL2_BONUSES = [
+  { key: "atk",    name: "충전식 장갑",   desc: "모든 아군의 공격력 +20%" },
+  { key: "def",    name: "별자리의 가호", desc: "모든 아군의 방어 +20%" },
+  { key: "hp",     name: "굴레",         desc: "모든 아군의 체력 +20%" },
+  { key: "reward", name: "행운의 부적",   desc: "클리어 보상 +20%" }
+];
+
+/* 지금 걸려 있는 순환 보너스. 2호선 밖에서는 전부 0 입니다 —
+ * S.mirror 가 내려가는 순간 저절로 꺼지므로, 편성 화면이나 본편에는 새어 나가지 않습니다. */
+function railBonus() {
+  const z = { atk: 0, def: 0, hp: 0, reward: 0 };
+  if (!S || !S.mirror || !S.rail2) return z;
+  (S.rail2.picks || []).forEach(k => { if (z[k] != null) z[k] += RAIL2_BONUS_PCT; });
+  return z;
+}
+
+function railCycleScale(r, cycle) { return r.loop.scale + r.loop.step * (cycle - 1); }
+function railDefK(r, k) {
+  return 1 + (k - 1) * (r.defScale != null ? r.defScale : DEF_SCALE);
+}
+/* 배수를 「×3.5」처럼 적습니다 — 3.0 이 「3」으로 줄어들지 않게 소수 한 자리로 못박습니다 */
+function railScaleText(k) { return "×" + k.toFixed(1); }
+
+/* 한 순환에 설 것들을 그 순환의 세기로 빚습니다.
+ * 열쇠를 「__mirror_」로 시작하게 지은 것은 일부러입니다 —
+ * 다음에 뽑을 때 «비친 것을 또 비추는» 일이 없도록 buildMirrorFoes 가 거르는 이름입니다. */
+function railCycleFoes(r, cycle, srcs) {
+  const k = railCycleScale(r, cycle), dk = railDefK(r, k);
+  return srcs.map((src, i) =>
+    mirrorFoeCopy("__mirror_r2_" + cycle + "_" + i, src, r, k, dk));
+}
+function railFinalFoe(r, cycle) {
+  const k = railCycleScale(r, cycle), dk = railDefK(r, k);
+  return mirrorFoeCopy("__mirror_r2_final", r.finalFoe, r, k, dk);
+}
+
+/* 뽑아 둔 보스 셋의 «본래 열쇠». 순환마다 배수를 갈아 다시 빚어야 하므로,
+ * 빚어 놓은 것이 아니라 본래 열쇠를 들고 있어야 합니다.
+ * MIRROR_SCOUT 과 마찬가지로 보관함에는 담기지 않습니다. */
+let RAIL2_PICK = null;   // { tier, bosses:[열쇠 셋] }
+
+function buildLoopFoes(r) {
+  const met = metFoes();
+  const 설수있나 = x =>
+    x.indexOf("__mirror_") !== 0 && !FOES[x].noMirror && typeof FOES[x].hp === "number";
+  let keys = Object.keys(FOES).filter(x => 설수있나(x) && met[x]);
+  if (!keys.length) keys = Object.keys(FOES).filter(설수있나);
+
+  let bag = keys.filter(x => FOES[x].boss && x !== r.finalFoe);
+  /* 만나 본 보스가 셋이 못 되면 잡졸로 채웁니다 — 같은 것을 두 번 세우지는 않습니다 */
+  if (bag.length < r.loop.foes) bag = bag.concat(keys.filter(x => !FOES[x].boss));
+
+  const picked = [];
+  while (picked.length < r.loop.foes && bag.length)
+    picked.push(bag.splice(rnd(bag.length), 1)[0]);
+  picked.sort((a, b) => FOES[a].hp - FOES[b].hp);   // 약한 것부터
+
+  RAIL2_PICK = { tier: r.key, bosses: picked };
+  /* 관측 화면에 보일 몫입니다 — 1번째·2번째·3번째 보스와, 종착역에 설 것.
+   * 세기는 여기서 상관이 없습니다(intro 만 보여 주므로) 1순환 몫으로 빚습니다. */
+  return railCycleFoes(r, 1, picked).concat([railFinalFoe(r, 1)]);
+}
+
 /* 갈래를 늘리려면 여기에 얹으면 됩니다. 순서가 곧 화면에 서는 순서입니다. */
-const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME, MIRROR_RAIL1];
+const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME, MIRROR_RAIL1, MIRROR_RAIL2];
 
 /* 갈래를 어떻게 부르든 받아 줍니다 — 번호, key 문자열, 규칙 그 자체,
  * 그리고 예전에 쓰던 참/거짓(하드인가 아닌가)까지. */
@@ -6199,7 +6502,71 @@ function mirrorRuleNow() {
 
 function mirrorUnlocked(rule) {
   const r = rule || MIRROR_RULE;
+  /* needChapter 를 적은 갈래는 «그 장을 마쳤는가» 만 봅니다.
+   * 클리어 수로 세면 곁가지(.5장)까지 함께 세어 버려, 본편 여섯 장을 마치지 않고도
+   * 열리는 일이 생깁니다. 콕 집어야 하는 갈래는 이쪽을 씁니다. */
+  if (r.needChapter) return !!(S.cleared && S.cleared[r.needChapter]);
   return Object.keys(S.cleared || {}).length >= r.needCleared;
+}
+
+/* ── 갈래 한 벌을 한 곳에서 짓습니다 ──────────────────────────
+ *  운전석의 칸(고르는 자리)과 들어가기 전 화면(준비하는 자리)이 같은 말을 하되,
+ *  «어디까지 적을 것인가» 는 다릅니다.
+ *
+ *    칸    고를 때 필요한 것만 — 세기 · 상대 · 입장 · 보상. 눈금 꼴로.
+ *    문턱  고르고 난 뒤에 알면 되는 것 — 보스가 몇까지 섞이는지, 순환이 어떻게 도는지.
+ *
+ *  둘을 한 함수에서 지어야, 한쪽만 고쳐 놓고 다른 쪽이 옛말을 하는 일이 없습니다.
+ */
+function mirrorFacts(rule) {
+  const r = rule || MIRROR_RULE;
+  const 몫 = ['황금교본 ' + r.codex]
+    .concat(r.fragBoxSelect ? ['파편 상자 ' + r.fragBoxSelect] : [])
+    .concat((openEvent() && r.event) ? [eventCurName() + ' ' + r.event] : []);
+
+  const 받았나 = !!(S.mirrorDone && S.mirrorDone[r.key]);
+  const o = {
+    상대라벨: '상대',
+    보상: 몫.join('　·　'),
+    첫몫: r.bonus ? (받았나 ? CURRENCY + ' ' + r.bonus + ' 받음'
+                            : '첫 완주 ' + CURRENCY + ' ' + r.bonus) : "",
+    첫몫받음: 받았나
+  };
+
+  if (r.loop) {
+    /* 눈금은 좁습니다. 값을 늘리는 대신 이름표를 갈래에 맞게 바꿉니다 —
+     * 「한 순환 / 보스 3」이 「상대 / 보스 3 × 순환」보다 좁고 또렷합니다. */
+    o.세기 = railScaleText(r.loop.scale) + '부터';
+    o.상대라벨 = '한 순환';
+    o.상대 = '보스 ' + r.loop.foes;
+    o.자세히 = '이미 만난 보스 ' + countWord(r.loop.foes) + ' 한 순환으로 묶어, ' +
+               '순환마다 다시 만납니다. 세기는 순환마다 ' + r.loop.step.toFixed(1) + '씩 올라, ' +
+               countBefore(r.loop.free) + ' 순환을 돌면 종착역으로 가는 문이 열립니다. ' +
+               '그 뒤로는 순환을 더 돌지 종착역으로 갈지 고를 수 있습니다.';
+    return o;
+  }
+
+  /* 나오는 수는 «만나 본 적» 만큼입니다. 적게 만났으면 그만큼만 섭니다. */
+  const n = Math.min(r.count, metCount());
+  o.세기 = railScaleText(r.scale);
+  o.상대 = '적 ' + n;
+  o.자세히 = '이미 만난 적 ' + countWord(n) + ' 연달아 상대합니다.' +
+             (r.maxNormal === 1 ? ' 맨 앞 하나를 빼면 모두 보스이고, 맨 뒤는 종점입니다.'
+              : r.maxBoss >= r.count ? ' 모두 보스일 수 있습니다.'
+              : r.maxBoss > 1 ? ' 보스가 ' + countBare(r.maxBoss) + '까지 섞입니다.' : '') +
+             (r.rest ? ' ' + countBefore(r.rest.after) + ' 번째를 넘기면 ' +
+                       withJosa(r.rest.who, "이") + ' 한 번 들러 체력과 관리력을 채워 줍니다.' : '');
+  return o;
+}
+
+/* 아직 안 열린 갈래의 잠금 문구 — 화면과 startMirror 가 같은 말을 하도록 한 군데서 짓습니다 */
+function mirrorNeedText(rule) {
+  const r = rule || MIRROR_RULE;
+  if (r.needChapter) {
+    const c = CHAPTERS.find(x => x.id === r.needChapter);
+    return "본편 " + (c ? c.no : r.needChapter) + "을 마치면 열립니다";
+  }
+  return "본편을 " + r.needCleared + "장 마치면 열립니다";
 }
 
 /* ── 방어에는 배수를 덜 먹입니다 ────────────────────────────────
@@ -6238,6 +6605,8 @@ function metCount() { return Object.keys(metFoes()).length; }
 
 function buildMirrorFoes(rule) {
   const r = rule || MIRROR_RULE;
+  /* 순환 갈래(2호선)는 뽑는 방식이 아주 다릅니다 — 셋을 못박고 순환마다 다시 빚습니다 */
+  if (r.loop) return buildLoopFoes(r);
   const k = r.scale;
   const met = metFoes();
   /* 거울에 세울 수 있는 적인가.
@@ -6299,35 +6668,56 @@ function buildMirrorFoes(rule) {
    * 배수가 큰 갈래일수록 이 값을 낮춰 잡습니다. */
   const dk = (r.defScale != null) ? (1 + (k - 1) * r.defScale) : defK(k);
 
-  return picked.map((src, i) => {
-    const f = FOES[src];
-    const id = "__mirror_" + i;
-    FOES[id] = {
-      name: f.mirrorName || ((r.prefix || "거울의 ") + f.name),
-      hp:  Math.round(f.hp  * k),
-      atk: Math.round(f.atk * k),
-      def: Math.round(f.def * dk),
-      boss: !!f.boss,
-      img: f.img || null,
-      /* 그림을 키워 세우는 적(타나콘다처럼 원본 안에서 몸집이 작게 잡힌 것)은
-       * 거울에서도 «같은 크기» 로 서야 합니다. 이것을 빠뜨리면 본편에서는 크고
-       * 거울 던전에서만 작게 나옵니다. */
-      imgScale: f.imgScale || 0,
-      /* 등장 대사와 강타 대사는 본래 것을 그대로 가져옵니다.
-       * 빠뜨리면 거울 던전 보스가 강타를 준비하며 아무 말도 안 하게 됩니다. */
-      intro: f.intro || null,
-      quote: f.quote || null,
-      heavyLine: f.heavyLine || null,
-      heavyImg: f.heavyImg || null,
-      /* 광역 공격도 함께 옮깁니다 — 빠뜨리면 거울에서만 광역을 안 씁니다 */
-      aoeEvery: f.aoeEvery || 0,
-      aoeLine: f.aoeLine || null,
-      aoeWarn: f.aoeWarn || null,
-      desc: "유리창에 비쳐 나온 것. 본래보다 " +
-            Math.round((k - 1) * 100) + "% 강하다."
-    };
-    return id;
-  });
+  return picked.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k, dk));
+}
+
+/* ── 비친 것 하나를 빚는다 ────────────────────────────────────
+ *  본편 적 하나를 배수만큼 세워 임시 적(FOES[id])으로 만듭니다.
+ *  거울 던전도, 굴절철도도, 순환마다 배수가 달라지는 2호선도 전부 여기를 씁니다 —
+ *  한 군데서만 베끼므로, 적에게 새 성질이 생기면 이 함수에만 한 줄 더하면 됩니다.
+ *
+ *    id  만들어 넣을 열쇠 (거울은 "__mirror_0", 2호선은 "__rail2_1_0" 처럼)
+ *    src 본래 적의 열쇠      r  갈래 규칙 (prefix 를 봅니다)
+ *    k   체력·공격에 곱할 배수      dk  방어에 곱할 배수
+ */
+function mirrorFoeCopy(id, src, r, k, dk) {
+  const f = FOES[src];
+  FOES[id] = {
+    name: f.mirrorName || ((r && r.prefix) || "거울의 ") + f.name,
+    hp:  Math.round(f.hp  * k),
+    atk: Math.round(f.atk * k),
+    def: Math.round(f.def * dk),
+    boss: !!f.boss,
+    img: f.img || null,
+    /* 그림을 키워 세우는 적(타나콘다처럼 원본 안에서 몸집이 작게 잡힌 것)은
+     * 거울에서도 «같은 크기» 로 서야 합니다. 이것을 빠뜨리면 본편에서는 크고
+     * 거울 던전에서만 작게 나옵니다. */
+    imgScale: f.imgScale || 0,
+    /* 등장 대사와 강타 대사는 본래 것을 그대로 가져옵니다.
+     * 빠뜨리면 거울 던전 보스가 강타를 준비하며 아무 말도 안 하게 됩니다. */
+    intro: f.intro || null,
+    quote: f.quote || null,
+    heavyLine: f.heavyLine || null,
+    heavyImg: f.heavyImg || null,
+    noHeavy: !!f.noHeavy,
+    /* 등장 연출과 등장 음성 — 종점·종착역처럼 «만나 봐야 아는» 것이 여기 걸립니다.
+     * 빠뜨리면 암전 없이 그냥 서 버립니다 (startMirror 가 cineEntrance 를 봅니다). */
+    cineEntrance: !!f.cineEntrance,
+    sound: f.sound || null,
+    /* 광역·회복도 함께 옮깁니다 — 빠뜨리면 거울에서만 이 짓을 안 합니다 */
+    aoeEvery: f.aoeEvery || 0,
+    aoeFrom: f.aoeFrom != null ? f.aoeFrom : null,
+    aoeLine: f.aoeLine || null,
+    aoeWarn: f.aoeWarn || null,
+    healEvery: f.healEvery || 0,
+    healFrom: f.healFrom != null ? f.healFrom : null,
+    healAtk: f.healAtk || 0,
+    healLine: f.healLine || null,
+    healWarn: f.healWarn || null,
+    desc: "유리창에 비쳐 나온 것. 본래보다 " +
+          Math.round((k - 1) * 100) + "% 강하다."
+  };
+  return id;
 }
 
 /* ── 거울 던전에 들어가기 전 ──────────────────────────────────
@@ -6376,9 +6766,13 @@ function openMirrorGate(tier, back) {
     const scouted = mirrorScouted(rule);
     const canGo = enkCount() >= rule.cost;
 
+    const f = mirrorFacts(rule);
     let h = '<h2>' + rule.name + ' — 들어가기 전</h2>' +
-      '<div class="hint">' + rule.sub + '. 들어가면 ' + ENK_RULE.name + ' ' + rule.cost +
-      '를 씁니다. 쓰기 전에 할 수 있는 일이 아래에 있습니다.</div>';
+      /* 갈래가 어떻게 굴러가는지는 여기서 다 말합니다. 운전석 칸에는 눈금만 서고,
+       * 풀어 쓴 말은 이 자리 몫입니다 (mirrorFacts 의 주석 참고). */
+      '<div class="hint">' + rule.sub + '.　' + f.자세히 + '</div>' +
+      '<div class="hint"><b>세기</b> ' + f.세기 + '　·　<b>' + f.상대라벨 + '</b> ' + f.상대 +
+        '　·　<b>완주 보상</b> ' + f.보상 + (f.첫몫 ? '　(' + f.첫몫 + ')' : '') + '</div>';
 
     /* 갈래에 warn 을 적어 두었으면 여기, 관측(적 관측)보다 먼저 보이는 자리에 붉게 띄웁니다. */
     if (rule.warn)
@@ -6406,8 +6800,12 @@ function openMirrorGate(tier, back) {
            scouted.map((id, i) => {
              const f = FOES[id];
              const line = f.intro || "낌새가 흐릿하다. 대단한 것은 아닌 듯하다.";
+             /* 순환 갈래는 맨 끝이 «순환에서 만나는 것» 이 아니라 종착역에 서는 것입니다.
+              * 그냥 「4번째」라고 적으면 순환에 넷이 나오는 줄로 읽힙니다. */
+             const 이름 = (rule.loop && i === scouted.length - 1)
+               ? '종착역' : ((i + 1) + '번째');
              return '<div class="slot sel">' +
-                      '<div class="nm">' + (i + 1) + '번째</div>' +
+                      '<div class="nm">' + 이름 + '</div>' +
                       '<div class="sub">' + line + '</div>' +
                     '</div>';
            }).join('') +
@@ -6442,7 +6840,7 @@ function startMirror(tier, preIds) {
   const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
 
   if (!mirrorUnlocked(rule)) {
-    say(rule.name + "은 본편을 " + rule.needCleared + "장 마쳐야 열립니다.", "sys");
+    say(rule.name + "은 " + mirrorNeedText(rule).replace("면 열립니다", "야 열립니다") + ".", "sys");
     return;
   }
   if (!enkSpend(rule.cost)) {
@@ -6459,6 +6857,10 @@ function startMirror(tier, preIds) {
    * 관측 없이 바로 들어왔으면(preIds 없음) 여기서 새로 뽑습니다 — 예전처럼 부딪쳐 봐야 압니다. */
   const ids = (preIds && preIds.length) ? preIds : buildMirrorFoes(rule);
   if (MIRROR_SCOUT && MIRROR_SCOUT.tier === rule.key) MIRROR_SCOUT = null;
+
+  /* 순환 갈래(2호선)는 여기서부터 길이 아주 갈립니다 — 장면을 한꺼번에 짓지 않고
+   * 한 순환씩 이어 붙이며 갑니다. 위에서 뽑은 것(RAIL2_PICK)을 그대로 물려 줍니다. */
+  if (rule.loop) return startRailLoop(rule);
   const 첫줄 = rule === MIRROR_EXTREME
     ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
     : rule === MIRROR_HARD
@@ -6513,10 +6915,205 @@ function startMirror(tier, preIds) {
   next();
 }
 
+/* ── 순환을 도는 갈래 (거울굴절철도 2호선) ─────────────────────
+ *  다른 갈래는 들어설 때 장면을 통째로 지어 놓고 그 위를 걷습니다.
+ *  2호선은 그럴 수가 없습니다 — 몇 순환을 돌지가 도는 사람 손에 달려 있어서,
+ *  들어설 때는 1순환만 지어 두고 베이스캠프에서 그때그때 이어 붙입니다.
+ *
+ *  이어 붙이기 전에 MIRROR.scenes 를 캠프 자리까지 «잘라» 냅니다.
+ *  져서 캠프로 돌아온 사람이 지난번과 다른 쪽을 고를 수 있어야 하는데,
+ *  자르지 않으면 지난번에 붙인 순환 뒤에 새 순환이 또 붙습니다.
+ */
+function startRailLoop(rule) {
+  /* 관측한 것이 있으면 그 셋이 그대로 섭니다. 없으면 여기서 뽑습니다. */
+  if (!RAIL2_PICK || RAIL2_PICK.tier !== rule.key) buildLoopFoes(rule);
+  S.rail2 = { bosses: RAIL2_PICK.bosses.slice(), done: 0, picks: [] };
+  RAIL2_PICK = null;
+
+  MIRROR = {
+    id: rule.key, no: rule.name, title: "", subtitle: rule.sub,
+    scenes: [
+      { t: "place", img: mirrorBG(rule), name: rule.name },
+      { t: "n", text: "유리창이 둥글게 휜다. 끝이 있어야 할 자리에 다시 출발점이 있다." },
+      { t: "n", text: "셋을 넘기면 한 순환이다. " + countBefore(rule.loop.free) +
+                      " 순환을 돌아야 종착역으로 가는 문이 열린다." }
+    ].concat(railCycleScenes(rule, 1))
+  };
+
+  S.mirror = true;
+  S.mirrorTier = MIRROR_TIERS.indexOf(rule);
+  S.mirrorHard = true;              // 옛 보관함과 맞추려고 함께 둡니다
+  S.mirrorCheckpoint = null;
+  S.sc = 0;
+  S.ended = false;
+  SCENES = buildScenes(MIRROR);
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  setBackdrop(mirrorBG(rule), null);
+  clearLog();
+  $log.classList.remove("recalling");
+  showCard(null);
+  divider();
+  say(rule.name, "place");
+  say("— " + rule.sub + " —", "sys");
+  say("무엇이 비쳐 나올지는 부딪쳐 봐야 안다.", "sys");
+  say(ENK_RULE.name + " " + rule.cost + " 소모.  (남은 것 " + enkCount() +
+      " / " + ENK_RULE.max + ")", "sys");
+  divider();
+  render();
+  next();
+}
+
+/* 한 순환치 장면 — 머리말 · 보스 셋 · 베이스캠프 */
+function railCycleScenes(rule, n) {
+  const k = railCycleScale(rule, n);
+  const ids = railCycleFoes(rule, n, S.rail2.bosses);
+  const out = [{ t: "railCycleHead", cycle: n, k: k }];
+  ids.forEach((id, i) => {
+    if (i) out.push({ t: "n", text: "선로가 다시 휜다. 다음 것이 그 자리에 서 있다." });
+    /* rail 은 전투 화면 눈금에 적을 것입니다 — 몇 순환의 몇 번째인가 (renderFoeBar) */
+    out.push({ t: "battle", foe: id, rail: { cycle: n, no: i + 1, k: k } });
+  });
+  out.push({ t: "railCamp", cycle: n });
+  return out;
+}
+
+/* 종착역치 장면 — 배경이 갈리고, 정해진 것 하나가 섭니다 */
+function railFinalScenes(rule, cycle) {
+  const k  = railCycleScale(rule, cycle);
+  const id = railFinalFoe(rule, cycle);
+  const rail = { final: true, k: k };
+  return [
+    { t: "n", text: "선로가 처음으로 곧게 뻗는다. 돌아오지 않는 쪽이다." },
+    { t: "place", img: rule.finalBg, name: rule.finalName },
+    { t: "n", text: "승강장 벽을 따라 그림이 걸려 있다. 어느 하나도 같은 손에서 나오지 않았다." },
+    FOES[id] && FOES[id].cineEntrance
+      ? { t: "bossCine", foe: id, rail: rail }
+      : { t: "battle",   foe: id, rail: rail },
+    { t: "mirrorClear" }
+  ];
+}
+
+/* 캠프 자리까지 잘라 내고 새로 이어 붙인다 */
+function railAppend(scenes) {
+  if (S.mirrorCheckpoint != null) MIRROR.scenes.length = S.mirrorCheckpoint + 1;
+  scenes.forEach(x => MIRROR.scenes.push(x));
+  SCENES = buildScenes(MIRROR);
+  S.waiting = false;
+  next();
+}
+
+/* ── 순환 머리말 ───────────────────────────────────────────── */
+SCENE_EXT.railCycleHead = function (s) {
+  const rule = mirrorRuleNow();
+  setBackdrop(mirrorBG(rule), rule.name);
+  divider();
+  say("── " + s.cycle + "순환 ──　" + railScaleText(s.k), "place");
+  say(s.cycle === 1
+    ? "선로가 둥글게 휘어 제자리로 돌아온다. 세 정거장, 그리고 다시 여기."
+    : "같은 선로다. 같은 셋이 서 있다. 이번에는 " + railScaleText(s.k) + ".", "sys");
+  return cont();
+};
+
+/* ── 베이스캠프 ────────────────────────────────────────────────
+ *  이형우가 순환과 순환 사이에 세워 둔 자리입니다. 여기서
+ *    · 체력과 관리력이 전부 찹니다
+ *    · 보너스를 하나 고릅니다 (그 순환에 처음 닿았을 때만)
+ *    · 편성을 고칩니다
+ *    · 종착역으로 갈지, 한 순환 더 돌지 고릅니다 (loop.free 순환을 넘겼을 때만)
+ *  져도 이 자리로 돌아옵니다 — defeat() 참고. 돌아왔을 때 보너스를 또 주지는
+ *  않습니다(picks 의 길이로 갈립니다). 안 그러면 일부러 져서 보너스를 모읍니다.
+ */
+SCENE_EXT.railCamp = function (s) {
+  const rule = mirrorRuleNow();
+  const r2 = S.rail2;
+  if (!r2) return next();
+
+  S.mirrorCheckpoint = S.sc - 1;      // 이 장면이 «져도 돌아오는 자리»
+  r2.done = Math.max(r2.done || 0, s.cycle);
+  S.waiting = true;
+
+  divider();
+  say("── " + s.cycle + "순환 종료 ──", "place");
+  setBackdrop(mirrorBG(rule), rule.name);
+
+  const 처음 = (r2.picks.length < s.cycle);   // 이 순환의 몫을 아직 안 골랐는가
+  if (처음) {
+    speak(rule.camp.who, s.cycle === 1
+      ? "여기에 베이스캠프를 세워 뒀습니다. 선로가 돌아오는 자리니까요."
+      : "또 오셨군요. 캠프는 그대로 있습니다.");
+    railCampHeal();
+    speak(rule.camp.who, "순환은 어떠셨습니까. …도움이 될 만한 것들을 좀 찾아 뒀습니다. 하나 챙기시죠.");
+    return railBonusPick(rule, s.cycle);
+  }
+  /* 져서 되돌아온 자리입니다. 몫은 이미 받았으니 다시 주지 않습니다. */
+  speak(rule.camp.who, "돌아오셨습니까. 캠프는 그대로입니다. 다시 나가시죠.");
+  railCampHeal();
+  return railFork(rule, s.cycle);
+};
+
+function railCampHeal() {
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  S.restManage = true;                 // 다음 전투는 관리력을 가득 채우고 엽니다
+  say("이형우가 관리력과 체력을 전부 회복시켰다.", "good");
+  render();
+}
+
+function railBonusPick(rule, cycle) {
+  S.waiting = true;
+  const have = railBonus();
+  divider();
+  say("순환을 하나 돌 때마다 하나씩 고른다. 같은 것을 거듭 골라도 되고, 그때는 더해진다.", "sys");
+  say("고른 것은 이 2호선 안에서만 산다 — 유리창으로 돌아가면 사라진다.", "sys");
+  buttons(RAIL2_BONUSES.map((b, i) => ({
+    label: b.name + "　" + b.desc +
+           (have[b.key] ? "　(지금 +" + Math.round(have[b.key] * 100) + "%)" : ""),
+    key: String(i + 1),
+    fn: () => {
+      S.rail2.picks.push(b.key);
+      say("→ " + b.name + " — " + b.desc, "gain");
+      /* 체력 상한이 올랐으면 오른 만큼 마저 채웁니다 */
+      S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+      render();
+      railFork(rule, cycle);
+    }
+  })));
+}
+
+function railFork(rule, cycle) {
+  S.waiting = true;
+  const 이번K = railCycleScale(rule, cycle);
+  const 다음K = railCycleScale(rule, cycle + 1);
+  const 다음순환 = {
+    label: (cycle + 1) + "순환으로　" + railScaleText(다음K),
+    fn: () => railAppend(railCycleScenes(rule, cycle + 1))
+  };
+  const 편성 = { label: "편성 고치기", cls: "ghost",
+                 fn: () => openParty(() => railFork(rule, cycle)) };
+
+  divider();
+  if (cycle < rule.loop.free) {
+    say("종착역으로 가는 문은 아직 닫혀 있다. " +
+        countBefore(rule.loop.free) + " 순환은 돌아야 한다.", "sys");
+    다음순환.cls = "primary";
+    return buttons([다음순환, 편성]);
+  }
+
+  speak(rule.camp.who,
+    "여기서 종착역으로 빠지실 수 있습니다. 한 바퀴 더 도셔도 되고요. " +
+    "다만 종착역에 서 있는 것도 그만큼 세져 있을 겁니다.");
+  buttons([
+    { label: "종착역으로　" + railScaleText(이번K), cls: "primary",
+      fn: () => railAppend(railFinalScenes(rule, cycle)) },
+    다음순환,
+    편성
+  ]);
+}
+
 function mirrorClear() {
   const rule = mirrorRuleNow();
   divider();
-  say(rule === MIRROR_EXTREME ? "흩어진 조각들이 하나씩 제자리를 찾아 간다."
+  say(rule.loop            ? "둥글게 휘어 있던 선로가 마침내 풀린다."
+    : rule === MIRROR_EXTREME ? "흩어진 조각들이 하나씩 제자리를 찾아 간다."
     : rule === MIRROR_HARD    ? "깨진 유리가 도로 맞물린다."
     :                           "유리창이 다시 맑아진다.", "good");
   /* 이 갈래를 «처음» 완주하는가 — 표를 남기기 전에 봐 두어야 합니다 */
@@ -6524,28 +7121,37 @@ function mirrorClear() {
   if (!S.mirrorDone) S.mirrorDone = {};
   S.mirrorDone[rule.key] = true;
 
+  /* ── 「행운의 부적」 ──────────────────────────────────────────
+   *  2호선에서 순환마다 고를 수 있는 넷 중 하나입니다. 고른 수만큼
+   *  받는 몫이 늘어납니다 — 원고료 · 황금교본 · 파편 상자 · 이벤트 재화 모두.
+   *  다른 갈래에서는 railBonus() 가 0 을 돌려주므로 곱해도 그대로입니다. */
+  const 덤 = 1 + railBonus().reward;
+  const 몫 = n => Math.round((n || 0) * 덤);
+  if (덤 > 1)
+    say("행운의 부적이 몫을 " + Math.round((덤 - 1) * 100) + "% 늘린다.", "gain");
+
   /* 원고료는 «처음 완주할 때만» 나옵니다. 고정값이라 earn() 을 타지 않으므로,
    * 들머리 칸에 적힌 수가 그대로 들어옵니다. */
   if (rule.bonus) {
     if (firstRun) {
-      S.money += rule.bonus;
-      say("처음 완주한 삯 — " + CURRENCY + " " + rule.bonus + " 획득.", "gain");
+      S.money += 몫(rule.bonus);
+      say("처음 완주한 삯 — " + CURRENCY + " " + 몫(rule.bonus) + " 획득.", "gain");
     } else {
       say(CURRENCY + "는 처음 완주할 때만 나온다.", "sys");
     }
   }
   if (rule.codex) {
-    S.codex += rule.codex;
-    say("비친 것들이 남기고 간 황금교본 " + rule.codex + "권.  (보유 " + S.codex + ")", "gain");
+    S.codex += 몫(rule.codex);
+    say("비친 것들이 남기고 간 황금교본 " + 몫(rule.codex) + "권.  (보유 " + S.codex + ")", "gain");
   }
   /* 인격 파편 상자(선택) — 돌 때마다 받는 몫입니다. 갈래마다 다릅니다. */
   if (rule.fragBoxSelect) {
-    addFragBox("select", rule.fragBoxSelect);
-    say("인격 파편 상자(선택) " + rule.fragBoxSelect + "개 획득.  (보유 " +
+    addFragBox("select", 몫(rule.fragBoxSelect));
+    say("인격 파편 상자(선택) " + 몫(rule.fragBoxSelect) + "개 획득.  (보유 " +
         fragBoxCount("select") + "개)", "gain");
   }
   /* 이벤트 재화 — 갈래마다 다릅니다. 각 MIRROR_TIERS 줄의 event 를 봅니다. */
-  gainEvent(rule.event);
+  gainEvent(몫(rule.event));
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
@@ -6553,6 +7159,10 @@ function mirrorClear() {
   S.mirror = false;
   S.mirrorTier = null;
   S.mirrorHard = false;
+  /* 순환 보너스는 여기서 사라집니다 — 이 2호선 한 판 안에서만 살던 것입니다.
+   * 「굴레」로 부풀렸던 체력 상한이 도로 줄어드니, 넘치는 몫을 깎아 맞춥니다. */
+  S.rail2 = null;
+  S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
   MIRROR = null;
   S.ended = true;
   render();

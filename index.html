@@ -39,6 +39,13 @@
   #foehp .nm{color:#c9c5c0;font-weight:700;font-size:12.5px;}
   #foehp .stat{color:#8b8681;font-size:11.5px;}
   body.battling #foehp .nm{color:#dcd0ce;}
+  /* 거울굴절철도 2호선 — 지금이 몇 순환의 몇 번째인가. 다른 갈래에서는 뜨지 않습니다. */
+  #foehp .railtag{
+    display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;
+    border:1px solid #6b5a34;background:#241f14;color:#d8b26a;
+    font-style:normal;font-weight:700;font-size:10.5px;letter-spacing:.02em;
+    vertical-align:1px;white-space:nowrap;
+  }
   /* 배경 한 겹, 그 위에 사람 한 겹 */
   .scenebox{position:relative;height:var(--stageh);overflow:hidden;background:#08080b;}
   .scenebox img.scene{
@@ -563,6 +570,64 @@
   .slot .nm{color:#e8e4de;font-weight:700;}
   .slot .sub{color:#8b8681;font-size:11.5px;}
   .slot .lock{color:#55524e;font-size:11.5px;}
+
+  /* ── 운전석의 접히는 무리 ────────────────────────────────────
+   *  갈래가 늘면서 운전석이 한 화면에 안 들어가게 됐습니다.
+   *  무리는 접어 두고, 맨 위의 「다음으로 추천」만 펴 둡니다. */
+  .csec{border-top:1px solid #23232a;margin-top:14px;}
+  .csec .csechead{
+    display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
+    padding:11px 2px;color:#e8e4de;font-weight:700;font-size:13.5px;
+  }
+  .csec .csechead:hover{color:#d8b26a;}
+  .csec .csechead b{flex:none;}
+  /* 무리마다 곁들이는 한 줄. 좁은 화면에서는 이름과 겹쳐 읽기 어려워 감춥니다. */
+  .csec .csechead span{
+    color:#6e6a66;font-weight:400;font-size:11.5px;
+    min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  @media (max-width:640px){ .csec .csechead span{display:none;} }
+  .csec .csechead i{                       /* 접힘 표시 — 펴면 아래를 봅니다 */
+    margin-left:auto;width:0;height:0;font-style:normal;
+    border-left:4px solid transparent;border-right:4px solid transparent;
+    border-top:5px solid #6e6a66;transform:rotate(-90deg);transition:transform .12s;
+  }
+  .csec.on .csechead i{transform:rotate(0deg);border-top-color:#d8b26a;}
+  .csec .csecbody{display:none;padding-bottom:4px;}
+  .csec.on .csecbody{display:block;}
+
+  /* 다음으로 추천 — 늘 펴져 있고, 금색 테로 한 번 묶습니다 */
+  .csrec{border:1px solid #4a3c1c;background:#14110a;padding:11px 12px;margin-top:16px;}
+  .csrec .csrechead{color:#d8b26a;font-weight:700;font-size:13.5px;margin-bottom:9px;letter-spacing:.04em;}
+  .csrec .csnone{color:#8b8681;font-size:12.5px;line-height:1.7;}
+  /* 추천 자리의 이야기 칸에만 붙는 소개 세 줄 (data/story.js 의 pitch) */
+  .csrec .slot .csum{margin-top:6px;}
+  .csrec .slot .csum span{display:block;color:#a9a49e;font-size:12px;line-height:1.55;}
+  .csrec .slot .csum span + span{margin-top:2px;}
+
+  /* ── 거울·거울굴절철도 칸 ────────────────────────────────────
+   *  갈래마다 적을 말이 제각각이라 줄글이 길어지던 자리입니다.
+   *  이제 «고를 때 필요한 것»만 눈금 셋으로 세우고, 풀어 쓴 말은
+   *  들어가기 전 화면으로 넘겼습니다 (engine.js 의 mirrorFacts 참고). */
+  .mslot .msub{color:#a9a49e;font-size:11.5px;margin-bottom:7px;}
+  .mslot .mstats{display:flex;gap:6px;margin-bottom:7px;}
+  /* 칸 너비는 창에 따라 달라지므로(grid 가 210px 부터 늘립니다) 값에 nowrap 을 걸지
+   * 않습니다 — 좁아지면 「엔케팔린 / 1」처럼 두 줄로 접히게 두는 편이,
+   * 잘려서 「엔케팔…」이 되는 것보다 낫습니다. 셋의 높이는 flex 가 맞춰 줍니다. */
+  .mslot .mstats b{
+    flex:1;min-width:0;display:block;padding:4px 7px;
+    border:1px solid #2f2f37;background:#0e0e13;border-radius:3px;
+    color:#e8e4de;font-weight:700;font-size:12px;line-height:1.35;overflow:hidden;
+  }
+  .mslot .mstats b i{
+    display:block;font-style:normal;font-weight:400;
+    color:#6e6a66;font-size:10px;letter-spacing:.08em;margin-bottom:1px;
+  }
+  .mslot .mstats b.bad{border-color:#5e2a28;color:#d9705f;}
+  .mslot .mrew{color:#8b8681;font-size:11px;line-height:1.5;}
+  .mslot .mrew em{display:block;font-style:normal;color:#d8b26a;}
+  .mslot .mrew em.done{color:#5f5b57;}   /* 처음 완주 몫을 이미 받은 갈래 */
+  .mslot .mwarn{color:#c8403a;font-size:11px;margin-top:5px;}
   /* ── 노트 ─────────────────────────────── */
   .note{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
   .notepic{flex:0 0 auto;}
