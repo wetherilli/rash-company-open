@@ -74,6 +74,12 @@
     transform:scale(var(--imgscale,1));transform-origin:50% 100%;
   }
   .scenebox .figwrap.mid img{max-width:74%;}
+  /* 키워 세우는 적(--imgscale 이 붙은 것) — 바닥이 아니라 칸 한가운데에 답니다.
+   * 바닥을 축으로 키우면 위로만 자라 머리가 잘려 나갑니다. 축도 가운데로 옮겨,
+   * 커진 만큼 위아래로 고르게 벌어지게 합니다. 맞을 때·쓰러질 때 애니메이션도
+   * 이 축을 그대로 물려받습니다 (keyframes 는 scale 만 곱하고 축은 안 건드립니다). */
+  .scenebox .figwrap.scaled{align-items:center;}
+  .scenebox .figwrap.scaled img{transform-origin:50% 50%;}
   /* 맞을 때 — 참격이 한 번 그어진다 */
   .scenebox .slashfx{
     position:absolute;left:50%;top:50%;
@@ -538,6 +544,10 @@
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;}
   /* 글이 긴 칸은 창 너비를 다 씁니다 — 우편함처럼 줄글이 들어가는 곳 */
   .grid.one{grid-template-columns:1fr;}
+  /* 칸이 셋뿐인 줄은 «반드시» 셋을 나란히 세웁니다 — 상점에서 한 칸짜리 덩이가
+   * 줄마다 하나씩 내려가 스크롤이 길어지던 것을 한 줄로 모으는 몫입니다.
+   * 좁은 화면(640px 아래)에서는 아래 미디어 규칙이 다시 한 줄씩으로 되돌립니다. */
+  .grid.three{grid-template-columns:repeat(3,1fr);}
   /* 우편 칸의 마지막 줄 — 남은 날과 「눌러서 받기」를 오른쪽에 붙입니다 */
   .slot .mailfoot{text-align:right;margin-top:4px;}
   /* 방금 받은 결과 / 못 받은 까닭 — 창 위에 붙습니다 */
@@ -675,6 +685,8 @@
     .card img{max-width:120px;max-height:160px;}
     .sheet{padding:14px 13px;}
     .grid{grid-template-columns:1fr;}
+    /* 셋을 나란히 세우는 규칙은 여기서 풀립니다 — 좁은 화면에서는 한 줄에 하나씩 */
+    .grid.three{grid-template-columns:1fr;}
     /* 배정 광고 띠도 화면에 맞춰 낮춥니다 */
     .pkline{height:92px;font-size:16px;letter-spacing:.06em;padding:0 10px;}
     .pkline.small{height:46px;}
@@ -716,6 +728,7 @@
 <script src="data/mail.js"></script>
 <script src="data/notice.js"></script>
 <script src="data/patch.js"></script>
+<script src="data/event.js"></script>
 <script src="data/story.js"></script>
 <script src="engine.js"></script>
 <script>

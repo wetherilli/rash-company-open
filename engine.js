@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.5.3";
+const VERSION = "1.6.0";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -223,6 +223,9 @@ function vaultBody() {
     supports: Object.keys(S.supportsOwned || {}),
     achieved: Object.keys(S.achieved || {}),
     cleared:  Object.keys(S.cleared || {}),
+    /* 완주한 거울 갈래 — 원고료는 갈래마다 «처음 완주할 때만» 나오므로,
+     * 어느 갈래를 이미 돌았는지 남겨 두어야 합니다. */
+    mirrorDone: Object.keys(S.mirrorDone || {}),
     equip:    S.equip,
     party:    ownParty(),          /* 조력자는 «내 것» 이 아니라 담지 않습니다 */
     money:    S.money,
@@ -237,6 +240,12 @@ function vaultBody() {
     fragBox:  S.fragBox || { select: 0, random: 0 },
     /* 엔케팔린 캡슐 — 보관함에서 바로 쓰는 소모품. 개수 하나만 남깁니다. */
     enkCap:   enkCapCount(),
+    /* 이벤트 재화 — 남은 개수와 «어느 기간 것인가»(eventId)를 함께 적습니다.
+     * 다음에 열 때 eventId 가 지금 기간과 다르면, 새 이야기가 나온 것으로 보고
+     * 0으로 지웁니다. eventBuy(교환소에서 몇 개 바꿨는가)도 함께 비워 한도가 다시 찹니다. */
+    event:    S.event || 0,
+    eventId:  S.eventId || null,
+    eventBuy: S.eventBuy || {},
     newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
     enk:      S.enk || null,
     /* 이미 받은 우편. 이것을 빠뜨리면 받은 표시가 안 남아 무한정 다시 받힙니다. */
@@ -266,6 +275,7 @@ function loadVault() {
     achieved: toMap(v.achieved),
     mailTaken: toMap(v.mailTaken),
     cleared:  toMap(v.cleared),
+    mirrorDone: toMap(v.mirrorDone),
     equip:    v.equip || {},
     party:    v.party || null,
     money:    v.money,
@@ -274,6 +284,9 @@ function loadVault() {
     sync:     v.sync || {},
     fragBox:  v.fragBox || { select: 0, random: 0 },
     enkCap:   (+v.enkCap) || 0,
+    event:    (+v.event) || 0,
+    eventId:  v.eventId || null,
+    eventBuy: v.eventBuy || {},
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     ver:      v.ver || null
@@ -308,7 +321,24 @@ function vaultSig(o) {
   return codeHash([
     j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
     j(o.achieved), j(o.cleared),
-    /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다. */
+    /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다.
+     * mirrorDone 도 같은 결입니다 — 거울 원고료가 처음 완주할 때만 나오므로. */
+    j(o.mailTaken), o.newbie, j(o.mirrorDone),
+    o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
+    /* 이벤트 재화 — 남은 개수, 어느 기간 것인가, 교환소에서 몇 개 바꿨는가 */
+    (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
+    o.ver
+  ].join("|"));
+}
+/* 이벤트 재화가 생기기 «전» 의 셈법입니다. 그때 나간 보관함에는 event 칸이
+ * 아예 없으므로, 이것을 남겨 두지 않으면 판을 올렸다는 이유만으로 손댐으로 뜹니다. */
+function vaultSigOld4(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  const jm = m => Object.keys(m || {}).sort().map(k => k + ":" + m[k]).join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
     j(o.mailTaken), o.newbie,
     o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0), o.ver
   ].join("|"));
@@ -354,7 +384,7 @@ function vaultSigOld(o) {
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld3(o) &&
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld4(o) && o.sig !== vaultSigOld3(o) &&
          o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
 }
 
@@ -719,6 +749,21 @@ function newState() {
     mailTaken[id] = true;
   }
 
+  /* 이벤트 재화 — 보관함에 «어느 기간 것인가»(eventId)가 함께 적혀 있습니다.
+   * 그것이 지금 기간과 다르면 새 이야기가 나온 것이므로, 남은 개수를 0으로 지우고
+   * 교환소에서 몇 개를 바꿨는지도 함께 비웁니다 (한도가 다시 찹니다).
+   * 지운 사실은 eventNote 에 담아, 유리창에서 한 번 알립니다. */
+  const evId  = curEventId();
+  let event    = (v && +v.event) || 0;
+  let eventBuy = (v && v.eventBuy) || {};
+  let eventNote = null;
+  if (evId && (!v || v.eventId !== evId)) {
+    /* 보관함이 아예 없는 분(처음 오신 분)께는 알리지 않습니다 — 지울 것이 없습니다 */
+    if (v) eventNote = { cur: eventCurName(), before: event };
+    event = 0;
+    eventBuy = {};
+  }
+
   let party = STARTING_PARTY.slice();
   const okMember = (w, i) =>
     isSupport(w) ? (supportBy(w) && supportsOwned[w] && slotTakesSupport(i))
@@ -814,6 +859,11 @@ function newState() {
     sync,
     fragBox,
     enkCap: (v && +v.enkCap) || 0,   // 엔케팔린 캡슐 — 보관함에 남는 소모품
+    /* 이벤트 재화 — 이름은 기간마다 갈리고(eventCurName), 개수는 이 한 칸입니다 */
+    event,
+    eventId: evId,
+    eventBuy,
+    eventNote,              // 기간이 갈려 0으로 지웠을 때 한 번 알릴 내용
     mailTaken,
     hp: {},                 // who -> 현재 체력 (없으면 최대)
     money,
@@ -822,6 +872,7 @@ function newState() {
     newbie: v && typeof v.newbie === "number" ? v.newbie : 0, // 신입 관리자 기념 배정을 쓴 횟수
     enk: (v && v.enk && typeof v.enk.n === "number") ? v.enk : null,  // 엔케팔린 — enkSync() 가 채운다
     cleared: v && v.cleared ? v.cleared : {},
+    mirrorDone: (v && v.mirrorDone) ? v.mirrorDone : {},   // 이미 완주한 거울 갈래
     flags: {},
     battle: null,
     waiting: false,
@@ -963,6 +1014,18 @@ function versionNotice() {
     say("인격 파편도 절반으로 줄었습니다 — " + n.frags.before + " → " + n.frags.after, "bad");
   if (n.fragBox)
     say("인격 파편 상자도 절반으로 줄었습니다 — " + n.fragBox.before + " → " + n.fragBox.after, "bad");
+  divider();
+}
+
+/* 새 이야기가 나와 이벤트 재화가 갈렸을 때 — 유리창에서 한 번만 알립니다.
+ * versionNotice() 와 같은 방식으로, 알리고 나면 지우고 곧바로 보관함에 적습니다. */
+function eventNotice() {
+  if (!S || !S.eventNote) return;
+  const n = S.eventNote;
+  S.eventNote = null;
+  saveVault();
+  divider();
+  say('새로운 이벤트 재화가 출시되었습니다 "' + n.cur + '"! 기존 재화는 0으로 초기화됩니다.', "gain");
   divider();
 }
 
@@ -1286,7 +1349,11 @@ function addFrag(who, n) {
  *  합은 언제나 (쓴 개수 × 2) 와 정확히 같다. */
 const FRAGBOX_RULE = {
   mult: 2,
-  desc: "상자 1개당 1~3개의 파편이 들어있습니다."
+  desc: "상자 1개당 1~3개의 파편이 들어있습니다.",
+  /* 보관함에서 desc 바로 아랫줄에 붙습니다 — 파편을 어디에 쓰는지 일러 두는 자리.
+   * 숫자 둘은 SYNC_UNLOCK_CH(동기화가 열리는 장)와 PRICES.fragExchange 를 따라갑니다. */
+  desc2: "3장 이후부터 동기화에 사용할 수 있습니다. " +
+         "400개의 파편을 모으면 원하는 인격과 교환할 수 있습니다."
 };
 const FRAGBOX_KINDS = [
   { key: "select", name: "인격 파편 상자 (선택)" },
@@ -1326,6 +1393,209 @@ function enkCapUse() {
  *  작성위원마다 그 사람 몫의 파편을 태워 «동기화» 단계를 올린다.
  *  0단계(안 적힘)에서 1단계로 올리는 값이 base, 단계가 하나 오를 때마다 step 만큼 늘어난다.
  *  전투에서는 statPct 만큼 — 단계 1당 모든 능력치(공·방·체)가 그 비율만큼 강해진다. */
+/* ── 이벤트 재화 ──────────────────────────────────────────────
+ *  원고료·황금교본과 같은 급의 재화입니다. 다만 «이름이 고정이 아닙니다» —
+ *  지금 서 있는 이벤트에 따라 화면에 적히는 이름이 바뀝니다.
+ *  괴수살인괴수 기간에는 「칼날이빨」, 부산행 기간에는 「열차티켓」입니다.
+ *  속으로는 늘 S.event 한 칸이고, 기간이 갈리면 0으로 지워집니다.
+ *
+ *  지금 서 있는 이벤트 = CHAPTERS «맨 마지막 장» 몫으로 data/event.js 에
+ *  적어 둔 줄입니다. 본편이든 .5장이든 가리지 않습니다.
+ *  물건·값·이름은 모두 data/event.js 에서 고칩니다.
+ */
+function eventRule() {
+  return (typeof EVENT_RULE !== "undefined" && EVENT_RULE)
+    ? EVENT_RULE : { shop: "이벤트 교환소", noCur: "이벤트 재화", bonusPct: 20,
+                     gain: { story: { first: 50, again: 10 },
+                             latest: { first: 100, again: 30 } } };
+}
+function eventList() { return (typeof EVENTS !== "undefined" && EVENTS) ? EVENTS : []; }
+/* 가장 마지막에 나온 이야기 — 맨 뒤에 붙은 것이 곧 최신 스토리입니다 */
+function lastStory() {
+  return (typeof CHAPTERS !== "undefined" && CHAPTERS.length)
+    ? CHAPTERS[CHAPTERS.length - 1] : null;
+}
+/* 지금 서 있는 이벤트. 맨 마지막 장 몫을 안 적어 두었으면 «이벤트 없음»(null) 입니다 —
+ * 그때는 상점에 교환소 손잡이가 아예 나오지 않습니다. */
+function curEvent() {
+  const c = lastStory();
+  if (!c) return null;
+  return eventList().find(e => e && e.chapter === c.title) || null;
+}
+function curEventId()   { const e = curEvent(); return e ? e.id : null; }
+/* 기간 — 우편함과 «같은 방식» 입니다. from 을 안 적었으면 기한이 없습니다.
+ * 기간이 지나면 상점의 교환소 손잡이가 사라집니다. 모아 둔 재화는 그대로 남고,
+ * 다음 이야기가 나올 때 비로소 0으로 갈립니다. */
+function eventUntil(e) {
+  const p = String((e && e.from) || "").split("-").map(Number);
+  if (p.length !== 3 || p.some(isNaN)) return Infinity;
+  const days = (e && typeof e.days === "number") ? e.days : eventRule().days;
+  return new Date(p[0], p[1] - 1, p[2]).getTime() + days * 24 * 60 * 60 * 1000;
+}
+function eventLive(e) { return !!e && Date.now() < eventUntil(e); }
+/* 지금 «열려 있는» 이벤트. 상점 손잡이와 교환소는 이것을 봅니다 */
+function openEvent() { const e = curEvent(); return eventLive(e) ? e : null; }
+/* 얼마나 남았는지 — 우편의 mailLeftText 와 같은 말투로 */
+function eventLeftText(e) {
+  const ms = eventUntil(e) - Date.now();
+  if (ms === Infinity) return "기한 없음";
+  if (ms <= 0) return "기간이 끝났습니다";
+  const d = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (d >= 1) return d + "일 남음";
+  const h = Math.floor(ms / (60 * 60 * 1000));
+  return h >= 1 ? h + "시간 남음" : "오늘까지";
+}
+/* 화면에 적을 재화 이름 — CURRENCY(원고료) 자리에 대응합니다 */
+function eventCurName() { const e = curEvent(); return e ? e.cur : eventRule().noCur; }
+function eventCount()   { return (S && +S.event) || 0; }
+function addEvent(n) {
+  if (!n) return;
+  S.event = eventCount() + n;
+}
+function eventGoods()   { const e = curEvent(); return (e && e.goods) || []; }
+
+/* ── 이벤트 재화가 들어오는 자리 ──────────────────────────────
+ *  스토리 장을 마칠 때(chapterEnd)와 거울 갈래를 완주할 때(mirrorClear)입니다.
+ *  얼마를 주는지는 data/event.js 의 EVENT_RULE.gain 과, 거울 쪽은
+ *  MIRROR_TIERS 각 갈래의 event 에 적혀 있습니다.
+ *
+ *  ■ 얹어 주는 몫
+ *    «가장 새로 선 특정 배정»(pickupList()[0] — 지금은 G사) 의 대상 인격을
+ *    편성에 세우고 있으면, 한 명당 EVENT_RULE.bonusPct % 를 더 받습니다.
+ *    셋을 다 세우면 60% 더입니다. 지원 작성위원도 제목으로 함께 봅니다.
+ */
+function eventLatestPickup() { return pickupList()[0] || null; }
+function eventBonusCount() {
+  const p = eventLatestPickup();
+  if (!p || !S || !S.party) return 0;
+  let n = 0;
+  S.party.forEach(w => {
+    if (!w) return;
+    /* 지원 작성위원은 자기 인격을 갈아 끼우지 않으므로 제 제목을 그대로 봅니다 */
+    const t = isSupport(w) ? (supportBy(w) || {}).title
+                           : (idByKey(S.equip[w]) || {}).title;
+    if (t && pickupHit(p, t)) n++;
+  });
+  return n;
+}
+/* 얹어 주는 몫까지 더한 값. 나머지는 버립니다 (다른 셈과 같은 결). */
+function eventGainWithBonus(base) {
+  base = +base || 0;
+  const n = eventBonusCount();
+  const extra = n ? Math.floor(base * (eventRule().bonusPct / 100) * n) : 0;
+  return { base, n, extra, total: base + extra };
+}
+/* 실제로 넣어 주고 화면에 한 줄 적습니다. 넣은 값을 돌려줍니다.
+ * 이벤트가 서 있지 않거나 기간이 끝났으면 아무것도 하지 않습니다 —
+ * 쓸 곳(교환소)이 닫힌 뒤에 모아 봐야 쓸 데가 없기 때문입니다. */
+function gainEvent(base) {
+  if (!openEvent() || !base) return 0;
+  const g = eventGainWithBonus(base);
+  addEvent(g.total);
+  say(eventCurName() + " " + g.total + " 획득." +
+      (g.n ? "　(" + eventLatestPickup().name + " 인격 " + g.n + "명 — " +
+             (eventRule().bonusPct * g.n) + "% 더 받았다)" : ""), "gain");
+  return g.total;
+}
+/* 스토리 장을 마쳤을 때 줄 몫 — 맨 마지막 장이면 더 줍니다 */
+function eventStoryGain(c, first) {
+  const g = eventRule().gain || {};
+  const last = lastStory();
+  const t = (last && c && c.id === last.id) ? g.latest : g.story;
+  if (!t) return 0;
+  return first ? t.first : t.again;
+}
+/* 이 기간에 그 물건을 몇 개 바꿨는가 */
+function eventBought(id) { return (S && S.eventBuy && +S.eventBuy[id]) || 0; }
+/* 몇 개 더 바꿀 수 있는가. limit 이 없거나 0 이면 무제한입니다 */
+function eventLeft(g) {
+  if (!g || !g.limit) return Infinity;
+  return Math.max(0, g.limit - eventBought(g.id));
+}
+/* 교환 물건이 무엇을 주는지 한 줄로 — 우편(mailGiveText)과 «같은 말» 을 씁니다 */
+/* 물건이 인격을 준다면 그 인격 줄을 찾아 돌려줍니다. 못 찾으면 null —
+ * 제목을 고쳤을 때 조용히 사라지지 않게, 화면에서 그대로 일러 줍니다. */
+function eventGiveId(g) {
+  const k = g && g.id;
+  if (!k || !k.who) return null;
+  const s = SINNERS[k.who];
+  if (!s) return null;
+  const id = s.ids.find(i => i.star === k.star && i.title === k.title);
+  return id ? { who: k.who, id, key: idKey(k.who, id) } : null;
+}
+function eventGiveText(g) {
+  g = g || {};
+  const out = [];
+  const p = eventGiveId(g);
+  if (p) out.push(stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name);
+  else if (g.id) out.push("(인격을 찾지 못했습니다: " + [g.id.who, g.id.star, g.id.title].join(" / ") + ")");
+  if (g.money) out.push(CURRENCY + " " + g.money);
+  if (g.codex) out.push("황금교본 " + g.codex + "권");
+  if (g.enk)   out.push(ENK_RULE.name + " " + g.enk);
+  if (g.enkCap) out.push(ENK_CAPSULE.name + " " + g.enkCap + "개");
+  if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
+  if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
+  return out.join("　·　") || "—";
+}
+/* 물건에 딸리는 설명 — 인격 파편 상자는 «보관함에 적힌 것과 똑같은 글» 을 씁니다.
+ * 글을 여기 옮겨 적지 않고 FRAGBOX_RULE 을 그대로 봅니다. 한 곳만 고치면
+ * 보관함과 교환소가 늘 같은 말을 하게 되는 몫입니다. */
+function eventGoodsNote(g) {
+  g = g || {};
+  if (g.fragBoxSelect || g.fragBoxRandom)
+    return FRAGBOX_RULE.desc + " " + FRAGBOX_RULE.desc2;
+  /* 인격을 이미 지녔으면 «무엇을 대신 받는지» 를 사기 전에 알려 둡니다 */
+  const p = eventGiveId(g);
+  if (p && S.owned[p.key])
+    return "이미 지닌 인격입니다 — 바꾸면 " + SINNERS[p.who].name +
+           " 인격 파편 " + dupRefund(p.id.star) + "개로 돌려받습니다.";
+  if (p && p.id.note) return "“" + p.id.note + "”";
+  return "";
+}
+/* 실제로 넣어 줍니다. 받은 것을 한 줄로 돌려줍니다. */
+function eventGiveApply(g) {
+  g = g || {};
+  const got = [];
+  /* 인격 — 없으면 넣어 주고, 이미 지녔으면 뽑기에서 겹쳤을 때와 «똑같이»
+   * 그 사람 몫 인격 파편으로 돌려줍니다 (dupRefund 표를 그대로 씁니다). */
+  const p = eventGiveId(g);
+  if (p) {
+    if (!S.owned[p.key]) {
+      S.owned[p.key] = true;
+      /* 뽑기와 같은 규칙 — 지금 세운 것보다 성급이 높으면 갈아 끼웁니다 */
+      const cur = idByKey(S.equip[p.who]);
+      if (!cur || cur.star < p.id.star) {
+        S.equip[p.who] = p.key;
+        if (S.party.indexOf(p.who) >= 0) S.hp[p.who] = maxHp(p.who);
+      }
+      got.push(stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name);
+    } else {
+      const n = dupRefund(p.id.star);
+      addFrag(p.who, n);
+      got.push("이미 지닌 인격이라 " + SINNERS[p.who].name + " 인격 파편 " + n + "개");
+    }
+  }
+  if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); }
+  if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
+  if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
+  if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
+  if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
+  if (g.enk) {
+    enkSync();
+    const before = enkCount();
+    S.enk.n = Math.min(ENK_RULE.max, before + g.enk);
+    const n = enkCount() - before;
+    got.push(ENK_RULE.name + " " + n +
+             (n < g.enk ? " (상한 " + ENK_RULE.max + " 을 넘겨 받지는 못했습니다)" : ""));
+  }
+  return got.join("　·　");
+}
+
+/* 동기화가 열리는 장 — 유리창의 [동기화] 손잡이와 장 종료 알림이 이것을 함께 봅니다.
+ * 이 장을 마치기 전에는 손잡이 자체가 유리창에 나오지 않습니다. */
+const SYNC_UNLOCK_CH = "ch3";
+function syncUnlocked() { return !!(S && S.cleared && S.cleared[SYNC_UNLOCK_CH]); }
+
 const SYNC_RULE = {
   base: 100,     // 0 → 1단계에 드는 파편
   step: 20,      // 단계가 하나 오를 때마다 늘어나는 값
@@ -1805,6 +2075,17 @@ function say(text, cls) {
   $log.appendChild(el);
   $log.scrollTop = $log.scrollHeight;
 }
+/* 굵게 한 줄 — 해금 알림처럼 «놓치면 안 되는» 한 줄에만 씁니다.
+ * say() 와 같되 글자만 굵습니다. 본문은 그대로 글자로 넣으므로 안전합니다. */
+function sayBold(text, cls) {
+  const el = document.createElement("p");
+  el.className = cls || "n";
+  const b = document.createElement("b");
+  b.textContent = text;
+  el.appendChild(b);
+  $log.appendChild(el);
+  $log.scrollTop = $log.scrollHeight;
+}
 function speak(who, text) {
   const w = document.createElement("p");
   w.className = "who";
@@ -1874,8 +2155,12 @@ function drawStage(fig, side, tag, scale) {
     /* --imgscale 로 넘깁니다(직접 transform 을 박지 않습니다) — 맞을 때·쓰러질 때
      * 애니메이션도 이 값을 keyframes 안에서 함께 곱하게 index.html 쪽에 맞춰 뒀습니다.
      * 그래야 맞는 순간 확대가 풀렸다 돌아오는 깜빡임이 없습니다. */
-    const st = (scale && scale !== 1) ? ' style="--imgscale:' + scale + '"' : '';
-    html += '<div class="figwrap ' + (side === "mid" ? "mid" : "left") + '">' +
+    const big = !!(scale && scale !== 1);
+    const st = big ? ' style="--imgscale:' + scale + '"' : '';
+    /* 키워 세우는 그림은 바닥이 아니라 «칸 한가운데» 에 답니다 — 바닥을 축으로
+     * 키우면 위로만 자라 머리가 화면 밖으로 넘칩니다. scaled 가 그 몫입니다. */
+    html += '<div class="figwrap ' + (side === "mid" ? "mid" : "left") +
+              (big ? " scaled" : "") + '">' +
               '<img id="figure" src="' + assetURL(fig) + '" alt="' + (tag || "") + '"' + st + ' ' +
               'onerror="this.style.display=\'none\'"></div>';
   }
@@ -1956,6 +2241,7 @@ function renderHeader() {
   let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") +
               CURRENCY + " <b>" + S.money + "</b>";
   if (S.codex) right += "   황금교본 <b>" + S.codex + "</b>";
+  /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
   /* 관리력은 머리에 숫자로 적지 않고, 아래쪽 눈금으로 보여 줍니다 (renderManage) */
   $wallet.innerHTML = right;
 }
@@ -3387,6 +3673,7 @@ function checkAchievements(foeName, cleared) {
     }
     if (g.money) { S.money += g.money; say(CURRENCY + " " + g.money + " 획득.", "gain"); }
     if (g.codex) { S.codex += g.codex; say("황금교본 " + g.codex + "권 획득.", "gain"); }
+    if (g.event) { addEvent(g.event); say(eventCurName() + " " + g.event + " 획득.", "gain"); }
     saveVault();
   });
 }
@@ -3789,12 +4076,23 @@ function chapterEnd() {
     S.money += pay;
     say(c.no + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
   }
+  /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
+   * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
+  gainEvent(eventStoryGain(c, first));
   saveVault();
   save();
   const hasNext = S.ch + 1 < CHAPTERS.length;
 
   /* 첫 장을 처음 마쳤을 때만 — 다음에 무엇을 하면 되는지 일러 둡니다.
    * 여기서 상점을 한 번 열어 보지 않으면 인격이 하나도 없는 채로 1장에 갑니다. */
+  /* 동기화가 열리는 장을 «처음» 마쳤을 때만 한 번 알립니다.
+   * 이미 마쳤던 장을 다시 밟으면 first 가 거짓이라 두 번 나오지 않습니다. */
+  if (first && c.id === SYNC_UNLOCK_CH) {
+    divider();
+    sayBold("'동기화' 기능이 해금되었습니다!", "good");
+    say("유리창의 [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
+  }
+
   const firstEver = first && CHAPTERS[0] && c.id === CHAPTERS[0].id;
   if (firstEver) {
     divider();
@@ -4415,11 +4713,17 @@ function openShop(back) {
   const draw = (msg) => {
     let h = '<h2>상 점</h2>' +
             '<div class="hint">보유 ' + CURRENCY + ' <b>' + S.money + '</b>' +
-            '　·　황금교본 <b>' + S.codex + '</b></div>';
+            '　·　황금교본 <b>' + S.codex + '</b>' +
+            (curEvent() ? '　·　' + eventCurName() + ' <b>' + eventCount() + '</b>' : '') +
+            '</div>';
 
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
 
-    /* ── 신입 관리자 기념 배정 — 맨 위, 가로로 통째 ──────────────
+    /* ── 맨 위 한 자리 — 가로로 통째 ─────────────────────────────
+     *  두 가지가 이 자리를 «번갈아» 씁니다. 겹쳐 서지 않게 한 번에 하나만입니다.
+     *    1. 신입 관리자 기념 배정 — 두 번 다 쓸 때까지
+     *    2. 이벤트 교환소        — 기념 배정을 마친 뒤부터, 이벤트 기간 동안만
+     *  기간이 끝나면(eventLive 가 거짓) 이 자리는 그냥 비워집니다.
      * 두 번 다 쓰고 나면 이 덩이 자체를 그리지 않습니다. 아주 사라집니다. */
     if (newbieLeft() > 0) {
       const canBuy = S.money >= NEWBIE_RULE.cost;
@@ -4436,6 +4740,27 @@ function openShop(back) {
                (canBuy ? '' : '<div class="sub" style="color:#c8403a">' + CURRENCY + '가 모자랍니다</div>') +
              '</div>' +
            '</div>';
+    } else {
+      const ev = openEvent();
+      if (ev) {
+        const cur = eventCurName();
+        const bg  = ev.banner
+          ? ' style="background-image:url(\'' + assetURL(ev.banner) + '\')"' : "";
+        h += '<div class="grid">' +
+               '<div class="slot pk wide" data-event="1">' +
+                 (ev.line
+                   ? '<div class="pkline' + (ev.banner ? ' pic' : '') + '"' + bg + '>' +
+                       '<span>' + ev.line + '</span></div>'
+                   : "") +
+                 '<div class="nm">' + eventRule().shop + '</div>' +
+                 '<div class="sub" style="color:#d8b26a">' +
+                   "'" + cur + "'" + josa(cur, "을") +
+                   ' 다양한 보상과 교환해보세요!</div>' +
+                 '<div class="sub">보유 ' + cur + ' <b>' + eventCount() + '</b>' +
+                   '　·　' + eventLeftText(ev) + '</div>' +
+               '</div>' +
+             '</div>';
+      }
     }
 
     h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">인격 배정</div>' +
@@ -4465,8 +4790,16 @@ function openShop(back) {
     const exCan = Object.keys(SINNERS).some(w =>
       fragCount(w) >= RULE.fragExchange &&
       SINNERS[w].ids.some(id => !S.owned[idKey(w, id)] && !pickupOnTitle(id.title)));
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">E.G.O 기프트</div>' +
-         '<div class="grid">' +
+    const aTotal = advisorList().length;
+    const aMine  = Object.keys(S.advisorsOwned || {}).length;
+
+    /* ── 기프트 · 인격 교환 · 교육위원 — 한 줄에 셋 ────────────────
+     *  셋 다 «한 칸짜리» 덩이라, 저마다 제목을 이고 한 줄씩 내려가면
+     *  상점이 쓸데없이 길어집니다. 제목 하나 아래로 모아 나란히 세웁니다.
+     *  .grid.three 가 셋을 붙들어 줍니다 — 좁은 화면에서는 다시 한 줄씩입니다. */
+    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">' +
+           'E.G.O 기프트　·　인격 교환　·　보조 교육위원</div>' +
+         '<div class="grid three">' +
            '<div class="slot"' + (S.codex >= GIFT_RULE.cost ? ' data-gift="1"' : '') + '>' +
              '<div class="' + (S.codex >= GIFT_RULE.cost ? 'nm' : 'lock') + '">기프트 배정소</div>' +
              '<div class="sub">1회 황금교본 ' + GIFT_RULE.cost + '　·　보유 ' + gMine + ' / ' + gTotal + '</div>' +
@@ -4476,10 +4809,6 @@ function openShop(back) {
                ? '중복이면 ' + CURRENCY + ' ' + dupRefundText()
                : '황금교본이 모자랍니다') + '</div>' +
            '</div>' +
-         '</div>';
-
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">인격 교환</div>' +
-         '<div class="grid">' +
            '<div class="slot"' + (exCan ? ' data-exchange="1"' : '') + '>' +
              '<div class="' + (exCan ? 'nm' : 'lock') + '">인격 교환</div>' +
              '<div class="sub">그 사람 몫 파편 ' + RULE.fragExchange + '개로 미보유 인격 하나를 정가로 바꿉니다</div>' +
@@ -4487,12 +4816,6 @@ function openShop(back) {
                ? '뽑기와 달리 무엇을 얻을지 직접 고릅니다'
                : '파편이 모자라거나, 이미 전부 지녔습니다') + '</div>' +
            '</div>' +
-         '</div>';
-
-    const aTotal = advisorList().length;
-    const aMine  = Object.keys(S.advisorsOwned || {}).length;
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">보조 교육위원</div>' +
-         '<div class="grid">' +
            '<div class="slot"' + (S.codex >= ADVISOR_RULE.cost ? ' data-adv="1"' : '') + '>' +
              '<div class="' + (S.codex >= ADVISOR_RULE.cost ? 'nm' : 'lock') + '">교육위원 파견 요청</div>' +
              '<div class="sub">1회 황금교본 ' + ADVISOR_RULE.cost + '　·　보유 ' + aMine + ' / ' + aTotal + '</div>' +
@@ -4525,6 +4848,9 @@ function openShop(back) {
     const nb = $sheet.querySelector(".slot[data-newbie]");
     if (nb) nb.onclick = () => openGacha(() => draw(null), null, NEWBIE_RULE);
 
+    const evb = $sheet.querySelector(".slot[data-event]");
+    if (evb) evb.onclick = () => openEventShop(() => draw(null));
+
     const g = $sheet.querySelector(".slot[data-gacha]");
     if (g) g.onclick = () => openGacha(() => draw(null));
 
@@ -4552,6 +4878,91 @@ function openShop(back) {
       };
     });
     document.getElementById("shclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  };
+  draw(null);
+}
+
+/* ── 이벤트 교환소 ────────────────────────────────────────────
+ *  상점 맨 위의 띠로 들어옵니다.
+ *  이곳에서는 «오직 이벤트 재화로만» 바꿉니다 — 원고료도 황금교본도 쓰이지
+ *  않습니다. 물건·값·한도는 data/event.js 의 EVENTS[].goods 에 적습니다.
+ *
+ *  기간이 끝나면 들어오는 길(상점 띠)이 사라지므로 여기까지 오지 못합니다.
+ *  그래도 혹시 몰라 들머리에서 한 번 더 봅니다.
+ */
+function openEventShop(back) {
+  const ev = openEvent();
+  if (!ev) { if (back) back(); return; }
+  $modal.classList.add("on");
+
+  const draw = (msg) => {
+    const cur = eventCurName();
+    let h = '<h2>' + eventRule().shop + '</h2>' +
+      /* 맨 위 알림 — 어떻게 하면 재화가 더 들어오는지 일러 두는 자리입니다.
+       * 비율은 EVENT_RULE.bonusPct 한 곳에서 고칩니다. */
+      '<div class="mailnote ok"><b>특정 배정 인격을 가지고 클리어하면 ' +
+        eventRule().bonusPct + '%의 추가 재화를 획득합니다!</b></div>' +
+      '<div class="hint">이곳에서는 오직 <b>' + cur + '</b>' +
+      josa(cur, "로") + '만 바꿉니다. ' +
+      CURRENCY + '도 황금교본도 쓰이지 않습니다.<br>' +
+      '보유 ' + cur + ' <b>' + eventCount() + '</b>　·　' + eventLeftText(ev) + '</div>';
+    if (ev.desc) h += '<div class="hint" style="color:#d8b26a">' + ev.desc + '</div>';
+    if (msg)     h += '<div class="mailnote ok">' + msg + '</div>';
+
+    const goods = eventGoods();
+    if (!goods.length) {
+      h += '<div class="hint">아직 내놓은 물건이 없습니다.</div>';
+    } else {
+      h += '<div class="grid">';
+      goods.forEach(g => {
+        const left = eventLeft(g);
+        const out  = left <= 0;                    // 이 기간에 살 만큼 다 샀다
+        const poor = eventCount() < g.cost;        // 재화가 모자라다
+        const ok   = !out && !poor;
+        h += '<div class="slot"' + (ok ? ' data-goods="' + g.id + '"' : '') + '>' +
+               '<div class="' + (ok ? 'nm' : 'lock') + '">' + g.name + '</div>' +
+               '<div class="sub">' + cur + ' <b>' + g.cost + '</b>' +
+                 (g.limit ? '　·　남은 횟수 ' + left + ' / ' + g.limit
+                          : '　·　횟수 제한 없음') + '</div>' +
+               '<div class="sub">받는 것 — ' + eventGiveText(g.give) + '</div>' +
+               (g.desc ? '<div class="sub" style="color:#d8b26a">' + g.desc + '</div>' : '') +
+               /* 보관함과 똑같은 설명 — 파편 상자처럼 «쓰는 법이 따로 있는» 것에 붙습니다 */
+               (eventGoodsNote(g.give)
+                 ? '<div class="sub">' + eventGoodsNote(g.give) + '</div>' : '') +
+               /* 못 누르는 까닭은 스스로 말합니다 — 「모자랍니다」로 뭉뚱그리면
+                * 이미 다 바꾼 경우에 거짓말이 됩니다. */
+               (out  ? '<div class="sub" style="color:#c8403a">이 기간에 바꿀 만큼 다 바꿨습니다</div>'
+                : poor ? '<div class="sub" style="color:#c8403a">' +
+                           cur + josa(cur, "이") + " 모자랍니다</div>" : "") +
+             '</div>';
+      });
+      h += '</div>';
+    }
+
+    h += '<div class="modalfoot"><button id="evclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-goods]").forEach(el => {
+      el.onclick = () => {
+        const g = eventGoods().find(x => x.id === el.dataset.goods);
+        if (!g) return;
+        /* 그리고 난 뒤에 사정이 바뀌었을 수 있으니 치르기 직전에 한 번 더 봅니다 */
+        if (eventCount() < g.cost || eventLeft(g) <= 0) return;
+        S.event = eventCount() - g.cost;
+        if (!S.eventBuy) S.eventBuy = {};
+        S.eventBuy[g.id] = eventBought(g.id) + 1;
+        const got = eventGiveApply(g.give);
+        saveVault(); render();
+        draw(cur + " " + g.cost + " → " + (got || g.name) +
+             josa(got || g.name, "을") + " 받았습니다.");
+      };
+    });
+    /* 닫으면 «상점으로» 돌아옵니다 — 창을 닫지 않고 그 자리에 상점을 다시 그립니다.
+     * (배정소·인격 교환 쪽은 창째로 닫고 나갑니다. 그쪽 버릇은 손대지 않았습니다.) */
+    document.getElementById("evclose").onclick = () => {
+      if (back) back(); else closeModal();
+      render();
+    };
   };
   draw(null);
 }
@@ -5152,8 +5563,19 @@ function openChapterSelect(back) {
                   (rule.maxBoss >= rule.count ? ' 셋 다 보스일 수 있습니다.'
                    : rule.maxBoss > 1 ? ' 보스가 ' + rule.maxBoss + '까지 섞입니다.' : ''))
                : ('본편을 ' + rule.needCleared + '장 마치면 열립니다')) + '</div>' +
-             '<div class="sub">완주 보상 ' + CURRENCY + ' ' + rule.bonus +
-               '　·　황금교본 ' + rule.codex + '</div>' +
+             /* 돌 때마다 받는 몫을 먼저 적고, 처음 한 번뿐인 원고료는 뒤에 따로 적습니다 —
+              * 「완주 보상 원고료 150」만 크게 적혀 있으면 두 번째부터 속은 느낌이 듭니다. */
+             '<div class="sub">완주 보상 황금교본 ' + rule.codex +
+               (rule.fragBoxSelect ? '　·　인격 파편 상자(선택) ' + rule.fragBoxSelect + '개' : '') +
+               (openEvent() && rule.event ? '　·　' + eventCurName() + ' ' + rule.event : '') +
+               '</div>' +
+             (rule.bonus
+               ? '<div class="sub">' +
+                   (S.mirrorDone && S.mirrorDone[rule.key]
+                     ? CURRENCY + ' ' + rule.bonus + '은 이미 받았습니다 (처음 완주할 때만)'
+                     : '처음 완주하면 ' + CURRENCY + ' ' + rule.bonus + ' 을 더 받습니다') +
+                 '</div>'
+               : '') +
              '<div class="sub"' + (canGo ? '' : ' style="color:#c8403a"') + '>' +
                '입장 ' + ENK_RULE.name + ' ' + rule.cost +
                (open && !canGo ? '　— ' + ENK_RULE.name + '이 모자랍니다' : '') + '</div>' +
@@ -5222,8 +5644,10 @@ const MIRROR_RULE = {
   prefix: "거울의 ",   // 비쳐 나온 적 이름 앞에 붙는 말
   count:  3,      // 몇 명과 연달아 싸우는가
   scale:  1.3,    // 본편 대비 강화 배수 (1.3 = 30% 강함)
-  bonus:  150,    // 완주 보상 (원고료) — 고정값. moneyGain 을 타지 않습니다
+  bonus:  150,    // 완주 보상 (원고료) — «처음 완주할 때만» 나옵니다. moneyGain 을 타지 않습니다
   codex:  1,      // 완주 보상 (황금교본) — 돌 때마다 받습니다
+  event:  20,     // 완주 보상 (이벤트 재화) — 이벤트가 서 있는 동안만 들어옵니다
+  fragBoxSelect: 3,   // 완주 보상 (인격 파편 상자 선택) — 돌 때마다 받습니다
   maxBoss: 1,     // 한 번에 나올 수 있는 보스 수
   bossChance: 0.65, // 보스가 섞여 나올 확률
   needCleared: 1, // 본편을 몇 장 마쳐야 열리는가
@@ -5240,6 +5664,8 @@ const MIRROR_HARD = {
   scale:  2.0,    // 본편의 2배
   bonus:  250,
   codex:  3,
+  event:  30,
+  fragBoxSelect: 5,
   maxBoss: 2,     // 보스가 둘까지 섞인다
   bossChance: 0.90,
   needCleared: 3, // 본편을 세 장 마쳐야 열립니다
@@ -5256,6 +5682,8 @@ const MIRROR_EXTREME = {
   scale:  3.0,    // 본편의 3배 — 가운데 회복이 있어 견딜 만합니다
   bonus:  900,
   codex:  7,
+  event:  100,
+  fragBoxSelect: 15,
   maxBoss: 3,     // 보스는 셋까지 섞입니다
   bossChance: 1.0,  // 보스가 반드시 섞입니다
   needCleared: 5, // 본편을 다섯 장 마쳐야 열립니다
@@ -5297,6 +5725,8 @@ const MIRROR_RAIL1 = {
   defScale: 0.25,   // 방어에만 덜 먹입니다 — ×3.5 일 때 방어 ×1.625
   bonus:  1000,
   codex:  10,
+  event:  300,
+  fragBoxSelect: 25,
   maxBoss: 5,       // 종점을 뺀 여섯 중 다섯까지 보스
   maxNormal: 1,     // 잡졸은 맨 앞 한 번만
   bossChance: 1.0,  // 보스가 반드시 섞입니다
@@ -5453,6 +5883,10 @@ function buildMirrorFoes(rule) {
       def: Math.round(f.def * dk),
       boss: !!f.boss,
       img: f.img || null,
+      /* 그림을 키워 세우는 적(타나콘다처럼 원본 안에서 몸집이 작게 잡힌 것)은
+       * 거울에서도 «같은 크기» 로 서야 합니다. 이것을 빠뜨리면 본편에서는 크고
+       * 거울 던전에서만 작게 나옵니다. */
+      imgScale: f.imgScale || 0,
       /* 등장 대사와 강타 대사는 본래 것을 그대로 가져옵니다.
        * 빠뜨리면 거울 던전 보스가 강타를 준비하며 아무 말도 안 하게 됩니다. */
       intro: f.intro || null,
@@ -5659,14 +6093,33 @@ function mirrorClear() {
   say(rule === MIRROR_EXTREME ? "흩어진 조각들이 하나씩 제자리를 찾아 간다."
     : rule === MIRROR_HARD    ? "깨진 유리가 도로 맞물린다."
     :                           "유리창이 다시 맑아진다.", "good");
-  /* 고정값입니다 — earn() 을 타지 않으므로 상점 칸에 적힌 수가 그대로 들어옵니다 */
-  const mb = rule.bonus;
-  S.money += mb;
-  say(CURRENCY + " " + mb + " 획득.", "gain");
+  /* 이 갈래를 «처음» 완주하는가 — 표를 남기기 전에 봐 두어야 합니다 */
+  const firstRun = !(S.mirrorDone && S.mirrorDone[rule.key]);
+  if (!S.mirrorDone) S.mirrorDone = {};
+  S.mirrorDone[rule.key] = true;
+
+  /* 원고료는 «처음 완주할 때만» 나옵니다. 고정값이라 earn() 을 타지 않으므로,
+   * 들머리 칸에 적힌 수가 그대로 들어옵니다. */
+  if (rule.bonus) {
+    if (firstRun) {
+      S.money += rule.bonus;
+      say("처음 완주한 삯 — " + CURRENCY + " " + rule.bonus + " 획득.", "gain");
+    } else {
+      say(CURRENCY + "는 처음 완주할 때만 나온다.", "sys");
+    }
+  }
   if (rule.codex) {
     S.codex += rule.codex;
     say("비친 것들이 남기고 간 황금교본 " + rule.codex + "권.  (보유 " + S.codex + ")", "gain");
   }
+  /* 인격 파편 상자(선택) — 돌 때마다 받는 몫입니다. 갈래마다 다릅니다. */
+  if (rule.fragBoxSelect) {
+    addFragBox("select", rule.fragBoxSelect);
+    say("인격 파편 상자(선택) " + rule.fragBoxSelect + "개 획득.  (보유 " +
+        fragBoxCount("select") + "개)", "gain");
+  }
+  /* 이벤트 재화 — 갈래마다 다릅니다. 각 MIRROR_TIERS 줄의 event 를 봅니다. */
+  gainEvent(rule.event);
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
@@ -5870,6 +6323,7 @@ function mailGiveText(m) {
   const g = m.give || {}, out = [];
   if (g.money) out.push(CURRENCY + " " + g.money);
   if (g.codex) out.push("황금교본 " + g.codex);
+  if (g.event) out.push(eventCurName() + " " + g.event);
   if (g.enk)   out.push(ENK_RULE.name + " " + g.enk);
   if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
   if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
@@ -5888,7 +6342,7 @@ function mailGiveText(m) {
 function mailWasted(m) {
   const g = m.give || {};
   /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
-  if (g.money || g.codex || g.support || g.enkCap ||
+  if (g.money || g.codex || g.event || g.support || g.enkCap ||
       g.fragBoxSelect || g.fragBoxRandom) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
@@ -5912,6 +6366,7 @@ function mailTake(m) {
   const got = [];
   if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); }
   if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
+  if (g.event) { addEvent(g.event); got.push(eventCurName() + " " + g.event); }
   if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
   if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
@@ -6459,7 +6914,8 @@ function openVault(back) {
    * 오른쪽 끝에 사용 손잡이를 둔다. 이런 손잡이가 필요 없는 항목은
    * vaultItemCategories() 에 얹으면 되고, 여기는 손댈 것 없다. */
   h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">인격 파편 상자</div>' +
-       '<div class="hint">' + FRAGBOX_RULE.desc + '</div>';
+       '<div class="hint">' + FRAGBOX_RULE.desc + '</div>' +
+       '<div class="hint">' + FRAGBOX_RULE.desc2 + '</div>';
   FRAGBOX_KINDS.forEach(k => {
     const cnt = fragBoxCount(k.key);
     h += '<div class="syncrow">' +
@@ -6735,9 +7191,11 @@ function glass() {
   say("보유 인격 " + total + "종　·　보조 교육위원 " + adv + "명　·　클리어 " +
       done + "/" + mains.length + "장" +
       (sides ? "　·　그밖의 이야기 " + sides + "편" : ""), "sys");
+  /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
   say(CURRENCY + " " + S.money + "　·　황금교본 " + S.codex, "sys");
   say(ENK_RULE.name + " " + enkCount() + " / " + ENK_RULE.max + "　·　" + enkNextText(), "sys");
   versionNotice();          // 옛 판 보관함을 열었으면 여기서 한 번 알린다
+  eventNotice();            // 새 이야기가 나와 이벤트 재화가 갈렸으면 한 번 알린다
 
   /* 처음 오신 분께 — 어디를 눌러야 하는지 일러 둡니다.
    * 한 장이라도 마쳤으면 나오지 않습니다. 아는 사람에게는 잔소리이니. */
@@ -6772,7 +7230,8 @@ function glass() {
     /* 받지 않은 우편이 있으면 몇 통인지 손잡이에 적습니다 */
     { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
       cls: mailWaiting() ? "" : "ghost", fn: () => openMail(() => glass()) },
-    { label: "동기화", fn: () => openSync(() => glass()) },
+    /* 3장을 마치기 전에는 손잡이를 아예 내놓지 않습니다 */
+    syncUnlocked() ? { label: "동기화", fn: () => openSync(() => glass()) } : null,
     { label: "보관함", fn: () => openVault(() => glass()) },
     /* 「다음부터 표시하지 않음」을 누른 판에서는 이 손잡이가 사라집니다 */
     patchHidden() ? null
