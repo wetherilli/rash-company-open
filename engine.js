@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.5.2";
+const VERSION = "1.5.3";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -92,6 +92,19 @@ const ENK_RULE = {
   costHard:    1,                 // 하드 거울 던전 1회 입장에 드는 양
   costExtreme: 2,                 // 익스트림 거울 던전 1회 입장에 드는 양
   costRail:    3                  // 거울굴절철도 1회 입장에 드는 양
+};
+
+/* ── 엔케팔린 캡슐 ─────────────────────────────────────────────
+ *  보관함에 개수로 쌓아 두는 소모품입니다. 한 개 쓰면 엔케팔린이
+ *  상한(ENK_RULE.max)까지 «한 번에» 찹니다.
+ *
+ *  가득 찬 채로 쓰면 한 개도 늘지 않고 캡슐만 사라지므로,
+ *  가득일 때는 아예 쓰지 못하게 막습니다 — 우편(mailWasted)과 같은 결입니다.
+ */
+const ENK_CAPSULE = {
+  name: "엔케팔린 캡슐",
+  desc: "쓰면 " + ENK_RULE.name + "이 상한(" + ENK_RULE.max + "개)까지 한 번에 찹니다. " +
+        "이미 가득 차 있으면 쓸 수 없습니다."
 };
 
 /* ── 판이 올라갔을 때 ──────────────────────────────────────────
@@ -222,6 +235,8 @@ function vaultBody() {
     sync:     S.sync || {},
     /* 인격 파편 상자 — 보관함에서 바로 쓰는 소모품. { select: 개수, random: 개수 } */
     fragBox:  S.fragBox || { select: 0, random: 0 },
+    /* 엔케팔린 캡슐 — 보관함에서 바로 쓰는 소모품. 개수 하나만 남깁니다. */
+    enkCap:   enkCapCount(),
     newbie:   S.newbie || 0,   // 신입 관리자 기념 배정을 몇 번 썼는가
     enk:      S.enk || null,
     /* 이미 받은 우편. 이것을 빠뜨리면 받은 표시가 안 남아 무한정 다시 받힙니다. */
@@ -258,6 +273,7 @@ function loadVault() {
     frags:    v.frags || {},
     sync:     v.sync || {},
     fragBox:  v.fragBox || { select: 0, random: 0 },
+    enkCap:   (+v.enkCap) || 0,
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     ver:      v.ver || null
@@ -294,6 +310,19 @@ function vaultSig(o) {
     j(o.achieved), j(o.cleared),
     /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다. */
     j(o.mailTaken), o.newbie,
+    o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0), o.ver
+  ].join("|"));
+}
+/* 엔케팔린 캡슐이 생기기 «전» 의 셈법입니다. 그때 나간 보관함에는 enkCap 칸이
+ * 아예 없으므로, 이것을 남겨 두지 않으면 판을 올렸다는 이유만으로 손댐으로 뜹니다. */
+function vaultSigOld3(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  const jm = m => Object.keys(m || {}).sort().map(k => k + ":" + m[k]).join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
+    j(o.mailTaken), o.newbie,
     o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), o.ver
   ].join("|"));
 }
@@ -325,7 +354,8 @@ function vaultSigOld(o) {
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld3(o) &&
+         o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
 }
 
 function vaultBackups() {
@@ -425,7 +455,7 @@ function vaultExportText() {
     " *\n" +
     " *  ■ 여기 담기는 것\n" +
     " *    보관함에 남는 것 «전부» 입니다 — 인격 · 인격 파편 · 동기화 · 교육위원 · 기프트 · 지원 작성위원 ·\n" +
-    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린.\n" +
+    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린 · 엔케팔린 캡슐.\n" +
     " *\n" +
     " *  ■ 무언가 없어진 것 같으면\n" +
     " *    고칠 것 없이 이 파일을 그대로 보내 주십시오.\n" +
@@ -783,6 +813,7 @@ function newState() {
     frags,
     sync,
     fragBox,
+    enkCap: (v && +v.enkCap) || 0,   // 엔케팔린 캡슐 — 보관함에 남는 소모품
     mailTaken,
     hp: {},                 // who -> 현재 체력 (없으면 최대)
     money,
@@ -1266,6 +1297,29 @@ function addFragBox(kind, n) {
   if (!n) return;
   if (!S.fragBox) S.fragBox = { select: 0, random: 0 };
   S.fragBox[kind] = (S.fragBox[kind] || 0) + n;
+}
+
+/* ── 엔케팔린 캡슐 ────────────────────────────────────────────
+ *  개수는 S.enkCap 하나로 셉니다. 보관함에 그대로 담겨, 회차를 새로
+ *  시작해도 남습니다 (vaultBody · loadVault · newState 참고). */
+function enkCapCount() { return (S && +S.enkCap) || 0; }
+function addEnkCap(n) {
+  if (!n) return;
+  S.enkCap = enkCapCount() + n;
+}
+/* 지금 쓸 수 있는가 — 가지고 있고, 엔케팔린이 «가득 차 있지 않을» 때만입니다.
+ * 가득일 때 쓰면 한 개도 안 늘고 캡슐만 사라지므로 여기서 막습니다. */
+function enkCapUsable() { return enkCapCount() > 0 && enkCount() < ENK_RULE.max; }
+/* 한 개 씁니다. 그래서 «몇 개나 찼는지» 를 돌려줍니다. 못 쓰면 0 */
+function enkCapUse() {
+  if (!enkCapUsable()) return 0;
+  const e = enkSync();
+  const before = e.n;
+  e.n = ENK_RULE.max;
+  e.at = Date.now();          // 가득에서 다시 줄어들 때부터 재도록
+  S.enkCap = enkCapCount() - 1;
+  saveVault();
+  return e.n - before;
 }
 
 /* ── 동기화 ────────────────────────────────────────────────────
@@ -5819,6 +5873,7 @@ function mailGiveText(m) {
   if (g.enk)   out.push(ENK_RULE.name + " " + g.enk);
   if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
   if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
+  if (g.enkCap) out.push(ENK_CAPSULE.name + " " + g.enkCap + "개");
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
     out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
@@ -5832,7 +5887,9 @@ function mailGiveText(m) {
  * 그래서 «받을 것이 하나도 없는» 우편은 아예 열지 않고 돌려보냅니다. */
 function mailWasted(m) {
   const g = m.give || {};
-  if (g.money || g.codex || g.support) return false;   // 다른 것이 있으면 버려질 일 없습니다
+  /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
+  if (g.money || g.codex || g.support || g.enkCap ||
+      g.fragBoxSelect || g.fragBoxRandom) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
   return enkCount() >= ENK_RULE.max;
@@ -5857,6 +5914,7 @@ function mailTake(m) {
   if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
   if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
   if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
+  if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
   if (g.enk) {
     enkSync();
     const before = enkCount();
@@ -6413,10 +6471,37 @@ function openVault(back) {
          '</div>';
   });
 
+  /* 엔케팔린 캡슐 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
+   * 없거나(0개) 엔케팔린이 이미 가득이면 손잡이를 잠급니다. */
+  const capCnt  = enkCapCount();
+  const capFull = enkCount() >= ENK_RULE.max;
+  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + ENK_CAPSULE.name + '</div>' +
+       '<div class="hint">' + ENK_CAPSULE.desc + '</div>' +
+       '<div class="syncrow">' +
+         '<button' + (capCnt > 0 && !capFull ? ' id="vcap"' : ' disabled') + '>사용</button>' +
+         '<div class="body">' +
+           '<div class="nm">' + ENK_CAPSULE.name + '</div>' +
+           '<div class="sub">보유 ' + capCnt + '개　·　' + ENK_RULE.name + ' ' +
+             enkCount() + ' / ' + ENK_RULE.max +
+             (capCnt > 0 && capFull ? '　(가득 차 있어 쓸 수 없습니다)' : '') + '</div>' +
+         '</div>' +
+       '</div>';
+
   h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
        '<button id="vrec">기록 · 내보내기</button>' +
        '<button id="vreset" class="ghost">보관함 비우기</button></div>';
   $sheet.innerHTML = h;
+
+  const vcap = document.getElementById("vcap");
+  if (vcap) vcap.onclick = () => {
+    const got = enkCapUse();
+    if (got) {
+      render();
+      say(ENK_CAPSULE.name + "을 써 " + ENK_RULE.name + "을 " + got + "개 채웠다.　(지금 " +
+          enkCount() + " / " + ENK_RULE.max + ")", "gain");
+    }
+    openVault(back);   // 개수와 눈금이 바뀌었으니 다시 그립니다
+  };
 
   document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
