@@ -638,6 +638,71 @@
   @media (max-width:900px){
     :root{ --stageh:250px; }
   }
+  /* ── 튜토리얼 ──────────────────────────
+   *  화면 전체를 반투명한 막으로 덮고, 짚어 줄 곳만 뚫어 놓습니다.
+   *  뚫는 몫은 .tutring 하나가 겸합니다 — 테두리를 두르고, 바깥쪽으로
+   *  아주 큰 box-shadow 를 뿌려 그 그림자가 곧 막이 됩니다.
+   *  막을 따로 한 겹 깔고 구멍을 오려 내는 것보다 어긋날 일이 없습니다.
+   *
+   *  누름은 #tut 이 전부 받습니다 (안쪽은 pointer-events:none).
+   *  그래야 「아무 데나 눌러 다음」이 되고, 밑의 손잡이가 잘못 눌리지 않습니다.
+   */
+  #tut{
+    position:fixed;inset:0;z-index:60;
+    background:rgba(0,0,0,0);          /* 막은 아래 .tutring 의 그림자가 냅니다 */
+    -webkit-tap-highlight-color:transparent;
+  }
+  /* 가리킬 곳이 없는 줄 — 이때는 이 바탕색이 그대로 막이 됩니다 */
+  #tut.plain{background:rgba(8,8,11,.78);}
+  #tut > *{pointer-events:none;}
+  #tut .tutring{
+    position:fixed;border:2px solid #d8b26a;border-radius:3px;
+    box-shadow:0 0 0 9999px rgba(8,8,11,.78), inset 0 0 14px rgba(216,178,106,.35);
+    animation:tutring 1.6s ease-in-out infinite;
+  }
+  @keyframes tutring{
+    0%,100%{border-color:#d8b26a;}
+    50%    {border-color:#f7e6bd;}
+  }
+  /* 회색 상자에 흰 글씨 */
+  #tut .tutbox{
+    position:fixed;max-width:340px;
+    background:#33333a;border:1px solid #55555f;
+    color:#ffffff;font-size:13.5px;line-height:1.7;
+    padding:11px 14px 9px;
+    box-shadow:0 8px 26px rgba(0,0,0,.6);
+  }
+  #tut .tutbox .tuttext{color:#ffffff;}
+  #tut .tutbox .tutfoot{
+    display:flex;align-items:baseline;gap:10px;
+    margin-top:7px;padding-top:6px;border-top:1px solid #4a4a54;
+    color:#b9b6b1;font-size:11px;letter-spacing:.04em;
+  }
+  #tut .tutbox .tutnum{margin-left:auto;color:#d8b26a;font-weight:700;}
+  /* 상자에 붙는 화살촉 — 짚는 곳 쪽으로 뻗습니다 */
+  #tut .tutbox .tutarrow{position:absolute;width:0;height:0;}
+  #tut .tutbox.below .tutarrow{
+    top:-9px;border-left:9px solid transparent;border-right:9px solid transparent;
+    border-bottom:9px solid #55555f;
+  }
+  #tut .tutbox.above .tutarrow{
+    bottom:-9px;border-left:9px solid transparent;border-right:9px solid transparent;
+    border-top:9px solid #55555f;
+  }
+  /* 건너뛰기 — 여기만 누름을 따로 받습니다 */
+  #tut .tutskip{
+    position:fixed;right:12px;top:12px;pointer-events:auto;cursor:pointer;
+    background:#1a1a20;border:1px solid #4a4a54;color:#b9b6b1;
+    font-size:11.5px;letter-spacing:.08em;padding:5px 11px;
+  }
+  #tut .tutskip:hover{border-color:#c8403a;color:#e8e4de;}
+  /* 노트 안 튜토리얼 목록 — 한 줄에 하나씩 */
+  .tutrow{border-left:3px solid #4a4a54;}
+  .tutrow.done{border-left-color:#4a3a20;}
+  .tutrow .tutwhen{color:#6e6a66;font-size:11px;}
+  .tutrow .tutline{color:#a8a49d;font-size:12px;line-height:1.65;}
+  .tutrow .tutline b{color:#d8b26a;font-weight:700;}
+
   /* ── 좁은 화면 (휴대전화) ──────────────────
    *  전투 화면이 한 눈에 들어오도록, 보여 주는 것을 줄입니다.
    *    · 그림칸과 글상자를 낮추고
@@ -693,6 +758,9 @@
     .pkline.small span{font-size:15px;}
     /* 가로 통째 칸도 좁은 화면에서는 띠를 낮춥니다 */
     .slot.wide .pkline{height:104px;}
+    /* 튜토리얼 상자 — 좁은 화면에서는 좌우 여백만 남기고 가로를 다 씁니다 */
+    #tut .tutbox{max-width:none;width:calc(100vw - 24px);font-size:13px;padding:10px 12px 8px;}
+    #tut .tutskip{right:10px;top:10px;font-size:11px;padding:4px 9px;}
   }
 </style>
 </head>
@@ -729,6 +797,7 @@
 <script src="data/notice.js"></script>
 <script src="data/patch.js"></script>
 <script src="data/event.js"></script>
+<script src="data/tutorial.js"></script>
 <script src="data/story.js"></script>
 <script src="engine.js"></script>
 <script>

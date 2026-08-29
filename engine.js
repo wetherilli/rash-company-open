@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.6.0";
+const VERSION = "1.7.0";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3595,6 +3595,9 @@ function askNext() {
 
   buttons(list);
   renderHeader();
+
+  /* 첫 전투의 첫 턴 — 명령 손잡이가 다 선 뒤에 한 번만 덮습니다 */
+  if (b.turn <= 1) tutorOnce("battle");
 }
 
 /* ── 업적 ──────────────────────────────────────────────────────
@@ -4143,7 +4146,7 @@ function openParty(done) {
     h += '<div class="hint">전투를 도와줄 보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다. ' +
          '직접 싸우지는 않고, 작성위원 전원에게 상시 효과를 겁니다.' +
          (advNext ? '　' + advNext + '을 마치면 한 명 더.' : '') + '</div>' +
-         '<div class="grid">';
+         '<div class="grid" data-tut="party-advisor">';
     /* 칸 수만큼 나란히 세웁니다 — 한 칸에 쌓지 않습니다 */
     for (let i = 0; i < advCap; i++) {
       const a = advs[i];
@@ -4178,7 +4181,7 @@ function openParty(done) {
 
     h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">작성위원</div>' +
          '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다.</div>' +
-         '<div class="grid">';
+         '<div class="grid" data-tut="party-sinners">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
       const sel = picking.indexOf(who);
@@ -4314,6 +4317,7 @@ function openParty(done) {
     });
   };
   draw();
+  tutorOnce("party");   /* 편성에 처음 들어왔을 때 한 번 */
 }
 
 /* 인격 장착 — 사람이 많고 인격은 더 많아서, 접어 둔 채로 엽니다.
@@ -4431,6 +4435,222 @@ function openEquip(back) {
   document.getElementById("edone").onclick = () => { if (back) back(); else closeModal(); };
 }
 
+/* ── 튜토리얼 ─────────────────────────────────────────────────
+ *  안내 글과 「어디를 짚을 것인가」는 전부 data/tutorial.js 에 있습니다.
+ *  이 아래는 그것을 화면에 덮어 보여 주는 몫만 합니다.
+ *
+ *  ■ 본 것은 보관함이 «아니라» 따로 둡니다 (TUTORIAL_RULE.key).
+ *    보관함에 넣으면 내보내기·손댐 검사(vaultSig)에 함께 얽혀서,
+ *    안내를 봤다는 이유만으로 보관함이 「손댄 것」으로 뜹니다.
+ *    패치 노트·상점 공지가 이미 같은 방식으로 따로 서 있습니다.
+ *
+ *  ■ 한 줄씩 보여 주고, 화면 아무 데나 누르면 다음으로 넘어갑니다.
+ */
+function tutorRule() {
+  return (typeof TUTORIAL_RULE !== "undefined" && TUTORIAL_RULE)
+       ? TUTORIAL_RULE : { name: "튜토리얼", key: "rash_company_tutorial_v1" };
+}
+function tutorList() { return (typeof TUTORIALS !== "undefined" && TUTORIALS) ? TUTORIALS : []; }
+function tutorBy(id) { return tutorList().find(t => t.id === id) || null; }
+
+/* 본 것 — { id: 본 때(ms) } */
+function tutorSeen() {
+  try { return JSON.parse(Store.get(tutorRule().key)) || {}; } catch (e) { return {}; }
+}
+function tutorSaw(id)   { return !!tutorSeen()[id]; }
+function tutorSawCount() { return tutorList().filter(t => tutorSaw(t.id)).length; }
+function tutorMark(id) {
+  const m = tutorSeen(); m[id] = Date.now();
+  Store.set(tutorRule().key, JSON.stringify(m));
+}
+/* id 를 안 주면 «전부» 안 본 것으로 되돌립니다 (노트 → 튜토리얼) */
+function tutorForget(id) {
+  if (!id) { Store.del(tutorRule().key); return; }
+  const m = tutorSeen(); delete m[id];
+  Store.set(tutorRule().key, JSON.stringify(m));
+}
+
+/* 지금 안내가 흐르는 중인가 — 둘이 겹쳐 뜨는 것을 막습니다 */
+let TUT_ON = false;
+
+/* 짚을 곳 찾기. 못 찾으면 null 이고, 그때는 화면 가운데에 띄웁니다. */
+function tutorTarget(at) {
+  if (!at) return null;
+  let el = null;
+  /* 손잡이는 이름 «앞부분» 으로 찾습니다 — 「첨삭 (2)」 는 "첨삭" 으로 잡힙니다 */
+  if (at.btn) {
+    const want = at.btn;
+    el = Array.prototype.slice.call($actions.querySelectorAll("button"))
+              .find(b => b.textContent.indexOf(want) === 0) || null;
+  }
+  if (!el && at.sel) { try { el = document.querySelector(at.sel); } catch (e) { el = null; } }
+  /* 숨어 있는 것(접힌 칸 등)은 짚지 않습니다 */
+  if (el && !el.getClientRects().length) el = null;
+  return el;
+}
+
+/* 아직 안 봤으면 한 번 보여 줍니다. 이미 봤으면 아무 일도 하지 않습니다. */
+function tutorOnce(id, after) {
+  if (tutorSaw(id)) { if (after) after(); return false; }
+  return tutorPlay(id, after);
+}
+
+/* 보여 주기 — 봤든 안 봤든 무조건 흐릅니다 (노트에서 다시 볼 때) */
+function tutorPlay(id, after) {
+  const t = tutorBy(id);
+  if (!t || !t.steps || !t.steps.length || TUT_ON) { if (after) after(); return false; }
+  const rule = tutorRule();
+  TUT_ON = true;
+  /* 열자마자 본 것으로 적어 둡니다 — 도중에 새로고침해도 다시 붙들지 않게 */
+  tutorMark(id);
+
+  const wrap = document.createElement("div");
+  wrap.id = "tut";
+  document.body.appendChild(wrap);
+
+  let i = 0;
+  let curEl = null;
+  let shownAt = 0;      // 방금 뜬 줄을 앞선 누름이 그대로 넘겨 버리지 않게
+
+  const place = () => {
+    const box = wrap.querySelector(".tutbox");
+    if (!box) return;
+    const ring  = wrap.querySelector(".tutring");
+    const arrow = box.querySelector(".tutarrow");
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const bw = box.offsetWidth, bh = box.offsetHeight;
+
+    /* 짚을 곳이 없으면 가운데에 */
+    if (!curEl || !curEl.getClientRects().length) {
+      if (ring)  ring.style.display = "none";
+      if (arrow) arrow.style.display = "none";
+      box.classList.remove("below", "above");
+      box.style.left = Math.round((vw - bw) / 2) + "px";
+      box.style.top  = Math.round((vh - bh) / 2) + "px";
+      return;
+    }
+
+    const r = curEl.getBoundingClientRect();
+    /* 두를 자리 — 짚을 곳이 화면보다 길면(좁은 화면에서 한 줄씩 늘어선 목록 등)
+     * 위쪽 일부만 두릅니다. 다 두르면 테두리가 위아래로 화면 밖에 나가
+     * 「구멍」도 화살표도 보이지 않고 막만 걷힌 꼴이 됩니다. */
+    const pad   = 5;
+    const gap   = 14;
+    const maxH  = vh - (bh + gap + 40);          // 상자와 여백 몫은 남겨 둡니다
+    let hTop    = r.top - pad;
+    let hHeight = r.height + pad * 2;
+    if (hHeight > maxH) { hTop = Math.max(8, hTop); hHeight = Math.max(60, maxH); }
+    const hBot = hTop + hHeight;
+
+    ring.style.display = "";
+    ring.style.left   = Math.round(r.left - pad) + "px";
+    ring.style.top    = Math.round(hTop) + "px";
+    ring.style.width  = Math.round(r.width + pad * 2) + "px";
+    ring.style.height = Math.round(hHeight) + "px";
+
+    /* 아래에 자리가 있으면 아래, 없으면 위. 둘 다 좁으면 넓은 쪽으로. */
+    let below = (hBot + gap + bh <= vh - 8);
+    if (!below && (hTop - gap - bh < 8)) below = (vh - hBot) >= hTop;
+
+    let top  = below ? hBot + gap : hTop - gap - bh;
+    top = Math.max(8, Math.min(top, vh - bh - 8));
+    let left = r.left + r.width / 2 - bw / 2;
+    left = Math.max(12, Math.min(left, vw - bw - 12));
+
+    box.classList.toggle("below", below);
+    box.classList.toggle("above", !below);
+    box.style.left = Math.round(left) + "px";
+    box.style.top  = Math.round(top)  + "px";
+
+    /* 화살촉 — 짚는 곳 한가운데를 겨눕니다. 상자가 두른 자리에 겹칠 만큼
+     * 자리가 없을 때는(위아래 어디에도 안 들어갈 때) 화살촉을 감춥니다. */
+    const fits = below ? (top >= hBot) : (top + bh <= hTop);
+    arrow.style.display = fits ? "" : "none";
+    let ax = r.left + r.width / 2 - left;
+    ax = Math.max(14, Math.min(ax, bw - 14));
+    arrow.style.left = Math.round(ax - 9) + "px";
+  };
+  /* 짚을 곳을 화면 안으로 끌어온 뒤 자리를 잡습니다.
+   *  그림이 늦게 뜨면(유리창의 단체 그림처럼) 안내가 뜬 뒤에 문서가 길어져
+   *  scrollIntoView 로 끌어온 자리가 그대로 어긋납니다. 그래서 아래
+   *  ResizeObserver 로 문서가 자랄 때마다 이 몫을 다시 부릅니다. */
+  const fit = () => {
+    if (curEl && curEl.getClientRects().length) {
+      const r  = curEl.getBoundingClientRect();
+      const vh = document.documentElement.clientHeight;
+      /* 화면보다 긴 것은 «머리» 를 화면 위에 맞춥니다 — 가운데로 맞추면
+       * 위아래가 다 잘려 어디를 가리키는지 알 수 없게 됩니다. */
+      if (r.height > vh - 120) {
+        if (r.top > 60 || r.top < -20) {
+          try { curEl.scrollIntoView({ block: "start", inline: "nearest" }); }
+          catch (e) { curEl.scrollIntoView(); }
+        }
+      } else if (r.top < 8 || r.bottom > vh - 8) {
+        try { curEl.scrollIntoView({ block: "center", inline: "nearest" }); }
+        catch (e) { curEl.scrollIntoView(); }
+      }
+    }
+    place();
+  };
+
+  const onMove = () => place();
+
+  let RO = null;
+  const end = () => {
+    TUT_ON = false;
+    window.removeEventListener("resize", onMove);
+    window.removeEventListener("scroll", onMove, true);
+    if (RO) { RO.disconnect(); RO = null; }
+    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    if (after) after();
+  };
+
+  const draw = () => {
+    const st = t.steps[i];
+    curEl = tutorTarget(st.at);
+    const last = (i === t.steps.length - 1);
+    wrap.classList.toggle("plain", !curEl);
+    wrap.innerHTML =
+      (curEl ? '<div class="tutring"></div>' : "") +
+      '<div class="tutbox"><i class="tutarrow"></i>' +
+        '<div class="tuttext">' + st.text + '</div>' +
+        '<div class="tutfoot"><span>' + (last ? rule.end : rule.tap) + '</span>' +
+          (t.steps.length > 1
+            ? '<span class="tutnum">' + (i + 1) + ' / ' + t.steps.length + '</span>' : "") +
+        '</div>' +
+      '</div>' +
+      (last || t.steps.length < 2 ? "" : '<div class="tutskip">' + rule.skip + '</div>');
+
+    const sk = wrap.querySelector(".tutskip");
+    if (sk) sk.onclick = e => { e.stopPropagation(); end(); };
+
+    /* 짚을 곳이 화면 밖이면(창 안에서 스크롤이 내려가 있을 때) 먼저 끌어옵니다.
+     * 늦게 뜨는 그림 때문에 문서가 자라는 것을 감안해 몇 번 더 다잡습니다. */
+    fit();
+    requestAnimationFrame(fit);
+    setTimeout(fit, 120);
+    setTimeout(fit, 400);
+    shownAt = Date.now();
+  };
+
+  wrap.onclick = () => {
+    if (Date.now() - shownAt < 200) return;   // 손이 미끄러져 두 줄이 지나가지 않게
+    i++;
+    if (i >= t.steps.length) end(); else draw();
+  };
+
+  draw();
+  window.addEventListener("resize", onMove);
+  window.addEventListener("scroll", onMove, true);
+  /* 늦게 뜨는 그림 때문에 문서 길이가 바뀌면 짚는 자리를 다시 잡습니다 */
+  if (typeof ResizeObserver !== "undefined") {
+    RO = new ResizeObserver(() => fit());
+    RO.observe(document.body);
+  }
+  return true;
+}
+
 /* ── 노트 ─────────────────────────────────────────────────────
  *  수감자 신상과 설정을 모아 보는 곳. 스토리는 담지 않습니다.
  *  내용은 전부 data/characters.js 에서 그대로 읽어옵니다.
@@ -4498,10 +4718,63 @@ function openNote(back, focus) {
     document.getElementById("nclose").onclick = () => { closeModal(); render(); if (back) back(); };
   };
 
+  /* ── 튜토리얼 ──
+   *  안내를 한 줄씩 펴 놓고, 누르면 그 안내를 다시 흐르게 합니다.
+   *  「어디를 짚을 것인가」는 그 화면에 들어가야 맞으므로, 다시 볼 때는
+   *  창을 닫고 유리창으로 나간 뒤에 흐릅니다 — 짚을 곳을 못 찾은 줄은
+   *  화살표 없이 가운데에 뜹니다 (tutorTarget 참고). */
+  const tutorView = () => {
+    const rule = tutorRule();
+    let h = '<h2>' + rule.name + '</h2>' +
+            '<div class="hint">' + rule.hint + '</div>' +
+            '<div class="grid one">';
+    tutorList().forEach(t => {
+      const saw = tutorSaw(t.id);
+      h += '<div class="slot tutrow' + (saw ? ' done' : '') + '" data-tut-play="' + t.id + '">' +
+             '<div class="nm">' + t.name +
+               ' <span class="sub">' + (saw ? '본 것' : '아직 안 봄') + '</span></div>' +
+             '<div class="tutwhen">' + t.where + '　·　' + t.steps.length + '줄</div>';
+      t.steps.forEach((s, k) => {
+        h += '<div class="tutline"><b>' + (k + 1) + '.</b> ' + s.text + '</div>';
+      });
+      h += '</div>';
+    });
+    h += '</div>';
+    h += '<div class="modalfoot">' +
+           '<button id="tback">목록으로</button>' +
+           '<button id="treset" class="ghost">모두 안 본 것으로</button>' +
+           '<button id="tclose" class="ghost">닫기</button>' +
+         '</div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-tut-play]").forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.tutPlay;
+        closeModal(); render();
+        if (back) back();
+        /* 유리창을 다 그린 뒤에 덮습니다 */
+        setTimeout(() => tutorPlay(id), 0);
+      };
+    });
+    document.getElementById("tback").onclick  = () => index();
+    document.getElementById("treset").onclick = () => { tutorForget(); tutorView(); };
+    document.getElementById("tclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  };
+
   /* ── 목록 ── */
   const index = () => {
     let h = '<h2>노 트</h2>' +
             '<div class="hint">수감자 신상과 설정을 모아 둔 곳입니다. 이야기 내용은 담기지 않습니다.</div>';
+
+    /* 게임 구조 안내 — 처음 그 화면에 들어섰을 때 저절로 한 번 나오고,
+     * 여기서 언제든 다시 볼 수 있습니다. */
+    h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">' +
+           tutorRule().name + '</div>' +
+         '<div class="grid one"><div class="slot" data-tut-open="1">' +
+           '<div class="nm">' + tutorRule().name + ' 다시 보기</div>' +
+           '<div class="sub">게임 구조 안내　·　' +
+             tutorSawCount() + ' / ' + tutorList().length + ' 봄　—　눌러서 목록으로</div>' +
+         '</div></div>';
 
     h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">작성위원</div><div class="grid">';
     Object.keys(SINNERS).forEach(who => {
@@ -4585,6 +4858,8 @@ function openNote(back, focus) {
     $sheet.querySelectorAll(".slot[data-who]").forEach(el => {
       el.onclick = () => detail(el.dataset.who);
     });
+    const tutOpen = $sheet.querySelector(".slot[data-tut-open]");
+    if (tutOpen) tutOpen.onclick = () => tutorView();
     document.getElementById("nclose").onclick = () => { closeModal(); render(); if (back) back(); };
   };
 
@@ -4765,7 +5040,7 @@ function openShop(back) {
 
     h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">인격 배정</div>' +
          '<div class="grid">' +
-           '<div class="slot" data-gacha="1">' +
+           '<div class="slot" data-gacha="1" data-tut="shop-gacha">' +
              stripHTML(GACHA_STRIP) +
              '<div class="nm">인격 배정소</div>' +
              '<div class="sub">1회 ' + RULE.pullCost + ' ' + CURRENCY + '</div>' +
@@ -4880,6 +5155,7 @@ function openShop(back) {
     document.getElementById("shclose").onclick = () => { closeModal(); render(); if (back) back(); };
   };
   draw(null);
+  tutorOnce("shop");    /* 상점에 처음 들어왔을 때 한 번 */
 }
 
 /* ── 이벤트 교환소 ────────────────────────────────────────────
@@ -7211,7 +7487,13 @@ function glass() {
   if (noticeDue()) {
     render();
     buttons([{ label: "…", cls: "primary", disabled: true }]);
-    return openNotice(() => { closeModal(); glass(); });
+    /* 닫을 때 «본 것» 으로 적어 둡니다.
+     * 이 알림은 원래 상점에서 열리던 것이라, 닫으면 상점을 다시 그리는 것으로
+     * 끝났습니다. 그런데 유리창에서 열면 닫는 길이 glass() 를 다시 부르고,
+     * 그러면 noticeDue() 가 여전히 참이라 알림이 곧바로 다시 뜹니다 —
+     * 「이번 판에서는 다시 보지 않음」을 누르지 않는 한 빠져나갈 수가 없었습니다.
+     * 여기서 열리는 것은 이제 유리창뿐이므로, 어느 손잡이로 닫든 한 번 본 것으로 봅니다. */
+    return openNotice(() => { noticeHide(); closeModal(); glass(); });
   }
 
   /* 받지 않은 우편이 있으면 눈에 띄게 알려 줍니다 */
@@ -7238,6 +7520,8 @@ function glass() {
                   : { label: "패치 노트", cls: "ghost", fn: () => openPatch(() => glass()) }
   ]);
   showEnkBar(true);
+  /* 처음 오신 분께 — 손잡이를 하나씩 짚어 드립니다. 한 번만 나옵니다. */
+  tutorOnce("glass");
 }
 
 /* 예전 이름 — 부팅과 내부 호출에서 그대로 쓸 수 있게 남겨 둡니다 */
