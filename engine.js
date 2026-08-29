@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.7.0";
+const VERSION = "1.7.1";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -226,6 +226,9 @@ function vaultBody() {
     /* 완주한 거울 갈래 — 원고료는 갈래마다 «처음 완주할 때만» 나오므로,
      * 어느 갈래를 이미 돌았는지 남겨 두어야 합니다. */
     mirrorDone: Object.keys(S.mirrorDone || {}),
+    /* 이야기에서 인격을 받은 자리 — 중복 파편은 자리마다 «처음 한 번만» 나오므로,
+     * 어느 자리를 이미 거쳤는지 남겨 두어야 합니다. 열쇠는 그 인격의 열쇠입니다. */
+    storyGain: Object.keys(S.storyGain || {}),
     equip:    S.equip,
     party:    ownParty(),          /* 조력자는 «내 것» 이 아니라 담지 않습니다 */
     money:    S.money,
@@ -276,6 +279,8 @@ function loadVault() {
     mailTaken: toMap(v.mailTaken),
     cleared:  toMap(v.cleared),
     mirrorDone: toMap(v.mirrorDone),
+    /* 옛 보관함에는 이 칸이 아예 없습니다 — newState 가 클리어한 장에서 되짚어 보탭니다 */
+    storyGain: toMap(v.storyGain),
     equip:    v.equip || {},
     party:    v.party || null,
     money:    v.money,
@@ -324,8 +329,25 @@ function vaultSig(o) {
     /* 한 번만 받는 것들. 여기 들지 않으면 손으로 지워 놓고 다시 받아도 티가 안 납니다.
      * mirrorDone 도 같은 결입니다 — 거울 원고료가 처음 완주할 때만 나오므로. */
     j(o.mailTaken), o.newbie, j(o.mirrorDone),
+    /* 이야기 인격 지급 자리도 같은 결입니다 — 중복 파편이 자리마다 한 번뿐이므로 */
+    j(o.storyGain),
     o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
     /* 이벤트 재화 — 남은 개수, 어느 기간 것인가, 교환소에서 몇 개 바꿨는가 */
+    (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
+    o.ver
+  ].join("|"));
+}
+/* storyGain 이 생기기 «전» 의 셈법입니다. 그때 나간 보관함에는 그 칸이
+ * 아예 없으므로, 이것을 남겨 두지 않으면 판을 올렸다는 이유만으로 손댐으로 뜹니다. */
+function vaultSigOld5(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  const jm = m => Object.keys(m || {}).sort().map(k => k + ":" + m[k]).join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
+    j(o.mailTaken), o.newbie, j(o.mirrorDone),
+    o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
     (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
     o.ver
   ].join("|"));
@@ -384,8 +406,8 @@ function vaultSigOld(o) {
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld4(o) && o.sig !== vaultSigOld3(o) &&
-         o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld5(o) && o.sig !== vaultSigOld4(o) &&
+         o.sig !== vaultSigOld3(o) && o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
 }
 
 function vaultBackups() {
@@ -563,6 +585,8 @@ function vaultMergeOnce(seed) {
   };
   seed.mailTaken = union(seed.mailTaken, now.mailTaken);
   seed.achieved  = union(seed.achieved,  now.achieved);
+  /* 이야기 인격 지급 자리도 한 번만 받는 것입니다 — 옛 파일을 들여와도 되살아나지 않게 */
+  seed.storyGain = union(seed.storyGain, now.storyGain);
   seed.newbie    = Math.max(Number(seed.newbie) || 0, Number(now.newbie) || 0);
   return seed;
 }
@@ -704,6 +728,29 @@ function enkBarHTML() {
 
 /* 지금 진행 중인 장 — 거울 던전이면 그쪽을 돌려준다 */
 function curChapter() { return S && S.mirror ? MIRROR : CHAPTERS[S.ch]; }
+
+/* ── 이야기에서 인격을 받은 자리 되짚기 ────────────────────────
+ *
+ *  storyGain 이 없던 판에서 넘어온 보관함을 위한 몫입니다.
+ *  이미 마친 장이라면 그 장의 인격 지급 자리도 당연히 거친 것이므로,
+ *  장을 훑어 { t:"gain" } 자리를 찾아 «받은 것» 으로 적어 둡니다.
+ *  이것을 안 하면, 마친 장을 한 번씩 더 돌며 파편을 한 번 더 받을 수 있습니다.
+ */
+function storyGainFromCleared(cleared) {
+  const m = {};
+  if (typeof CHAPTERS === "undefined" || !cleared) return m;
+  CHAPTERS.forEach(c => {
+    if (!cleared[c.id]) return;
+    (c.scenes || []).forEach(sc => {
+      if (!sc || sc.t !== "gain") return;
+      const g = sc.starter ? (typeof STARTER_ID !== "undefined" ? STARTER_ID : null) : sc;
+      if (!g || !SINNERS[g.who]) return;
+      const id = SINNERS[g.who].ids.find(i => i.star === g.star && i.title === g.title);
+      if (id) m[idKey(g.who, id)] = true;
+    });
+  });
+  return m;
+}
 
 function newState() {
   const owned = {};
@@ -873,6 +920,10 @@ function newState() {
     enk: (v && v.enk && typeof v.enk.n === "number") ? v.enk : null,  // 엔케팔린 — enkSync() 가 채운다
     cleared: v && v.cleared ? v.cleared : {},
     mirrorDone: (v && v.mirrorDone) ? v.mirrorDone : {},   // 이미 완주한 거울 갈래
+    /* 이야기에서 인격을 이미 받은 자리. 적힌 것에 «이미 마친 장» 몫을 보탭니다 —
+     * 옛 보관함에는 이 칸 자체가 없고, 장을 마쳤다면 그 자리는 이미 거친 것이니까요. */
+    storyGain: Object.assign(storyGainFromCleared((v && v.cleared) || {}),
+                             (v && v.storyGain) || {}),
     flags: {},
     battle: null,
     waiting: false,
@@ -2877,18 +2928,31 @@ function toGlass(back) {
   glass();
 }
 
-/* ── 인격 지급 ─────────────────────────────────────────────── */
+/* ── 인격 지급 ───────────────────────────────────────────────
+ *
+ *  이야기에서 인격을 주는 자리입니다. 이미 가진 인격이면 그 사람 몫 파편으로
+ *  돌려주는데, 그 몫은 «그 자리에서 처음 한 번만» 나옵니다 — 황금교본과 같은 결입니다.
+ *  이렇게 두지 않으면 마친 장을 다시 돌기만 해도 파편이 끝없이 나옵니다.
+ *  받은 자리는 S.storyGain 에 인격 열쇠로 적히고, 보관함에 함께 남습니다.
+ */
 function grant(who, star, title) {
   const s = SINNERS[who];
   if (!s) { say("(지급 실패: " + who + ")", "todo"); return; }
   const id = s.ids.find(i => i.star === star && i.title === title);
   if (!id) { say("(지급 실패: " + title + ")", "todo"); return; }
   const key = idKey(who, id);
+  if (!S.storyGain) S.storyGain = {};
+  const took = !!S.storyGain[key];
+  S.storyGain[key] = true;
   divider();
   if (S.owned[key]) {
-    const rf = dupRefund(star);
-    addFrag(who, rf);
-    say("이미 가진 인격이다. " + fragName(who) + " " + rf + " 획득.  (보유 " + fragCount(who) + ")", "sys");
+    if (took) {
+      say("이미 가진 인격이다. 이 자리의 몫은 이미 받아 갔다.", "sys");
+    } else {
+      const rf = dupRefund(star);
+      addFrag(who, rf);
+      say("이미 가진 인격이다. " + fragName(who) + " " + rf + " 획득.  (보유 " + fragCount(who) + ")", "sys");
+    }
   } else {
     S.owned[key] = true;
     say("인격 획득 — " + stars(star) + " " + title + " " + s.name, "gain");

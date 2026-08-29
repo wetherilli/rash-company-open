@@ -7,7 +7,8 @@
  *    gifts      보유한 기프트             giftOn     세워 둔 기프트 (칸 순서대로)
  *    supports   얻은 지원 작성위원        achieved   달성한 업적
  *    cleared    클리어한 장               presets    담아 둔 편성 3칸
- *    mailTaken  이미 받은 우편            equip / party / money / codex / newbie / enk
+ *    mailTaken  이미 받은 우편            storyGain  이야기에서 인격을 이미 받은 자리
+ *    equip / party / money / codex / newbie / enk
  *
  *    advisor · gift 는 «첫째 칸» 을 따로 적어 둔 것입니다. 옛 판이 읽을 수 있게 남겨 둡니다.
  *
