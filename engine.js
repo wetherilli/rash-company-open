@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.7.1";
+const VERSION = "1.7.2";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2229,14 +2229,71 @@ function showSpeaker(src, tag) { drawStage(src, "left", tag); }
 /* 적을 가운데에 세운다 */
 function showFoe(src, tag, scale) { drawStage(src, "mid", tag, scale); }
 
+/* ── 소리 ─────────────────────────────────────────────────────
+ *  브라우저는 «사용자가 튼 소리» 만 허락합니다. 그런데 허락의 잣대가 둘입니다 —
+ *    한 번이라도 눌렀으면 됨   : 크롬·엣지 데스크톱
+ *    누른 그 순간이어야 함     : 사파리(아이폰은 전부, 맥은 기본값), 파이어폭스 일부
+ *  보스 등장 연출은 암전 1초 뒤 setTimeout 안에서 소리를 틉니다. 뒤쪽 잣대를 쓰는
+ *  브라우저에서는 «누른 그 순간» 이 이미 끝나 있어, 손도 못 대 보고 거부당합니다.
+ *
+ *  그래서 화면을 처음 누르는 순간에 소리를 미리 «틀었다 멈춰» 둡니다. 그 순간은
+ *  틀림없이 사용자가 누른 때이므로 허락이 떨어지고, 한 번 허락이 떨어진 Audio 는
+ *  그 뒤로 아무 때나 다시 틀 수 있습니다. 연출 자리에서는 그 객체를 다시 씁니다.
+ */
+const SOUND_CACHE = {};        // 경로 → 미리 쥐어 둔 Audio (연출 때마다 새로 만들지 않는다)
+let   SOUND_UNLOCKED = false;  // 첫 조작으로 허락을 받아 두었는가
+
+/* 이 경로의 Audio 를 하나만 만들어 두고 계속 씁니다.
+ * assetURL 을 거칩니다 — 완전판처럼 파일을 통째로 품은 판을 대비해서. */
+function soundEl(src) {
+  if (!SOUND_CACHE[src]) {
+    const a = new Audio(assetURL(src));
+    a.preload = "auto";
+    SOUND_CACHE[src] = a;
+  }
+  return SOUND_CACHE[src];
+}
+
+/* 미리 쥐어 둘 소리 목록 — FOES 에 sound 를 적어 둔 적의 것 전부 */
+function soundsToUnlock() {
+  const out = [];
+  if (typeof FOES !== "undefined")
+    for (const k in FOES) if (FOES[k] && FOES[k].sound) out.push(FOES[k].sound);
+  return out;
+}
+
+/* 첫 조작 때 딱 한 번. 소리 나지 않게 muted 로 틀었다 곧바로 멈춥니다 —
+ * 허락은 play() 를 부른 «때» 로 판가름 나지, 소리가 실제로 났는지로 나지 않습니다. */
+function unlockSounds() {
+  if (SOUND_UNLOCKED) return;
+  SOUND_UNLOCKED = true;
+  soundsToUnlock().forEach(src => {
+    try {
+      const a = soundEl(src);
+      a.muted = true;
+      const stop = () => { try { a.pause(); a.currentTime = 0; } catch (e) {} a.muted = false; };
+      const p = a.play();
+      if (p && p.then) p.then(stop, () => { a.muted = false; });
+      else stop();
+    } catch (e) { /* 못 쥐어 두면 그만 — 연출 자리에서 손잡이로 받습니다 */ }
+  });
+}
+document.addEventListener("pointerdown", unlockSounds, true);
+document.addEventListener("keydown",     unlockSounds, true);
+
 /* 효과음을 한 번 재생한다. assets/sound/ 의 파일을 씁니다.
- * 자동재생이 막혀 있어도(브라우저 정책) 조용히 넘어갑니다 — 화면을 막지 않습니다.
- * 만든 Audio 를 돌려줍니다 — «끝나면」을 기다려야 하는 자리(startBossCine)에서 씁니다. */
+ * 그래도 막히면 onBlocked 를 부릅니다 — 부르는 쪽이 손잡이를 내어 주도록.
+ * 쓴 Audio 를 돌려줍니다 — «끝나면» 을 기다려야 하는 자리(startBossCine)에서 씁니다.
+ * 다시 쓰는 객체이므로, 듣는 쪽은 반드시 { once: true } 로 답니다. */
 function playSound(src, onBlocked) {
   if (!src) return null;
   try {
-    const a = new Audio(src);
-    a.play().catch(() => { if (onBlocked) onBlocked(); });
+    const a = soundEl(src);
+    a.pause();
+    a.muted = false;
+    try { a.currentTime = 0; } catch (e) {}   // 다시 만나도 처음부터
+    const p = a.play();
+    if (p && p.catch) p.catch(() => { if (onBlocked) onBlocked(); });
     return a;
   } catch (e) { if (onBlocked) onBlocked(); return null; }
 }
@@ -3270,15 +3327,39 @@ function startBossCine(s) {
   };
 
   /* 배경을 도로 보이며 등장 대사를 적고 음성을 튼다.
-   * onDone 은 음성이 끝나거나(ended), 못 틀거나, 너무 길 때(cineVoiceMaxMs) 한 번만 불린다. */
-  const showVoice = onDone => {
+   * onDone 은 음성이 끝나거나(ended), 넘기거나, 너무 길 때(cineVoiceMaxMs) 한 번만 불린다.
+   *
+   * canAsk 를 세우면, 그래도 자동재생이 막혔을 때 조용히 넘기는 대신 손잡이를 내어
+   * 줍니다 — 손잡이를 누르는 것 자체가 사용자 조작이라 그 자리에서는 소리가 납니다.
+   * 「계속」을 눌러 들어온 자리(이미 본 보스)에서는 손잡이가 필요 없습니다.        */
+  const showVoice = (onDone, canAsk) => {
     drawStage(null, null, null);              // 배경만 도로 보인다. 보스 그림은 아직 안 낸다
     if (f.intro && f.intro !== "TODO") say(f.intro, "bad");
     let done = false;
-    const finish = () => { if (done) return; done = true; onDone(); };
-    const audio = playSound(f.sound, finish);   // 자동재생이 막히면 여기서 곧바로 넘어간다
-    if (audio) { audio.addEventListener("ended", finish); audio.addEventListener("error", finish); }
-    setTimeout(finish, RULE.cineVoiceMaxMs);
+    let timer = 0;
+    const finish = () => { if (done) return; done = true; clearTimeout(timer); onDone(); };
+    const listen = a => {
+      if (!a) return;
+      a.addEventListener("ended", finish, { once: true });   // 다시 쓰는 객체라 once 로 답니다
+      a.addEventListener("error", finish, { once: true });
+    };
+    const wait = () => { clearTimeout(timer); timer = setTimeout(finish, RULE.cineVoiceMaxMs); };
+
+    /* 막혔을 때 — 기다리기를 멈추고, 눌러서 듣거나 넘기게 한다 */
+    const ask = () => {
+      clearTimeout(timer);
+      buttons([
+        { label: "▶ 등장 음성 듣기", cls: "primary", fn: () => {
+            buttons([{ label: "…", cls: "primary", disabled: true }]);
+            listen(playSound(f.sound, finish));   // 이번에도 막히면 그냥 넘어갑니다
+            wait();
+          } },
+        { label: "넘기기", fn: finish }
+      ]);
+    };
+
+    listen(playSound(f.sound, canAsk ? ask : finish));
+    wait();
   };
 
   const reveal = () => {
@@ -3292,12 +3373,12 @@ function startBossCine(s) {
     blackout();
     render();
     buttons([{ label: "…", cls: "primary", disabled: true }]);   // 처음 보는 동안은 손잡이를 잠근다
-    setTimeout(() => showVoice(reveal), RULE.cineBlackoutMs);
+    setTimeout(() => showVoice(reveal, true), RULE.cineBlackoutMs);
   } else {
     blackout();
     render();
     buttons([{ label: "계속", cls: "primary", fn: () => {
-      showVoice(() => {});
+      showVoice(() => {}, false);   // 「계속」을 누른 그 순간이라 소리는 그대로 납니다
       render();
       buttons([{ label: "계속", cls: "primary", fn: reveal }]);
     } }]);
