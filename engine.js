@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.7.2";
+const VERSION = "1.7.3";
 const VERSION_NAME = "괴수살인괴수";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2104,6 +2104,11 @@ function portraitOf(who) {
   if (isSupport(who)) { const s = supportBy(who); return s ? s.portrait : null; }
   if (SINNERS[who])  return SINNERS[who].portrait;
   if (CREW[who])     return CREW[who].portrait;
+  /* 이야기가 같은 사람을 어떤 데선 영문 열쇠로, 어떤 데선 한글 이름으로 부릅니다 —
+   * who:"kim_taeseong" 과 who:"김태성" 이 함께 있습니다. 이름으로도 찾아 줍니다.
+   * 보조 교육위원보다 «먼저» 봐야 합니다. 저쪽은 초상이 전부 null 이라,
+   * 이름이 겹치면 그 자리에서 null 을 돌려주고 멈춰 버립니다. */
+  for (const k in SINNERS) if (SINNERS[k].name === who) return SINNERS[k].portrait;
   /* 이야기에만 나오는 사람 — data/characters.js 의 EXTRA_PORTRAITS */
   if (typeof EXTRA_PORTRAITS !== "undefined" && EXTRA_PORTRAITS[who])
     return EXTRA_PORTRAITS[who];

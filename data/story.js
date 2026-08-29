@@ -68,7 +68,7 @@ const FOES = {
   },
 
   /* 2장 */
-  olympiad_rival: { name: "올림피아드 참가자", hp: 95, atk: 11, def: 4, img: null },
+  olympiad_rival: { name: "올림피아드 참가자", hp: 95, atk: 11, def: 4, img: "assets/enemy/올림피아드 참가자.png" },
   viper: {
     name: "공룡애호가 바이퍼", hp: 190, atk: 16, def: 5,
     img: null,
@@ -95,7 +95,7 @@ const FOES = {
   },
 
   /* 3장 */
-  creationist: { name: "창조론자", hp: 100, atk: 12, def: 4, img: null },
+  creationist: { name: "창조론자", hp: 100, atk: 12, def: 4, img: "assets/enemy/창조론자.png" },
   sim_seunghwi: {
     name: "우생회 큰망치 심승휘", hp: 300, atk: 20, def: 7,
     img: null,

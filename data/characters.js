@@ -130,6 +130,15 @@ const CREW = {
 const EXTRA_PORTRAITS = {
   "경성피스톨":   "assets/portrait/경성피스톨.png",
   "오르도제노스": "assets/enemy/오르도제노스.png",
+  /* 3.5장·5장 — 이 셋은 «보조 교육위원» 이름과 겹칩니다.
+   *  보조 교육위원은 초상이 전부 null 이라 engine.js 의 portraitOf 가
+   *  거기서 멈춰 버려, 적 그림이 있는데도 대사에 얼굴이 안 떴습니다.
+   *  EXTRA_PORTRAITS 는 그보다 먼저 보므로 여기에 적어 두면 풀립니다. */
+  "이형우":       "assets/enemy/다시 끌려온 이형우.png",
+  "이서진":       "assets/enemy/이서진.png",
+  "강호영":       "assets/enemy/뒤틀린 모사사우루스.png",
+  /* 6.5장 — 이름이 적 이름(「G사 특촬전대」)과 안 겹쳐 자동으로 못 찾습니다 */
+  "G사 2등급 가면라이더": "assets/enemy/가면라이더.png",
   /* 6장 — 적 그림을 대화 초상으로 그대로 빌려 씁니다 */
   "가렛":         "assets/enemy/치프버틀러 가렛.png",
   "마왕 이경원":  "assets/enemy/마왕 이경원(인게임).png",
