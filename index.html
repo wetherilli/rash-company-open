@@ -361,6 +361,10 @@
   /* 작성위원 고유 능력 손잡이 — 보라색으로 따로 갈린다 */
   button.skill{border-color:#6f4a91;color:#c9a8e6;}
   body.battling button.skill{border-color:#7d55a8;color:#d3b6ef;}
+  /* 제1발톱 「지령」— 그 차례에 내려온 지령(공격 또는 방어 중 하나)을
+   * 연두색으로 짚어 준다. 지원 작성위원의 연두(#9ccc65)와 같은 색이다. */
+  button.claw1{border-color:#9ccc65;color:#c5e1a5;}
+  body.battling button.claw1{border-color:#a8d876;color:#d0e8a8;}
   .codein{
     background:#0b0b0f;border:1px solid #34343c;color:#e8e4de;
     font-family:inherit;font-size:14px;padding:7px 12px;min-width:180px;outline:none;
@@ -595,6 +599,13 @@
   .csec.on .csechead i{transform:rotate(0deg);border-top-color:#d8b26a;}
   .csec .csecbody{display:none;padding-bottom:4px;}
   .csec.on .csecbody{display:block;}
+
+  /* 노트의 시너지 한 줄을 누르면 펼쳐지는, 거기 걸리는 사람 목록.
+   * 미보유 인격은 흐리게(.un) — 지원 작성위원은 애초에 미보유면 안 실립니다. */
+  .synmembers{margin-top:8px;padding-top:8px;border-top:1px dashed #2a2a30;}
+  .synmem{font-size:12px;color:#c8c4bc;padding:2px 0;}
+  .synmem.un{color:#55524e;}
+  .synmem i{font-style:normal;color:#9ccc65;font-size:10.5px;margin-left:4px;}
 
   /* 다음으로 추천 — 늘 펴져 있고, 금색 테로 한 번 묶습니다 */
   .csrec{border:1px solid #4a3c1c;background:#14110a;padding:11px 12px;margin-top:16px;}

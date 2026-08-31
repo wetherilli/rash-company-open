@@ -14,7 +14,9 @@
  *      kill        쓰러뜨려야 하는 적 이름. 여러 개면 배열 — 그중 하나만 맞으면 됩니다.
  *                  이름이 그 말을 품고만 있어도 맞는 것으로 봅니다.
  *      clear       거울 던전을 «끝까지 돌았을 때» 만 봅니다. 갈래 이름을 적습니다 —
- *                  "mirror" · "mirrorHard" · "mirrorExtreme".
+ *                  "mirror" · "mirrorHard" · "mirrorExtreme" · "railLine1" · "railLine2" 등.
+ *                  where 처럼 여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
+ *                  clear: ["mirrorHard", "mirrorExtreme"]
  *                  적을 쓰러뜨리는 것과는 다른 사건이라, kill 과 같이 적지 마십시오.
  *      where       "story" 본편 · "mirror" 거울 던전(하드·익스트림 포함)
  *                  · "mirrorHard" 하드만 · "mirrorExtreme" 익스트림만

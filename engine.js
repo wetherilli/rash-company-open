@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.8.1";
+const VERSION = "1.8.2";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1898,10 +1898,38 @@ function effStats(who) {
   /* 깎는 기프트가 있어 배수가 0 아래로 갈 수 있습니다. 바닥을 둡니다 —
    * 공격과 체력은 1, 방어는 0 까지. */
   const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy + pv.atk + rl.atk)));
-  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def)) + pv.def);
+  /* 제1발톱 「지령」— 이번 차례에 방어를 골랐고, 그게 턴 머리에서 무작위로
+   * 내려온 지령 그대로였다면 방어력을 그 자리에서 더 올려 준다.
+   * claw1SynergyBonus() 참고. 전투 밖(S.battle 없음)이면 그냥 1이다. */
+  const claw1Def = (S.battle && S.battle.cmds && S.battle.cmds[who] === "guard" &&
+                    S.battle.mods && S.battle.mods[who + "_claw1Order"] === "guard")
+                   ? (1.5 + claw1SynergyBonus()) : 1;
+  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def) * claw1Def) + pv.def);
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   return { atk: atk + Math.round(def * conv), def: def, hp: hp };
+}
+
+/* 제1발톱 시너지가 지금 발동 중이면 claw1Bonus 를 돌려준다 — 그 시너지는
+ * 일반 atk/def/hp 필드를 안 쓰므로 activeSynergies() 로는 못 읽는다.
+ * data/characters.js 의 SYNERGIES 「제1발톱」 항목 머리말 참고. */
+function claw1SynergyBonus() {
+  if (typeof SYNERGIES === "undefined") return 0;
+  const sy = SYNERGIES.find(x => (Array.isArray(x.tag) ? x.tag : [x.tag]).indexOf("제1발톱") >= 0);
+  if (!sy || !sy.claw1Bonus) return 0;
+  const n = synergyNames().filter(t => t.indexOf("제1발톱") >= 0).length;
+  return n >= sy.need ? sy.claw1Bonus : 0;
+}
+
+/* 지령을 따랐을 때 그 사람이 하는 한마디 — 인격(또는 지원 작성위원)
+ * 줄에 적힌 claw1Line 을 그대로 읽습니다. 사람마다 다르게 적을 수
+ * 있도록 데이터 쪽(id/SUPPORTS 항목)에 두었습니다 — 없으면 그냥
+ * 아무 말도 안 합니다. */
+function claw1LineFor(who) {
+  if (isAlly(who)) return null;
+  if (isSupport(who)) { const s = supportBy(who); return s ? s.claw1Line : null; }
+  const id = idByKey(S.equip[who]);
+  return id ? id.claw1Line : null;
 }
 
 /* 인격 단독 수치 (시너지 미포함) */
@@ -3745,14 +3773,27 @@ function askNext() {
   /* 손잡이는 늘 같은 자리에 섭니다 — 남은 사람 수에 따라 사라지지 않도록 */
   const list = [];
 
+  /* 제1발톱 「지령」— 이 인격을 장착한 사람 차례가 열리는 순간, 공격·
+   * 방어 중 하나가 무작위로 지령으로 내려와 그 손잡이를 연두색으로
+   * 짚어 줍니다. 그대로 따르면 그 행동만 강화됩니다(swing()·effStats()
+   * 참고) — 실제 배율은 claw1SynergyBonus() 가 얹힙니다. b.mods 는
+   * beginTurn() 마다 비므로, 한 턴에 한 번만 무작위로 내려오고 그 뒤로는
+   * 그대로 유지됩니다. */
+  let claw1Order = null;
+  if (memberTitle(who).indexOf("제1발톱") >= 0) {
+    const key = who + "_claw1Order";
+    if (!b.mods[key]) b.mods[key] = rnd(2) ? "guard" : "attack";
+    claw1Order = b.mods[key];
+  }
+
   /* '전원 공격' 은 늘 첫 손잡이입니다. 한 사람만 남았어도 자리를 지킵니다.
    * P 로도 눌립니다. */
   list.push({ label: "전원 공격", cls: "primary", key: "p",
               fn: () => { pending.forEach(w => b.cmds[w] = "attack"); askNext(); } });
 
-  list.push({ label: "공격",
+  list.push({ label: "공격", cls: claw1Order === "attack" ? "claw1" : "",
               fn: () => { b.cmds[who] = "attack"; askNext(); } });
-  list.push({ label: "방어", fn: () => {
+  list.push({ label: "방어", cls: claw1Order === "guard" ? "claw1" : "", fn: () => {
       b.cmds[who] = "guard";
       b.manage = Math.min(manageCap(), b.manage + RULE.guardManage);
       askNext();
@@ -3870,7 +3911,11 @@ function battleWhere() {
 function achieveMatches(a, foeName, cleared) {
   const w = a.when || {};
 
-  if (w.clear) { if (w.clear !== cleared) return false; }
+  if (w.clear) {
+    /* where 처럼 배열로도 적을 수 있습니다 — clear: ["mirrorHard", "mirrorExtreme"] */
+    const want = Array.isArray(w.clear) ? w.clear : [w.clear];
+    if (want.indexOf(cleared) < 0) return false;
+  }
   else if (cleared) return false;
 
   if (w.kill) {
@@ -4058,11 +4103,22 @@ function resolveTurn() {
     const fdef = b.mods.arrest
       ? Math.round(b.def * (1 - arrestCut))
       : b.def;
-    /* 강공·겹살 — 공격력 배율. 연계 효과 — LINK_SKILLS 가 건 별도 배율(둘 다
-     * 걸리면 곱해집니다). 회피 보상 — 지난 턴에 걸어 둔 확정 치명타 */
+    /* 강공·겹살 — 공격력 배율. 연계 효과 — LINK_SKILLS 가 건 별도 배율.
+     * 제1발톱 — 이번 차례에 공격을 골랐고, 그게 턴 머리에서 무작위로
+     * 내려온 지령 그대로였다면 이 공격에만 배율이 붙는다(claw1SynergyBonus
+     * 참고). 셋 다 걸리면 곱해집니다. 회피 보상 — 지난 턴에 걸어 둔
+     * 확정 치명타 */
     const skillMult = b.mods[who + "_atkMult"] || 1;
     const linkMult  = b.mods[who + "_linkMult"] || 1;
-    const atkMult = skillMult * linkMult;
+    const claw1Mult = (b.mods[who + "_claw1Order"] === "attack") ? (1.5 + claw1SynergyBonus()) : 1;
+    const atkMult = skillMult * linkMult * claw1Mult;
+    /* 지령을 따랐을 때, 그 인격을 낀 사람 몫의 한마디를 공격 직전에
+     * 한 번 보여 준다 — data/characters.js 의 id(또는 SUPPORTS 항목)
+     * 에 적힌 claw1Line 을 그대로 읽는다(claw1LineFor 참고). */
+    if (claw1Mult !== 1) {
+      const line = claw1LineFor(who);
+      if (line) battleSay(who, line);
+    }
     const evadeBonus = b.persist[who + "_evadeBonus"];
     let dmg = st.atk * atkMult + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
@@ -4076,6 +4132,7 @@ function resolveTurn() {
         (b.mods.arrest ? " (체포)" : "") +
         (skillMult !== 1 ? " (" + UNIQUE_SKILLS[who].name + ")" : "") +
         (linkMult !== 1 ? " (" + b.mods[who + "_linkLabel"] + ")" : "") +
+        (claw1Mult !== 1 ? " (지령)" : "") +
         (evadeBonus ? " (회피 보상)" : ""), crit ? "crit" : "hit");
     if (evadeBonus) delete b.persist[who + "_evadeBonus"];
 
@@ -4936,11 +4993,76 @@ function tutorPlay(id, after) {
   return true;
 }
 
+/* ── 편성 시너지 — 큰 갈래로 묶어 보여주는 순서 (사용자 지침 2026-08-31) ──
+ *  노트 화면과 교육위원 고르기(「시너지 순」 정렬) 둘 다 이 순서를 씁니다.
+ *  synergyGroupOf() 가 SYNERGIES 항목 하나를 받아 이 배열의 하나로 갈라 줍니다 —
+ *  이름이 어느 names 배열에도 없으면 자동으로 맨 끝 "기타"에 들어가므로,
+ *  SYNERGIES 에 새 항목을 더할 때 여기를 안 고쳐도 안전합니다(다만 알맞은
+ *  자리에 넣고 싶으면 그 이름을 아래 배열 중 하나에 적어 주십시오). */
+const SYNERGY_GROUPS = [
+  { id: "wings", name: "날개", names: [
+      "N사 파견", "군 복무", "우주정복의 의지", "가상생물학자", "G사 프로덕션",
+      "Y사 연구실", "P사 저지선", "남부협회", "북부 총기 협회"
+    ] },
+  { id: "lsync", name: "L사 및 LST", names: ["신생 L사", "LST 시절"] },
+  { id: "event", name: "이벤트", names: ["공룡의 날", "영덕의 요리사"] },
+  { id: "etc",   name: "기타", names: null }   // 위 어디에도 안 걸리면 여기로
+];
+function synergyGroupOf(sy) {
+  return SYNERGY_GROUPS.find(g => g.names && g.names.indexOf(sy.name) >= 0) ||
+         SYNERGY_GROUPS[SYNERGY_GROUPS.length - 1];
+}
+/* SYNERGIES 를 SYNERGY_GROUPS 순서대로 한 줄로 편 목록 — 교육위원 「시너지
+ * 순」 정렬이 "이 사람이 몇 번째 시너지에 걸리는가"로 등수를 매길 때 씁니다. */
+function synergySortedList() {
+  if (typeof SYNERGIES === "undefined") return [];
+  const out = [];
+  SYNERGY_GROUPS.forEach(g => {
+    SYNERGIES.filter(sy => synergyGroupOf(sy) === g).forEach(sy => out.push(sy));
+  });
+  return out;
+}
+/* 시너지 하나에 걸리는 사람 전부 — 인격은 미보유도 이름만 보여주고,
+ * 지원 작성위원은 «미보유면 아예 안 보여줍니다» (사용자 지침 —
+ * 지원 작성위원은 얻기 전엔 이름도 가려지는 게 원래 규칙이라 그대로 따름). */
+function synergyMembers(sy) {
+  const tags = Array.isArray(sy.tag) ? sy.tag : [sy.tag];
+  const match = t => tags.some(tg => t.indexOf(tg) >= 0);
+  const out = [];
+  for (const w in SINNERS) {
+    SINNERS[w].ids.forEach(id => {
+      if (id.todo || !match(id.title)) return;
+      out.push({ sup: false, owned: !!S.owned[idKey(w, id)], who: SINNERS[w].name, star: id.star, title: id.title });
+    });
+  }
+  (typeof SUPPORTS !== "undefined" ? SUPPORTS : []).forEach(sp => {
+    if (!match(sp.title) || !supportOwned(sp)) return;   // 미보유 지원 작성위원은 표시하지 않는다
+    out.push({ sup: true, owned: true, who: sp.name, star: sp.star, title: sp.title });
+  });
+  out.sort((a, b) => (b.owned - a.owned) || (b.star - a.star));
+  return out;
+}
+function synergyMembersHTML(sy) {
+  const list = synergyMembers(sy);
+  if (!list.length) return '<div class="synmembers"><div class="sub">아직 걸리는 사람이 없습니다</div></div>';
+  return '<div class="synmembers">' + list.map(m =>
+    '<div class="synmem' + (m.owned ? '' : ' un') + '">' +
+      '<span class="star">' + stars(m.star) + '</span> ' +
+      (m.owned ? (m.who + ' · ' + m.title) : m.title) +
+      (m.sup ? ' <i>지원</i>' : '') +
+    '</div>'
+  ).join('') + '</div>';
+}
+
 /* ── 노트 ─────────────────────────────────────────────────────
  *  수감자 신상과 설정을 모아 보는 곳. 스토리는 담지 않습니다.
  *  내용은 전부 data/characters.js 에서 그대로 읽어옵니다.
  */
 function noteTag(t) { return '<span class="tag2">' + t + '</span>'; }
+/* 시너지 무리(csec)가 접혔는지, 어느 시너지 하나가 펴져 있는지 — 판이
+ * 도는 동안만 기억합니다(운전석의 CS_OPEN과는 다른 자리 — 화면마다 따로 둡니다). */
+let NOTE_SYN_OPEN = {};
+let NOTE_SYN_DETAIL = null;
 
 function openNote(back, focus) {
   $modal.classList.add("on");
@@ -5100,41 +5222,54 @@ function openNote(back, focus) {
 
     /* ── 편성 시너지 한눈에 ──
      *  data/characters.js 의 SYNERGIES 를 그대로 읽어 옵니다.
-     *  지금 편성으로 몇 명이 걸려 있는지도 함께 적습니다. */
+     *  큰 갈래(SYNERGY_GROUPS)로 접어 두고, 시너지 한 줄을 누르면 거기
+     *  걸리는 사람을 펼쳐 보여줍니다(synergyMembersHTML 참고). */
     const syAll = (typeof SYNERGIES !== "undefined" && SYNERGIES) ? SYNERGIES : [];
     if (syAll.length) {
       const nowTitles = synergyNames();
       h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">편성 시너지 ' +
            '<span class="sub" style="font-weight:400">모두 ' + syAll.length + '가지</span></div>' +
            '<div class="hint">파티 셋이 <b>장착한 인격 이름</b>에 같은 말이 들어가면 발동합니다. ' +
-           '몇 명부터 발동하는지는 시너지마다 다르고, 3명이면 1.75배, 보조 교육위원까지 넷이면 2배가 됩니다.</div>' +
-           '<div class="grid">';
-      syAll.forEach(sy => {
-        const tags = Array.isArray(sy.tag) ? sy.tag : [sy.tag];
-        /* 지금 편성으로 몇 명이 걸려 있는가 */
-        const now = nowTitles.filter(t => tags.some(tg => t.indexOf(tg) >= 0)).length;
-        /* 보관함에 이 말이 든 인격이 몇 종이나 있는가 */
-        let ownedN = 0, totalN = 0;
-        for (const w in SINNERS) SINNERS[w].ids.forEach(id => {
-          if (id.todo || !tags.some(tg => id.title.indexOf(tg) >= 0)) return;
-          totalN++; if (S.owned[idKey(w, id)]) ownedN++;
+           '몇 명부터 발동하는지는 시너지마다 다르고, 3명이면 1.75배, 보조 교육위원까지 넷이면 2배가 됩니다. ' +
+           '무리 이름을 누르면 접히고 펴집니다. 시너지 한 줄을 누르면 거기 걸리는 사람을 보여줍니다.</div>';
+
+      SYNERGY_GROUPS.forEach(g => {
+        const list = syAll.filter(sy => synergyGroupOf(sy) === g);
+        if (!list.length) return;
+        const secId = "syn_" + g.id;
+        const gOpen = !!NOTE_SYN_OPEN[secId];
+        h += '<div class="csec' + (gOpen ? ' on' : '') + '" data-sec="' + secId + '">' +
+               '<div class="csechead"><b>' + g.name + '</b><span>' + list.length + '가지</span><i></i></div>' +
+               '<div class="csecbody"><div class="grid">';
+        list.forEach(sy => {
+          const tags = Array.isArray(sy.tag) ? sy.tag : [sy.tag];
+          /* 지금 편성으로 몇 명이 걸려 있는가 */
+          const now = nowTitles.filter(t => tags.some(tg => t.indexOf(tg) >= 0)).length;
+          /* 보관함에 이 말이 든 인격이 몇 종이나 있는가 */
+          let ownedN = 0, totalN = 0;
+          for (const w in SINNERS) SINNERS[w].ids.forEach(id => {
+            if (id.todo || !tags.some(tg => id.title.indexOf(tg) >= 0)) return;
+            totalN++; if (S.owned[idKey(w, id)]) ownedN++;
+          });
+          const eff = [];
+          if (sy.atk) eff.push("공 +" + Math.round(sy.atk * 100) + "%");
+          if (sy.def) eff.push("방 +" + Math.round(sy.def * 100) + "%");
+          if (sy.hp)  eff.push("체 +" + Math.round(sy.hp  * 100) + "%");
+          const on = now >= sy.need;
+          const detailOpen = NOTE_SYN_DETAIL === sy.name;
+          h += '<div class="slot' + (on ? ' sel' : '') + '" data-syn="' + sy.name + '">' +
+                 '<div class="nm">' + sy.name +
+                   (on ? ' <span class="synon">발동 중 ' + now + '명</span>' : '') + '</div>' +
+                 '<div class="sub">찾는 말 「' + tags.join("」 「") + '」　·　' + sy.need + '명부터</div>' +
+                 '<div class="sub" style="color:#d8b26a">' + eff.join("　") + '</div>' +
+                 (sy.desc ? '<div class="sub">' + sy.desc + '</div>' : '') +
+                 '<div class="sub">해당 인격 ' + ownedN + ' / ' + totalN + ' 보유' +
+                   (totalN < sy.need ? '　— 인격이 모자라 발동할 수 없습니다' : '') + '</div>' +
+                 (detailOpen ? synergyMembersHTML(sy) : '') +
+               '</div>';
         });
-        const eff = [];
-        if (sy.atk) eff.push("공 +" + Math.round(sy.atk * 100) + "%");
-        if (sy.def) eff.push("방 +" + Math.round(sy.def * 100) + "%");
-        if (sy.hp)  eff.push("체 +" + Math.round(sy.hp  * 100) + "%");
-        const on = now >= sy.need;
-        h += '<div class="slot' + (on ? ' sel' : '') + '">' +
-               '<div class="nm">' + sy.name +
-                 (on ? ' <span class="synon">발동 중 ' + now + '명</span>' : '') + '</div>' +
-               '<div class="sub">찾는 말 「' + tags.join("」 「") + '」　·　' + sy.need + '명부터</div>' +
-               '<div class="sub" style="color:#d8b26a">' + eff.join("　") + '</div>' +
-               (sy.desc ? '<div class="sub">' + sy.desc + '</div>' : '') +
-               '<div class="sub">해당 인격 ' + ownedN + ' / ' + totalN + ' 보유' +
-                 (totalN < sy.need ? '　— 인격이 모자라 발동할 수 없습니다' : '') + '</div>' +
-             '</div>';
+        h += '</div></div></div>';
       });
-      h += '</div>';
     }
 
     h += '<div class="modalfoot"><button id="nclose">닫기</button></div>';
@@ -5145,6 +5280,22 @@ function openNote(back, focus) {
     });
     const tutOpen = $sheet.querySelector(".slot[data-tut-open]");
     if (tutOpen) tutOpen.onclick = () => tutorView();
+    /* 시너지 무리 접기/펴기 */
+    $sheet.querySelectorAll(".csec .csechead").forEach(el => {
+      el.onclick = () => {
+        const id = el.closest(".csec").dataset.sec;
+        NOTE_SYN_OPEN[id] = !NOTE_SYN_OPEN[id];
+        index();
+      };
+    });
+    /* 시너지 한 줄을 누르면 거기 걸리는 사람이 펼쳐집니다 — 다시 누르면 접힙니다 */
+    $sheet.querySelectorAll(".slot[data-syn]").forEach(el => {
+      el.onclick = () => {
+        const name = el.dataset.syn;
+        NOTE_SYN_DETAIL = (NOTE_SYN_DETAIL === name) ? null : name;
+        index();
+      };
+    });
     document.getElementById("nclose").onclick = () => { closeModal(); render(); if (back) back(); };
   };
 
@@ -7739,6 +7890,20 @@ function openPresetSave(back) {
 }
 
 /* ── 보조 교육위원 편성 ────────────────────────────────────── */
+/* 정렬("added"·"name"·"synergy")과 「보유한 것만」 — 판이 도는 동안 기억합니다.
+ * 사용자 지침(2026-08-31)으로 기본을 «보유한 것만 보기»로 바꿨습니다. */
+let ADV_SORT = "added";
+let ADV_OWNED_ONLY = true;
+/* 「시너지순」 정렬용 — 이 교육위원의 제목이 synergySortedList() 의 몇 번째
+ * 시너지에 걸리는지를 등수로 돌려줍니다. 어디에도 안 걸리면 맨 뒤로 갑니다. */
+function advisorSynergyRank(a) {
+  const ordered = synergySortedList();
+  for (let i = 0; i < ordered.length; i++) {
+    const tags = Array.isArray(ordered[i].tag) ? ordered[i].tag : [ordered[i].tag];
+    if (tags.some(tg => a.title.indexOf(tg) >= 0)) return i;
+  }
+  return ordered.length;
+}
 function openAdvisor(back) {
   $modal.classList.add("on");
   const all = advisorList();
@@ -7748,17 +7913,41 @@ function openAdvisor(back) {
   const nowOn = advisorOnList();
   const 다음 = nextSlotChapter("advisor");
 
+  /* 정렬·「보유한 것만」 — 인격 장착(openEquip)의 EQUIP_OWNED_ONLY와 같은
+   * 요령입니다. 기본은 보유한 것만 보이게(ADV_OWNED_ONLY = true) 해 두었습니다
+   * (사용자 지침 2026-08-31 — "추가된 순서로만 나와서 난잡하다"). */
+  let list = all.slice();
+  if (ADV_SORT === "name") {
+    list.sort((a, b) => a.name.localeCompare(b.name, "ko") || a.title.localeCompare(b.title, "ko"));
+  } else if (ADV_SORT === "synergy") {
+    list.sort((a, b) => advisorSynergyRank(a) - advisorSynergyRank(b) || a.name.localeCompare(b.name, "ko"));
+  }
+  if (ADV_OWNED_ONLY) list = list.filter(a => S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
+
   let h = '<h2>보 조 교 육 위 원</h2>' +
           '<div class="hint">관리자 옆에 <b>' + cap + '명</b>까지 세울 수 있습니다. 직접 싸우지는 않고, ' +
           '편성된 작성위원 전원에게 상시 효과를 겁니다.　세운 ' + nowOn.length + ' / ' + cap +
           '　·　보유 ' + mine.length + ' / ' + all.length +
           (다음 ? '<br>' + 다음 + '을 마치면 한 명 더 세울 수 있습니다.' : '') +
-          '</div><div class="grid">';
+          '</div>' +
+          '<div class="eqbar">' +
+            '<label class="eqchk"><input type="checkbox" id="advowned"' +
+              (ADV_OWNED_ONLY ? ' checked' : '') + '> 보유한 것만 보기</label>' +
+            '<button id="advsort_added" class="' + (ADV_SORT === "added" ? "" : "ghost") + '">추가순</button>' +
+            '<button id="advsort_name" class="' + (ADV_SORT === "name" ? "" : "ghost") + '">이름순</button>' +
+            '<button id="advsort_synergy" class="' + (ADV_SORT === "synergy" ? "" : "ghost") + '">시너지순</button>' +
+          '</div>' +
+          '<div class="grid">';
 
   h += '<div class="slot' + (!nowOn.length ? ' sel' : '') + '" data-pick="">' +
          '<div class="nm">모두 내리기</div><div class="sub">아무도 세우지 않습니다</div></div>';
 
-  all.forEach(a => {
+  if (!list.length)
+    h += '<div class="slot"><div class="sub">' +
+         (ADV_OWNED_ONLY ? '아직 보유한 교육위원이 없습니다 — 「보유한 것만 보기」를 꺼 보십시오.'
+                         : '표시할 교육위원이 없습니다.') + '</div></div>';
+
+  list.forEach(a => {
     const k = advisorId(a);
     const has = !!(S.advisorsOwned && S.advisorsOwned[k]);
     const on  = advisorIsOn(k);
@@ -7778,6 +7967,11 @@ function openAdvisor(back) {
   });
   h += '</div><div class="modalfoot"><button id="aclose">돌아가기</button></div>';
   $sheet.innerHTML = h;
+
+  document.getElementById("advowned").onchange = (e) => { ADV_OWNED_ONLY = e.target.checked; openAdvisor(back); };
+  ["added", "name", "synergy"].forEach(key => {
+    document.getElementById("advsort_" + key).onclick = () => { ADV_SORT = key; openAdvisor(back); };
+  });
 
   $sheet.querySelectorAll(".slot[data-pick]").forEach(el => {
     el.onclick = () => {

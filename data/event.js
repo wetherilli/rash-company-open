@@ -86,7 +86,7 @@ const EVENTS = [
     line:    "괴수의 잔재는 또다른 거름이 된다.",   /* 상점 맨 위 띠에 얹히는 광고 문구 */
     banner:  "assets/scene/배수로 내부.jpg",
     from:    "2026-08-29",         /* ← 기간을 늘리거나 줄이려면 여기와 days 를 고칩니다 */
-    days:    28,
+    days:    7,
     goods: [
       { id: "kaiju_box_select", name: "인격 파편 상자 (선택) 10개",
         cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
@@ -120,7 +120,8 @@ const EVENTS = [
     desc:    "어디로 가는지는 적혀 있지 않다.",
     line:    null,                 /* ← 그때 광고 문구를 적어 주십시오 */
     banner:  null,
-    from:    null,
+    from:    "2026-09-05",         /* 괴수살인괴수(2026-08-29 + 7일)가 끝난 다음 날부터 7일간 */
+    days:    7,
     goods: [
       { id: "busan_box_select", name: "인격 파편 상자 (선택) 10개",
         cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
