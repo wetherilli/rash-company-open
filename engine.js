@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.8.2";
+const VERSION = "1.8.3";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -257,6 +257,10 @@ function vaultBody() {
     enk:      S.enk || null,
     /* 이미 받은 우편. 이것을 빠뜨리면 받은 표시가 안 남아 무한정 다시 받힙니다. */
     mailTaken: Object.keys(S.mailTaken || {}),
+    /* 거울굴절철도(등) 체크포인트 이어하기 — 완주하면 지워지는 임시 데이터입니다.
+     * 편성은 담지 않습니다(resumeMirror 참고). vaultSig() 에는 일부러 안 넣습니다 —
+     * 손댐 검사가 아니라 그냥 진행 상황이라서요. */
+    railSave: S.railSave || null,
     ver:      VERSION
   };
 }
@@ -298,6 +302,7 @@ function loadVault() {
     eventBuy: v.eventBuy || {},
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
+    railSave: v.railSave || null,
     ver:      v.ver || null
   };
 }
@@ -935,6 +940,10 @@ function newState() {
     mirror: false,
     mirrorHard: false,
     mirrorTier: null,
+    /* 거울굴절철도 체크포인트 이어하기 — 완주하면 지워지는 임시 데이터.
+     * { key, picked, checkpoint } (순환 없는 갈래) 또는
+     * { key, rail2:{bosses,done,picks}, checkpoint } (2호선류). */
+    railSave: (v && v.railSave) || null,
     partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
     battleForced: false,
     /* 「이번 갈래」 — 광신(처치 수)·보복(아군 사망 수, 작성위원별) 이 쌓이는 자리.
@@ -2407,14 +2416,18 @@ function renderFoeBar() {
   if (!b) { $foehp.classList.remove("on"); $foehp.innerHTML = ""; return; }
   $foehp.classList.add("on");
   const pct = Math.max(0, Math.round(b.hp / b.maxhp * 100));
-  /* ── 순환 눈금 (거울굴절철도 2호선) ────────────────────────────
-   *  열 몇 판을 내리 붙는 갈래라, 지금이 «몇 순환의 몇 번째» 인지 화면에 없으면
-   *  금세 길을 잃습니다. 장면에 붙여 둔 rail 을 그대로 읽어 적습니다
-   *  (railCycleScenes · railFinalScenes 참고). 다른 갈래에는 rail 이 없어 뜨지 않습니다. */
+  /* ── 순환/차례 눈금 (거울굴절철도) ──────────────────────────────
+   *  열 몇 판을 내리 붙는 갈래라, 지금이 «몇 번째» 인지 화면에 없으면
+   *  금세 길을 잃습니다. 장면에 붙여 둔 rail 을 그대로 읽어 적습니다.
+   *  2호선은 {cycle,no,k}(railCycleScenes·railFinalScenes), 순환이 없는
+   *  갈래(거울 던전·하드·익스트림·1호선)는 {no,total,k}(buildMirrorRunScenes)
+   *  — 둘을 갈라 다르게 적습니다. rail 이 없으면(본편 등) 아예 안 뜹니다. */
   const rl = b.scene && b.scene.rail;
   const 눈금 = !rl ? "" :
     ' <i class="railtag">' +
-      (rl.final ? "종착역" : rl.cycle + "순환 · " + rl.no + "번째") +
+      (rl.final ? "종착역" :
+       rl.cycle != null ? (rl.cycle + "순환 · " + rl.no + "번째") :
+       (rl.no + " / " + rl.total + "번째")) +
       '　' + railScaleText(rl.k) +
     '</i>';
   $foehp.innerHTML =
@@ -2958,6 +2971,14 @@ function play(s) {
       S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 쓰러진 사람도 함께 일어납니다
       S.restManage = true;                                     // 다음 전투는 관리력을 가득 채우고 연다
       say(s.text || "길잡이가 관리력과 체력을 전부 회복시켰다.", "good");
+      /* 거울굴절철도(1호선 등) 체크포인트에 실제로 닿은 자리입니다 — 보관함에도
+       * 남겨서, 창을 닫았다 다시 열어도 여기서부터 이어할 수 있게 합니다.
+       * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
+      if (S.mirror && S.mirrorCheckpoint != null && !mirrorRuleNow().loop) {
+        S.railSave = { key: mirrorRuleNow().key, picked: (MIRROR.foeSrc || []).slice(),
+                        checkpoint: S.mirrorCheckpoint };
+        saveVault();
+      }
       render();
       return cont();
     }
@@ -6883,6 +6904,9 @@ function buildMirrorFoes(rule) {
 function mirrorFoeCopy(id, src, r, k, dk) {
   const f = FOES[src];
   FOES[id] = {
+    /* 원래 열쇠를 남겨 둡니다 — 거울굴절철도 저장 이어하기(railSave)가
+     * "무엇을 비췄었는지" 되짚을 때 씁니다. 다른 곳에서는 안 읽습니다. */
+    src: src,
     name: f.mirrorName || ((r && r.prefix) || "거울의 ") + f.name,
     hp:  Math.round(f.hp  * k),
     atk: Math.round(f.atk * k),
@@ -6965,6 +6989,9 @@ function openMirrorGate(tier, back) {
   const draw = (msg) => {
     const scouted = mirrorScouted(rule);
     const canGo = enkCount() >= rule.cost;
+    /* 저장해 둔 이어하기 자리 — 체크포인트를 실제로 밟았을 때만 생깁니다
+     * (case "rest" · SCENE_EXT.railCamp 참고). 완주하면 사라집니다. */
+    const saved = (S.railSave && S.railSave.key === rule.key) ? S.railSave : null;
 
     const f = mirrorFacts(rule);
     let h = '<h2>' + rule.name + ' — 들어가기 전</h2>' +
@@ -6973,6 +7000,11 @@ function openMirrorGate(tier, back) {
       '<div class="hint">' + rule.sub + '.　' + f.자세히 + '</div>' +
       '<div class="hint"><b>세기</b> ' + f.세기 + '　·　<b>' + f.상대라벨 + '</b> ' + f.상대 +
         '　·　<b>완주 보상</b> ' + f.보상 + (f.첫몫 ? '　(' + f.첫몫 + ')' : '') + '</div>';
+
+    if (saved)
+      h += '<div class="hint" style="color:#d8b26a">저장해 둔 자리가 있습니다. ' +
+           '<b>이어하기</b>를 누르면 엔케팔린 없이 그 자리부터, <b>입장</b>을 누르면 ' +
+           '처음부터 다시 시작합니다 — 이때 저장해 둔 자리는 사라집니다.</div>';
 
     /* 갈래에 warn 을 적어 두었으면 여기, 관측(적 관측)보다 먼저 보이는 자리에 붉게 띄웁니다. */
     if (rule.warn)
@@ -7014,7 +7046,9 @@ function openMirrorGate(tier, back) {
 
     h += '<div class="modalfoot">' +
            '<button id="mgback" class="ghost">돌아가기</button>' +
-           '<button id="mgenter" class="primary"' + (canGo ? '' : ' disabled') + '>' +
+           (saved ? '<button id="mgresume" class="primary">이어하기</button>' : '') +
+           '<button id="mgenter"' + (saved ? ' class="ghost"' : ' class="primary"') +
+             (canGo ? '' : ' disabled') + '>' +
              '입장　(' + ENK_RULE.name + ' ' + rule.cost + (canGo ? '' : '　— 모자랍니다') + ')</button>' +
          '</div>';
     $sheet.innerHTML = h;
@@ -7031,8 +7065,48 @@ function openMirrorGate(tier, back) {
     document.getElementById("mgback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
     const enterBtn = document.getElementById("mgenter");
     if (canGo) enterBtn.onclick = () => { closeModal(); startMirror(rule.key, scouted); };
+    if (saved) document.getElementById("mgresume").onclick = () => { closeModal(); resumeMirror(); };
   };
   draw(null);
+}
+
+/* 순환하지 않는 갈래(거울 던전·하드·익스트림·거울굴절철도 1호선)의 장면을
+ * ids 로부터 짓습니다. startMirror() 와 resumeMirror() 둘 다 이걸 씁니다 —
+ * 「저장해 둔 것으로 이어하기」가 처음 들어갈 때와 «정확히 같은 모양»으로
+ * 다시 지어야 체크포인트 자리(scene index)가 어긋나지 않습니다.
+ *
+ *  rail:{no,total,k} 를 전투 장면마다 붙여 둡니다 — 「몇 번째 상대인지」를
+ *  전투 화면에 보여주려는 것입니다(renderFoeBar 참고, 2호선의 rail:{cycle,no,k}
+ *  와 같은 자리를 씁니다). */
+function buildMirrorRunScenes(rule, ids) {
+  const 첫줄 = rule === MIRROR_EXTREME
+    ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
+    : rule === MIRROR_HARD
+      ? "유리창에 금이 간다. 갈라진 틈마다 다른 것이 서 있다."
+      : "메카고질라의 유리창이 흐려지더니, 비친 것들이 걸어 나온다.";
+  const scenes = [{ t: "place", img: mirrorBG(rule), name: rule.name },
+                  { t: "n", text: 첫줄 },
+                  { t: "n", text: "쉴 틈은 없다. " + countWord(ids.length) + " 연달아 상대해야 한다." }];
+  /* 길잡이가 들르는 자리(있으면) — 그 뒤로 지면 이 자리로 돌아옵니다. defeat() 참고. */
+  let checkpoint = null;
+  ids.forEach((id, i) => {
+    if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
+    const rail = { no: i + 1, total: ids.length, k: rule.scale };
+    /* cineEntrance 를 단 적(쥬3피노 등)은 그냥 세우는 대신 등장 연출을 거칩니다 */
+    scenes.push(FOES[id] && FOES[id].cineEntrance
+      ? { t: "bossCine", foe: id, rail: rail } : { t: "battle", foe: id, rail: rail });
+    /* 정해진 수를 넘기면 길잡이가 한 번 들러 세워 놓고 갑니다 */
+    if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length) {
+      checkpoint = scenes.length;   // 이 rest 장면이 설 자리
+      scenes.push({ t: "rest", who: rule.rest.who, say: rule.rest.say, text: rule.rest.text });
+      /* 편성까지 손볼 수 있는 자리라면 쉬는 김에 한 번 물어봅니다 —
+       * 앞의 것들을 겪어 보고 뒤를 다시 짜라는 뜻입니다. */
+      if (rule.rest.party)
+        scenes.push({ t: "party", text: "여기서 편성을 고칠 수 있습니다." });
+    }
+  });
+  scenes.push({ t: "mirrorClear" });
+  return { scenes: scenes, checkpoint: checkpoint };
 }
 
 function startMirror(tier, preIds) {
@@ -7050,6 +7124,11 @@ function startMirror(tier, preIds) {
     return;
   }
 
+  /* 새로 들어서는 자리이므로, 이 갈래든 다른 갈래든 저장해 둔 이어하기 자리가
+   * 있었다면 여기서 버립니다 — 지금 막 새로 만드는 진행과 뒤섞이면 안 됩니다.
+   * 「저장해 둔 자리에서 이어하기」는 resumeMirror() 가 따로 맡습니다. */
+  S.railSave = null;
+
   /* 거울 던전에 들어서는 자리라 「이번 갈래」를 새로 엽니다 — 광신·보복 스택 리셋 */
   S.arc = { kills: 0, retribution: {} };
 
@@ -7061,35 +7140,15 @@ function startMirror(tier, preIds) {
   /* 순환 갈래(2호선)는 여기서부터 길이 아주 갈립니다 — 장면을 한꺼번에 짓지 않고
    * 한 순환씩 이어 붙이며 갑니다. 위에서 뽑은 것(RAIL2_PICK)을 그대로 물려 줍니다. */
   if (rule.loop) return startRailLoop(rule);
-  const 첫줄 = rule === MIRROR_EXTREME
-    ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
-    : rule === MIRROR_HARD
-      ? "유리창에 금이 간다. 갈라진 틈마다 다른 것이 서 있다."
-      : "메카고질라의 유리창이 흐려지더니, 비친 것들이 걸어 나온다.";
-  const scenes = [{ t: "place", img: mirrorBG(rule), name: rule.name },
-                  { t: "n", text: 첫줄 },
-                  { t: "n", text: "쉴 틈은 없다. " + countWord(ids.length) + " 연달아 상대해야 한다." }];
-  /* 길잡이가 들르는 자리(있으면) — 그 뒤로 지면 이 자리로 돌아옵니다. defeat() 참고. */
-  S.mirrorCheckpoint = null;
-  ids.forEach((id, i) => {
-    if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
-    /* cineEntrance 를 단 적(쥬3피노 등)은 그냥 세우는 대신 등장 연출을 거칩니다 */
-    scenes.push(FOES[id] && FOES[id].cineEntrance ? { t: "bossCine", foe: id } : { t: "battle", foe: id });
-    /* 정해진 수를 넘기면 길잡이가 한 번 들러 세워 놓고 갑니다 */
-    if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length) {
-      S.mirrorCheckpoint = scenes.length;   // 이 rest 장면이 설 자리
-      scenes.push({ t: "rest", who: rule.rest.who, say: rule.rest.say, text: rule.rest.text });
-      /* 편성까지 손볼 수 있는 자리라면 쉬는 김에 한 번 물어봅니다 —
-       * 앞의 것들을 겪어 보고 뒤를 다시 짜라는 뜻입니다. */
-      if (rule.rest.party)
-        scenes.push({ t: "party", text: "여기서 편성을 고칠 수 있습니다." });
-    }
-  });
-  scenes.push({ t: "mirrorClear" });
+
+  const built = buildMirrorRunScenes(rule, ids);
+  S.mirrorCheckpoint = built.checkpoint;
 
   MIRROR = {
     id: rule.key, no: rule.name, title: "",
-    subtitle: rule.sub, scenes: scenes
+    subtitle: rule.sub, scenes: built.scenes,
+    /* 이어하기(railSave)가 되짚어 다시 지을 때 쓰는 원본 열쇠 목록 */
+    foeSrc: ids.map(id => FOES[id].src)
   };
 
   S.mirror = true;
@@ -7110,6 +7169,67 @@ function startMirror(tier, preIds) {
   say("무엇이 비쳐 나올지는 부딪쳐 봐야 안다.", "sys");
   say(ENK_RULE.name + " " + rule.cost + " 소모.  (남은 것 " + enkCount() +
       " / " + ENK_RULE.max + ")", "sys");
+  divider();
+  render();
+  next();
+}
+
+/* ── 거울굴절철도 저장 이어하기 ────────────────────────────────
+ *  긴 갈래(1호선·2호선 등)를 하다가 창을 닫아도, 체크포인트(길잡이가 들르는
+ *  자리 · 2호선 베이스캠프)를 실제로 밟은 시점에 S.railSave 를 보관함에도
+ *  같이 남겨 둡니다(《rest》장면·SCENE_EXT.railCamp 참고). 이 함수는 그
+ *  자리로 «다시 지어» 곧장 돌아갑니다 — 엔케팔린은 처음 들어올 때 이미
+ *  치렀으므로 다시 받지 않습니다. 편성은 저장하지 않으므로(사용자 지침)
+ *  지금 짜여 있는 편성 그대로 들어갑니다.
+ *  완주하면(mirrorClear) 지워집니다 — 그 전까지만 사는 임시 데이터입니다. */
+function resumeMirror() {
+  if (!S.railSave) return;
+  /* mirrorTier() 는 못 알아보는 열쇠면 MIRROR_RULE 로 슬쩍 넘어가므로,
+   * 여기서는 직접 찾아 «정말 그 갈래가 맞는지» 확인합니다. */
+  const rule = MIRROR_TIERS.find(r => r.key === S.railSave.key);
+  if (!rule) { S.railSave = null; return; }   // 갈래 자체가 없어졌으면 포기
+
+  S.arc = { kills: 0, retribution: {} };
+
+  if (rule.loop) {
+    const saved = S.railSave.rail2;
+    if (!saved || !saved.bosses || !saved.bosses.length) { S.railSave = null; return; }
+    S.rail2 = { bosses: saved.bosses.slice(), done: saved.done || 0, picks: (saved.picks || []).slice() };
+    let scenes = [
+      { t: "place", img: mirrorBG(rule), name: rule.name },
+      { t: "n", text: "유리창이 둥글게 휜다. 끝이 있어야 할 자리에 다시 출발점이 있다." },
+      { t: "n", text: "셋을 넘기면 한 순환이다. " + countBefore(rule.loop.free) +
+                      " 순환을 돌아야 종착역으로 가는 문이 열린다." }
+    ];
+    for (let n = 1; n <= S.rail2.done; n++) scenes = scenes.concat(railCycleScenes(rule, n));
+    MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub, scenes: scenes };
+    S.mirrorHard = true;
+  } else {
+    const picked = S.railSave.picked || [];
+    if (!picked.length) { S.railSave = null; return; }
+    const k = rule.scale;
+    const dk = (rule.defScale != null) ? (1 + (k - 1) * rule.defScale) : defK(k);
+    const ids = picked.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, rule, k, dk));
+    const built = buildMirrorRunScenes(rule, ids);
+    MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub,
+               scenes: built.scenes, foeSrc: picked.slice() };
+    S.mirrorHard = rule !== MIRROR_RULE;
+  }
+
+  S.mirror = true;
+  S.mirrorTier = MIRROR_TIERS.indexOf(rule);
+  S.mirrorCheckpoint = S.railSave.checkpoint;
+  S.sc = S.railSave.checkpoint;
+  S.ended = false;
+  SCENES = buildScenes(MIRROR);
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  setBackdrop(mirrorBG(rule), null);
+  clearLog();
+  $log.classList.remove("recalling");
+  showCard(null);
+  divider();
+  say(rule.name, "place");
+  say("— 저장해 둔 자리에서 이어합니다 —", "sys");
   divider();
   render();
   next();
@@ -7232,6 +7352,14 @@ SCENE_EXT.railCamp = function (s) {
   r2.done = Math.max(r2.done || 0, s.cycle);
   S.waiting = true;
 
+  /* 베이스캠프에 실제로 닿은 자리입니다 — 보관함에도 남겨서, 창을 닫았다
+   * 다시 열어도 이 순환 끝에서부터 이어할 수 있게 합니다(resumeMirror 참고).
+   * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
+  S.railSave = { key: rule.key,
+                 rail2: { bosses: r2.bosses.slice(), done: r2.done, picks: r2.picks.slice() },
+                 checkpoint: S.mirrorCheckpoint };
+  saveVault();
+
   divider();
   say("── " + s.cycle + "순환 종료 ──", "place");
   setBackdrop(mirrorBG(rule), rule.name);
@@ -7311,6 +7439,10 @@ function railFork(rule, cycle) {
 
 function mirrorClear() {
   const rule = mirrorRuleNow();
+  /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — 임시 데이터라
+   * 여기서 지웁니다(saveVault() 는 이 함수 뒤 어디선가 자연히 한 번 더 돌아
+   * 보관함에도 반영됩니다). */
+  if (S.railSave && S.railSave.key === rule.key) S.railSave = null;
   divider();
   say(rule.loop            ? "둥글게 휘어 있던 선로가 마침내 풀린다."
     : rule === MIRROR_EXTREME ? "흩어진 조각들이 하나씩 제자리를 찾아 간다."
