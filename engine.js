@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.8.0";
+const VERSION = "1.8.1";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3577,7 +3577,52 @@ function beginTurn() {
     }
   }
 
+  checkLinkSkills();
+
   askNext();
+}
+
+/* ── 연계 효과 ──────────────────────────────────────────────────
+ *  data/skills.js 의 LINK_SKILLS 를 매 턴 검사합니다. 조건이 맞으면
+ *  who 가 한마디 선창하고, 같은 태그(pickTag) 를 두른 편성원 중 하나를
+ *  무작위로 뽑아 그 차례 공격력을 올립니다 — 실제 배율은 b.mods 의
+ *  "_linkMult"/"_linkLabel" 에 남겨 resolveTurn() 의 swing() 이 읽습니다.
+ *  who 자신이 뽑히면 selfLine, 아니면 otherLine 으로 대답합니다.
+ */
+function linkSkillList() {
+  return (typeof LINK_SKILLS !== "undefined" && LINK_SKILLS) ? LINK_SKILLS : [];
+}
+function battleSay(who, text) {
+  const w = document.createElement("p");
+  w.className = "who";
+  w.textContent = memberName(who);
+  $log.appendChild(w);
+  say(text, "d");
+}
+function checkLinkSkills() {
+  const b = S.battle;
+  linkSkillList().forEach(ls => {
+    if (S.party.indexOf(ls.who) < 0 || !alive(ls.who)) return;
+    if (memberTitle(ls.who).indexOf(ls.needTitle) < 0) return;
+    if (!activeSynergies().some(sy => sy.name === ls.synergyName)) return;
+
+    const boosted = ls.giftName && equippedGifts().some(g => g.name === ls.giftName);
+    const every = boosted ? (ls.giftEvery || ls.every) : ls.every;
+    const start = ls.startTurn != null ? ls.startTurn : every;
+    if (b.turn < start || (b.turn - start) % every !== 0) return;
+
+    const pool = S.party.filter(w => w && alive(w) && memberTitle(w).indexOf(ls.pickTag) >= 0);
+    if (!pool.length) return;
+    const target = pool[rnd(pool.length)];
+
+    b.mods[target + "_linkMult"] = ls.atkMult;
+    b.mods[target + "_linkLabel"] = ls.label || "연계";
+
+    const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
+    if (call) battleSay(ls.who, call);
+    const reply = (target === ls.who) ? ls.selfLine : ls.otherLine;
+    if (reply) battleSay(target, reply);
+  });
 }
 
 /* ── 관리자 능력의 대상 고르기 ──────────────────────────────────
@@ -4013,8 +4058,11 @@ function resolveTurn() {
     const fdef = b.mods.arrest
       ? Math.round(b.def * (1 - arrestCut))
       : b.def;
-    /* 강공·겹살 — 공격력 배율. 회피 보상 — 지난 턴에 걸어 둔 확정 치명타 */
-    const atkMult = b.mods[who + "_atkMult"] || 1;
+    /* 강공·겹살 — 공격력 배율. 연계 효과 — LINK_SKILLS 가 건 별도 배율(둘 다
+     * 걸리면 곱해집니다). 회피 보상 — 지난 턴에 걸어 둔 확정 치명타 */
+    const skillMult = b.mods[who + "_atkMult"] || 1;
+    const linkMult  = b.mods[who + "_linkMult"] || 1;
+    const atkMult = skillMult * linkMult;
     const evadeBonus = b.persist[who + "_evadeBonus"];
     let dmg = st.atk * atkMult + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
@@ -4026,7 +4074,8 @@ function resolveTurn() {
               : (memberName(who) + "의 공격 — " + dmg + " 피해")) +
         (b.mods[who + "_push"] ? " (독촉)" : "") +
         (b.mods.arrest ? " (체포)" : "") +
-        (atkMult !== 1 ? " (" + UNIQUE_SKILLS[who].name + ")" : "") +
+        (skillMult !== 1 ? " (" + UNIQUE_SKILLS[who].name + ")" : "") +
+        (linkMult !== 1 ? " (" + b.mods[who + "_linkLabel"] + ")" : "") +
         (evadeBonus ? " (회피 보상)" : ""), crit ? "crit" : "hit");
     if (evadeBonus) delete b.persist[who + "_evadeBonus"];
 

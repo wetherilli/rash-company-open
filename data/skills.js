@@ -95,3 +95,38 @@ function skillTierValue(skill, level) {
   const step = steps[steps.length - 1];
   return skill.tiers[step];
 }
+
+/* ── 연계 효과 ──────────────────────────────────────────────────
+ *  작성위원 고유 능력과는 다른 자리입니다 — «누가 특정 인격을 장착하고,
+ *  그 인격의 시너지가 발동 중이면, 전투 중 정해진 턴마다 같은 시너지
+ *  인원 하나를 무작위로 뽑아 그 차례 공격력을 강화» 하는 자리(engine.js
+ *  의 checkLinkSkills, beginTurn 끝에서 매 턴 검사합니다).
+ *
+ *  who          부르는 사람(작성위원 키). 편성에 있고 살아 있어야 합니다.
+ *  needTitle    who 가 이 인격을 장착하고 있어야 발동합니다.
+ *  synergyName  이 이름의 편성 시너지(SYNERGIES 의 name)가 지금 발동 중이어야 합니다.
+ *  pickTag      제목에 이 말이 든 «편성원»(작성위원·지원 다 포함, who 자신도 포함)
+ *               중에서 무작위로 한 명을 뽑습니다.
+ *  startTurn / every   startTurn 턴부터, every 턴마다.
+ *  giftName / giftEvery  그 이름의 E.G.O 기프트를 지녔으면 every 대신 이 값을 씁니다.
+ *  atkMult      뽑힌 사람의 이번 턴 공격력 배율(2면 두 배).
+ *  label        전투 로그에 "(라벨)" 로 붙는 짧은 이름. 안 적으면 "연계".
+ *  callLines    who 가 선창하는 대사 — 배열이면 무작위로 하나.
+ *  selfLine     뽑힌 사람이 who 자신일 때 하는 대답.
+ *  otherLine    뽑힌 사람이 다른 사람일 때 하는 대답.
+ */
+const LINK_SKILLS = [
+  {
+    id: "shinhaesuland_cha_minjun",
+    who: "cha_minjun", needTitle: "신해수랜드 실장",
+    synergyName: "퍼레이드의 열기",
+    pickTag: "신해수랜드",
+    startTurn: 2, every: 3,
+    giftName: "탐하는 가시", giftEvery: 2,
+    atkMult: 2,
+    label: "가시꽃",
+    callLines: ["피를 머금을 시간이다.", "준비해라.", "가시꽃을 피워낼 때군."],
+    selfLine: "내가 직접 창을 들겠다.",
+    otherLine: "받들겠습니다."
+  }
+];
