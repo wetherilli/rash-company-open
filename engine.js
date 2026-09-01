@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.8.4";
+const VERSION = "1.8.5";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -189,6 +189,17 @@ const STARTING_PARTY = ["kim_duhyeon", "lee_hanbeom", "kim_taeseong"];
  *  보통은 브라우저 localStorage 를 씁니다.
  *  파일을 특이한 방식으로 열어 저장소가 막힌 경우(미리보기 창 등)에는
  *  메모리에만 담아 두어, 창을 닫기 전까지는 정상 동작하게 합니다.
+ *
+ *  ■ 쓰기가 «도중에» 막히는 경우 — 이것 때문에 한 번 고쳤습니다
+ *    예전에는 ok 를 파일 읽을 때 딱 한 번만 재 보고 그 뒤로는 믿었습니다.
+ *    그런데 사파리는 처음엔 되다가 도중에 막히는 일이 있습니다(용량이 차거나,
+ *    저장 권한이 도로 걷히거나). 그러면 set 은 catch 로 빠져 mem 에 담는데
+ *    get 은 ok 가 참이니 여전히 localStorage 만 보고 «옛 값» 을 돌려주었습니다.
+ *    「기록했다」고 적혀 놓고 새로고침하면 옛것이 나오던 것이 이것입니다.
+ *
+ *    이제 한 번이라도 막히면 ok 를 거짓으로 내려 mem 으로 옮겨 갑니다.
+ *    set 은 언제나 mem 에도 함께 남겨 두므로, 어느 쪽으로 넘어가든
+ *    바로 앞에 쓴 값을 읽을 수 있습니다.
  */
 const Store = {
   ok: (function () {
@@ -196,9 +207,21 @@ const Store = {
     catch (e) { return false; }
   })(),
   mem: {},
-  get(k) { if (this.ok) { try { return localStorage.getItem(k); } catch (e) {} } return this.mem[k] || null; },
-  set(k, v) { if (this.ok) { try { localStorage.setItem(k, v); return; } catch (e) {} } this.mem[k] = v; },
-  del(k) { if (this.ok) { try { localStorage.removeItem(k); } catch (e) {} } delete this.mem[k]; }
+  get(k) {
+    if (this.ok) {
+      try { const v = localStorage.getItem(k); if (v !== null) return v; }
+      catch (e) { this.ok = false; }
+    }
+    return this.mem[k] || null;
+  },
+  set(k, v) {
+    this.mem[k] = v;                    // 손안에도 언제나 남겨 둔다
+    if (this.ok) { try { localStorage.setItem(k, v); } catch (e) { this.ok = false; } }
+  },
+  del(k) {
+    if (this.ok) { try { localStorage.removeItem(k); } catch (e) { this.ok = false; } }
+    delete this.mem[k];
+  }
 };
 
 /* ── 보관함 ────────────────────────────────────────────────────
@@ -1100,6 +1123,54 @@ function eventNotice() {
   saveVault();
   divider();
   say('새로운 이벤트 재화가 출시되었습니다 "' + n.cur + '"! 기존 재화는 0으로 초기화됩니다.', "gain");
+  divider();
+}
+
+
+/* ── 저장이 미덥잖은 환경 알림 ─────────────────────────────────
+ *  유리창에서 알립니다. 두 가지를 갈라서 봅니다.
+ *
+ *   1) 저장소가 아예 막힌 경우 (Store.ok 가 거짓)
+ *      사파리로 파일을 곧장(file://) 열면 이렇게 됩니다 — 주요 브라우저 가운데
+ *      사파리만 file:// 에서 저장을 막습니다. 창을 닫으면 다 사라집니다.
+ *
+ *   2) 저장은 되는데 브라우저가 지워 버리는 경우
+ *      사파리(맥·아이폰)는 «7일» 동안 안 들르면 저장해 둔 것을 통째로 지웁니다.
+ *      이때 Store.ok 는 참이라 1) 로는 잡히지 않습니다 — 「저장이 잘 안된다」던
+ *      제보가 이것입니다. 게임 쪽에서 막을 길이 없으니, 미리 일러 두고
+ *      내보내기를 권하는 것이 지금 할 수 있는 전부입니다.
+ *
+ *  2) 는 판마다 한 번만 알립니다. 그런데 정작 지워지고 나면 «봤다» 는 표시도
+ *  함께 지워져 다시 뜹니다 — 알려야 할 사람에게 다시 뜨는 것이니 그대로 둡니다.
+ */
+const STORAGE_SEEN_KEY = "rash_company_storage_seen";
+
+/* 사파리 계열인가. 크롬·엣지도 UA 에 Safari 를 달고 다니므로 걸러 냅니다.
+ * 아이폰·아이패드는 어느 브라우저를 쓰든 속이 웹킷이라 함께 걸립니다. */
+function isWebKit() {
+  const ua = navigator.userAgent || "";
+  return /iPhone|iPad|iPod/.test(ua) ||
+         (/Safari/.test(ua) && !/Chrom(e|ium)|Edg\/|OPR\/|Android/.test(ua));
+}
+
+function storageNotice() {
+  if (!Store.ok) {
+    divider();
+    say("이 환경은 브라우저 저장이 막혀 있습니다.", "place");
+    say("창을 닫으면 지금까지 한 것이 모두 사라집니다. " +
+        "파일을 곧장 열지 마시고 http 로 시작하는 주소로 들어오시거나, " +
+        "[보관함 내보내기] 로 vault.js 를 받아 두십시오.", "bad");
+    divider();
+    return;
+  }
+  if (!isWebKit() || Store.get(STORAGE_SEEN_KEY) === VERSION) return;
+  Store.set(STORAGE_SEEN_KEY, VERSION);
+  divider();
+  say("사파리로 열고 계십니다 — 한 가지만 일러 둡니다.", "place");
+  say("사파리는 7일 넘게 이쪽에 들르지 않으면 저장해 둔 것을 통째로 지웁니다. " +
+      "게임이 잘못된 것이 아니라 브라우저가 하는 일이라, 이쪽에서 막을 수가 없습니다.", "sys");
+  say("오래 쉬실 것 같으면 [보관함 내보내기] 로 vault.js 를 받아 두십시오. " +
+      "홈 화면(맥이라면 독)에 추가해 두고 그쪽으로 여시면 지워지지 않습니다.", "good");
   divider();
 }
 
@@ -8776,8 +8847,27 @@ function openReset(back) {
  *  메인 화면. 장을 고르고, 작성위원을 편성하고, 보관함을 여는 곳.
  *  메카고질라 안에서 밖을 내다보는 자리다.
  */
+/* ── 캐시를 건너뛰고 다시 열기 ────────────────────────────────
+ *  주소 뒤에 처음 보는 값을 붙이면 브라우저가 캐시에서 찾지 못해 새로 받아옵니다.
+ *  그렇게 새로 온 index.html 안의 <script src="engine.js?v=…"> 는 지금 판을
+ *  가리키므로 engine.js 까지 함께 갈립니다 — 판 번호는 tools/배포하기.sh 가 붙입니다.
+ *
+ *  ■ 왜 그냥 새로고침으로는 안 되는가
+ *    사파리는 그냥 새로고침(⌘R)을 해도 이미 받아 둔 하위 파일은 다시 받지 않습니다.
+ *    GitHub Pages 가 붙여 주는 것이 max-age=600 뿐이라 더 그렇습니다. 그래서
+ *    「새로고침 한 번이면 됩니다」라고만 일러 두면 사파리 쓰는 분은 빠져나갈 길이
+ *    없었습니다 — 잠긴 화면에서 새로고침해도 여전히 옛 engine.js 였으니까요.
+ */
+function reloadFresh() {
+  if (location.protocol === "http:" || location.protocol === "https:")
+    location.replace(location.pathname + "?cb=" + Date.now());
+  else
+    location.reload();
+}
+
 /* 뒤에서 온 보관함을 열었을 때 — 여기서 멈춥니다.
- * 손잡이는 「다시 확인」 하나뿐입니다. 새 판으로 열면 그대로 이어집니다. */
+ * 새 판으로 열면 그대로 이어집니다. 거의 언제나 브라우저가 옛 engine.js 를
+ * 물고 있는 것이므로, 손잡이 첫째는 캐시를 건너뛰고 다시 여는 것입니다. */
 function vaultLockScreen() {
   const n = VAULT_LOCK;
   clearLog();
@@ -8791,12 +8881,17 @@ function vaultLockScreen() {
       "그대로 열어 두면 모르는 것을 지운 채 덮어쓰게 됩니다.", "n");
   divider();
   say("그래서 아무것도 쓰지 않고 멈췄습니다. 모아 두신 것은 그대로 있습니다.", "sys");
-  say("v" + n.from + " 이상으로 열어 주십시오. " +
-      "온라인 판을 쓰고 계시면 새로고침 한 번으로 최신 판이 됩니다.", "sys");
+  say("온라인 판이라면 브라우저가 옛 engine.js 를 캐시에 붙들고 있는 것입니다. " +
+      "아래 [최신 판으로 다시 열기] 를 누르면 캐시를 건너뛰고 새로 받아옵니다.", "sys");
+  if (isWebKit())
+    say("사파리는 그냥 새로고침(⌘R)으로는 갈리지 않습니다 — 받아 둔 것을 그대로 씁니다. " +
+        "위 손잡이가 듣지 않으면 ⌘⌥R 을 누르시거나, " +
+        "사파리 설정 → 개인정보 보호 → 웹사이트 데이터 관리에서 이 쪽 것을 지워 주십시오.", "bad");
   divider();
   render();
   buttons([
-    { label: "다시 확인", cls: "primary", fn: () => glass() },
+    { label: "최신 판으로 다시 열기", cls: "primary", fn: () => reloadFresh() },
+    { label: "다시 확인", fn: () => glass() },
     { label: "보관함 내보내기", fn: () => openRecord(() => glass()) }
   ]);
 }
@@ -8830,6 +8925,7 @@ function glass() {
   say(ENK_RULE.name + " " + enkCount() + " / " + ENK_RULE.max + "　·　" + enkNextText(), "sys");
   versionNotice();          // 옛 판 보관함을 열었으면 여기서 한 번 알린다
   eventNotice();            // 새 이야기가 나와 이벤트 재화가 갈렸으면 한 번 알린다
+  storageNotice();          // 저장이 막혔거나(사파리 file://) 지워질 수 있는(사파리 7일) 환경이면 일러 준다
 
   /* 처음 오신 분께 — 어디를 눌러야 하는지 일러 둡니다.
    * 한 장이라도 마쳤으면 나오지 않습니다. 아는 사람에게는 잔소리이니. */
