@@ -110,6 +110,9 @@ function skillTierValue(skill, level) {
  *  startTurn / every   startTurn 턴부터, every 턴마다.
  *  giftName / giftEvery  그 이름의 E.G.O 기프트를 지녔으면 every 대신 이 값을 씁니다.
  *  atkMult      뽑힌 사람의 이번 턴 공격력 배율(2면 두 배).
+ *  advisorName / advisorMult  그 이름의 보조 교육위원을 세웠으면 atkMult
+ *               대신 이 값을 씁니다. giftName/giftEvery(주기 단축)와는
+ *               독립된 자리라 함께 걸 수 있습니다(engine.js checkLinkSkills).
  *  label        전투 로그에 "(라벨)" 로 붙는 짧은 이름. 안 적으면 "연계".
  *  callLines    who 가 선창하는 대사 — 배열이면 무작위로 하나.
  *  selfLine     뽑힌 사람이 who 자신일 때 하는 대답.
@@ -124,6 +127,10 @@ const LINK_SKILLS = [
     startTurn: 2, every: 3,
     giftName: "탐하는 가시", giftEvery: 2,
     atkMult: 2,
+    /* 「이정빈」보조 교육위원(7장 wip, "연계 효과 강화")을 세우면 배율이
+     * 2배 → 2.5배로 오릅니다 — 이정빈이 아직 ADVISORS 에 없는 동안은
+     * 그냥 조용히 안 걸립니다(탐하는 가시가 GIFTS 에 없던 동안과 같은 사정). */
+    advisorName: "이정빈", advisorMult: 2.5,
     label: "가시꽃",
     callLines: ["피를 머금을 시간이다.", "준비해라.", "가시꽃을 피워낼 때군."],
     selfLine: "내가 직접 창을 들겠다.",

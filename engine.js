@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.8.3";
+const VERSION = "1.8.4";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -261,6 +261,10 @@ function vaultBody() {
      * 편성은 담지 않습니다(resumeMirror 참고). vaultSig() 에는 일부러 안 넣습니다 —
      * 손댐 검사가 아니라 그냥 진행 상황이라서요. */
     railSave: S.railSave || null,
+    /* 본편 편성 자리(case "party")에서 남기는 이어하기 — 위 railSave와 같은
+     * 논리이되 서로 겹치지 않는 별도 자리입니다. 장을 새로 시작하거나
+     * 마치면 지워지는 임시 데이터입니다(startChapter/chapterEnd 참고). */
+    storySave: S.storySave || null,
     ver:      VERSION
   };
 }
@@ -303,6 +307,7 @@ function loadVault() {
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     railSave: v.railSave || null,
+    storySave: v.storySave || null,
     ver:      v.ver || null
   };
 }
@@ -944,7 +949,12 @@ function newState() {
      * { key, picked, checkpoint } (순환 없는 갈래) 또는
      * { key, rail2:{bosses,done,picks}, checkpoint } (2호선류). */
     railSave: (v && v.railSave) || null,
+    /* 본편 편성 자리(case "party") 이어하기 — 위 railSave와 같은 논리이되
+     * 겹치지 않는 별도 자리. { chId, sc, party, equip, hp, flags,
+     * partyStack, partyBan, battleForced }. */
+    storySave: (v && v.storySave) || null,
     partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
+    partyBan: [],            // 지금은 편성할 수 없는 사람 — banParty/unbanParty 가 씁니다
     battleForced: false,
     /* 「이번 갈래」 — 광신(처치 수)·보복(아군 사망 수, 작성위원별) 이 쌓이는 자리.
      * 거울 던전 들어갈 때(startMirror) 0으로 리셋됩니다. 본편 연전에도 쌓이게
@@ -2081,6 +2091,33 @@ function forcePartyPop() {
   if (S.partyStack.length) S.party = S.partyStack.pop();
 }
 
+/* ── 편성 금지 ────────────────────────────────────────────────────
+ *  이야기 안에서 그 사람 자신이 적으로 돌아서는 등, 잠깐 함께 싸울 수 없게
+ *  되는 자리에 씁니다(7장 「호감이 끝나는」, 차민준). forceParty(반대로
+ *  «이 사람만»)와 달리 이쪽은 «이 사람은 빼고»입니다.
+ *
+ *      { t:"party", ban: ["cha_minjun"], text:"…" }     지금 편성에서 빼고, 다시 못 고르게
+ *      { t:"party", unban: ["cha_minjun"], text:"…" }   다시 고를 수 있게
+ *
+ *  금지된 사람은 chapterNeeds(장의 require)에서도 잠깐 빠집니다 — 그래야
+ *  「이 장은 ○○이 없이는 진행할 수 없다」는 확정 검사에 걸리지 않습니다.
+ *  openParty() 의 작성위원 칸·확정 손잡이가 S.partyBan 을 함께 봅니다. */
+function banParty(list) {
+  const arr = (Array.isArray(list) ? list : [list]).filter(Boolean);
+  arr.forEach(w => { if (S.partyBan.indexOf(w) < 0) S.partyBan.push(w); });
+  const left = [];
+  S.party = S.party.filter(w => {
+    if (arr.indexOf(w) < 0) return true;
+    left.push(w);
+    return false;
+  });
+  if (left.length) { divider(); say(withJosa(nameList(left), "이") + " 전열에서 빠진다.", "sys"); }
+}
+function unbanParty(list) {
+  const arr = Array.isArray(list) ? list : [list];
+  S.partyBan = S.partyBan.filter(w => arr.indexOf(w) < 0);
+}
+
 const SUP_PREFIX = "지원|";
 function supportList() { return (typeof SUPPORTS !== "undefined" && SUPPORTS) ? SUPPORTS : []; }
 function supportId(s)  { return s ? SUP_PREFIX + s.title + "|" + s.name : null; }
@@ -2094,6 +2131,29 @@ let SUP_OPEN = false;
 function supportOwned(sp) {
   const id = typeof sp === "string" ? sp : supportId(sp);
   return !!(S && S.supportsOwned && S.supportsOwned[id]);
+}
+
+/* 실명과 코드네임이 CREW(승무원 목록)에 함께 적힌 사람은 같은 사람으로 봅니다 —
+ * 이정빈(교육위원)과 하축론(지원 작성위원)처럼, 자리는 달라도 결국 한 사람이라
+ * 둘을 같이 세우면 안 됩니다. CREW 에 없는 이름은 그 이름 자체가 열쇠가 됩니다. */
+function personKey(name) {
+  for (const k in CREW) if (CREW[k].name === name || CREW[k].codename === name) return k;
+  return name;
+}
+function samePerson(a, b) { return !!a && !!b && personKey(a) === personKey(b); }
+
+/* 교육위원 k 를 세우려는데, 그 사람이 이미 지원 작성위원으로 편성에 있는가.
+ * 있으면 그 지원의 이름을(예: "하축론") 돌려주고, 없으면 null. */
+function advisorBlockedBySupport(k) {
+  const a = advisorById(k);
+  if (!a) return null;
+  const hit = S.party.find(w => w && isSupport(w) && samePerson(memberName(w), a.name));
+  return hit ? memberName(hit) : null;
+}
+/* 지원 작성위원 sp 를 편성하려는데, 그 사람이 이미 교육위원으로 서 있는가. */
+function supportBlockedByAdvisor(sp) {
+  const hit = equippedAdvisors().find(x => samePerson(x.name, sp.name));
+  return hit ? hit.name : null;
 }
 
 function supportSlot() {
@@ -2778,6 +2838,13 @@ function startChapter(i) {
    * 그래야 아래 chapterMissing() 이 «진짜 편성» 을 보고 판단한다. */
   if (S.partyStack.length) { S.party = S.partyStack[0]; S.partyStack = []; }
   S.battleForced = false;
+  S.partyBan = [];    // 앞 장에서 걸린 편성 금지(banParty)도 뿌리까지 되돌린다
+
+  /* 새로 들어서는 자리이므로, 이 장이든 다른 장이든 저장해 둔 이어하기 자리가
+   * 있었다면 여기서 버립니다 — startMirror() 가 S.railSave 를 버리는 것과
+   * 같은 논리입니다. 「저장해 둔 자리에서 이어하기」는 resumeStorySave() 가
+   * 따로 맡습니다. */
+  S.storySave = null;
 
   /* 들어가기 전에 편성부터 확인한다 */
   const miss = chapterMissing(c);
@@ -2987,14 +3054,49 @@ function play(s) {
       grantAdvisor(s);
       return cont();
 
-    case "party":
+    /* s.ban / s.unban — banParty/unbanParty 참고. s.require 를 적으면
+     * (배열 또는 한 명) 그 사람이 편성에 들 때까지 "이대로 진행"을 감추고
+     * 편성 창을 다시 띄웁니다 — 장 전체의 require 와 달리 이 장면 하나만
+     * 겨눈 검사입니다(7장 「호감이 끝나는」, G안 최종전 앞). */
+    case "party": {
+      if (s.ban) banParty(s.ban);
+      if (s.unban) unbanParty(s.unban);
+      /* 장이 길어질수록(7장부터) 편성을 고치는 자리마다 조용히 이어할 자리를
+       * 남겨 둡니다 — 거울굴절철도의 체크포인트(S.railSave, resumeMirror
+       * 참고)와 같은 논리이되, 서로 뒤섞이지 않도록 별도 자리(S.storySave)에
+       * 둡니다. 운전석의 "다음으로 추천" 자리에서 이 장의 이어하기 버튼으로
+       * 들어갑니다(resumeStorySave). */
+      if (!S.mirror) {
+        const c = curChapter();
+        if (c) {
+          S.storySave = {
+            chId: c.id, sc: S.sc - 1,
+            party: S.party.slice(), equip: Object.assign({}, S.equip),
+            hp: Object.assign({}, S.hp), flags: Object.assign({}, S.flags),
+            partyStack: S.partyStack.slice(), partyBan: S.partyBan.slice(),
+            battleForced: S.battleForced
+          };
+          saveVault();
+        }
+      }
       say(s.text || "편성을 조정하십시오.", "sys");
       S.waiting = true;
-      buttons([
-        { label: "편성", cls: "primary", fn: () => openParty(() => { S.waiting = false; next(); }) },
-        { label: "이대로 진행", fn: () => { S.waiting = false; next(); } }
-      ]);
-      return;
+      const need = s.require ? (Array.isArray(s.require) ? s.require : [s.require]) : [];
+      const satisfied = () => !need.filter(w => S.party.indexOf(w) < 0).length;
+      const openThenCheck = () => openParty(() => {
+        if (!satisfied()) {
+          say(withJosa(nameList(need.filter(w => S.party.indexOf(w) < 0)), "이") +
+              " 없이는 이대로 나설 수 없다.", "bad");
+          return askParty();
+        }
+        S.waiting = false; next();
+      });
+      const askParty = () => buttons([
+        { label: "편성", cls: "primary", fn: openThenCheck },
+        satisfied() ? { label: "이대로 진행", fn: () => { S.waiting = false; next(); } } : null
+      ].filter(Boolean));
+      return askParty();
+    }
 
     /* 조력자 — 이야기에서만 옆에 서 주는 사람 (data/allies.js) */
     case "ally":
@@ -3628,6 +3730,27 @@ function beginTurn() {
 
   checkLinkSkills();
 
+  /* ── 설득 전투 ──────────────────────────────────────────────────
+   *  scene.persuade 를 단 전투는 체력을 깎아 이기는 대신, 정해진 턴수를
+   *  버티면 설득이 성공한 것으로 치고 끝납니다(persuadeEnd 참고). 그
+   *  턴이 오기 전까지는 그냥 보통 전투처럼 지고 이길 수 있습니다 — 다만
+   *  이 전투는 lose:"story"가 아니므로 전멸하면 보통 패배(재도전)입니다.
+   *
+   *      { t:"battle", foe:"…",
+   *        persuade: { turns: 4, lines: { 1:[…], 2:[…], 3:[…], 4:[…] } } }
+   *
+   *  lines 의 각 턴 배열 원소는 { who, text }(대사, battleSay 로) 또는
+   *  { text }(who 없이 — 지문, say 로) 입니다. 전투 화면 중간에 대사를
+   *  끼워 넣는 자리가 이걸로 처음 생겼습니다(7장 「호감이 끝나는」). */
+  const persuadeLines = b.scene.persuade && b.scene.persuade.lines && b.scene.persuade.lines[b.turn];
+  if (persuadeLines) {
+    divider();
+    persuadeLines.forEach(line => {
+      if (line.who) battleSay(line.who, line.text);
+      else say(line.text, "sys");
+    });
+  }
+
   askNext();
 }
 
@@ -3655,8 +3778,8 @@ function checkLinkSkills() {
     if (memberTitle(ls.who).indexOf(ls.needTitle) < 0) return;
     if (!activeSynergies().some(sy => sy.name === ls.synergyName)) return;
 
-    const boosted = ls.giftName && equippedGifts().some(g => g.name === ls.giftName);
-    const every = boosted ? (ls.giftEvery || ls.every) : ls.every;
+    const giftBoosted = ls.giftName && equippedGifts().some(g => g.name === ls.giftName);
+    const every = giftBoosted ? (ls.giftEvery || ls.every) : ls.every;
     const start = ls.startTurn != null ? ls.startTurn : every;
     if (b.turn < start || (b.turn - start) % every !== 0) return;
 
@@ -3664,7 +3787,11 @@ function checkLinkSkills() {
     if (!pool.length) return;
     const target = pool[rnd(pool.length)];
 
-    b.mods[target + "_linkMult"] = ls.atkMult;
+    /* 보조 교육위원 강화 — advisorName 을 세우고 있으면 atkMult 대신
+     * advisorMult 를 씁니다. giftName/giftEvery(주기 단축)와는 독립된
+     * 자리라 함께 적용됩니다. */
+    const advisorBoosted = ls.advisorName && equippedAdvisors().some(a => a.name === ls.advisorName);
+    b.mods[target + "_linkMult"] = advisorBoosted ? (ls.advisorMult || ls.atkMult) : ls.atkMult;
     b.mods[target + "_linkLabel"] = ls.label || "연계";
 
     const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
@@ -4184,6 +4311,7 @@ function resolveTurn() {
     if (!same()) return;
     if (b.hp <= 0) return victory();
     if (b.loseOk && b.hp <= b.maxhp * RULE.scriptedOut) return scriptedEnd();
+    if (b.scene.persuade && b.turn >= b.scene.persuade.turns) return persuadeEnd();
 
     const targets = S.party.filter(w => w && alive(w));
     if (!targets.length) return defeat();
@@ -4364,6 +4492,20 @@ function scriptedEnd() {
   foeFalls(() => { S.waiting = false; cont(); });
 }
 
+/* 설득으로 끝나는 전투 — 정해진 턴수를 버텨 이긴 것으로 칩니다.
+ * scriptedEnd 와 달리 foeFalls() 를 부르지 않습니다 — 적이 쓰러져 사라지는
+ * 연출 없이, 화면에 그대로 선 채로 다음 이야기(설득 성공 대사 자체가
+ * persuade.lines 마지막 턴에 이미 나온 뒤입니다)로 곧장 이어집니다. */
+function persuadeEnd() {
+  const b = S.battle;
+  healParty(RULE.winHeal, null);
+  if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
+  S.battle = null;
+  S.waiting = false;
+  render();
+  cont();
+}
+
 function healParty(ratio, msg) {
   let any = false;
   S.party.forEach(w => {
@@ -4431,6 +4573,9 @@ function chapterEnd() {
   divider();
   const c = curChapter();
   if (S.mirror) return mirrorClear();
+  /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — mirrorClear()가
+   * S.railSave 를 지우는 것과 같은 논리입니다. */
+  S.storySave = null;
   if (!S.cleared) S.cleared = {};
   /* «처음» 마쳤는지는 표시를 남기기 전에 봐 두어야 합니다 */
   const first = !S.cleared[c.id];
@@ -4547,6 +4692,15 @@ function openParty(done) {
          '<div class="grid" data-tut="party-sinners">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
+      /* 지금 편성할 수 없는 사람 — banParty 참고. 고를 수 없도록
+       * data-who 를 아예 달지 않습니다(아래 클릭 손잡이가 못 찾습니다). */
+      if (S.partyBan && S.partyBan.indexOf(who) >= 0) {
+        h += '<div class="slot">' +
+               '<div class="lock">' + s.name + '</div>' +
+               '<div class="sub">지금은 함께할 수 없습니다</div>' +
+             '</div>';
+        return;
+      }
       const sel = picking.indexOf(who);
       const id = idByKey(S.equip[who]);
       h += '<div class="slot' + (sel >= 0 ? ' sel' : '') + '" data-who="' + who + '">' +
@@ -4585,6 +4739,14 @@ function openParty(done) {
           if (!has) {
             h += '<div class="slot"><div class="lock">' + stars(sp.star) + ' ？？？</div>' +
                  '<div class="sub">업적으로 얻습니다</div></div>';
+            return;
+          }
+          /* 이미 교육위원으로 서 있는 사람이면(예: 이정빈=하축론) 지원으로 못 세웁니다 */
+          const advBlock = sel < 0 && supportBlockedByAdvisor(sp);
+          if (advBlock) {
+            h += '<div class="slot"><div class="lock">' + sp.name + '</div>' +
+                 '<div class="sub">' + withJosa(advBlock, "을") +
+                 ' 교육위원으로 세운 동안은 지원으로 함께할 수 없습니다.</div></div>';
             return;
           }
           /* 별 위치는 작성위원 칸과 같게 — 이름줄이 아니라 인격줄 앞에 붙습니다 */
@@ -4645,10 +4807,13 @@ function openParty(done) {
       const chosen = picking.filter(Boolean);
       if (chosen.length !== 3) { alert("3명을 골라주세요."); return; }
       /* 그 장이 요구하는 사람은 «장 안에서도» 빼지 못합니다.
-       * 예전에는 들어갈 때만 봤습니다 — 5장 도중에 성시윤을 빼도 그냥 넘어갔습니다. */
+       * 예전에는 들어갈 때만 봤습니다 — 5장 도중에 성시윤을 빼도 그냥 넘어갔습니다.
+       * 다만 지금 편성 금지된 사람(banParty — 예: 스스로 적으로 돌아선 차민준)은
+       * 이 검사에서 잠깐 빼 줍니다. 안 그러면 금지 자체가 불가능해집니다. */
       const c = curChapter();
       if (c && !S.mirror) {
-        const miss = chapterNeeds(c).filter(w => chosen.indexOf(w) < 0);
+        const miss = chapterNeeds(c).filter(w =>
+          chosen.indexOf(w) < 0 && !(S.partyBan && S.partyBan.indexOf(w) >= 0));
         if (miss.length) {
           alert(c.no + "은 " + nameList(miss) + " 없이는 진행할 수 없습니다.");
           return;
@@ -6208,6 +6373,46 @@ function load() {
   } catch (e) { return false; }
 }
 
+/* ── 본편 편성 자리 이어하기 ────────────────────────────────────
+ *  case "party"(편성을 고칠 수 있는 자리)를 지날 때마다 S.storySave 에
+ *  자리를 남겨 둡니다. 거울굴절철도의 체크포인트(S.railSave, resumeMirror
+ *  참고)와 같은 논리이되, 본편은 procedurally 다시 짓지 않고 CHAPTERS[].scenes
+ *  를 그대로 쓰므로 scene index 하나면 충분합니다 — 다만 이 자리 즈음엔
+ *  banParty 등으로 편성이 장 도중 바뀌어 있을 수 있어 party/partyBan/
+ *  partyStack 도 함께 담아 둡니다. 장을 새로 시작하면(startChapter) 버리고,
+ *  마치면(chapterEnd) 지웁니다 — 그 전까지만 사는 임시 데이터입니다.
+ *  위 SAVE_KEY 기반 기록(save/load)과는 아주 다른 자리입니다 — 그쪽은 손으로
+ *  「기록」을 눌러야 하는 어디서나 한 자리뿐인 이어하기이고, 이쪽은 편성을
+ *  고치는 자리마다 조용히 자동으로 남깁니다. */
+function resumeStorySave() {
+  if (!S.storySave) return;
+  const save = S.storySave;
+  const i = CHAPTERS.findIndex(c => c.id === save.chId);
+  if (i < 0) { S.storySave = null; return; }
+
+  S.ch = i; S.ended = false;
+  S.mirror = false; MIRROR = null;
+  SCENES = buildScenes(CHAPTERS[i]);
+  S.party = save.party.slice();
+  S.equip = Object.assign({}, save.equip);
+  S.hp = Object.assign({}, save.hp);
+  S.flags = Object.assign({}, save.flags);
+  S.partyStack = (save.partyStack || []).slice();
+  S.partyBan = (save.partyBan || []).slice();
+  S.battleForced = !!save.battleForced;
+  S.sc = save.sc;
+  S.battle = null; S.waiting = false;
+  allyClear();
+  clearLog();
+  $log.classList.remove("recalling");
+  showCard(CHAPTERS[i].img || null, CHAPTERS[i].no + "  " + CHAPTERS[i].title);
+  divider();
+  say("저장해 둔 자리에서 이어합니다.", "sys");
+  divider();
+  render();
+  next();
+}
+
 /* ── 장 선택 ──────────────────────────────────────────────────
  *  0장은 언제나 열려 있고, 그 뒤로는 앞 장을 클리어해야 열립니다.
  *  화면에는 장 번호와 제목만 보여 줍니다. (내용은 스포일러라 적지 않습니다)
@@ -6368,8 +6573,19 @@ function openChapterSelect(back) {
    *  펴 둔 채로 맨 위에 섭니다. 접힌 무리를 일일이 펴 보지 않아도
    *  «지금 할 만한 것» 이 바로 눈에 들어오게 하려는 것입니다. */
   const pick = chapterPicks();
+  /* 본편 추천 장에 편성 자리 이어하기(storySave)가 있으면, 그 장 바로
+   * 옆에 «-장 이어하기» 카드를 하나 더 세웁니다 — resumeStorySave 참고. */
+  const mainChap = pick.main >= 0 ? CHAPTERS[pick.main] : null;
+  const storyResume = (mainChap && S.storySave && S.storySave.chId === mainChap.id)
+    ? S.storySave : null;
   const rec = []
-    .concat(pick.main >= 0 ? [chapSlot(CHAPTERS[pick.main], pick.main, true)] : [])
+    .concat(mainChap ? [chapSlot(mainChap, pick.main, true)] : [])
+    .concat(storyResume
+      ? ['<div class="slot" data-storyresume="1">' +
+           '<div class="nm">' + mainChap.no + ' 이어하기</div>' +
+           '<div class="sub">편성을 고치던 자리에서 이어서 읽습니다</div>' +
+         '</div>']
+      : [])
     .concat(pick.side >= 0 ? [chapSlot(CHAPTERS[pick.side], pick.side, true)] : [])
     .concat(pick.mirror ? [slot(pick.mirror, 'data-mirror="' + pick.mirror.key + '"')] : []);
 
@@ -6426,6 +6642,8 @@ function openChapterSelect(back) {
   });
   const rs = $sheet.querySelector(".slot[data-resume]");
   if (rs) rs.onclick = () => { closeModal(); if (!load()) { glass(); say("기록이 손상되었다.", "todo"); } };
+  const srs = $sheet.querySelector(".slot[data-storyresume]");
+  if (srs) srs.onclick = () => { closeModal(); resumeStorySave(); };
   $sheet.querySelectorAll(".slot[data-mirror]").forEach(el => {
     el.onclick = () => { openMirrorGate(el.dataset.mirror, () => openChapterSelect(back)); };
   });
@@ -8085,7 +8303,9 @@ function openAdvisor(back) {
     const on  = advisorIsOn(k);
     /* 같은 사람을 이미 세웠으면 못 고릅니다 — N사 이형우와 L사 이형우처럼 */
     const 겹침 = has && !on && advisorNameTaken(k);
-    const 고를수있나 = has && !겹침;
+    /* 그 사람이 지금 지원 작성위원으로 편성에 있으면(예: 하축론=이정빈) 못 세웁니다 */
+    const 지원겹침 = has && !on && !겹침 && advisorBlockedBySupport(k);
+    const 고를수있나 = has && !겹침 && !지원겹침;
     h += '<div class="slot' + (on ? ' sel' : '') + '"' +
            (고를수있나 ? ' data-pick="' + k + '"' : '') + '>' +
            '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
@@ -8094,6 +8314,8 @@ function openAdvisor(back) {
            '<div class="sub">' + (has ? a.desc : '미보유') + '</div>' +
            (겹침 ? '<div class="sub" style="color:#c8403a">' + withJosa(a.name, "을") +
                    ' 이미 세웠습니다. 한 사람은 한 번만 설 수 있습니다.</div>' : '') +
+           (지원겹침 ? '<div class="sub" style="color:#c8403a">' +
+                   withJosa(지원겹침, "이") + ' 지원 작성위원으로 편성에 있어 세울 수 없습니다.</div>' : '') +
            (has && a.note ? '<div class="sub">' + a.note + '</div>' : '') +
          '</div>';
   });
@@ -8112,6 +8334,7 @@ function openAdvisor(back) {
       if (!k) S.advisorOn = [];
       else if (advisorIsOn(k)) S.advisorOn = advisorOnList().filter(x => x !== k);
       else if (advisorNameTaken(k)) return;      // 같은 사람은 둘 세울 수 없습니다
+      else if (advisorBlockedBySupport(k)) return; // 지원 작성위원으로 이미 서 있습니다
       else {
         const list = advisorOnList();
         /* 칸이 다 찼으면 «맨 먼저 세운 사람» 이 물러납니다 */
