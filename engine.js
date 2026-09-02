@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.9.2";
-const VERSION_NAME = "거울굴절철도 2호선";
+const VERSION = "1.10.0";
+const VERSION_NAME = "거울던전 테마팩";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -3125,6 +3125,23 @@ function play(s) {
 
     case "mirrorClear": return mirrorClear();
 
+    /* ── 테마팩 하나를 다 깼다 ────────────────────────────────
+     *  { t:"mirrorPackDone", packId }. buildPackRunScenes()가 팩마다
+     *  끝에 붙입니다. 이번 판(packRounds)에 라운드가 남았으면 체크포인트
+     *  (S.railSave)를 다음 라운드로 다시 저장하고 선택 화면을 다시 엽니다.
+     *  다 돌았으면 mirrorClear() 로 넘어갑니다(다른 갈래와 같은 마무리). */
+    case "mirrorPackDone": {
+      const rule = mirrorRuleNow();
+      const cleared = ((S.railSave && S.railSave.clearedPacks) || []).slice();
+      cleared.push(s.packId);
+      const nextRound = ((S.railSave && S.railSave.round) || 1) + 1;
+      if (nextRound > rule.packRounds) return mirrorClear();
+      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared };
+      saveVault();
+      openPackGate(rule, nextRound, cleared);
+      return;
+    }
+
     /* ── 길잡이가 들러 세워 놓고 간다 ──────────────────────────
      *  { t:"rest", who:"베르렐리우스", say:"...", text:"..." }
      *
@@ -4705,8 +4722,19 @@ function defeat() {
     ? S.mirrorCheckpoint : null;
   const 쉼표주인 = cp == null ? null : (mrule.rest ? mrule.rest.who : mrule.camp.who);
 
+  /* 테마팩 갈래(사용자 지침 2026-09-02) — 편성을 다시 짤 수 없고, 팩을
+   * 고르기 전 자리(테마팩 선택 화면)로 그대로 돌아갑니다. 이번 라운드에서
+   * 깬 팩이 없으므로 S.railSave 는 손대지 않은 그대로이고, resumeMirror()
+   * 가 그 자리를 다시 짓습니다. */
+  const packCP = !!(mrule && mrule.packRounds && S.railSave && S.railSave.key === mrule.key);
+
   buttons([
-    cp != null
+    packCP
+      ? { label: "테마팩 선택으로", cls: "primary", fn: () => {
+          S.waiting = false;
+          resumeMirror();
+        } }
+      : cp != null
       ? { label: 쉼표주인 + "에게로", cls: "primary", fn: () => {
           S.waiting = false;
           S.sc = cp;
@@ -4716,10 +4744,10 @@ function defeat() {
           S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
           S.waiting = false; startBattle(scene);
         } },
-    /* 이 전투가 정해진 인원으로만 돌아가는 것이거나, 돌아갈 자리(cp)에서 편성을
-     * 다시 손볼 수 있으면, 패배 후 편성을 바꿔 강제를 우회하지 못하도록
-     * 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
-    (cp != null || scene.party) ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
+    /* 이 전투가 정해진 인원으로만 돌아가는 것이거나, 돌아갈 자리(cp·팩)에서
+     * 편성을 다시 손볼 수 없으면, 패배 후 편성을 바꿔 강제를 우회하지
+     * 못하도록 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
+    (packCP || cp != null || scene.party) ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
         S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
         S.waiting = false; startBattle(scene);
       }) },
@@ -5769,12 +5797,28 @@ function openNotice(then) {
     띠 +
     '<div class="hint">이번 판에 새로 들어온 것들입니다.</div>' +
     /* groups 로 적으면 무리마다 제목을 답니다. 옛 방식(lines)도 그대로 받습니다. */
-    (n.groups || [{ lines: n.lines || [] }]).map(g =>
-      (g.head ? '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + g.head + '</div>' : "") +
+    (n.groups || [{ lines: n.lines || [] }]).map(g => {
+      /* showEventCountdown — 데이터(data/notice.js)에는 날짜를 그대로 안 적고
+       * 이 표시만 해 둡니다. 몇 일 남았는지는 늘 «지금»을 봐야 맞으므로,
+       * 여기서 eventLeftText()로 그때그때 새로 계산해 한 줄 얹습니다
+       * (사용자 지침 2026-09-02 — 이벤트 교환소 알림에 남은 날을 강조). */
+      const ev = g.showEventCountdown ? openEvent() : null;
+      const countdownLine = ev
+        ? (() => {
+            const until = new Date(eventUntil(ev));
+            const untilText = until.getMonth() + 1 + "월 " + until.getDate() + "일";
+            return '<div class="slot"><div class="sub">' +
+              '<b style="color:#d8b26a;font-size:14px">' + ev.cur + ' — ' + eventLeftText(ev) + '</b>　' +
+              '(' + untilText + '까지)' +
+            '</div></div>';
+          })()
+        : "";
+      return (g.head ? '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + g.head + '</div>' : "") +
       '<div class="grid one">' +
         (g.lines || []).map(x => '<div class="slot"><div class="sub">' + x + '</div></div>').join("") +
-      '</div>'
-    ).join("") +
+        countdownLine +
+      '</div>';
+    }).join("") +
     (n.tail ? '<div class="mailnote ok" style="margin-top:12px">' + n.tail + '</div>' : '') +
     '<div class="modalfoot">' +
       '<button id="ntgo" class="primary">상점으로</button>' +
@@ -6855,20 +6899,25 @@ function openChapterSelect(back) {
 const MIRROR_BG = "assets/scene/거울던전.jpg";
 function mirrorBG(rule) { return (rule && rule.bg) || MIRROR_BG; }
 
+/* ⚠ 「테마팩」 개편(2026-09-02, 사용자 지침) — 노말·하드·익스트림 셋은
+ * 더는 buildMirrorFoes() 로 무작위 적을 직접 뽑지 않습니다. 대신
+ * data/mirrorpacks.js 의 MIRROR_PACKS 에서 「잡졸1+보스2」 묶음(팩)을
+ * packRounds 번 고르는 방식으로 바뀌었습니다 — 자세한 흐름은
+ * 「테마팩 선택」 절(openPackGate 부터)의 머리말을 읽으십시오.
+ * count/maxBoss/bossChance/maxNormal 은 이 셋에서는 이제 안 씁니다
+ * (buildMirrorFoes 는 여전히 아래 거울굴절철도 갈래가 씁니다). */
 const MIRROR_RULE = {
   key:  "mirror",
   name: "거울 던전",
   sub:  "유리창에 비친 것들",
   prefix: "거울의 ",   // 비쳐 나온 적 이름 앞에 붙는 말
-  count:  3,      // 몇 명과 연달아 싸우는가
-  scale:  1.3,    // 본편 대비 강화 배수 (1.3 = 30% 강함)
+  packRounds: 1,  // 테마팩을 몇 번 고르는가
+  scale:  2.0,    // 본편 대비 강화 배수 (테마팩 개편, 2026-09-02 — 1.3배에서 올림)
   bonus:  150,    // 완주 보상 (원고료) — «처음 완주할 때만» 나옵니다. moneyGain 을 타지 않습니다
   codex:  1,      // 완주 보상 (황금교본) — 돌 때마다 받습니다
   event:  20,     // 완주 보상 (이벤트 재화) — 이벤트가 서 있는 동안만 들어옵니다
   fragBoxSelect: 3,   // 완주 보상 (인격 파편 상자 선택) — 돌 때마다 받습니다
-  maxBoss: 1,     // 한 번에 나올 수 있는 보스 수
-  bossChance: 0.65, // 보스가 섞여 나올 확률
-  needCleared: 1, // 본편을 몇 장 마쳐야 열리는가
+  needCleared: 3, // 본편을 몇 장 마쳐야 열리는가 (테마팩 개편, 2026-09-02 — 1장에서 올림)
   cost: ENK_RULE.cost   // 입장에 드는 엔케팔린
 };
 
@@ -6878,15 +6927,13 @@ const MIRROR_HARD = {
   sub:  "깨진 유리창에 비친 것들",
   bg:   "assets/scene/하드거울던전.jpg",
   prefix: "깨진 거울의 ",
-  count:  3,
-  scale:  2.0,    // 본편의 2배
+  packRounds: 2,  // 테마팩을 두 번 연달아 고릅니다
+  scale:  2.5,    // 테마팩 개편, 2026-09-02 — 2.0배에서 올림
   bonus:  250,
   codex:  3,
   event:  30,
   fragBoxSelect: 5,
-  maxBoss: 2,     // 보스가 둘까지 섞인다
-  bossChance: 0.90,
-  needCleared: 3, // 본편을 세 장 마쳐야 열립니다
+  needCleared: 5, // 본편을 다섯 장 마쳐야 열립니다 (테마팩 개편, 2026-09-02 — 3장에서 올림)
   cost: ENK_RULE.costHard
 };
 
@@ -6896,28 +6943,22 @@ const MIRROR_EXTREME = {
   sub:  "산산이 부서진 유리창에 비친 것들",
   bg:   "assets/scene/익스트림거울던전.jpg",
   prefix: "조각난 거울의 ",
-  count:  5,      // 다섯을 연달아 상대합니다
-  scale:  3.0,    // 본편의 3배 — 가운데 회복이 있어 견딜 만합니다
+  packRounds: 3,  // 테마팩을 세 번 연달아 고릅니다
+  scale:  3.0,    // 본편의 3배 (그대로)
   bonus:  900,
   codex:  7,
   event:  100,
   fragBoxSelect: 15,
-  maxBoss: 3,     // 보스는 셋까지 섞입니다
-  bossChance: 1.0,  // 보스가 반드시 섞입니다
-  needCleared: 5, // 본편을 다섯 장 마쳐야 열립니다
+  /* 테마팩 개편, 2026-09-02 — needCleared(장 수) 대신 「거울굴절철도 1호선을
+   * 완주했는가」로 문을 겁니다(mirrorUnlocked 참고). 마지막 라운드에서
+   * 거울굴절철도 팩(1호선·2호선)이 반드시 섞이니, 적어도 1호선은 미리
+   * 완주해 봐야 그 팩이 스포일러 없이 자연스럽게 다가옵니다. */
+  needMirrorDone: "railLine1",
   cost: ENK_RULE.costExtreme,
 
-  /* 셋을 넘기면 길잡이가 한 번 들릅니다.
-   * 다섯을 쉬지 않고 붙는 것은 사람이 할 짓이 아니라, 가운데에 숨 돌릴 자리를 둔 것입니다.
-   * party: true — 이 자리가 «패배해도 돌아오는 자리»(defeat() 의 mirrorCheckpoint)이기도
-   * 하므로, 다시 돌아왔을 때도 편성을 다시 짤 수 있게 열어 둡니다. */
-  rest: {
-    after: 3,
-    who:  "베르렐리우스",
-    say:  "이런 곳에서 시간만 죽이고 있었나...",
-    text: "길잡이가 관리력과 체력을 전부 회복시켰다.",
-    party: true
-  }
+  /* 마지막(세 번째) 테마팩 선택에서는, 보여 주는 셋 중 하나가 반드시
+   * 거울굴절철도 팩(1호선·2호선 중 무작위)입니다 — drawPackChoices 참고. */
+  guaranteeRailPackOnFinalRound: true
 };
 
 /* ── 거울굴절철도 ──────────────────────────────────────────────
@@ -7126,6 +7167,11 @@ function mirrorUnlocked(rule) {
    * 클리어 수로 세면 곁가지(.5장)까지 함께 세어 버려, 본편 여섯 장을 마치지 않고도
    * 열리는 일이 생깁니다. 콕 집어야 하는 갈래는 이쪽을 씁니다. */
   if (r.needChapter) return !!(S.cleared && S.cleared[r.needChapter]);
+  /* needMirrorDone 을 적은 갈래는 «그 갈래를 완주해 봤는가»(S.mirrorDone) 만
+   * 봅니다 — 익스트림(사용자 지침 2026-09-02)이 이 자리입니다. 마지막
+   * 라운드에서 거울굴절철도 팩(1호선·2호선)이 반드시 섞이니, 적어도
+   * 1호선은 완주해 봐야 그 팩들이 스포일러 없이 자연스럽습니다. */
+  if (r.needMirrorDone) return !!(S.mirrorDone && S.mirrorDone[r.needMirrorDone]);
   return Object.keys(S.cleared || {}).length >= r.needCleared;
 }
 
@@ -7166,6 +7212,21 @@ function mirrorFacts(rule) {
     return o;
   }
 
+  /* 테마팩 갈래(노말·하드·익스트림) — packRounds 번, 매번 셋 중 하나를 고릅니다 */
+  if (r.packRounds) {
+    o.세기 = railScaleText(r.scale);
+    o.상대라벨 = '테마팩';
+    o.상대 = countBare(r.packRounds) + '번';
+    o.자세히 = '들어가면 「테마팩」(잡졸 하나·보스 둘) 셋을 보여 주고, 그중 하나를 골라' +
+               ' 상대합니다. ' + (r.packRounds > 1 ? countBefore(r.packRounds) +
+               ' 번 연달아 고릅니다 — 한 번 고른 자리부터 다시 이어할 수 있습니다.'
+               : '') +
+               (r.guaranteeRailPackOnFinalRound
+                 ? ' 마지막 선택에서는 거울굴절철도 팩(1호선·2호선 중 하나)이 반드시 섞입니다.'
+                 : '');
+    return o;
+  }
+
   /* 나오는 수는 «만나 본 적» 만큼입니다. 적게 만났으면 그만큼만 섭니다. */
   const n = Math.min(r.count, metCount());
   o.세기 = railScaleText(r.scale);
@@ -7185,6 +7246,10 @@ function mirrorNeedText(rule) {
   if (r.needChapter) {
     const c = CHAPTERS.find(x => x.id === r.needChapter);
     return "본편 " + (c ? c.no : r.needChapter) + "을 마치면 열립니다";
+  }
+  if (r.needMirrorDone) {
+    const dr = MIRROR_TIERS.find(x => x.key === r.needMirrorDone);
+    return (dr ? dr.name : r.needMirrorDone) + "을 완주하면 열립니다";
   }
   return "본편을 " + r.needCleared + "장 마치면 열립니다";
 }
@@ -7361,24 +7426,13 @@ function mirrorScouted(rule) {
   return (MIRROR_SCOUT && MIRROR_SCOUT.tier === rule.key) ? MIRROR_SCOUT.ids : null;
 }
 
+/* ⚠ 일단 꺼 둡니다(사용자 지침, 2026-09-02) — 「테마팩」 개편(입장하면
+ * 적을 무작위로 셋 보여주고 고르는 방식)이 들어오면 「관측」이 무엇을
+ * 하는 자리인지부터 다시 정해야 합니다. 아래 함수·변수(MIRROR_SCOUT_COST·
+ * MIRROR_SCOUT·mirrorScouted)는 다시 쓸 수 있게 그대로 남겨 뒀고,
+ * MIRROR_PREP_ACTIONS 만 비웠습니다 — openMirrorGate()가 이 배열을 그냥
+ * 훑어 그리므로, 비우면 "할 수 있는 일" 손잡이 자체가 안 뜹니다. */
 const MIRROR_PREP_ACTIONS = [
-  {
-    id: "scout",
-    name: "적 관측",
-    desc: "황금교본 " + MIRROR_SCOUT_COST + "권으로 이번에 만날 상대의 낌새를 미리 엿봅니다. " +
-          "누구인지는 알려 주지 않습니다.",
-    can:  rule => !mirrorScouted(rule) && S.codex >= MIRROR_SCOUT_COST,
-    need: rule => mirrorScouted(rule) ? "이미 관측했습니다"
-                : "황금교본 " + MIRROR_SCOUT_COST + "권" +
-                  (S.codex < MIRROR_SCOUT_COST ? "　— 모자랍니다" : ""),
-    give: rule => {
-      S.codex -= MIRROR_SCOUT_COST;
-      /* 실제로 들어갈 때(startMirror)와 같은 함수로 뽑아 두므로,
-       * 여기서 본 그대로가 그때 나옵니다. */
-      MIRROR_SCOUT = { tier: rule.key, ids: buildMirrorFoes(rule) };
-      return "황금교본의 힘으로 거울 속을 들여다보았다. 새어나오는 소리가 있다.";
-    }
-  }
 ];
 
 function openMirrorGate(tier, back) {
@@ -7411,17 +7465,19 @@ function openMirrorGate(tier, back) {
 
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
 
-    h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">할 수 있는 일</div>' +
-         '<div class="grid">';
-    MIRROR_PREP_ACTIONS.forEach(a => {
-      const ok = a.can(rule);
-      h += '<div class="slot"' + (ok ? ' data-act="' + a.id + '"' : '') + '>' +
-             '<div class="' + (ok ? 'nm' : 'lock') + '">' + a.name + '</div>' +
-             '<div class="sub">' + a.desc + '</div>' +
-             '<div class="sub"' + (ok ? '' : ' style="color:#c8403a"') + '>' + a.need(rule) + '</div>' +
-           '</div>';
-    });
-    h += '</div>';
+    if (MIRROR_PREP_ACTIONS.length) {
+      h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">할 수 있는 일</div>' +
+           '<div class="grid">';
+      MIRROR_PREP_ACTIONS.forEach(a => {
+        const ok = a.can(rule);
+        h += '<div class="slot"' + (ok ? ' data-act="' + a.id + '"' : '') + '>' +
+               '<div class="' + (ok ? 'nm' : 'lock') + '">' + a.name + '</div>' +
+               '<div class="sub">' + a.desc + '</div>' +
+               '<div class="sub"' + (ok ? '' : ' style="color:#c8403a"') + '>' + a.need(rule) + '</div>' +
+             '</div>';
+      });
+      h += '</div>';
+    }
 
     if (scouted) {
       /* 누구인지는 알려 주지 않습니다 — 이름·수치 대신 «새어나오는 소리»(intro) 만 들려줍니다.
@@ -7508,6 +7564,219 @@ function buildMirrorRunScenes(rule, ids) {
   return { scenes: scenes, checkpoint: checkpoint };
 }
 
+/* ── 테마팩 선택 (2026-09-02, 사용자 지침) ──────────────────────
+ *  노말·하드·익스트림이 들어서면(startMirror/resumeMirror의 packRounds
+ *  갈래) 곧장 전투로 들어가는 대신 이 화면부터 거칩니다.
+ *
+ *  ■ 화면
+ *    이형우가 "이번 거울에서는 길이 갈려 있습니다." 라고 말하고, 왼쪽·
+ *    가운데·오른쪽 세 갈래(각각 data/mirrorpacks.js 의 테마팩 하나)를
+ *    보여 줍니다. 손잡이 넷:
+ *      경로 셋 중 하나 — 그 팩으로 들어갑니다(전투 시작).
+ *      소리 듣기(황금교본 1) — 먼저 이 손잡이를 누르고 경로 하나를
+ *        고르면, 그 팩 적 셋의 intro 대사만 보여 줍니다(들어가지는
+ *        않습니다). 이 화면 한 번(=지금 보여 준 셋)에 딱 한 번만 씁니다.
+ *      다른 길로(황금교본 2) — 지금 보여 준 셋을 통째로 다시 뽑습니다.
+ *        같은 팩이 다시 나올 수 있습니다(사용자 지침 — 겹쳐도 됨). 다시
+ *        뽑으면 「소리 듣기」를 다시 한 번 쓸 수 있습니다.
+ *      유리창으로 나가기 — glass(). 아래 체크포인트 덕분에 언제든
+ *        나갔다가 이어할 수 있습니다.
+ *
+ *  ■ 체크포인트 — S.railSave 를 그대로 재활용합니다
+ *    { key, round, clearedPacks }. 이 화면이 뜰 때(맨 처음 포함) 곧바로
+ *    저장됩니다 — 엔케팔린을 이미 쓰고 들어온 자리라 사용자 지침대로
+ *    "첫 번째 선택 구간에서도 저장이 만들어집니다". 팩 하나를 다 깨면
+ *    clearedPacks 에 더하고 다음 round 로 다시 저장합니다.
+ *
+ *    한 판(라운드 packRounds개) 안에서는 이미 깬 팩이 다음 뽑기 풀에서
+ *    아예 빠집니다(clearedPacks) — drawPackChoices 참고.
+ *
+ *  ■ 패배하면
+ *    편성을 다시 짤 수 없습니다(사용자 지침) — defeat() 이 packRounds
+ *    갈래를 따로 갈라, "다시 도전"/"편성 바꾸기" 대신 "테마팩 선택으로"
+ *    하나만 보여 주고 resumeMirror() 를 그대로 부릅니다. 이번 라운드에서
+ *    깬 팩이 없으므로(아직 안 끝났으므로) S.railSave 는 손대지 않은
+ *    그대로이고, 결국 지금 이 화면으로 돌아오는 것과 같습니다 — 다만
+ *    새로 뽑으므로 보여 주는 셋은 달라질 수 있습니다.
+ *
+ *  ■ 익스트림 마지막 라운드
+ *    guaranteeRailPackOnFinalRound 가 있으면, 보여 주는 셋 중 하나는
+ *    무조건 거울굴절철도 팩(1호선·2호선 중 무작위, 열려 있는 쪽만)입니다.
+ */
+const MIRROR_SOUND_COST  = 1;   // 소리 듣기에 드는 황금교본
+const MIRROR_REROLL_COST = 2;   // 다른 길로에 드는 황금교본
+
+/* 팩 하나가 지금 뽑기 풀에 들어갈 수 있는가.
+ * 본편 적과 같은 원칙입니다 — «클리어한 장에 나왔던 적» 만 (metFoes 참고).
+ * 다만 noMirror 를 단 적(쥬3피노·데이비드 피터스처럼 이야기에 안 나오고
+ * 거울에서만 만나는 «종점» 부류)은 이 검사에서 뺍니다 — 애초에 metFoes 에
+ * 잡힐 일이 없는 적이라, 그대로 두면 영영 못 뽑습니다. */
+/* 본편 적과 같은 원칙 — «클리어한 장에 나왔던 적» 만(metFoes 참고).
+ * noMirror 를 단 적(쥬3피노·데이비드 피터스처럼 이야기에 안 나오고 거울
+ * 에서만 만나는 «종점» 부류)은 이 검사에서 뺍니다 — metFoes 에 잡힐 일이
+ * 없는 적이라, 그대로 두면 영영 못 뽑습니다.
+ *
+ * ⚠ 처음엔 이렇게 짰다가, 노말의 문턱이 1장이던 때는 «어느 팩도 못 뽑는»
+ * 사태가 났습니다(사용자 지침 2026-09-02) — 팩 하나가 여러 장에 걸친
+ * 적을 묶은 경우(pack02 = 1장+3.5장)가 있어서입니다. 문턱을 노말 3장·
+ * 하드 5장·익스트림 「1호선 완주」로 올리면서(mirrorUnlocked 참고) 다시
+ * met 검사를 걸었습니다 — 문턱이 이만큼 높아지면 그때는 자연히 그 장
+ * 근처의 팩 몇 개는 이미 met 상태일 걸로 보입니다. 그래도 특정 배수
+ * 조합에서 풀이 셋보다 적게 남을 수 있습니다(그러면 화면에 둘만 뜹니다
+ * — drawPackChoices 참고, 막힌 건 아니지만 확인이 필요할 수 있습니다). */
+function packUnlocked(pack) {
+  const met = metFoes();
+  return pack.foes.every(f => met[f] || (FOES[f] && FOES[f].noMirror));
+}
+
+/* 지금 라운드에 보여 줄 테마팩 셋을 뽑습니다.
+ * clearedPacks — 이번 판(여러 라운드) 안에서 이미 깬 팩 id 목록. 뽑기
+ * 풀에서부터 뺍니다(사용자 지침 — 애초에 안 보여 줌). */
+function drawPackChoices(rule, round, clearedPacks) {
+  const pool = MIRROR_PACKS.filter(p =>
+    !p.railOnly && packUnlocked(p) && clearedPacks.indexOf(p.id) < 0);
+  const bag = pool.slice();
+  const picks = [];
+
+  /* 익스트림 마지막 라운드 — 한 자리는 거울굴절철도 팩으로 고정.
+   * 그 갈래(1호선·2호선)가 열려 있고, met 검사도 통과해야 합니다 —
+   * 익스트림 자체가 1호선 완주를 요구하지만(needMirrorDone), 그렇다고
+   * 6장·6.5장까지 반드시 다 마쳤다는 보장은 아니라서(needCleared 는
+   * «아무 5장»을 셉니다) 그대로 둡니다. 둘 다 못 뽑으면 그냥 평소
+   * 풀에서 셋을 채웁니다. */
+  if (rule.guaranteeRailPackOnFinalRound && round === rule.packRounds) {
+    const railBag = MIRROR_PACKS.filter(p => p.railOnly && packUnlocked(p) &&
+      mirrorUnlocked(MIRROR_TIERS.find(r => r.key === (p.id === "rail1pack" ? "railLine1" : "railLine2"))));
+    if (railBag.length) picks.push(railBag[rnd(railBag.length)]);
+  }
+  while (picks.length < 3 && bag.length) picks.push(bag.splice(rnd(bag.length), 1)[0]);
+  /* 순서를 다시 섞습니다 — 거울굴절철도 팩이 늘 첫 자리에만 서지 않게 */
+  for (let i = picks.length - 1; i > 0; i--) {
+    const j = rnd(i + 1);
+    const t = picks[i]; picks[i] = picks[j]; picks[j] = t;
+  }
+  return picks;
+}
+
+/* 테마팩 하나의 전투 셋을 배수만큼 세워 장면으로 짓습니다.
+ * buildMirrorRunScenes 와 같은 결이지만, 팩은 늘 정확히 셋이고 끝에
+ * mirrorClear 대신 mirrorPackDone(그 팩 id를 실어)을 붙입니다 —
+ * 다음 라운드로 이을지, 이걸로 판이 끝인지는 그 장면이 갈라 정합니다. */
+function buildPackRunScenes(rule, pack) {
+  const k = rule.scale;
+  const dk = (rule.defScale != null) ? (1 + (k - 1) * rule.defScale) : defK(k);
+  const ids = pack.foes.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, rule, k, dk));
+  const scenes = [];
+  ids.forEach((id, i) => {
+    if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
+    const rail = { no: i + 1, total: ids.length, k: k };
+    scenes.push(FOES[id] && FOES[id].cineEntrance
+      ? { t: "bossCine", foe: id, rail: rail } : { t: "battle", foe: id, rail: rail });
+  });
+  scenes.push({ t: "mirrorPackDone", packId: pack.id });
+  return scenes;
+}
+
+/* 고른 팩으로 실제로 들어갑니다 — startMirror() 의 뒷부분과 같은 결입니다. */
+function enterPack(rule, pack) {
+  MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub,
+             scenes: buildPackRunScenes(rule, pack) };
+  S.sc = 0;
+  S.ended = false;
+  SCENES = buildScenes(MIRROR);
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  /* 팩에 들어가 있는 동안(테마팩 선택 화면으로 돌아올 때까지)은 그 팩의
+   * 배경(사용자 지침 2026-09-02) — 안 적힌 팩은 그냥 거울 던전 기본 배경. */
+  setBackdrop(pack.bg || mirrorBG(rule), null);
+  clearLog();
+  $log.classList.remove("recalling");
+  showCard(null);
+  divider();
+  say(rule.name + " — " + pack.name, "place");
+  say("쉴 틈은 없다. 이 팩의 셋을 연달아 상대해야 한다.", "sys");
+  divider();
+  render();
+  next();
+}
+
+function openPackGate(rule, round, clearedPacks) {
+  $modal.classList.add("on");
+  /* 팩 배경에서 돌아온 것일 수 있으므로, 선택 화면은 늘 기본 배경으로 되돌립니다. */
+  setBackdrop(mirrorBG(rule), null);
+  let shown = drawPackChoices(rule, round, clearedPacks);
+  let heardId = null;     // 이 셋(shown)에서 소리 듣기로 이미 들어 본 팩 id
+  let picking = false;    // "소리 듣기"를 누르고 경로를 고르는 중인가
+
+  const 라벨 = ["왼쪽 길", "가운데 길", "오른쪽 길"];
+
+  const draw = () => {
+    const canSound  = !picking && !heardId && S.codex >= MIRROR_SOUND_COST;
+    const canReroll = !picking && S.codex >= MIRROR_REROLL_COST;
+
+    let h = '<h2>' + rule.name + '</h2>' +
+      '<div class="hint">' + (round > 1 ? round + '번째 갈림길입니다. ' : '') +
+        (rule.packRounds > 1 ? '(' + round + ' / ' + rule.packRounds + ')' : '') + '</div>' +
+      '<div class="who">이형우</div>' +
+      '<p class="d">"이번 거울에서는 길이 갈려있습니다."<br>"어느 쪽으로 가시겠습니까?"</p>' +
+      (picking ? '<div class="hint" style="color:#d8b26a">소리를 들을 경로를 고르십시오.</div>' : '') +
+      '<div class="grid three">' +
+      shown.map((p, i) => {
+        if (!p) return '';
+        const heard = heardId === p.id;
+        return '<div class="slot' + (picking ? ' sel' : '') + '" data-path="' + i + '">' +
+          '<div class="nm">' + 라벨[i] + '</div>' +
+          '<div class="sub">' + p.name + '</div>' +
+          (heard
+            ? '<div class="sub" style="margin-top:8px;color:#d8b26a">' +
+                p.foes.map(f => (FOES[f] && FOES[f].intro) || "낌새가 흐릿하다.").join('<br>') +
+              '</div>'
+            : '') +
+        '</div>';
+      }).join('') +
+      '</div>' +
+      '<div class="modalfoot">' +
+        '<button id="pgsound" class="ghost"' + (canSound ? '' : ' disabled') + '>소리 듣기　(황금교본 ' + MIRROR_SOUND_COST + ')</button>' +
+        '<button id="pgreroll" class="ghost"' + (canReroll ? '' : ' disabled') + '>다른 길로　(황금교본 ' + MIRROR_REROLL_COST + ')</button>' +
+        '<button id="pgback" class="ghost">유리창으로</button>' +
+      '</div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-path]").forEach(el => {
+      el.onclick = () => {
+        const p = shown[Number(el.dataset.path)];
+        if (!p) return;
+        if (picking) {
+          if (S.codex < MIRROR_SOUND_COST) return;
+          S.codex -= MIRROR_SOUND_COST;
+          heardId = p.id;
+          picking = false;
+          saveVault();
+          draw();
+          return;
+        }
+        closeModal();
+        enterPack(rule, p);
+      };
+    });
+    document.getElementById("pgsound").onclick = () => {
+      if (!canSound) return;
+      picking = true;
+      draw();
+    };
+    document.getElementById("pgreroll").onclick = () => {
+      if (!canReroll) return;
+      S.codex -= MIRROR_REROLL_COST;
+      shown = drawPackChoices(rule, round, clearedPacks);
+      heardId = null;
+      picking = false;
+      saveVault();
+      draw();
+    };
+    document.getElementById("pgback").onclick = () => { closeModal(); glass(); };
+  };
+  draw();
+}
+
 function startMirror(tier, preIds) {
   const rule = mirrorTier(tier);
   const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
@@ -7530,6 +7799,34 @@ function startMirror(tier, preIds) {
 
   /* 거울 던전에 들어서는 자리라 「이번 갈래」를 새로 엽니다 — 광신·보복 스택 리셋 */
   S.arc = { kills: 0, retribution: {} };
+
+  /* 테마팩 갈래(노말·하드·익스트림) — 곧장 전투를 짓지 않고 테마팩 선택
+   * 화면부터 엽니다(openPackGate 머리말 참고). 엔케팔린은 이미 위에서
+   * 냈으므로, 여기서 곧바로 첫 체크포인트(S.railSave)를 남깁니다. */
+  if (rule.packRounds) {
+    S.mirrorCheckpoint = null;
+    MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub, scenes: [] };
+    S.mirror = true;
+    S.mirrorTier = MIRROR_TIERS.indexOf(rule);
+    S.mirrorHard = hard;
+    S.mirrorRunTurns = 0;
+    S.ended = false;
+    S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+    S.railSave = { key: rule.key, round: 1, clearedPacks: [] };
+    saveVault();
+    clearLog();
+    $log.classList.remove("recalling");
+    showCard(null);
+    divider();
+    say(rule.name, "place");
+    say("— " + rule.sub + " —", "sys");
+    say(ENK_RULE.name + " " + rule.cost + " 소모.  (남은 것 " + enkCount() +
+        " / " + ENK_RULE.max + ")", "sys");
+    divider();
+    render();
+    openPackGate(rule, 1, []);
+    return;
+  }
 
   /* 관측해 둔 것이 있으면 그대로 씁니다 — 다시 뽑으면 관측한 것과 달라져 버립니다.
    * 관측 없이 바로 들어왔으면(preIds 없음) 여기서 새로 뽑습니다 — 예전처럼 부딪쳐 봐야 압니다. */
@@ -7590,6 +7887,25 @@ function resumeMirror() {
   if (!rule) { S.railSave = null; return; }   // 갈래 자체가 없어졌으면 포기
 
   S.arc = { kills: 0, retribution: {} };
+
+  /* 테마팩 갈래 — 저장해 둔 라운드·이미 깬 팩만 들고 선택 화면으로
+   * 바로 돌아갑니다. 전투 장면을 다시 지을 게 없습니다(팩을 고르지
+   * 않은 채로 나갔던 자리이므로). defeat() 도 여기로 그대로 옵니다. */
+  if (rule.packRounds) {
+    const round = S.railSave.round || 1;
+    const cleared = (S.railSave.clearedPacks || []).slice();
+    S.mirrorCheckpoint = null;
+    MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub, scenes: [] };
+    S.mirror = true;
+    S.mirrorTier = MIRROR_TIERS.indexOf(rule);
+    S.mirrorHard = rule !== MIRROR_RULE;
+    S.mirrorRunTurns = S.railSave.turns || 0;
+    S.ended = false;
+    S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+    render();
+    openPackGate(rule, round, cleared);
+    return;
+  }
 
   if (rule.loop) {
     const saved = S.railSave.rail2;
