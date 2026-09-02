@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.9.0";
+const VERSION = "1.9.1";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -7799,7 +7799,7 @@ function mirrorRecordBuild(rule) {
   const party = S.party.map(w => {
     if (!w) return null;
     const id = idByKey(S.equip[w]);
-    return { name: nameOf(w), title: id ? id.title : "" };
+    return { name: nameOf(w), title: id ? id.title : "", star: id ? id.star : null, sync: syncLevel(w) };
   });
   const advisors = advisorOnList().map(advisorById).filter(Boolean)
     .map(a => ({ name: a.name, title: a.title }));
@@ -7808,6 +7808,8 @@ function mirrorRecordBuild(rule) {
   /* 2호선 순환 보너스 — 같은 것을 거듭 고르면 더해지므로 몫을 셉니다 */
   const picks = {};
   ((S.rail2 && S.rail2.picks) || []).forEach(k => { picks[k] = (picks[k] || 0) + 1; });
+  /* 발동한 시너지 — 결과 카드용으로 이름만 얼려 둡니다(수치는 굳이 안 남깁니다) */
+  const synergies = activeSynergies(S.party).map(s => s.name);
   return {
     at: Date.now(),
     ver: VERSION,
@@ -7815,7 +7817,7 @@ function mirrorRecordBuild(rule) {
     name: rule.loop ? rule.finalName : rule.name,   // 2호선은 «종착역」 이름으로 남깁니다
     turns: S.mirrorRunTurns || 0,
     cycles: (S.rail2 && S.rail2.done) || null,       // 1호선 등 순환 없는 갈래는 null
-    party, advisors, gifts, picks
+    party, advisors, gifts, picks, synergies
   };
 }
 
@@ -7833,6 +7835,16 @@ function mirrorRecordDateText(at) {
          " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
 }
 
+/* 2호선 순환 보너스로 고른 특전을 «이름 ×횟수」 로 폅니다. 하나도 안 골랐으면 null. */
+function mirrorPickText(rec) {
+  const keys = Object.keys(rec.picks || {});
+  if (!keys.length) return null;
+  return keys.map(k => {
+    const b = RAIL2_BONUSES.find(x => x.key === k);
+    return (b ? b.name : k) + " ×" + rec.picks[k];
+  }).join(" · ");
+}
+
 /* 남에게 그대로 붙여 넣을 수 있는 글로 폅니다 */
 function mirrorRecordText(rec) {
   const partyStr = rec.party.filter(Boolean)
@@ -7841,13 +7853,7 @@ function mirrorRecordText(rec) {
     ? rec.advisors.map(a => a.name + (a.title ? "(" + a.title + ")" : "")).join(" · ")
     : "없음";
   const giftStr = rec.gifts.length ? rec.gifts.map(g => g.name).join(" · ") : "없음";
-  const pickKeys = Object.keys(rec.picks || {});
-  const pickStr = pickKeys.length
-    ? pickKeys.map(k => {
-        const b = RAIL2_BONUSES.find(x => x.key === k);
-        return (b ? b.name : k) + " ×" + rec.picks[k];
-      }).join(" · ")
-    : null;
+  const pickStr = mirrorPickText(rec);
   const lines = [
     "「라슈 컴퍼니」 " + rec.name + " 클리어",
     "턴수 " + rec.turns + "턴" + (rec.cycles ? "　(" + rec.cycles + "순환)" : ""),
@@ -7858,6 +7864,69 @@ function mirrorRecordText(rec) {
   if (pickStr) lines.push("특전 " + pickStr);
   lines.push("v" + rec.ver + "　" + mirrorRecordDateText(rec.at));
   return lines.join("\n");
+}
+
+/* 결과 카드 — 캡처해서 자랑할 수 있게 편성칸 그대로 보여 주는 별도 화면.
+ * mirrorClear() 에서 막 딴 기록으로 열리거나, 「기록」 화면(openRecord)에서
+ * 보관함에 남은 최근 세 판 중 하나를 다시 열어 볼 수 있습니다.
+ * 나가는 손잡이는 늘 유리창으로 갑니다 — 어디서 열렸든 같습니다. */
+function openMirrorResult(rec) {
+  $modal.classList.add("on");
+
+  const emptySlot = '<div class="slot ro"><div class="lock">비어 있음</div></div>';
+  const pad = (arr, n) => {
+    const a = (arr || []).slice(0, n);
+    while (a.length < n) a.push(null);
+    return a;
+  };
+
+  const partyHTML = rec.party.map(w => !w ? emptySlot :
+    '<div class="slot ro">' +
+      (w.sync ? '<div class="mrsync">+' + w.sync + '단계</div>' : '') +
+      '<div class="nm">' + w.name + '</div>' +
+      '<div class="sub">' + (w.title
+        ? '<span class="star">' + stars(w.star || 0) + '</span> ' + w.title
+        : '인격 없음') + '</div>' +
+    '</div>'
+  ).join('');
+
+  const giftHTML = pad(rec.gifts, 3).map(g => g
+    ? '<div class="slot ro"><div class="nm">' + g.name + '</div></div>'
+    : emptySlot
+  ).join('');
+
+  const advHTML = pad(rec.advisors, 3).map(a => a
+    ? '<div class="slot ro"><div class="nm">' + a.title + ' ' + a.name + '</div></div>'
+    : emptySlot
+  ).join('');
+
+  const synText = (rec.synergies && rec.synergies.length) ? rec.synergies.join(' · ') : '없음';
+  const pickText = mirrorPickText(rec) || '없음';
+
+  $sheet.innerHTML =
+    '<div class="mrcard">' +
+      '<div class="mrclear">' + rec.name + ' 클리어</div>' +
+      '<div class="mrstats"><b class="mrturn">' + rec.turns + '턴</b>' +
+        (rec.cycles ? '<span class="mrcyc">' + rec.cycles + '순환</span>' : '') +
+      '</div>' +
+      '<div class="mrlabel">편성</div>' +
+      '<div class="grid three mrparty">' + partyHTML + '</div>' +
+      '<div class="mrlabel">사용한 E.G.O 기프트</div>' +
+      '<div class="grid three">' + giftHTML + '</div>' +
+      '<div class="mrlabel">세운 교육위원</div>' +
+      '<div class="grid three">' + advHTML + '</div>' +
+      '<div class="mrlabel">발동한 시너지</div>' +
+      '<div class="mrline">' + synText + '</div>' +
+      '<div class="mrlabel">선택한 특전</div>' +
+      '<div class="mrline">' + pickText + '</div>' +
+      '<div class="mrver">v' + rec.ver + '　' + mirrorRecordDateText(rec.at) + '</div>' +
+    '</div>' +
+    '<div class="hint" style="margin-top:14px">이 화면을 캡처해서 자랑할 곳에 공유하세요.</div>' +
+    '<div class="modalfoot" style="justify-content:flex-end">' +
+      '<button id="mrExit" class="primary">유리창으로 나가기</button>' +
+    '</div>';
+
+  document.getElementById("mrExit").onclick = () => { closeModal(); glass(); };
 }
 
 /* 로그에 결과 카드를 한 덩이로 띄웁니다 — say() 와 달리 줄바꿈을 그대로 살립니다 */
@@ -7970,12 +8039,19 @@ function mirrorClear() {
   const again = enkCount() >= rule.cost;
   const clearButtons = [
     { label: again ? "한 번 더" : "한 번 더 (" + ENK_RULE.name + " 부족)",
-      cls: "primary", disabled: !again, fn: () => startMirror(rule.key) },
-    { label: "유리창", fn: () => glass() },
-    { label: "상점", cls: "ghost", fn: () => openShop(() => {}) }
+      cls: "primary", disabled: !again, fn: () => startMirror(rule.key) }
   ];
-  if (record) clearButtons.push({ label: "결과 카드 복사", cls: "ghost",
-    fn: () => copyText(mirrorRecordText(record), "결과 카드를 복사했습니다 — 자랑할 곳에 붙여 넣으세요.") });
+  /* 결과 카드가 있는 갈래(거울굴절철도)는 유리창/상점으로 바로 나가지 않고,
+   * 먼저 결과 카드 화면을 거칩니다 — 그 화면의 [유리창으로 나가기] 가 진짜 출구입니다. */
+  if (record) {
+    clearButtons.push({ label: "결과 카드 보기", cls: "primary",
+      fn: () => openMirrorResult(record) });
+    clearButtons.push({ label: "결과 카드 복사", cls: "ghost",
+      fn: () => copyText(mirrorRecordText(record), "결과 카드를 복사했습니다 — 자랑할 곳에 붙여 넣으세요.") });
+  } else {
+    clearButtons.push({ label: "유리창", fn: () => glass() });
+    clearButtons.push({ label: "상점", cls: "ghost", fn: () => openShop(() => {}) });
+  }
   buttons(clearButtons);
   showEnkBar(true);
 }
@@ -8086,11 +8162,20 @@ function openRecord(back) {
       : '') +
     ((S.mirrorRecords || []).length
       ? '<h3 style="margin:18px 0 4px">거울굴절철도 결과 카드</h3>' +
-        '<div class="hint">최근 세 판까지 남습니다. 복사해서 자랑할 곳에 붙여 넣으세요.</div>' +
+        '<div class="hint">최근 세 판까지 남습니다. 「보기」로 캡처용 화면을 다시 열거나, 「복사」로 글로 붙여 넣으세요.</div>' +
+        '<div class="grid one">' +
         S.mirrorRecords.map((r, i) =>
-          '<pre class="resultcard" style="margin:8px 0 4px">' + mirrorRecordText(r) + '</pre>' +
-          '<div style="margin:0 0 12px"><button id="reccp' + i + '" class="ghost">이 카드 복사</button></div>'
-        ).join('')
+          '<div class="slot" style="cursor:default">' +
+            '<div class="nm">' + r.name + ' 클리어</div>' +
+            '<div class="sub">' + r.turns + '턴' + (r.cycles ? '　·　' + r.cycles + '순환' : '') +
+              '　·　' + mirrorRecordDateText(r.at) + '</div>' +
+            '<div style="margin-top:8px;display:flex;gap:8px">' +
+              '<button id="recview' + i + '" class="ghost">결과 카드 보기</button>' +
+              '<button id="reccp' + i + '" class="ghost">복사</button>' +
+            '</div>' +
+          '</div>'
+        ).join('') +
+        '</div>'
       : '') +
     '<div class="hint" style="margin-top:16px">' +
       '<b>내보내기</b> 를 누르면 <code>vault.js</code> 파일이 ' +
@@ -8122,8 +8207,10 @@ function openRecord(back) {
     '</div>';
 
   (S.mirrorRecords || []).forEach((r, i) => {
-    const btn = document.getElementById("reccp" + i);
-    if (btn) btn.onclick = () => copyText(mirrorRecordText(r), null, btn);
+    const cp = document.getElementById("reccp" + i);
+    if (cp) cp.onclick = () => copyText(mirrorRecordText(r), null, cp);
+    const vw = document.getElementById("recview" + i);
+    if (vw) vw.onclick = () => openMirrorResult(r);
   });
 
   const a = document.getElementById("vdl");
