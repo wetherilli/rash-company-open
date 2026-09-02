@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.8.6";
+const VERSION = "1.9.0";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -284,6 +284,9 @@ function vaultBody() {
      * 편성은 담지 않습니다(resumeMirror 참고). vaultSig() 에는 일부러 안 넣습니다 —
      * 손댐 검사가 아니라 그냥 진행 상황이라서요. */
     railSave: S.railSave || null,
+    /* 거울굴절철도 결과 카드 — 최근 세 판까지. 손댐 검사(vaultSig)에는 일부러
+     * 안 넣습니다 — 업적처럼 지키려는 값이 아니라 그냥 지난 기록이라서요. */
+    mirrorRecords: S.mirrorRecords || [],
     /* 본편 편성 자리(case "party")에서 남기는 이어하기 — 위 railSave와 같은
      * 논리이되 서로 겹치지 않는 별도 자리입니다. 장을 새로 시작하거나
      * 마치면 지워지는 임시 데이터입니다(startChapter/chapterEnd 참고). */
@@ -331,6 +334,7 @@ function loadVault() {
     enk:      v.enk || null,
     railSave: v.railSave || null,
     storySave: v.storySave || null,
+    mirrorRecords: v.mirrorRecords || [],
     ver:      v.ver || null
   };
 }
@@ -976,6 +980,7 @@ function newState() {
      * 겹치지 않는 별도 자리. { chId, sc, party, equip, hp, flags,
      * partyStack, partyBan, battleForced }. */
     storySave: (v && v.storySave) || null,
+    mirrorRecords: (v && v.mirrorRecords) || [],   // 거울굴절철도 결과 카드 — 최근 세 판
     partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
     partyBan: [],            // 지금은 편성할 수 없는 사람 — banParty/unbanParty 가 씁니다
     battleForced: false,
@@ -3137,7 +3142,7 @@ function play(s) {
        * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
       if (S.mirror && S.mirrorCheckpoint != null && !mirrorRuleNow().loop) {
         S.railSave = { key: mirrorRuleNow().key, picked: (MIRROR.foeSrc || []).slice(),
-                        checkpoint: S.mirrorCheckpoint };
+                        checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0 };
         saveVault();
       }
       render();
@@ -4561,6 +4566,9 @@ function resolveTurn() {
 
 function victory() {
   const b = S.battle;
+  /* 거울굴절철도 결과 카드에 적을 총 턴수 — 이긴 전투의 턴만 더합니다.
+   * 지고 다시 도전하면 b.turn 이 0부터 다시 세므로(startBattleFight), 그 턴은 안 셉니다. */
+  if (S.mirror) S.mirrorRunTurns = (S.mirrorRunTurns || 0) + b.turn;
   if (!S.arc) S.arc = { kills: 0, retribution: {} };
   S.arc.kills = (S.arc.kills || 0) + 1;         // 광신 — 이번 갈래 처치 수
   const reward = storyPays()
@@ -5325,6 +5333,17 @@ function synergyMembers(sy) {
       out.push({ sup: false, owned: !!S.owned[idKey(w, id)], who: SINNERS[w].name, star: id.star, title: id.title });
     });
   }
+  /* 교육위원도 봅니다 — 「Y사」·「대륵도」처럼 인격이 하나도 없이 교육위원
+   * 제목끼리만 걸리는 시너지가 있어(activeSynergies·synergyNames 는 이미
+   * 교육위원 제목도 셉니다), 여기서 빠지면 실제로는 걸리는데도 화면에는
+   * «아무도 안 걸린다» 로 잘못 보입니다. 인격과 같은 결로, 미보유도 이름은
+   * 보여줍니다(지원 작성위원과 달리 얻기 전에도 제목·이름이 가려지지 않는
+   * 기존 규칙을 그대로 따릅니다 — openNote() 의 교육위원 목록 참고). */
+  advisorList().forEach(a => {
+    if (!match(a.title)) return;
+    out.push({ sup: false, adv: true, owned: !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]),
+               who: a.name, star: a.star, title: a.title });
+  });
   (typeof SUPPORTS !== "undefined" ? SUPPORTS : []).forEach(sp => {
     if (!match(sp.title) || !supportOwned(sp)) return;   // 미보유 지원 작성위원은 표시하지 않는다
     out.push({ sup: true, owned: true, who: sp.name, star: sp.star, title: sp.title });
@@ -5340,6 +5359,7 @@ function synergyMembersHTML(sy) {
       '<span class="star">' + stars(m.star) + '</span> ' +
       (m.owned ? (m.who + ' · ' + m.title) : m.title) +
       (m.sup ? ' <i>지원</i>' : '') +
+      (m.adv ? ' <i>교육위원</i>' : '') +
     '</div>'
   ).join('') + '</div>';
 }
@@ -5519,7 +5539,8 @@ function openNote(back, focus) {
       const nowTitles = synergyNames();
       h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">편성 시너지 ' +
            '<span class="sub" style="font-weight:400">모두 ' + syAll.length + '가지</span></div>' +
-           '<div class="hint">파티 셋이 <b>장착한 인격 이름</b>에 같은 말이 들어가면 발동합니다. ' +
+           '<div class="hint">파티 셋이 <b>장착한 인격</b>이나 <b>세워 둔 교육위원</b>의 제목에 같은 말이 ' +
+           '들어가면 발동합니다(간혹 인격 없이 교육위원끼리만 걸리는 시너지도 있습니다). ' +
            '몇 명부터 발동하는지는 시너지마다 다르고, 3명이면 1.75배, 보조 교육위원까지 넷이면 2배가 됩니다. ' +
            '무리 이름을 누르면 접히고 펴집니다. 시너지 한 줄을 누르면 거기 걸리는 사람을 보여줍니다.</div>';
 
@@ -5535,11 +5556,18 @@ function openNote(back, focus) {
           const tags = Array.isArray(sy.tag) ? sy.tag : [sy.tag];
           /* 지금 편성으로 몇 명이 걸려 있는가 */
           const now = nowTitles.filter(t => tags.some(tg => t.indexOf(tg) >= 0)).length;
-          /* 보관함에 이 말이 든 인격이 몇 종이나 있는가 */
+          /* 보관함에 이 말이 든 인격·교육위원이 몇 종이나 있는가.
+           * 인격만 세면 「Y사」·「대륵도」처럼 교육위원끼리만 걸리는 시너지가
+           * totalN=0 으로 나와, 실제로는 걸리는데도 「모자라 발동할 수 없다」
+           * 고 잘못 뜹니다 — 교육위원도 함께 셉니다. */
           let ownedN = 0, totalN = 0;
           for (const w in SINNERS) SINNERS[w].ids.forEach(id => {
             if (id.todo || !tags.some(tg => id.title.indexOf(tg) >= 0)) return;
             totalN++; if (S.owned[idKey(w, id)]) ownedN++;
+          });
+          advisorList().forEach(a => {
+            if (!tags.some(tg => a.title.indexOf(tg) >= 0)) return;
+            totalN++; if (S.advisorsOwned && S.advisorsOwned[advisorId(a)]) ownedN++;
           });
           const eff = [];
           if (sy.atk) eff.push("공 +" + Math.round(sy.atk * 100) + "%");
@@ -5553,8 +5581,8 @@ function openNote(back, focus) {
                  '<div class="sub">찾는 말 「' + tags.join("」 「") + '」　·　' + sy.need + '명부터</div>' +
                  '<div class="sub" style="color:#d8b26a">' + eff.join("　") + '</div>' +
                  (sy.desc ? '<div class="sub">' + sy.desc + '</div>' : '') +
-                 '<div class="sub">해당 인격 ' + ownedN + ' / ' + totalN + ' 보유' +
-                   (totalN < sy.need ? '　— 인격이 모자라 발동할 수 없습니다' : '') + '</div>' +
+                 '<div class="sub">걸리는 인격·교육위원 ' + ownedN + ' / ' + totalN + ' 보유' +
+                   (totalN < sy.need ? '　— 모자라 발동할 수 없습니다' : '') + '</div>' +
                  (detailOpen ? synergyMembersHTML(sy) : '') +
                '</div>';
         });
@@ -7476,6 +7504,7 @@ function startMirror(tier, preIds) {
   S.mirror = true;
   S.mirrorTier = MIRROR_TIERS.indexOf(rule);
   S.mirrorHard = hard;              // 옛 보관함과 맞추려고 함께 둡니다
+  S.mirrorRunTurns = 0;             // 결과 카드용 총 턴수 — 이 갈래에 새로 들어서므로 0부터
   S.sc = 0;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
@@ -7540,6 +7569,7 @@ function resumeMirror() {
 
   S.mirror = true;
   S.mirrorTier = MIRROR_TIERS.indexOf(rule);
+  S.mirrorRunTurns = S.railSave.turns || 0;   // 저장해 둔 자리까지 이미 쌓인 턴수를 이어받습니다
   S.mirrorCheckpoint = S.railSave.checkpoint;
   S.sc = S.railSave.checkpoint;
   S.ended = false;
@@ -7585,6 +7615,7 @@ function startRailLoop(rule) {
   S.mirror = true;
   S.mirrorTier = MIRROR_TIERS.indexOf(rule);
   S.mirrorHard = true;              // 옛 보관함과 맞추려고 함께 둡니다
+  S.mirrorRunTurns = 0;             // 결과 카드용 총 턴수 — 이 갈래에 새로 들어서므로 0부터
   S.mirrorCheckpoint = null;
   S.sc = 0;
   S.ended = false;
@@ -7679,7 +7710,7 @@ SCENE_EXT.railCamp = function (s) {
    * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
   S.railSave = { key: rule.key,
                  rail2: { bosses: r2.bosses.slice(), done: r2.done, picks: r2.picks.slice() },
-                 checkpoint: S.mirrorCheckpoint };
+                 checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0 };
   saveVault();
 
   divider();
@@ -7759,6 +7790,116 @@ function railFork(rule, cycle) {
   ]);
 }
 
+/* ── 결과 카드 ──────────────────────────────────────────────────
+ *  거울굴절철도(1호선·2호선)를 완주한 순간의 기록입니다. 최근 세 판까지
+ *  보관함에 남아, 나중에 「기록」 화면에서 다시 꺼내 복사할 수 있습니다.
+ *  서버 없이 도는 게임이라 순위표 대신, 화면 갈무리 없이도 자랑할 수 있게
+ *  글 한 덩이로 옮겨 붙여 넣을 수 있게 하려는 것입니다. */
+function mirrorRecordBuild(rule) {
+  const party = S.party.map(w => {
+    if (!w) return null;
+    const id = idByKey(S.equip[w]);
+    return { name: nameOf(w), title: id ? id.title : "" };
+  });
+  const advisors = advisorOnList().map(advisorById).filter(Boolean)
+    .map(a => ({ name: a.name, title: a.title }));
+  const gifts = giftOnList().map(giftById).filter(Boolean)
+    .map(g => ({ name: g.name }));
+  /* 2호선 순환 보너스 — 같은 것을 거듭 고르면 더해지므로 몫을 셉니다 */
+  const picks = {};
+  ((S.rail2 && S.rail2.picks) || []).forEach(k => { picks[k] = (picks[k] || 0) + 1; });
+  return {
+    at: Date.now(),
+    ver: VERSION,
+    key: rule.key,
+    name: rule.loop ? rule.finalName : rule.name,   // 2호선은 «종착역」 이름으로 남깁니다
+    turns: S.mirrorRunTurns || 0,
+    cycles: (S.rail2 && S.rail2.done) || null,       // 1호선 등 순환 없는 갈래는 null
+    party, advisors, gifts, picks
+  };
+}
+
+/* 최근 세 판까지만 보관함에 남깁니다 — 맨 앞이 최신입니다. */
+function pushMirrorRecord(rec) {
+  if (!S.mirrorRecords) S.mirrorRecords = [];
+  S.mirrorRecords.unshift(rec);
+  S.mirrorRecords = S.mirrorRecords.slice(0, 3);
+}
+
+function mirrorRecordDateText(at) {
+  const d = new Date(at);
+  const pad = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "." + pad(d.getMonth() + 1) + "." + pad(d.getDate()) +
+         " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+/* 남에게 그대로 붙여 넣을 수 있는 글로 폅니다 */
+function mirrorRecordText(rec) {
+  const partyStr = rec.party.filter(Boolean)
+    .map(p => p.name + (p.title ? "(" + p.title + ")" : "")).join(" · ") || "없음";
+  const advStr = rec.advisors.length
+    ? rec.advisors.map(a => a.name + (a.title ? "(" + a.title + ")" : "")).join(" · ")
+    : "없음";
+  const giftStr = rec.gifts.length ? rec.gifts.map(g => g.name).join(" · ") : "없음";
+  const pickKeys = Object.keys(rec.picks || {});
+  const pickStr = pickKeys.length
+    ? pickKeys.map(k => {
+        const b = RAIL2_BONUSES.find(x => x.key === k);
+        return (b ? b.name : k) + " ×" + rec.picks[k];
+      }).join(" · ")
+    : null;
+  const lines = [
+    "「라슈 컴퍼니」 " + rec.name + " 클리어",
+    "턴수 " + rec.turns + "턴" + (rec.cycles ? "　(" + rec.cycles + "순환)" : ""),
+    "편성 " + partyStr,
+    "교육위원 " + advStr,
+    "기프트 " + giftStr
+  ];
+  if (pickStr) lines.push("특전 " + pickStr);
+  lines.push("v" + rec.ver + "　" + mirrorRecordDateText(rec.at));
+  return lines.join("\n");
+}
+
+/* 로그에 결과 카드를 한 덩이로 띄웁니다 — say() 와 달리 줄바꿈을 그대로 살립니다 */
+function sayCard(text) {
+  const el = document.createElement("pre");
+  el.className = "resultcard";
+  el.textContent = text;
+  $log.appendChild(el);
+  $log.scrollTop = $log.scrollHeight;
+}
+
+/* 클립보드로 복사합니다. 옛 브라우저 등 navigator.clipboard 가 없는 환경은
+ * 감춘 textarea 로 대신합니다.
+ * btn 을 주면(모달 안 등, 로그가 가려져 say() 가 안 보이는 자리) 그 손잡이
+ * 글자를 잠깐 «복사됨!」으로 바꿔 알립니다 — 안 주면 로그에 한 줄 남깁니다. */
+function copyText(text, okMsg, btn) {
+  const done = () => {
+    if (!btn) { say(okMsg || "복사했습니다.", "good"); return; }
+    const old = btn.textContent;
+    btn.textContent = "복사됨!"; btn.disabled = true;
+    setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1200);
+  };
+  const fail = () => {
+    const msg = "복사에 실패했습니다 — 카드를 길게 눌러 직접 골라 복사해 주세요.";
+    btn ? alert(msg) : say(msg, "bad");
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, fail);
+    return;
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    ok ? done() : fail();
+  } catch (e) { fail(); }
+}
+
 function mirrorClear() {
   const rule = mirrorRuleNow();
   /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — 임시 데이터라
@@ -7809,6 +7950,11 @@ function mirrorClear() {
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
+  /* 결과 카드 — 거울굴절철도(1호선·2호선)만 남깁니다. 노말·하드·익스트림
+   * 거울 던전은 훨씬 자주 도니 굳이 다 남기지 않습니다. S.rail2 를 지우기
+   * 전에(바로 아래) 만들어야 순환 수·특전을 읽을 수 있습니다. */
+  const record = rule.group === "rail" ? mirrorRecordBuild(rule) : null;
+  if (record) pushMirrorRecord(record);
   saveVault();
   S.mirror = false;
   S.mirrorTier = null;
@@ -7819,14 +7965,18 @@ function mirrorClear() {
   S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
   MIRROR = null;
   S.ended = true;
+  if (record) { divider(); sayCard(mirrorRecordText(record)); }
   render();
   const again = enkCount() >= rule.cost;
-  buttons([
+  const clearButtons = [
     { label: again ? "한 번 더" : "한 번 더 (" + ENK_RULE.name + " 부족)",
       cls: "primary", disabled: !again, fn: () => startMirror(rule.key) },
     { label: "유리창", fn: () => glass() },
     { label: "상점", cls: "ghost", fn: () => openShop(() => {}) }
-  ]);
+  ];
+  if (record) clearButtons.push({ label: "결과 카드 복사", cls: "ghost",
+    fn: () => copyText(mirrorRecordText(record), "결과 카드를 복사했습니다 — 자랑할 곳에 붙여 넣으세요.") });
+  buttons(clearButtons);
   showEnkBar(true);
 }
 
@@ -7934,6 +8084,14 @@ function openRecord(back) {
           '<b>손댄 흔적이 있습니다.</b> 저장된 내용이 요약값과 맞지 않습니다. ' +
           '파일을 손으로 고치셨다면 그 때문입니다.</div>'
       : '') +
+    ((S.mirrorRecords || []).length
+      ? '<h3 style="margin:18px 0 4px">거울굴절철도 결과 카드</h3>' +
+        '<div class="hint">최근 세 판까지 남습니다. 복사해서 자랑할 곳에 붙여 넣으세요.</div>' +
+        S.mirrorRecords.map((r, i) =>
+          '<pre class="resultcard" style="margin:8px 0 4px">' + mirrorRecordText(r) + '</pre>' +
+          '<div style="margin:0 0 12px"><button id="reccp' + i + '" class="ghost">이 카드 복사</button></div>'
+        ).join('')
+      : '') +
     '<div class="hint" style="margin-top:16px">' +
       '<b>내보내기</b> 를 누르면 <code>vault.js</code> 파일이 ' +
       '브라우저가 쓰는 <b>내려받기 폴더</b>에 떨어집니다 (보통 «다운로드»).' +
@@ -7962,6 +8120,11 @@ function openRecord(back) {
       '<input id="vimpfile" type="file" accept=".js,text/javascript,text/plain" style="display:none">' +
       '<button id="rclose">닫기</button>' +
     '</div>';
+
+  (S.mirrorRecords || []).forEach((r, i) => {
+    const btn = document.getElementById("reccp" + i);
+    if (btn) btn.onclick = () => copyText(mirrorRecordText(r), null, btn);
+  });
 
   const a = document.getElementById("vdl");
   a.href = "data:text/javascript;charset=utf-8," + encodeURIComponent(vaultExportText());
