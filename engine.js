@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.10.0";
-const VERSION_NAME = "거울던전 테마팩";
+const VERSION = "1.11.0";
+const VERSION_NAME = "작성위원 균형 조정";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -1941,11 +1941,14 @@ function passiveSkillBonus(who, effHp) {
     case "yu_ain":                                // 보복 — 아군 사망마다, 자신이 죽으면 초기화
       out.atk = ((S.arc && S.arc.retribution[who]) || 0) * v / 100;
       break;
-    case "lee_hanbeom":                           // 격노 — 잃은 체력 v%마다 추가 피해 1%
-      out.atk = Math.floor(lostPct / v) * 0.01;
+    /* 격노·배임 — 스택 하나당 얻는 몫을 3배로 올림(사용자 지침 2026-09-02
+     * — 원래 스택당 +1%·+1이던 것을 +3%·+3으로). 스택 수 자체(표시용
+     * passiveStackCount)는 그대로이고, 스택 하나가 주는 몫만 세졌습니다. */
+    case "lee_hanbeom":                           // 격노 — 잃은 체력 v%마다 추가 피해 3%
+      out.atk = Math.floor(lostPct / v) * 0.03;
       break;
-    case "lee_sojeong":                           // 배임 — 잃은 체력 v%마다 방어 +1 (플랫)
-      out.def = Math.floor(lostPct / v);
+    case "lee_sojeong":                           // 배임 — 잃은 체력 v%마다 방어 +3 (플랫)
+      out.def = Math.floor(lostPct / v) * 3;
       break;
   }
   return out;
@@ -3135,8 +3138,10 @@ function play(s) {
       const cleared = ((S.railSave && S.railSave.clearedPacks) || []).slice();
       cleared.push(s.packId);
       const nextRound = ((S.railSave && S.railSave.round) || 1) + 1;
+      /* 마지막 라운드까지 다 깼어도 방금 깬 팩을 S.railSave 에 먼저 실어 둡니다 —
+       * mirrorClear() 가 결과 카드(고른 테마팩 목록)를 지을 때 이걸 읽습니다. */
+      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared, arc: S.arc };
       if (nextRound > rule.packRounds) return mirrorClear();
-      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared };
       saveVault();
       openPackGate(rule, nextRound, cleared);
       return;
@@ -3159,7 +3164,7 @@ function play(s) {
        * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
       if (S.mirror && S.mirrorCheckpoint != null && !mirrorRuleNow().loop) {
         S.railSave = { key: mirrorRuleNow().key, picked: (MIRROR.foeSrc || []).slice(),
-                        checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0 };
+                        checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0, arc: S.arc };
         saveVault();
       }
       render();
@@ -4434,6 +4439,9 @@ function resolveTurn() {
      * 확정 치명타 */
     const skillMult = b.mods[who + "_atkMult"] || 1;
     const linkMult  = b.mods[who + "_linkMult"] || 1;
+    /* 흡혈로 넘친 회복(다 찬 뒤로도 남은 몫)을 다음 공격력에 플랫로 얹는다 —
+     * 그 공격 한 번에만 쓰고 지운다(아래 evadeBonus와 같은 결). */
+    const vampBonus = b.persist[who + "_vampBonus"] || 0;
     const claw1Mult = (b.mods[who + "_claw1Order"] === "attack") ? (1.5 + claw1SynergyBonus()) : 1;
     const atkMult = skillMult * linkMult * claw1Mult;
     /* 지령을 따랐을 때, 그 인격을 낀 사람 몫의 한마디를 공격 직전에
@@ -4444,7 +4452,7 @@ function resolveTurn() {
       if (line) battleSay(who, line);
     }
     const evadeBonus = b.persist[who + "_evadeBonus"];
-    let dmg = st.atk * atkMult + rnd(4) - fdef;
+    let dmg = st.atk * atkMult + vampBonus + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
     const crit = evadeBonus ? true : Math.random() < critRate();
     if (crit) dmg *= evadeBonus || critMult();
@@ -4457,14 +4465,22 @@ function resolveTurn() {
         (skillMult !== 1 ? " (" + UNIQUE_SKILLS[who].name + ")" : "") +
         (linkMult !== 1 ? " (" + b.mods[who + "_linkLabel"] + ")" : "") +
         (claw1Mult !== 1 ? " (지령)" : "") +
+        (vampBonus ? " (흡혈 과잉회복 +" + vampBonus + ")" : "") +
         (evadeBonus ? " (회피 보상)" : ""), crit ? "crit" : "hit");
     if (evadeBonus) delete b.persist[who + "_evadeBonus"];
+    if (vampBonus) delete b.persist[who + "_vampBonus"];
 
-    /* 흡혈 — 준 피해의 v% 만큼 회복 */
+    /* 흡혈 — 자신 최대 체력의 v% 만큼 회복(사용자 지침 2026-09-02 — 준 피해
+     * 기준에서 자신 체력 기준으로 바꿈). 다 찬 뒤로 넘친 만큼은 흘리지 않고
+     * b.persist 에 얹어 두어, 다음 자기 공격 한 번에 플랫 공격력으로 씁니다. */
     if (b.mods[who + "_vamp"]) {
-      const heal = Math.round(dmg * b.mods[who + "_vamp"] / 100);
-      setHp(who, curHp(who) + heal);
-      say(memberName(who) + " — " + heal + " 회복 (흡혈)", "good");
+      const heal = Math.round(maxHp(who) * b.mods[who + "_vamp"] / 100);
+      const before = curHp(who);
+      setHp(who, before + heal);
+      const overheal = Math.max(0, before + heal - maxHp(who));
+      say(memberName(who) + " — " + (heal - overheal) + " 회복 (흡혈)" +
+          (overheal ? "　·　넘친 " + overheal + "은 다음 공격력으로" : ""), "good");
+      if (overheal > 0) b.persist[who + "_vampBonus"] = (b.persist[who + "_vampBonus"] || 0) + overheal;
     }
 
     foeHit(0);
@@ -4586,6 +4602,10 @@ function resolveTurn() {
 
     const st = effStats(t);
     let dmg = (heavy ? b.atk * 1.7 : b.atk) + rnd(4) - st.def;
+    /* 반격(김하주) 몫의 바탕 — 방어·교정·도발·갑주·강공 등 «경감»이 걸리기
+     * 전의 값입니다(사용자 지침 2026-09-02 — 원래는 자기 공격력 기반의
+     * 확정 치명타였다가, 실제로 맞은 피해를 되돌려주는 것으로 바뀜). */
+    const rawDmg = Math.max(1, Math.floor(dmg));
     if (b.cmds[t] === "guard") dmg *= RULE.guardCut;
     if (b.mods[t + "_guard"]) dmg *= Math.max(0.05, RULE.correctCut - advisorEffect().correct);
     if (b.mods[t + "_taunt"]) dmg *= (1 - b.mods[t + "_taunt"] / 100);
@@ -4610,10 +4630,10 @@ function resolveTurn() {
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     render();
 
-    /* 반격 — 맞고도 살아 있으면 확정 치명타(×v)로 되받아친다 */
+    /* 반격 — 맞고도 살아 있으면, 방금 «경감되기 전» 받은 피해(rawDmg)에
+     * ×v 를 곱해 그대로 되돌려준다(사용자 지침 2026-09-02). */
     if (b.mods[t + "_counter"] && alive(t)) {
-      const cst = effStats(t);
-      const cdmg = Math.max(1, Math.floor(cst.atk * b.mods[t + "_counter"] + rnd(4) - b.def));
+      const cdmg = Math.max(1, Math.floor(rawDmg * b.mods[t + "_counter"]));
       b.hp -= cdmg;
       say(memberName(t) + "의 반격! — " + cdmg + " 피해", "crit");
       foeHit(0);
@@ -4636,7 +4656,12 @@ function victory() {
    * 지고 다시 도전하면 b.turn 이 0부터 다시 세므로(startBattleFight), 그 턴은 안 셉니다. */
   if (S.mirror) S.mirrorRunTurns = (S.mirrorRunTurns || 0) + b.turn;
   if (!S.arc) S.arc = { kills: 0, retribution: {} };
-  S.arc.kills = (S.arc.kills || 0) + 1;         // 광신 — 이번 갈래 처치 수
+  /* 광신 — 이번 갈래 처치 수. 「우생회」 시너지가 발동 중이면 50% 더
+   * 받습니다(사용자 지침 2026-09-02 — "광신 스택이 소수점 받도록") —
+   * 그래서 정수로 내림하지 않고 소수점까지 그대로 쌓고, 그대로 보여 줍니다
+   * (passiveStackCount·파티 카드 배지 모두 이 값을 그대로 읽습니다). */
+  const arcGain = activeSynergies(S.party).some(sy => sy.name === "우생회") ? 1.5 : 1;
+  S.arc.kills = (S.arc.kills || 0) + arcGain;
   const reward = storyPays()
     ? earn(Math.floor((b.maxhp + b.atk * 4) / 6) * (b.boss ? 2 : 1))
     : 0;
@@ -7583,7 +7608,10 @@ function buildMirrorRunScenes(rule, ids) {
  *        나갔다가 이어할 수 있습니다.
  *
  *  ■ 체크포인트 — S.railSave 를 그대로 재활용합니다
- *    { key, round, clearedPacks }. 이 화면이 뜰 때(맨 처음 포함) 곧바로
+ *    { key, round, clearedPacks, arc }. arc 는 광신(김태성)·보복(유아인)
+ *    같은 「이번 갈래」 스택입니다(사용자 지침 2026-09-02 — 중간 저장에서
+ *    빠져 있던 것을 고침) — resumeMirror() 가 이걸로 되짚어 살립니다.
+ *    이 화면이 뜰 때(맨 처음 포함) 곧바로
  *    저장됩니다 — 엔케팔린을 이미 쓰고 들어온 자리라 사용자 지침대로
  *    "첫 번째 선택 구간에서도 저장이 만들어집니다". 팩 하나를 다 깨면
  *    clearedPacks 에 더하고 다음 round 로 다시 저장합니다.
@@ -7605,6 +7633,7 @@ function buildMirrorRunScenes(rule, ids) {
  */
 const MIRROR_SOUND_COST  = 1;   // 소리 듣기에 드는 황금교본
 const MIRROR_REROLL_COST = 2;   // 다른 길로에 드는 황금교본
+const PACK_PATH_NAME = ["왼쪽 길", "가운데 길", "오른쪽 길"];
 
 /* 팩 하나가 지금 뽑기 풀에 들어갈 수 있는가.
  * 본편 적과 같은 원칙입니다 — «클리어한 장에 나왔던 적» 만 (metFoes 참고).
@@ -7699,82 +7728,69 @@ function enterPack(rule, pack) {
   next();
 }
 
+/* 모달(가짜 「거울 던전 준비」 화면)이 아니라, 거울굴절철도 베이스캠프
+ * (SCENE_EXT.railCamp)와 같은 결의 «장면»입니다(사용자 지침 2026-09-02 —
+ * "왜 거울던전 준비화면을 변형해서 만든 거야" 지적으로 고쳤습니다).
+ * 이형우가 로그에 직접 나와 말을 걸고, 아래 손잡이 줄(buttons)로 경로를
+ * 고릅니다 — 팩 안에서 돌아온 것일 수 있으므로 배경은 늘 기본 배경으로
+ * 되돌립니다. */
 function openPackGate(rule, round, clearedPacks) {
-  $modal.classList.add("on");
-  /* 팩 배경에서 돌아온 것일 수 있으므로, 선택 화면은 늘 기본 배경으로 되돌립니다. */
-  setBackdrop(mirrorBG(rule), null);
-  let shown = drawPackChoices(rule, round, clearedPacks);
-  let heardId = null;     // 이 셋(shown)에서 소리 듣기로 이미 들어 본 팩 id
-  let picking = false;    // "소리 듣기"를 누르고 경로를 고르는 중인가
+  setBackdrop(mirrorBG(rule), rule.name);
+  S.waiting = true;
+  divider();
+  say((round > 1 ? round + "번째 갈림길입니다." : "길이 갈려 있습니다.") +
+      (rule.packRounds > 1 ? "　(" + round + " / " + rule.packRounds + ")" : ""), "sys");
+  speak("이형우", "\"이번 거울에서는 길이 갈려있습니다.\"");
+  speak("이형우", "\"어느 쪽으로 가시겠습니까?\"");
+  render();
+  packGateChoices(rule, round, clearedPacks, drawPackChoices(rule, round, clearedPacks), null, false);
+}
 
-  const 라벨 = ["왼쪽 길", "가운데 길", "오른쪽 길"];
+/* shown — 지금 보여 주는 세 갈래. heardId — 이 셋에서 「소리 듣기」로 이미
+ * 들어 본 팩 id(한 번만). picking — 「소리 듣기」를 누르고 어느 경로의
+ * 소리를 들을지 고르는 중인가. 다른 길로/소리 듣기는 처음의 이형우 대사를
+ * 다시 읊지 않고, 이 함수만 다시 불러 손잡이 줄만 새로 그립니다. */
+function packGateChoices(rule, round, clearedPacks, shown, heardId, picking) {
+  S.waiting = true;
+  if (picking) say("소리를 들을 경로를 고르십시오.", "sys");
+  const canSound  = !picking && !heardId && S.codex >= MIRROR_SOUND_COST;
+  const canReroll = !picking && S.codex >= MIRROR_REROLL_COST;
 
-  const draw = () => {
-    const canSound  = !picking && !heardId && S.codex >= MIRROR_SOUND_COST;
-    const canReroll = !picking && S.codex >= MIRROR_REROLL_COST;
-
-    let h = '<h2>' + rule.name + '</h2>' +
-      '<div class="hint">' + (round > 1 ? round + '번째 갈림길입니다. ' : '') +
-        (rule.packRounds > 1 ? '(' + round + ' / ' + rule.packRounds + ')' : '') + '</div>' +
-      '<div class="who">이형우</div>' +
-      '<p class="d">"이번 거울에서는 길이 갈려있습니다."<br>"어느 쪽으로 가시겠습니까?"</p>' +
-      (picking ? '<div class="hint" style="color:#d8b26a">소리를 들을 경로를 고르십시오.</div>' : '') +
-      '<div class="grid three">' +
-      shown.map((p, i) => {
-        if (!p) return '';
-        const heard = heardId === p.id;
-        return '<div class="slot' + (picking ? ' sel' : '') + '" data-path="' + i + '">' +
-          '<div class="nm">' + 라벨[i] + '</div>' +
-          '<div class="sub">' + p.name + '</div>' +
-          (heard
-            ? '<div class="sub" style="margin-top:8px;color:#d8b26a">' +
-                p.foes.map(f => (FOES[f] && FOES[f].intro) || "낌새가 흐릿하다.").join('<br>') +
-              '</div>'
-            : '') +
-        '</div>';
-      }).join('') +
-      '</div>' +
-      '<div class="modalfoot">' +
-        '<button id="pgsound" class="ghost"' + (canSound ? '' : ' disabled') + '>소리 듣기　(황금교본 ' + MIRROR_SOUND_COST + ')</button>' +
-        '<button id="pgreroll" class="ghost"' + (canReroll ? '' : ' disabled') + '>다른 길로　(황금교본 ' + MIRROR_REROLL_COST + ')</button>' +
-        '<button id="pgback" class="ghost">유리창으로</button>' +
-      '</div>';
-    $sheet.innerHTML = h;
-
-    $sheet.querySelectorAll(".slot[data-path]").forEach(el => {
-      el.onclick = () => {
-        const p = shown[Number(el.dataset.path)];
-        if (!p) return;
+  const pathButtons = shown.map((p, i) => {
+    if (!p) return null;
+    return {
+      label: PACK_PATH_NAME[i] + "　" + p.name + (heardId === p.id ? "　(들어 봄)" : ""),
+      fn: () => {
         if (picking) {
           if (S.codex < MIRROR_SOUND_COST) return;
           S.codex -= MIRROR_SOUND_COST;
-          heardId = p.id;
-          picking = false;
+          say("→ " + p.name + "에서 새어 나오는 소리 —", "sys");
+          p.foes.forEach(f => say((FOES[f] && FOES[f].intro) || "낌새가 흐릿하다.", "d"));
           saveVault();
-          draw();
+          render();
+          packGateChoices(rule, round, clearedPacks, shown, p.id, false);
           return;
         }
-        closeModal();
+        S.waiting = false;
+        say("→ " + p.name, "sys");
         enterPack(rule, p);
-      };
-    });
-    document.getElementById("pgsound").onclick = () => {
-      if (!canSound) return;
-      picking = true;
-      draw();
+      }
     };
-    document.getElementById("pgreroll").onclick = () => {
-      if (!canReroll) return;
-      S.codex -= MIRROR_REROLL_COST;
-      shown = drawPackChoices(rule, round, clearedPacks);
-      heardId = null;
-      picking = false;
-      saveVault();
-      draw();
-    };
-    document.getElementById("pgback").onclick = () => { closeModal(); glass(); };
-  };
-  draw();
+  });
+
+  buttons(pathButtons.concat([
+    { label: "소리 듣기　(황금교본 " + MIRROR_SOUND_COST + ")", cls: "ghost", disabled: !canSound,
+      fn: () => { say("→ 소리 듣기.", "sys"); packGateChoices(rule, round, clearedPacks, shown, heardId, true); } },
+    { label: "다른 길로　(황금교본 " + MIRROR_REROLL_COST + ")", cls: "ghost", disabled: !canReroll,
+      fn: () => {
+        S.codex -= MIRROR_REROLL_COST;
+        saveVault();
+        say("→ 다른 길로.", "sys");
+        render();
+        packGateChoices(rule, round, clearedPacks, drawPackChoices(rule, round, clearedPacks), null, false);
+      } },
+    { label: "유리창으로", cls: "ghost", fn: () => { S.waiting = false; glass(); } }
+  ]));
 }
 
 function startMirror(tier, preIds) {
@@ -7812,7 +7828,7 @@ function startMirror(tier, preIds) {
     S.mirrorRunTurns = 0;
     S.ended = false;
     S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
-    S.railSave = { key: rule.key, round: 1, clearedPacks: [] };
+    S.railSave = { key: rule.key, round: 1, clearedPacks: [], arc: S.arc };
     saveVault();
     clearLog();
     $log.classList.remove("recalling");
@@ -7886,7 +7902,12 @@ function resumeMirror() {
   const rule = MIRROR_TIERS.find(r => r.key === S.railSave.key);
   if (!rule) { S.railSave = null; return; }   // 갈래 자체가 없어졌으면 포기
 
-  S.arc = { kills: 0, retribution: {} };
+  /* 광신(김태성)·보복(유아인) 같은 「이번 갈래」 스택은 저장해 둔 자리에
+   * 함께 실려 있으면 그대로 이어받습니다(사용자 지침 2026-09-02 — 중간
+   * 저장에서 빠져 있던 것을 고침). 옛 저장(이 칸이 없던 판)은 0부터. */
+  S.arc = S.railSave.arc ? { kills: S.railSave.arc.kills || 0,
+                              retribution: Object.assign({}, S.railSave.arc.retribution) }
+                          : { kills: 0, retribution: {} };
 
   /* 테마팩 갈래 — 저장해 둔 라운드·이미 깬 팩만 들고 선택 화면으로
    * 바로 돌아갑니다. 전투 장면을 다시 지을 게 없습니다(팩을 고르지
@@ -8075,7 +8096,7 @@ SCENE_EXT.railCamp = function (s) {
    * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
   S.railSave = { key: rule.key,
                  rail2: { bosses: r2.bosses.slice(), done: r2.done, picks: r2.picks.slice() },
-                 checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0 };
+                 checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0, arc: S.arc };
   saveVault();
 
   divider();
@@ -8156,11 +8177,16 @@ function railFork(rule, cycle) {
 }
 
 /* ── 결과 카드 ──────────────────────────────────────────────────
- *  거울굴절철도(1호선·2호선)를 완주한 순간의 기록입니다. 최근 세 판까지
- *  보관함에 남아, 나중에 「기록」 화면에서 다시 꺼내 복사할 수 있습니다.
- *  서버 없이 도는 게임이라 순위표 대신, 화면 갈무리 없이도 자랑할 수 있게
- *  글 한 덩이로 옮겨 붙여 넣을 수 있게 하려는 것입니다. */
-function mirrorRecordBuild(rule) {
+ *  거울 던전(노말·하드·익스트림 — 테마팩 갈래) · 거울굴절철도(1호선·2호선)
+ *  를 완주한 순간의 기록입니다(사용자 지침 2026-09-02 — 원래 거울굴절철도
+ *  뿐이었으나 테마팩 갈래도 같은 보관함·같은 개수로 함께 셉니다).
+ *  최근 세 판까지 보관함에 남아, 나중에 「기록」 화면에서 다시 꺼내
+ *  복사할 수 있습니다. 서버 없이 도는 게임이라 순위표 대신, 화면 갈무리
+ *  없이도 자랑할 수 있게 글 한 덩이로 옮겨 붙여 넣을 수 있게 하려는 것입니다.
+ *
+ *  packIds — 테마팩 갈래에서 이번 판에 고른 팩 id 목록(순서대로).
+ *  거울굴절철도 등 팩이 없는 갈래는 null 을 넘깁니다. */
+function mirrorRecordBuild(rule, packIds) {
   const party = S.party.map(w => {
     if (!w) return null;
     const id = idByKey(S.equip[w]);
@@ -8175,14 +8201,19 @@ function mirrorRecordBuild(rule) {
   ((S.rail2 && S.rail2.picks) || []).forEach(k => { picks[k] = (picks[k] || 0) + 1; });
   /* 발동한 시너지 — 결과 카드용으로 이름만 얼려 둡니다(수치는 굳이 안 남깁니다) */
   const synergies = activeSynergies(S.party).map(s => s.name);
+  /* 고른 테마팩 — 이름만 순서대로 얼려 둡니다(팩 자체가 나중에 없어져도 카드는 그대로 읽힙니다) */
+  const packs = (packIds || []).map(id => {
+    const p = MIRROR_PACKS.find(x => x.id === id);
+    return p ? p.name : id;
+  });
   return {
     at: Date.now(),
     ver: VERSION,
     key: rule.key,
-    name: rule.loop ? rule.finalName : rule.name,   // 2호선은 «종착역」 이름으로 남깁니다
+    name: rule.loop ? rule.finalName : rule.name,   // 2호선은 「종착역」 이름으로 남깁니다
     turns: S.mirrorRunTurns || 0,
     cycles: (S.rail2 && S.rail2.done) || null,       // 1호선 등 순환 없는 갈래는 null
-    party, advisors, gifts, picks, synergies
+    party, advisors, gifts, picks, synergies, packs
   };
 }
 
@@ -8226,6 +8257,7 @@ function mirrorRecordText(rec) {
     "교육위원 " + advStr,
     "기프트 " + giftStr
   ];
+  if (rec.packs && rec.packs.length) lines.push("테마팩 " + rec.packs.join(" → "));
   if (pickStr) lines.push("특전 " + pickStr);
   lines.push("v" + rec.ver + "　" + mirrorRecordDateText(rec.at));
   return lines.join("\n");
@@ -8267,6 +8299,10 @@ function openMirrorResult(rec) {
 
   const synText = (rec.synergies && rec.synergies.length) ? rec.synergies.join(' · ') : '없음';
   const pickText = mirrorPickText(rec) || '없음';
+  /* 테마팩 갈래(노말·하드·익스트림)에만 있는 자리 — 고른 순서 그대로 화살표로 잇습니다 */
+  const packHTML = (rec.packs && rec.packs.length)
+    ? '<div class="mrlabel">고른 테마팩</div><div class="mrline">' + rec.packs.join(' → ') + '</div>'
+    : '';
 
   $sheet.innerHTML =
     '<div class="mrcard">' +
@@ -8282,6 +8318,7 @@ function openMirrorResult(rec) {
       '<div class="grid three">' + advHTML + '</div>' +
       '<div class="mrlabel">발동한 시너지</div>' +
       '<div class="mrline">' + synText + '</div>' +
+      packHTML +
       '<div class="mrlabel">선택한 특전</div>' +
       '<div class="mrline">' + pickText + '</div>' +
       '<div class="mrver">v' + rec.ver + '　' + mirrorRecordDateText(rec.at) + '</div>' +
@@ -8336,6 +8373,10 @@ function copyText(text, okMsg, btn) {
 
 function mirrorClear() {
   const rule = mirrorRuleNow();
+  /* 결과 카드(테마팩 갈래)용 — 지우기 전에 «이번 판에서 고른 팩» 목록을
+   * 먼저 빼 둡니다. case "mirrorPackDone" 이 마지막 팩까지 실어 둔 것입니다. */
+  const clearedPackIds = (rule.packRounds && S.railSave && S.railSave.key === rule.key)
+    ? (S.railSave.clearedPacks || []) : null;
   /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — 임시 데이터라
    * 여기서 지웁니다(saveVault() 는 이 함수 뒤 어디선가 자연히 한 번 더 돌아
    * 보관함에도 반영됩니다). */
@@ -8384,10 +8425,12 @@ function mirrorClear() {
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
-  /* 결과 카드 — 거울굴절철도(1호선·2호선)만 남깁니다. 노말·하드·익스트림
-   * 거울 던전은 훨씬 자주 도니 굳이 다 남기지 않습니다. S.rail2 를 지우기
-   * 전에(바로 아래) 만들어야 순환 수·특전을 읽을 수 있습니다. */
-  const record = rule.group === "rail" ? mirrorRecordBuild(rule) : null;
+  /* 결과 카드 — 거울굴절철도(1호선·2호선)뿐 아니라 노말·하드·익스트림
+   * (테마팩 갈래)도 남깁니다(사용자 지침 2026-09-02) — 보는 곳·보관함은
+   * 같고, 남는 개수(pushMirrorRecord 의 slice(0,3))도 함께 셉니다.
+   * S.rail2 를 지우기 전에(바로 아래) 만들어야 순환 수·특전을 읽을 수 있습니다. */
+  const record = (rule.group === "rail" || rule.packRounds)
+    ? mirrorRecordBuild(rule, clearedPackIds) : null;
   if (record) pushMirrorRecord(record);
   saveVault();
   S.mirror = false;
@@ -8526,13 +8569,14 @@ function openRecord(back) {
           '파일을 손으로 고치셨다면 그 때문입니다.</div>'
       : '') +
     ((S.mirrorRecords || []).length
-      ? '<h3 style="margin:18px 0 4px">거울굴절철도 결과 카드</h3>' +
-        '<div class="hint">최근 세 판까지 남습니다. 「보기」로 캡처용 화면을 다시 열거나, 「복사」로 글로 붙여 넣으세요.</div>' +
+      ? '<h3 style="margin:18px 0 4px">거울 던전 결과 카드</h3>' +
+        '<div class="hint">거울 던전(노말·하드·익스트림)·거울굴절철도를 합쳐 최근 세 판까지 남습니다. 「보기」로 캡처용 화면을 다시 열거나, 「복사」로 글로 붙여 넣으세요.</div>' +
         '<div class="grid one">' +
         S.mirrorRecords.map((r, i) =>
           '<div class="slot" style="cursor:default">' +
             '<div class="nm">' + r.name + ' 클리어</div>' +
             '<div class="sub">' + r.turns + '턴' + (r.cycles ? '　·　' + r.cycles + '순환' : '') +
+              (r.packs && r.packs.length ? '　·　' + r.packs.join(' → ') : '') +
               '　·　' + mirrorRecordDateText(r.at) + '</div>' +
             '<div style="margin-top:8px;display:flex;gap:8px">' +
               '<button id="recview' + i + '" class="ghost">결과 카드 보기</button>' +
