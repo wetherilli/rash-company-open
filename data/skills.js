@@ -115,12 +115,17 @@ function skillTierValue(skill, level) {
  *  인원 하나를 무작위로 뽑아 그 차례 공격력을 강화» 하는 자리(engine.js
  *  의 checkLinkSkills, beginTurn 끝에서 매 턴 검사합니다).
  *
- *  who          부르는 사람(작성위원 키). 편성에 있고 살아 있어야 합니다.
+ *  who          부르는 사람(작성위원 키). 편성에 있어야 합니다 — 다만 살아
+ *               있어야 하는 것은 «낼 차례가 왔을 때» 뿐입니다(아래 참고).
  *  needTitle    who 가 이 인격을 장착하고 있어야 발동합니다.
  *  synergyName  이 이름의 편성 시너지(SYNERGIES 의 name)가 지금 발동 중이어야 합니다.
  *  pickTag      제목에 이 말이 든 «편성원»(작성위원·지원 다 포함, who 자신도 포함)
  *               중에서 무작위로 한 명을 뽑습니다.
- *  startTurn / every   startTurn 턴부터, every 턴마다.
+ *  startTurn / every   startTurn 턴부터, every 턴마다. 그 차례에 who 가
+ *               죽어 있으면 그냥 지나가지 않고 «빚»으로 남습니다(사용자
+ *               지침 2026-09-02) — who 가 다시 살아나는 바로 다음 차례에
+ *               곧바로 냅니다. 다음 주기(또 every 턴 뒤)까지 기다리지
+ *               않습니다. engine.js checkLinkSkills() 의 _linkDue 참고.
  *  giftName / giftEvery  그 이름의 E.G.O 기프트를 지녔으면 every 대신 이 값을 씁니다.
  *  atkMult      뽑힌 사람의 이번 턴 공격력 배율(2면 두 배).
  *  advisorName / advisorMult  그 이름의 보조 교육위원을 세웠으면 atkMult
@@ -169,6 +174,14 @@ const LINK_SKILLS = [
  *                둘 자리입니다(지금은 다 defaultReply 뿐입니다).
  *  defaultReply  replyLines 에 없는 사람이 하는 기본 대답.
  *  label         전투 로그에 "(라벨)" 로 붙는 짧은 이름.
+ *
+ *  ■ 흑수들의 왕 — 3명째부터 보복까지 (사용자 지침 2026-09-02)
+ *    「흑수들의 왕」 시너지가 need(2명)를 넘어 3명 이상으로 걸려 있으면,
+ *    이 추가타를 치는 사람도 그 순간만큼은 유아인이 「보복」으로 지금
+ *    받고 있는 공격력 상승률을 그대로 받습니다. 이 문턱은 SYNERGIES 의
+ *    need 와는 별개(need 는 시너지 자체가 서는 문턱, 이건 그 위에 얹는
+ *    보너스 문턱)라 engine.js checkLinkBonus() 에서 activeSynergies() 의
+ *    count 를 직접 다시 봅니다 — data 쪽에는 별도 필드를 두지 않았습니다.
  */
 const LINK_BONUS_ATTACKS = [
   {

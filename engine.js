@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.11.0";
-const VERSION_NAME = "작성위원 균형 조정";
+const VERSION = "1.11.2";
+const VERSION_NAME = "거울던전 개편";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -61,6 +61,10 @@ const RULE = {
   allyStepMs:  260,    // 아군이 하나씩 때리는 간격(ms)
   foePauseMs:  420,    // 아군이 다 때린 뒤 적이 되받아치기까지(ms)
   turnGapMs:   380,    // 적이 친 뒤 다음 턴 명령을 받기까지(ms)
+  /* 전투 중간에 끼어드는 대사(연계 효과 선창·대답, 설득전 대사 등) 사이의
+   * 짧은 대기(ms) — 초상이 바뀌는 것도, 대사를 읽는 것도 눈에 들어오게
+   * 한 줄씩 끊어 보여 줍니다(사용자 지침 2026-09-02, battleSay 참고). */
+  dialogueGapMs: 650,
   shakeMs:     320,    // 맞을 때 화면이 흔들리는 시간(ms)
   shakeHardMs: 620,    // 강타를 맞을 때(ms)
   gachaFxMs:   900,    // 배정에서 ★★★ 이 나왔을 때 빛이 터지는 시간(ms).
@@ -1255,15 +1259,20 @@ function advisorBonusFor(who) {
  *  아래 표에 { n, needCleared } 를 얹으면 그만큼 늘어납니다 —
  *  needCleared 를 적지 않은 줄이 기본값입니다.
  *
- *    기프트    6장을 마치면 2개
- *    교육위원  7장을 마치면 2명
+ *    기프트    6장을 마치면 2개, 8장을 마치면 3개
+ *    교육위원  7장을 마치면 2명, 9장을 마치면 3명
  *
  *  칸을 더 늘리려면 줄 하나만 더 얹으면 됩니다. 편성 화면도, 저장해 둔 편성도
  *  전부 이 수를 보고 스스로 늘어납니다.
+ *
+ *  8장·9장 줄은 그 장이 아직 안 쓰인 동안(사용자 지침 2026-09-02)에도
+ *  미리 얹어 둔 것입니다 — needCleared 가 가리키는 장(ch8·ch9)이 아직
+ *  CHAPTERS 에 없으면 S.cleared 에도 결코 안 잡히니 조용히 잠긴 채로
+ *  있습니다. 장이 실제로 나오면 이 표는 손댈 것이 없습니다.
  */
 const SLOT_RULE = {
-  gift:    [{ n: 1 }, { n: 2, needCleared: "ch6" }],
-  advisor: [{ n: 1 }, { n: 2, needCleared: "ch7" }]
+  gift:    [{ n: 1 }, { n: 2, needCleared: "ch6" }, { n: 3, needCleared: "ch8" }],
+  advisor: [{ n: 1 }, { n: 2, needCleared: "ch7" }, { n: 3, needCleared: "ch9" }]
 };
 function slotCount(kind) {
   let n = 1;
@@ -2363,13 +2372,20 @@ function assetURL(p) {
 }
 
 /* ── 무대 ──────────────────────────────────────────────────────
- *  칸은 늘 같은 높이(--stageh)이고, 그 안이 두 겹입니다.
+ *  칸은 늘 같은 높이(--stageh)이고, 그 안이 세 겹입니다.
  *    배경  — 지금 있는 장소 그림. 칸을 꽉 채웁니다.
- *    사람  — 그 위에 얹히는 초상. 대사하는 사람은 왼쪽, 적은 가운데.
- *  배경은 장면이 바뀔 때만 갈리고, 사람만 자주 바뀝니다.
+ *    적    — 가운데. 전투 중에는 이야기 밖 손이 지우기 전까지 그대로 섭니다.
+ *    사람  — 왼쪽. 대사하는 사람의 초상. 적과 자리가 달라 겹쳐 그려도 됩니다
+ *            (사용자 지침 2026-09-02 — 신해수랜드 연계 중 초상이 적 그림을
+ *            «통째로» 대신해 버리던 것을 고침. 둘은 완전히 다른 칸입니다).
+ *  배경·적은 장면이 바뀔 때만 갈리고, 초상만 자주 바뀝니다 — 그리고 다음
+ *  차례가 오면(beginTurn) 스스로 사라집니다. clearFigures() 로 셋 다,
+ *  또는 drawStage(null,null,null) 로 적·초상만 함께 지웁니다.
  */
 let CUR_BG   = null;    // 지금 깔려 있는 배경 그림
 let CUR_NAME = null;    // 칸 아래에 적을 지명
+let CUR_FOE  = null;    // { src, tag, scale } — 가운데에 선 적. showFoe() 가 다룹니다
+let CUR_SPEAKER = null; // { src, tag } — 왼쪽에 선 말하는 사람의 초상. showSpeaker() 가 다룹니다
 
 /* 배경은 새 그림을 줄 때만 갈립니다.
  * 그림 없는 장면(img:null)이 와도 깔려 있던 배경을 지우지 않습니다 —
@@ -2382,12 +2398,27 @@ function setBackdrop(src, placeName) {
   drawStage(null, null, null);
 }
 
-/* fig   : 배경 위에 얹을 그림 (없으면 배경만)
- * side  : "left" 대사하는 사람 · "mid" 적
+/* fig   : 그 자리에 세울 그림 (없으면 그 자리를 비운다)
+ * side  : "left" 대사하는 사람 자리 · "mid" 적 자리 · 그 밖(null 등)은
+ *         «둘 다 비우기» — setBackdrop()·보스 등장 전 암전처럼 무대를
+ *         통째로 새로 시작할 때만 씁니다.
  * tag   : 그림에 붙일 이름 (지금은 화면에 쓰지 않고 alt 로만)
- * scale : 그림만 이 배수로 키운다 (자리는 그대로 — 바닥 가운데를 축으로 키운다).
- *         원본 그림 안에서 몸집이 작게 잡혀 있는 적(FOES 의 imgScale)에만 씁니다.  */
+ * scale : 적 그림만 이 배수로 키운다 (자리는 그대로 — 바닥 가운데를 축으로 키운다).
+ *         원본 그림 안에서 몸집이 작게 잡혀 있는 적(FOES 의 imgScale)에만 씁니다.
+ *
+ * 적 자리와 사람 자리는 서로 다른 칸입니다 — 하나를 새로 그린다고 다른
+ * 하나가 지워지지 않습니다(사용자 지침 2026-09-02 — 신해수랜드 연계 중
+ * 대사하는 사람의 초상이 적 그림을 통째로 덮어써 버리던 것을 고침). */
 function drawStage(fig, side, tag, scale) {
+  if (side === "mid")       CUR_FOE = fig ? { src: fig, tag: tag, scale: scale } : null;
+  else if (side === "left") CUR_SPEAKER = fig ? { src: fig, tag: tag } : null;
+  else { CUR_FOE = null; CUR_SPEAKER = null; }
+  renderStage();
+}
+
+/* drawStage() 가 CUR_FOE·CUR_SPEAKER 를 정한 뒤 실제로 그리는 자리.
+ * beginTurn() 이 다음 차례를 열 때(CUR_SPEAKER 를 지운 뒤)도 이걸 다시 부릅니다. */
+function renderStage() {
   /* 칸의 높이는 그림에 따라 달라지지 않습니다.
    * 그릴 것이 하나도 없어도 칸은 그대로 있고, 안이 비어 있을 뿐입니다.
    * (그림이 사라질 때마다 화면이 덜컥 접히는 일이 없도록) */
@@ -2401,19 +2432,23 @@ function drawStage(fig, side, tag, scale) {
   if (CUR_BG)
     html += '<img class="scene' + (wide ? '' : ' fit') + '" src="' + assetURL(CUR_BG) + '" alt="" ' +
             'onerror="this.style.display=\'none\'">';
-  if (fig) {
+  if (CUR_FOE) {
     /* --imgscale 로 넘깁니다(직접 transform 을 박지 않습니다) — 맞을 때·쓰러질 때
      * 애니메이션도 이 값을 keyframes 안에서 함께 곱하게 index.html 쪽에 맞춰 뒀습니다.
      * 그래야 맞는 순간 확대가 풀렸다 돌아오는 깜빡임이 없습니다. */
-    const big = !!(scale && scale !== 1);
-    const st = big ? ' style="--imgscale:' + scale + '"' : '';
+    const big = !!(CUR_FOE.scale && CUR_FOE.scale !== 1);
+    const st = big ? ' style="--imgscale:' + CUR_FOE.scale + '"' : '';
     /* 키워 세우는 그림은 바닥이 아니라 «칸 한가운데» 에 답니다 — 바닥을 축으로
-     * 키우면 위로만 자라 머리가 화면 밖으로 넘칩니다. scaled 가 그 몫입니다. */
-    html += '<div class="figwrap ' + (side === "mid" ? "mid" : "left") +
-              (big ? " scaled" : "") + '">' +
-              '<img id="figure" src="' + assetURL(fig) + '" alt="' + (tag || "") + '"' + st + ' ' +
+     * 키우면 위로만 자라 머리가 화면 밖으로 넘칩니다. scaled 가 그 몫입니다.
+     * id="figure" 는 foeHit()·foeFalls() 가 찾는 자리라 적 그림에만 답니다. */
+    html += '<div class="figwrap mid' + (big ? " scaled" : "") + '">' +
+              '<img id="figure" src="' + assetURL(CUR_FOE.src) + '" alt="' + (CUR_FOE.tag || "") + '"' + st + ' ' +
               'onerror="this.style.display=\'none\'"></div>';
   }
+  if (CUR_SPEAKER)
+    html += '<div class="figwrap left">' +
+              '<img src="' + assetURL(CUR_SPEAKER.src) + '" alt="' + (CUR_SPEAKER.tag || "") + '" ' +
+              'onerror="this.style.display=\'none\'"></div>';
   /* 지명은 칸 안쪽 아래에 얹습니다 — 밖에 두면 있고 없고에 따라 높이가 흔들립니다 */
   if (CUR_NAME) html += '<div class="placename">' + CUR_NAME + '</div>';
   html += '</div>';
@@ -2421,12 +2456,23 @@ function drawStage(fig, side, tag, scale) {
 }
 
 /* 무대를 아예 접는다 — 지금은 출입 코드 화면에서만 씁니다 */
-function hideStage() { $stage.className = ""; $stage.innerHTML = ""; CUR_BG = null; CUR_NAME = null; }
+function hideStage() {
+  $stage.className = ""; $stage.innerHTML = "";
+  CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null;
+}
 
-/* 대사하는 사람을 왼쪽에 세운다 */
+/* 대사하는 사람을 왼쪽에 세운다 — 적(CUR_FOE)은 그대로 둔다 */
 function showSpeaker(src, tag) { drawStage(src, "left", tag); }
-/* 적을 가운데에 세운다 */
+/* 적을 가운데에 세운다 — 말하는 사람의 초상(CUR_SPEAKER)은 그대로 둔다 */
 function showFoe(src, tag, scale) { drawStage(src, "mid", tag, scale); }
+
+/* 다음 차례가 열리면 말하던 사람의 초상은 스스로 사라집니다(사용자 지침
+ * 2026-09-02) — 적(CUR_FOE)은 그대로 두고 이 자리만 비웁니다. */
+function clearSpeaker() {
+  if (!CUR_SPEAKER) return;
+  CUR_SPEAKER = null;
+  renderStage();
+}
 
 /* 전투 중 대사를 적이 선 자리(무대 가운데)에 큰 글씨로 얹는다 — battleSay 전용.
  * drawStage 를 다시 부르지 않고 지금 그려진 칸에 얹기만 하므로, 초상·적 그림은
@@ -2536,9 +2582,14 @@ function foeHit(delay) {
   }, delay || 0);
 }
 
-/* 쓰러지는 연출 — 깜빡이다 살짝 내려앉으며 사라진다 */
+/* 쓰러지는 연출 — 깜빡이다 살짝 내려앉으며 사라진다.
+ * 그림을 직접(DOM에서) 지우므로, CUR_FOE 도 함께 비워 둡니다 — 안 그러면
+ * 나중에 누가 말을 걸어(showSpeaker) 무대를 다시 그릴 때 죽은 적이
+ * 되살아나 보이게 됩니다. */
 function foeFalls(after) {
   const el = document.getElementById("figure");
+  CUR_FOE = null;
+  CUR_SPEAKER = null;   // 싸움이 끝났으니, 말하던 사람의 초상도 함께 내린다
   if (!el) { if (after) after(); return; }
   el.classList.remove("hit");
   el.classList.add("gone");
@@ -3765,6 +3816,11 @@ function beginTurn() {
   const b = S.battle;
   b.turn++;
   b.cmds = {}; b.mods = {};
+  /* 지난 차례에 누가 말을 걸었다면(신해수랜드 연계 등, battleSay 참고) 그
+   * 초상은 여기서 지웁니다 — 적 그림은 그대로 둔 채 사람 자리만 비웁니다
+   * (사용자 지침 2026-09-02 — "다음 차례가 오면 사라져야"). 이번 턴에
+   * 또 누가 말을 걸면(checkLinkSkills 등, 아래에서) 새로 세웁니다. */
+  clearSpeaker();
   b.manage = Math.min(manageCap(), b.manage + (b.turn > 1 ? RULE.manageGain + advisorEffect().gain : 0));
   divider();
   say("── " + b.turn + "턴 ──  " + b.name + "  " + b.hp + "/" + b.maxhp, "sys");
@@ -3849,33 +3905,47 @@ function beginTurn() {
     }
   }
 
-  checkLinkSkills();
+  /* checkLinkSkills() 는 대사(선창·대답)를 한 줄씩 끊어 보여 주느라 이제
+   * 곧바로 끝나지 않습니다 — 뒤이을 것(설득전 대사·askNext)은 그 다음에
+   * 이어 부르는 콜백(afterLinkSkills)에 넣습니다. */
+  checkLinkSkills(afterLinkSkills);
 
-  /* ── 설득 전투 ──────────────────────────────────────────────────
-   *  scene.persuade 를 단 전투는 체력을 깎아 이기는 대신, 정해진 턴수를
-   *  버티면 설득이 성공한 것으로 치고 끝납니다(persuadeEnd 참고). 그
-   *  턴이 오기 전까지는 그냥 보통 전투처럼 지고 이길 수 있습니다 — 다만
-   *  이 전투는 lose:"story"가 아니므로 전멸하면 보통 패배(재도전)입니다.
-   *
-   *      { t:"battle", foe:"…",
-   *        persuade: { turns: 4, lines: { 1:[…], 2:[…], 3:[…], 4:[…] } } }
-   *
-   *  lines 의 각 턴 배열 원소는 { who, text }(대사, battleSay 로) 또는
-   *  { text }(who 없이 — 지문, say 로) 입니다. 전투 화면 중간에 대사를
-   *  끼워 넣는 자리가 이걸로 처음 생겼습니다(7장 「호감이 끝나는」).
-   *  caption:true 를 더 달면 그 줄만 무대 가운데에 큰 글씨로도 띄웁니다
-   *  (showBattleCaption 참고) — 특히 강조하고 싶은 대사에만 답니다. */
-  const persuadeLines = b.scene.persuade && b.scene.persuade.lines && b.scene.persuade.lines[b.turn];
-  if (persuadeLines) {
-    divider();
-    persuadeLines.forEach(line => {
-      if (line.who) battleSay(line.who, line.text);
-      else say(line.text, "sys");
-      if (line.caption) showBattleCaption(line.text);
-    });
+  function afterLinkSkills() {
+    /* ── 설득 전투 ──────────────────────────────────────────────────
+     *  scene.persuade 를 단 전투는 체력을 깎아 이기는 대신, 정해진 턴수를
+     *  버티면 설득이 성공한 것으로 치고 끝납니다(persuadeEnd 참고). 그
+     *  턴이 오기 전까지는 그냥 보통 전투처럼 지고 이길 수 있습니다 — 다만
+     *  이 전투는 lose:"story"가 아니므로 전멸하면 보통 패배(재도전)입니다.
+     *
+     *      { t:"battle", foe:"…",
+     *        persuade: { turns: 4, lines: { 1:[…], 2:[…], 3:[…], 4:[…] } } }
+     *
+     *  lines 의 각 턴 배열 원소는 { who, text }(대사, battleSay 로) 또는
+     *  { text }(who 없이 — 지문, say 로) 입니다. 전투 화면 중간에 대사를
+     *  끼워 넣는 자리가 이걸로 처음 생겼습니다(7장 「호감이 끝나는」).
+     *  caption:true 를 더 달면 그 줄만 무대 가운데에 큰 글씨로도 띄웁니다
+     *  (showBattleCaption 참고) — 특히 강조하고 싶은 대사에만 답니다.
+     *
+     *  줄마다 짧게 끊어 보여 줍니다(사용자 지침 2026-09-02) — 한꺼번에
+     *  쏟아지면 초상이 바뀌는 것도, 대사를 읽을 틈도 없습니다. */
+    const persuadeLines = b.scene.persuade && b.scene.persuade.lines && b.scene.persuade.lines[b.turn];
+    if (persuadeLines && persuadeLines.length) {
+      divider();
+      let pi = 0;
+      const stepLine = () => {
+        if (S.battle !== b) return;              // 그 사이 전투가 바뀌었으면 조용히 그만둔다
+        if (pi >= persuadeLines.length) return askNext();
+        const line = persuadeLines[pi++];
+        if (line.who) battleSay(line.who, line.text);
+        else say(line.text, "sys");
+        if (line.caption) showBattleCaption(line.text);
+        setTimeout(stepLine, RULE.dialogueGapMs);
+      };
+      stepLine();
+    } else {
+      askNext();
+    }
   }
-
-  askNext();
 }
 
 /* ── 연계 효과 ──────────────────────────────────────────────────
@@ -3902,20 +3972,38 @@ function battleSay(who, text) {
     if (pt) showSpeaker(pt, nameOf(who));
   }
 }
-function checkLinkSkills() {
+/* next — 이 턴에 걸 것을 다 걸고(그리고 대사를 다 보여 주고) 나면 부릅니다.
+ * 대사가 있으면 한 줄씩 끊어 보여 주느라(사용자 지침 2026-09-02) next() 가
+ * 곧바로 불리지 않을 수 있습니다 — beginTurn() 은 이 콜백 안에서 뒷일을 잇습니다. */
+function checkLinkSkills(next) {
   const b = S.battle;
-  linkSkillList().forEach(ls => {
-    if (S.party.indexOf(ls.who) < 0 || !alive(ls.who)) return;
-    if (memberTitle(ls.who).indexOf(ls.needTitle) < 0) return;
-    if (!activeSynergies().some(sy => sy.name === ls.synergyName)) return;
+  /* alive(ls.who) 는 일부러 안 봅니다 — 선창자가 죽어 있어도 «낼 차례를
+   * 빚져 둔다»(아래 _linkDue, 사용자 지침 2026-09-02) 는 살아서 다시
+   * 돌아왔을 때 갚습니다. 편성·인격·시너지 조건은 그대로 봅니다. */
+  const list = linkSkillList().filter(ls =>
+    S.party.indexOf(ls.who) >= 0 &&
+    memberTitle(ls.who).indexOf(ls.needTitle) >= 0 &&
+    activeSynergies().some(sy => sy.name === ls.synergyName));
+
+  const step = (i) => {
+    if (S.battle !== b) return;                  // 그 사이 전투가 바뀌었으면 조용히 그만둔다
+    if (i >= list.length) return next();
+    const ls = list[i];
 
     const giftBoosted = ls.giftName && equippedGifts().some(g => g.name === ls.giftName);
     const every = giftBoosted ? (ls.giftEvery || ls.every) : ls.every;
     const start = ls.startTurn != null ? ls.startTurn : every;
-    if (b.turn < start || (b.turn - start) % every !== 0) return;
+    /* 원래 낼 차례가 되면 빚으로 답니다 — 죽어 있어 못 내면(아래) 이 빚은
+     * 그대로 남아, 살아 돌아온 다음 차례에 곧바로 냅니다(주기를 다시
+     * 기다리지 않습니다). 살아 있어 바로 내면 그 자리에서 갚고 지웁니다. */
+    const dueKey = "_linkDue_" + (ls.id || ls.who);
+    if (b.turn >= start && (b.turn - start) % every === 0) b.persist[dueKey] = true;
+    if (!b.persist[dueKey]) return step(i + 1);
+    if (!alive(ls.who)) return step(i + 1);       // 선창자가 죽어 있다 — 다음 차례로 유예(빚은 그대로)
+    b.persist[dueKey] = false;
 
     const pool = S.party.filter(w => w && alive(w) && memberTitle(w).indexOf(ls.pickTag) >= 0);
-    if (!pool.length) return;
+    if (!pool.length) return step(i + 1);
     const target = pool[rnd(pool.length)];
 
     /* 보조 교육위원 강화 — advisorName 을 세우고 있으면 atkMult 대신
@@ -3926,10 +4014,19 @@ function checkLinkSkills() {
     b.mods[target + "_linkLabel"] = ls.label || "연계";
 
     const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
-    if (call) battleSay(ls.who, call);
     const reply = (target === ls.who) ? ls.selfLine : ls.otherLine;
-    if (reply) battleSay(target, reply);
-  });
+    /* 선창 → (대기) → 대답 → (대기) → 다음 항목 — 초상이 바뀌는 것도,
+     * 대사를 읽을 틈도 있게 한 줄씩 끊어 보여 줍니다. */
+    if (call) battleSay(ls.who, call);
+    render();
+    setTimeout(() => {
+      if (S.battle !== b) return;
+      if (reply) battleSay(target, reply);
+      render();
+      setTimeout(() => step(i + 1), RULE.dialogueGapMs);
+    }, RULE.dialogueGapMs);
+  };
+  step(0);
 }
 
 /* ── 관리자 능력의 대상 고르기 ──────────────────────────────────
@@ -4394,29 +4491,44 @@ function resolveTurn() {
     const target = pool[rnd(pool.length)];
 
     const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
-    if (call) battleSay(ls.who, call);
     const reply = (ls.replyLines && ls.replyLines[target]) || ls.defaultReply;
-    if (reply) battleSay(target, reply);
-
+    /* 선창 → (대기) → 대답 → (대기) → 실제 추가타 — 대사가 한꺼번에
+     * 쏟아지지 않도록 한 줄씩 끊어 보여 줍니다(사용자 지침 2026-09-02). */
+    if (call) battleSay(ls.who, call);
+    render();
     setTimeout(() => {
       if (!same()) return;
-      const st = effStats(target);
-      const arrestCut = Math.min(0.9, RULE.arrestCut + advisorEffect().arrest);
-      const fdef = b.mods.arrest ? Math.round(b.def * (1 - arrestCut)) : b.def;
-      let dmg = st.atk + rnd(4) - fdef;
-      const crit = Math.random() < critRate();
-      if (crit) dmg *= critMult();
-      dmg = Math.max(1, Math.floor(dmg));
-      b.hp -= dmg;
-      say((crit ? (memberName(target) + "의 치명적인 공격! — " + dmg + " 피해")
-                : (memberName(target) + "의 공격 — " + dmg + " 피해")) +
-          " (" + (ls.label || "연계") + ")", crit ? "crit" : "hit");
-      foeHit(0);
-      checkJoinIn();
+      if (reply) battleSay(target, reply);
       render();
-      if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
-      next();
-    }, RULE.allyStepMs);
+      setTimeout(() => {
+        if (!same()) return;
+        const st = effStats(target);
+        const arrestCut = Math.min(0.9, RULE.arrestCut + advisorEffect().arrest);
+        const fdef = b.mods.arrest ? Math.round(b.def * (1 - arrestCut)) : b.def;
+        /* 흑수들의 왕 시너지가 3명 이상으로 걸려 있으면, 유아인이 보복으로
+         * 지금 받고 있는 공격력 상승률을 이 추가타를 치는 사람에게도
+         * 그대로 얹습니다(사용자 지침 2026-09-02) — 기본 need(2명)보다
+         * 높은 문턱이라 여기서 따로 다시 셉니다. */
+        const heuksuSyn = activeSynergies().find(sy => sy.name === "흑수들의 왕");
+        const retribBonus = (heuksuSyn && heuksuSyn.count >= 3)
+          ? (passiveSkillBonus("yu_ain", 0).atk || 0) : 0;
+        let dmg = st.atk * (1 + retribBonus) + rnd(4) - fdef;
+        const crit = Math.random() < critRate();
+        if (crit) dmg *= critMult();
+        dmg = Math.max(1, Math.floor(dmg));
+        b.hp -= dmg;
+        say((crit ? (memberName(target) + "의 치명적인 공격! — " + dmg + " 피해")
+                  : (memberName(target) + "의 공격 — " + dmg + " 피해")) +
+            " (" + (ls.label || "연계") + ")" +
+            (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : ""),
+            crit ? "crit" : "hit");
+        foeHit(0);
+        checkJoinIn();
+        render();
+        if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
+        next();
+      }, RULE.dialogueGapMs);
+    }, RULE.dialogueGapMs);
   };
 
   /* ① 아군이 하나씩 때린다 */
