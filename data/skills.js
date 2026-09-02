@@ -137,3 +137,36 @@ const LINK_SKILLS = [
     otherLine: "받들겠습니다."
   }
 ];
+
+/* ── 연계 추가타 ────────────────────────────────────────────────
+ *  위 「연계 효과」와 발동 조건은 같은 결입니다(who 가 needTitle 을 장착하고
+ *  synergyName 이 발동 중이면, startTurn 턴부터 every 턴마다) — 하지만
+ *  효과가 다릅니다. 연계 효과는 «뽑힌 사람의 다음 차례»를 강화하지만,
+ *  이건 who 가 «자기 공격을 마친 직후» 곧바로 다른 편성원 하나를 뽑아
+ *  그 자리에서 추가 공격을 한 번 더 꽂아 넣습니다 — 뽑힌 사람의 이번
+ *  차례 행동(공격이든 방어든)과는 무관한 «덤» 입니다.
+ *  (engine.js 의 resolveTurn() 안 checkLinkBonus() 가 who 의 공격이
+ *  끝날 때마다 검사합니다.)
+ *
+ *  who / needTitle / synergyName / startTurn / every  — 위 LINK_SKILLS 와 같은 뜻.
+ *  pickTag       이 말이 제목에 든 «편성원»(who 자신은 이미 다른 인격을
+ *                장착 중이라 보통 저절로 빠집니다) 중에서 무작위로 뽑습니다.
+ *  callLines     who 가 선창하는 대사 — 배열이면 무작위로 하나.
+ *  replyLines    { 편성원 키: 대답 } — 캐릭터마다 다른 대답을 미리 걸어
+ *                둘 자리입니다(지금은 다 defaultReply 뿐입니다).
+ *  defaultReply  replyLines 에 없는 사람이 하는 기본 대답.
+ *  label         전투 로그에 "(라벨)" 로 붙는 짧은 이름.
+ */
+const LINK_BONUS_ATTACKS = [
+  {
+    id: "heuksu_yu_ain",
+    who: "yu_ain", needTitle: "B구역 군주",
+    synergyName: "흑수들의 왕",
+    pickTag: "흑수",
+    startTurn: 2, every: 3,
+    label: "흑수",
+    callLines: ["흑수여.", "물어뜯어라."],
+    replyLines: {},
+    defaultReply: "수행합니다."
+  }
+];

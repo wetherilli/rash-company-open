@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.9.1";
+const VERSION = "1.9.2";
 const VERSION_NAME = "거울굴절철도 2호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4347,6 +4347,56 @@ function resolveTurn() {
     shakeScreen(true);
   };
 
+  /* ── 연계 추가타 ──────────────────────────────────────────────
+   *  data/skills.js 의 LINK_BONUS_ATTACKS — 위 「연계 효과」와 달리
+   *  who 의 «다음 차례» 대신, who 가 방금 자기 공격을 마친 자리에서
+   *  곧바로 다른 편성원 하나를 뽑아 추가 공격을 한 번 더 꽂습니다.
+   *  뽑힌 사람의 이번 차례 행동과는 무관한 «덤» 입니다. swing() 이
+   *  who 의 공격(과 겹살까지)을 다 끝낸 뒤 한 번만 부릅니다.
+   *  적이 이 추가타로 쓰러지면 afterAllies() 로, 아니면 next() 로 이어갑니다. */
+  const linkBonusList = () =>
+    (typeof LINK_BONUS_ATTACKS !== "undefined" && LINK_BONUS_ATTACKS) ? LINK_BONUS_ATTACKS : [];
+  const checkLinkBonus = (who, next) => {
+    const ls = linkBonusList().find(x => x.who === who);
+    if (!ls || S.party.indexOf(ls.who) < 0 || !alive(ls.who) ||
+        memberTitle(ls.who).indexOf(ls.needTitle) < 0 ||
+        !activeSynergies().some(sy => sy.name === ls.synergyName))
+      return next();
+
+    const start = ls.startTurn != null ? ls.startTurn : ls.every;
+    if (b.turn < start || (b.turn - start) % ls.every !== 0) return next();
+
+    const pool = S.party.filter(w =>
+      w && w !== ls.who && alive(w) && memberTitle(w).indexOf(ls.pickTag) >= 0);
+    if (!pool.length) return next();
+    const target = pool[rnd(pool.length)];
+
+    const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
+    if (call) battleSay(ls.who, call);
+    const reply = (ls.replyLines && ls.replyLines[target]) || ls.defaultReply;
+    if (reply) battleSay(target, reply);
+
+    setTimeout(() => {
+      if (!same()) return;
+      const st = effStats(target);
+      const arrestCut = Math.min(0.9, RULE.arrestCut + advisorEffect().arrest);
+      const fdef = b.mods.arrest ? Math.round(b.def * (1 - arrestCut)) : b.def;
+      let dmg = st.atk + rnd(4) - fdef;
+      const crit = Math.random() < critRate();
+      if (crit) dmg *= critMult();
+      dmg = Math.max(1, Math.floor(dmg));
+      b.hp -= dmg;
+      say((crit ? (memberName(target) + "의 치명적인 공격! — " + dmg + " 피해")
+                : (memberName(target) + "의 공격 — " + dmg + " 피해")) +
+          " (" + (ls.label || "연계") + ")", crit ? "crit" : "hit");
+      foeHit(0);
+      checkJoinIn();
+      render();
+      if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
+      next();
+    }, RULE.allyStepMs);
+  };
+
   /* ① 아군이 하나씩 때린다 */
   const swing = () => {
     if (!same()) return;
@@ -4411,8 +4461,7 @@ function resolveTurn() {
       b.mods[who + "_doubleDone"] = true;
       return setTimeout(swing, RULE.allyStepMs);   // i는 그대로 — 같은 사람을 다시
     }
-    i++;
-    setTimeout(swing, RULE.allyStepMs);
+    checkLinkBonus(who, () => { i++; setTimeout(swing, RULE.allyStepMs); });
   };
 
   /* ② 다 때렸으면 결판을 본다 */
