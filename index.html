@@ -132,6 +132,19 @@
     color:#d8b26a;letter-spacing:.16em;font-size:12.5px;padding:7px 12px;
     background:linear-gradient(to top, rgba(6,6,9,.92), rgba(6,6,9,0));
   }
+  /* 전투 중 대사를 적이 선 자리(가운데)에 큰 글씨로 얹습니다 — battleSay 전용
+   * (showBattleCaption 참고). 다음 무대 그림이 그려지면 함께 지워집니다. */
+  .scenebox .battlecap{
+    position:absolute;left:6%;right:6%;top:10%;
+    text-align:center;font-size:21px;font-weight:800;line-height:1.4;
+    color:#fff;text-shadow:0 2px 5px rgba(0,0,0,.85), 0 0 16px rgba(0,0,0,.6);
+    pointer-events:none;z-index:4;
+    animation:battlecapIn .28s ease-out;
+  }
+  @keyframes battlecapIn{
+    from{opacity:0;transform:translateY(-8px);}
+    to  {opacity:1;transform:translateY(0);}
+  }
   /* 초상은 흰 바탕이라 살짝 눌러 준다 */
   .card{background:#efeae1;border:1px solid #cabfae;padding:8px;flex:0 0 auto;}
   .card img{display:block;max-width:190px;max-height:250px;width:auto;height:auto;}

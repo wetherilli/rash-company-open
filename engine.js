@@ -2106,8 +2106,13 @@ function allyJoin(name) {
   S.hp[id] = maxHp(id);
   divider();
   say(withJosa(a.name, "이") + " 곁에 선다.", "gain");
-  /* 여러 줄이면 차례로 */
-  (Array.isArray(a.line) ? a.line : (a.line ? [a.line] : [])).forEach(t => speak(id, t));
+  /* 여러 줄이면 차례로. 그냥 글이 아니라 { text, caption:true } 로 적으면
+   * 그 줄만 무대 가운데에 큰 글씨로도 띄웁니다(showBattleCaption 참고). */
+  (Array.isArray(a.line) ? a.line : (a.line ? [a.line] : [])).forEach(t => {
+    const text = (typeof t === "object") ? t.text : t;
+    speak(id, text);
+    if (typeof t === "object" && t.caption) showBattleCaption(text);
+  });
   render();
 }
 function allyLeave(name) {
@@ -2414,6 +2419,21 @@ function hideStage() { $stage.className = ""; $stage.innerHTML = ""; CUR_BG = nu
 function showSpeaker(src, tag) { drawStage(src, "left", tag); }
 /* 적을 가운데에 세운다 */
 function showFoe(src, tag, scale) { drawStage(src, "mid", tag, scale); }
+
+/* 전투 중 대사를 적이 선 자리(무대 가운데)에 큰 글씨로 얹는다 — battleSay 전용.
+ * drawStage 를 다시 부르지 않고 지금 그려진 칸에 얹기만 하므로, 초상·적 그림은
+ * 그대로 둔 채 글씨만 갈아 끼웁니다. 다음에 drawStage 가 무대를 다시 그리면
+ * (다음 장면·다음 초상 등) 함께 지워집니다. */
+function showBattleCaption(text) {
+  const box = $stage.querySelector(".scenebox");
+  if (!box) return;
+  let cap = box.querySelector(".battlecap");
+  if (cap) cap.remove();          // 같은 대사가 이어져도 애니메이션이 다시 걸리게
+  cap = document.createElement("div");
+  cap.className = "battlecap";
+  cap.textContent = text;
+  box.appendChild(cap);
+}
 
 /* ── 소리 ─────────────────────────────────────────────────────
  *  브라우저는 «사용자가 튼 소리» 만 허락합니다. 그런데 허락의 잣대가 둘입니다 —
@@ -3063,6 +3083,9 @@ function play(s) {
                     if (s.shake) shakeScreen(s.shake === "hard");
                     playExtras(x); return cont(); }
     case "d":     { const x = applyAlt(s); speak(x.who, x.text);
+                    /* caption:true — 이 줄만 무대 가운데에 큰 글씨로도 띄웁니다
+                     * (showBattleCaption 참고). 특히 강조하고 싶은 대사에만 답니다. */
+                    if (s.caption) showBattleCaption(x.text);
                     if (s.shake) shakeScreen(s.shake === "hard");
                     playExtras(x); return cont(); }
 
@@ -3812,13 +3835,16 @@ function beginTurn() {
    *
    *  lines 의 각 턴 배열 원소는 { who, text }(대사, battleSay 로) 또는
    *  { text }(who 없이 — 지문, say 로) 입니다. 전투 화면 중간에 대사를
-   *  끼워 넣는 자리가 이걸로 처음 생겼습니다(7장 「호감이 끝나는」). */
+   *  끼워 넣는 자리가 이걸로 처음 생겼습니다(7장 「호감이 끝나는」).
+   *  caption:true 를 더 달면 그 줄만 무대 가운데에 큰 글씨로도 띄웁니다
+   *  (showBattleCaption 참고) — 특히 강조하고 싶은 대사에만 답니다. */
   const persuadeLines = b.scene.persuade && b.scene.persuade.lines && b.scene.persuade.lines[b.turn];
   if (persuadeLines) {
     divider();
     persuadeLines.forEach(line => {
       if (line.who) battleSay(line.who, line.text);
       else say(line.text, "sys");
+      if (line.caption) showBattleCaption(line.text);
     });
   }
 
@@ -3838,9 +3864,16 @@ function linkSkillList() {
 function battleSay(who, text) {
   const w = document.createElement("p");
   w.className = "who";
-  w.textContent = memberName(who);
+  w.textContent = nameOf(who);
   $log.appendChild(w);
   say(text, "d");
+  /* 지금 화면에 이미 적으로 떠 있는 상대(S.battle.id)는 초상을 다시
+   * 띄우지 않습니다 — 각본 전투(설득전 등) 중 적 본인의 대사에
+   * 겹쳐 그리지 않기 위함입니다. */
+  if (who !== S.battle.id) {
+    const pt = portraitOf(who);
+    if (pt) showSpeaker(pt, nameOf(who));
+  }
 }
 function checkLinkSkills() {
   const b = S.battle;
