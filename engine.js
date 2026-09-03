@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.11.3";
+const VERSION = "1.11.4";
 const VERSION_NAME = "거울던전 개편";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4779,13 +4779,27 @@ function victory() {
    * (passiveStackCount·파티 카드 배지 모두 이 값을 그대로 읽습니다). */
   const arcGain = activeSynergies(S.party).some(sy => sy.name === "우생회") ? 1.5 : 1;
   S.arc.kills = (S.arc.kills || 0) + arcGain;
-  const reward = storyPays()
+  /* 굴절철도에서는 적을 잡아도 원고료가 나오지 않습니다 (noKillPay — 사용자 지침
+   * 2026-09-04).
+   *
+   *  두 컨텐츠가 서 있어야 할 자리를 갈라 놓은 것입니다.
+   *    거울 던전(노말·하드·익스트림)  되풀이해서 버는 자리
+   *    거울굴절철도(1호선·2호선)      «한 번 완주하는 값» 을 크게 치르는 자리
+   *
+   *  이렇게 나누기 전에는 굴절철도가 둘 다였습니다 — 전투가 일곱·열이나 되고
+   *  배수도 ×3.5~×4.5라, 처치 원고료만으로 2호선 한 판이 하드 거울 던전 넉 판을
+   *  넘겼습니다. 엔케팔린당 효율까지 게임에서 가장 높아, 「한 번 깨고 나면 볼일
+   *  없는 대형 보상」이어야 할 자리가 매일 도는 최적 파밍 루트가 되어 있었습니다.
+   *  처치 원고료를 여기서만 걷어 내고, 대신 첫 완주 삯(bonus)을 크게 올렸습니다. */
+  const noKillPay = !!(S.mirror && mirrorRuleNow().noKillPay);
+  const reward = (!noKillPay && storyPays())
     ? earn(Math.floor((b.maxhp + b.atk * 4) / 6) * (b.boss ? 2 : 1))
     : 0;
   S.money += reward;
   divider();
   say("▶ " + b.name + " 격파.", "good");
   if (reward) say(CURRENCY + " " + reward + " 획득.", "gain");
+  else if (noKillPay) say("선로 위에서 돈이 될 것은 없다. 끝까지 가야 삯이 나온다.", "sys");
   else say("이미 지나온 길이다. " + CURRENCY + "는 나오지 않는다.", "sys");
   checkAchievements(b.name);
   saveVault();
@@ -7137,7 +7151,12 @@ const MIRROR_RAIL1 = {
   count:  7,        // 일곱을 연달아 상대합니다 (종점 포함)
   scale:  3.5,      // 본편의 3.5배
   defScale: 0.25,   // 방어에만 덜 먹입니다 — ×3.5 일 때 방어 ×1.625
-  bonus:  1000,
+
+  /* 굴절철도는 «한 번 완주하는 값» 으로 치르는 자리입니다 (사용자 지침 2026-09-04).
+   * 도중에 적을 잡아도 원고료가 한 푼도 안 나오는 대신(noKillPay — victory 참고),
+   * 첫 완주 삯을 크게 잡았습니다. 되풀이해서 버는 자리는 거울 던전 쪽입니다. */
+  noKillPay: true,
+  bonus:  3000,     // 1000 → 3000 (처치 원고료를 걷어 낸 몫을 여기로 옮겼습니다)
   codex:  10,
   event:  300,
   fragBoxSelect: 25,
@@ -7200,7 +7219,8 @@ const MIRROR_RAIL2 = {
 
   /* 입장과 보상은 1호선과 같습니다 (사용자 지침).
    * 다만 「행운의 부적」을 고른 만큼 여기 적힌 수보다 더 받습니다 — mirrorClear 참고. */
-  bonus:  1000,
+  noKillPay: true,  // 1호선과 같게 — 처치 원고료가 안 나옵니다 (victory 참고)
+  bonus:  5000,     // 1000 → 5000. 1호선보다 길고(열 판) 세서 그만큼 더 칩니다
   codex:  10,
   event:  300,
   fragBoxSelect: 25,
@@ -7354,6 +7374,13 @@ function mirrorFacts(rule) {
     첫몫받음: 받았나
   };
 
+  /* 처치 원고료가 안 나오는 갈래(굴절철도)는 그 사실을 «들어가기 전에» 말해 둡니다.
+   * 다 돌고 나서야 알면 속은 기분이 듭니다 — 첫 완주 삯이 그만큼 큰 것도 함께 적습니다. */
+  const 처치몫없음 = r.noKillPay
+    ? ' 선로 위에서는 적을 잡아도 ' + CURRENCY + '가 나오지 않습니다 — 대신 첫 완주 삯이 ' +
+      '거울 던전보다 훨씬 큽니다.'
+    : '';
+
   if (r.loop) {
     /* 눈금은 좁습니다. 값을 늘리는 대신 이름표를 갈래에 맞게 바꿉니다 —
      * 「한 순환 / 보스 3」이 「상대 / 보스 3 × 순환」보다 좁고 또렷합니다. */
@@ -7363,7 +7390,7 @@ function mirrorFacts(rule) {
     o.자세히 = '이미 만난 보스 ' + countWord(r.loop.foes) + ' 한 순환으로 묶어, ' +
                '순환마다 다시 만납니다. 세기는 순환마다 ' + r.loop.step.toFixed(1) + '씩 올라, ' +
                countBefore(r.loop.free) + ' 순환을 돌면 종착역으로 가는 문이 열립니다. ' +
-               '그 뒤로는 순환을 더 돌지 종착역으로 갈지 고를 수 있습니다.';
+               '그 뒤로는 순환을 더 돌지 종착역으로 갈지 고를 수 있습니다.' + 처치몫없음;
     return o;
   }
 
@@ -7391,7 +7418,8 @@ function mirrorFacts(rule) {
               : r.maxBoss >= r.count ? ' 모두 보스일 수 있습니다.'
               : r.maxBoss > 1 ? ' 보스가 ' + countBare(r.maxBoss) + '까지 섞입니다.' : '') +
              (r.rest ? ' ' + countBefore(r.rest.after) + ' 번째를 넘기면 ' +
-                       withJosa(r.rest.who, "이") + ' 한 번 들러 체력과 관리력을 채워 줍니다.' : '');
+                       withJosa(r.rest.who, "이") + ' 한 번 들러 체력과 관리력을 채워 줍니다.' : '') +
+             처치몫없음;
   return o;
 }
 
