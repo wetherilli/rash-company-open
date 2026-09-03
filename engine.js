@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.11.2";
+const VERSION = "1.11.3";
 const VERSION_NAME = "거울던전 개편";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -291,9 +291,9 @@ function vaultBody() {
     /* 거울굴절철도 결과 카드 — 최근 세 판까지. 손댐 검사(vaultSig)에는 일부러
      * 안 넣습니다 — 업적처럼 지키려는 값이 아니라 그냥 지난 기록이라서요. */
     mirrorRecords: S.mirrorRecords || [],
-    /* 본편 편성 자리(case "party")에서 남기는 이어하기 — 위 railSave와 같은
-     * 논리이되 서로 겹치지 않는 별도 자리입니다. 장을 새로 시작하거나
-     * 마치면 지워지는 임시 데이터입니다(startChapter/chapterEnd 참고). */
+    /* 본편 편성 자리(case "party")에서 남기는 중간 저장 — 패배했을 때
+     * 돌아갈 자리로만 씁니다(defeat() 참고). 장을 새로 시작하거나 마치면
+     * 지워지는 임시 데이터입니다(startChapter/chapterEnd 참고). */
     storySave: S.storySave || null,
     ver:      VERSION
   };
@@ -980,8 +980,8 @@ function newState() {
      * { key, picked, checkpoint } (순환 없는 갈래) 또는
      * { key, rail2:{bosses,done,picks}, checkpoint } (2호선류). */
     railSave: (v && v.railSave) || null,
-    /* 본편 편성 자리(case "party") 이어하기 — 위 railSave와 같은 논리이되
-     * 겹치지 않는 별도 자리. { chId, sc, party, equip, hp, flags,
+    /* 본편 편성 자리(case "party") 중간 저장 — 패배했을 때 돌아갈 자리로만
+     * 씁니다(defeat() 참고). { chId, sc, party, equip, hp, flags,
      * partyStack, partyBan, battleForced }. */
     storySave: (v && v.storySave) || null,
     mirrorRecords: (v && v.mirrorRecords) || [],   // 거울굴절철도 결과 카드 — 최근 세 판
@@ -1908,6 +1908,17 @@ function activeSynergies(party) {
       if (g.effect && g.effect.synergy &&
           (tags.indexOf(g.effect.synergy) >= 0 || g.effect.synergy === sy.name))
         scale *= (g.effect.mult || 1);
+    });
+    /* 교육위원도 같은 방식으로 시너지를 북돋울 수 있습니다(사용자 지침
+     * 2026-09-03) — 기프트의 effect.synergy/mult 을 그대로 옮긴 것입니다.
+     * data/characters.js 의 ADVISORS 에 { effect: { synergy: "제3발톱",
+     * mult: 1.5 } } 처럼 적으면, 그 교육위원을 세운 동안 「제3발톱」
+     * 시너지의 atk/def/hp 배율 자체가 곱해집니다 — advisorBonusFor() 의
+     * tag 보너스(그 인격 자신에게 능력치를 더하는 것)와는 다른 자리입니다. */
+    equippedAdvisors().forEach(a => {
+      if (a.effect && a.effect.synergy &&
+          (tags.indexOf(a.effect.synergy) >= 0 || a.effect.synergy === sy.name))
+        scale *= (a.effect.mult || 1);
     });
     out.push({
       name: sy.name, tag: tags[0], count: n, desc: sy.desc,
@@ -2990,10 +3001,10 @@ function startChapter(i) {
   S.battleForced = false;
   S.partyBan = [];    // 앞 장에서 걸린 편성 금지(banParty)도 뿌리까지 되돌린다
 
-  /* 새로 들어서는 자리이므로, 이 장이든 다른 장이든 저장해 둔 이어하기 자리가
-   * 있었다면 여기서 버립니다 — startMirror() 가 S.railSave 를 버리는 것과
-   * 같은 논리입니다. 「저장해 둔 자리에서 이어하기」는 resumeStorySave() 가
-   * 따로 맡습니다. */
+  /* 새로 들어서는 자리이므로, 이 장이든 다른 장이든 남아 있던 중간 저장은
+   * 여기서 버립니다 — startMirror() 가 S.railSave 를 버리는 것과 같은
+   * 논리입니다. 이 중간 저장은 패배했을 때 돌아갈 자리로만 씁니다
+   * (defeat() 참고). */
   S.storySave = null;
 
   /* 들어가기 전에 편성부터 확인한다 */
@@ -3233,11 +3244,9 @@ function play(s) {
     case "party": {
       if (s.ban) banParty(s.ban);
       if (s.unban) unbanParty(s.unban);
-      /* 장이 길어질수록(7장부터) 편성을 고치는 자리마다 조용히 이어할 자리를
-       * 남겨 둡니다 — 거울굴절철도의 체크포인트(S.railSave, resumeMirror
-       * 참고)와 같은 논리이되, 서로 뒤섞이지 않도록 별도 자리(S.storySave)에
-       * 둡니다. 운전석의 "다음으로 추천" 자리에서 이 장의 이어하기 버튼으로
-       * 들어갑니다(resumeStorySave). */
+      /* 장이 길어질수록(7장부터) 편성을 고치는 자리마다 조용히 중간 저장을
+       * 남겨 둡니다(S.storySave) — 이 장에서 패배하면 처음부터나 그 전투를
+       * 그대로 다시 하는 대신 이 자리로 돌아갑니다(defeat() 참고). */
       if (!S.mirror) {
         const c = curChapter();
         if (c) {
@@ -3315,22 +3324,18 @@ function play(s) {
   }
 }
 
-/* 계속 버튼 */
+/* 계속 버튼 — 손으로 누르는 「기록」 손잡이는 없앴습니다(사용자 지침
+ * 2026-09-03). 그 자리에서 매번 조용히 자동 저장합니다 — save() 참고. */
 function cont() {
   render();
+  save(true);
   buttons([{ label: "계속", cls: "primary", fn: next },
-           { label: "기록", cls: "ghost", fn: () => openRecord(() => cont()) },
            { label: "유리창", cls: "ghost", fn: () => toGlass(() => cont()) }]);
 }
 
-/* 유리창(메인 화면)으로 돌아가기 — 장 도중이면 한 번 물어본다 */
+/* 유리창(메인 화면)으로 돌아가기 — 매번 자동 저장되므로 더는 물어보지
+ * 않습니다(사용자 지침 2026-09-03) */
 function toGlass(back) {
-  const midChapter = !S.ended && S.sc > 0 && S.sc < SCENES.length;
-  if (midChapter &&
-      !confirm("유리창으로 돌아갑니다.\n기록하지 않은 이 장의 진행은 사라집니다. 계속할까요?")) {
-    if (back) back();
-    return;
-  }
   S.battle = null;
   S.waiting = false;
   glass();
@@ -4865,6 +4870,15 @@ function defeat() {
    * 가 그 자리를 다시 짓습니다. */
   const packCP = !!(mrule && mrule.packRounds && S.railSave && S.railSave.key === mrule.key);
 
+  /* 본편(거울 아님)에서, 지금 장이 중간 저장 자리(S.storySave, case "party"
+   * 참고)를 이미 지났으면 그 전투만 다시 하는 대신 그 자리로 돌아갑니다 —
+   * 위 거울 쉼표(cp)와 같은 논리를 본편에 옮긴 것입니다(사용자 지침
+   * 2026-09-03). 중간 저장 자리가 아예 없는 장(대부분의 장)은 지금까지처럼
+   * 그대로 「다시 도전」입니다 — 7장 「호감이 끝나는」·코드레드처럼
+   * {t:"party"} 를 쓰는 장에서만 걸립니다. */
+  const cch = !S.mirror ? curChapter() : null;
+  const storyCP = (cch && S.storySave && S.storySave.chId === cch.id) ? S.storySave : null;
+
   buttons([
     packCP
       ? { label: "테마팩 선택으로", cls: "primary", fn: () => {
@@ -4877,14 +4891,27 @@ function defeat() {
           S.sc = cp;
           next();
         } }
+      : storyCP
+      ? { label: "중간 저장 지점으로", cls: "primary", fn: () => {
+          S.waiting = false;
+          S.party = storyCP.party.slice();
+          S.equip = Object.assign({}, storyCP.equip);
+          S.hp = Object.assign({}, storyCP.hp);
+          S.flags = Object.assign({}, storyCP.flags);
+          S.partyStack = (storyCP.partyStack || []).slice();
+          S.partyBan = (storyCP.partyBan || []).slice();
+          S.battleForced = !!storyCP.battleForced;
+          S.sc = storyCP.sc;
+          next();
+        } }
       : { label: "다시 도전", cls: "primary", fn: () => {
           S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
           S.waiting = false; startBattle(scene);
         } },
-    /* 이 전투가 정해진 인원으로만 돌아가는 것이거나, 돌아갈 자리(cp·팩)에서
-     * 편성을 다시 손볼 수 없으면, 패배 후 편성을 바꿔 강제를 우회하지
-     * 못하도록 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
-    (packCP || cp != null || scene.party) ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
+    /* 이 전투가 정해진 인원으로만 돌아가는 것이거나, 돌아갈 자리(cp·팩·
+     * storyCP)에서 편성을 다시 손볼 수 없으면, 패배 후 편성을 바꿔 강제를
+     * 우회하지 못하도록 이 손잡이 자체를 감춘다 (forcePartyPush 참고) */
+    (packCP || cp != null || storyCP || scene.party) ? null : { label: "편성 바꾸기", fn: () => openParty(() => {
         S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
         S.waiting = false; startBattle(scene);
       }) },
@@ -6689,16 +6716,37 @@ function openExchangePick(who, back) {
  *  저장 / 시작
  * ===================================================================== */
 function readSave() { return Store.get(SAVE_KEY); }
-function save() {
-  if (vaultLocked()) { say("보관함이 잠겨 있어 기록하지 않았습니다.", "todo"); return; }
+/* 「이어하기」가 무엇을 이어 읽는지 — 장이면 그 장 번호·제목과 몇 번째
+ * 장면인지, 거울 던전·거울굴절철도면 그 갈래 이름을 적습니다. 저장이
+ * 없거나 읽지 못하면 null(운전석이 이 자리엔 카드를 세우지 않습니다).
+ * 사용자 지침(2026-09-03) — 「이어하기」가 «어디로 이어지는지» 직접
+ * 보여 주도록 달았습니다. */
+function saveSpotText() {
+  const raw = readSave();
+  if (!raw) return null;
+  try {
+    const spot = JSON.parse(raw);
+    if (spot.mirror) return mirrorTier(spot.mirrorTier).name + " 진행 중";
+    const c = CHAPTERS[spot.ch];
+    if (!c) return null;
+    const total = (c.scenes || []).length;
+    return c.no + (c.title ? "  " + c.title : "") +
+           (total ? "　·　" + Math.min((spot.sc || 0) + 1, total) + "/" + total + "번째 장면" : "");
+  } catch (e) { return null; }
+}
+/* silent — 손으로 누르는 「기록」 손잡이를 없애고(사용자 지침 2026-09-03)
+ * cont() 가 매번 조용히 부르므로, 그 자리에서는 로그에 "기록했다"를
+ * 남기지 않습니다. 다른 자리(openRecord 등)에서 부를 때는 그대로 남깁니다. */
+function save(silent) {
+  if (vaultLocked()) { if (!silent) say("보관함이 잠겨 있어 기록하지 않았습니다.", "todo"); return; }
   try {
     /* «자리» 만 적습니다. 모은 것은 보관함이 임자입니다 (load 의 주석 참고) */
     const c = {};
     SAVE_KEEPS.forEach(k => { if (S[k] !== undefined) c[k] = S[k]; });
     Store.set(SAVE_KEY, JSON.stringify(JSON.parse(JSON.stringify(c))));
     saveVault();                     // 기록할 때 모은 것도 함께 굳혀 둡니다
-    say("기록했다. (" + curChapter().no + ")", "sys");
-  } catch (e) { say("기록 실패.", "todo"); }
+    if (!silent) say("기록했다. (" + curChapter().no + ")", "sys");
+  } catch (e) { if (!silent) say("기록 실패.", "todo"); }
 }
 /* 기록(이어하기)에는 «어디까지 읽었나» 만 들어 있어야 합니다.
  * 모은 것은 보관함이 임자입니다.
@@ -6709,10 +6757,12 @@ function save() {
  *  「새로고침하면 업적이 없어진다」던 것이 이것입니다.
  *
  *  이제 보관함에서 새로 읽은 것 위에 «자리» 만 얹습니다.
- */
+ *  partyBan — 곁가지 장의 편성 금지(banParty)도 함께 담습니다(사용자
+ *  지침 2026-09-03) — 없으면 「기록」으로 이어하기 할 때 금지가 풀려
+ *  버려, 지금은 못 골라야 할 사람을 다시 고를 수 있게 됩니다. */
 const SAVE_KEEPS = ["ch", "sc", "flags", "hp", "party", "equip",
                     "mirror", "mirrorHard", "mirrorTier", "ended",
-                    "partyStack", "battleForced"];
+                    "partyStack", "partyBan", "battleForced"];
 
 function load() {
   const raw = readSave();
@@ -6735,45 +6785,18 @@ function load() {
   } catch (e) { return false; }
 }
 
-/* ── 본편 편성 자리 이어하기 ────────────────────────────────────
+/* ── 본편 편성 자리 중간 저장 ────────────────────────────────────
  *  case "party"(편성을 고칠 수 있는 자리)를 지날 때마다 S.storySave 에
- *  자리를 남겨 둡니다. 거울굴절철도의 체크포인트(S.railSave, resumeMirror
- *  참고)와 같은 논리이되, 본편은 procedurally 다시 짓지 않고 CHAPTERS[].scenes
- *  를 그대로 쓰므로 scene index 하나면 충분합니다 — 다만 이 자리 즈음엔
- *  banParty 등으로 편성이 장 도중 바뀌어 있을 수 있어 party/partyBan/
- *  partyStack 도 함께 담아 둡니다. 장을 새로 시작하면(startChapter) 버리고,
- *  마치면(chapterEnd) 지웁니다 — 그 전까지만 사는 임시 데이터입니다.
- *  위 SAVE_KEY 기반 기록(save/load)과는 아주 다른 자리입니다 — 그쪽은 손으로
- *  「기록」을 눌러야 하는 어디서나 한 자리뿐인 이어하기이고, 이쪽은 편성을
- *  고치는 자리마다 조용히 자동으로 남깁니다. */
-function resumeStorySave() {
-  if (!S.storySave) return;
-  const save = S.storySave;
-  const i = CHAPTERS.findIndex(c => c.id === save.chId);
-  if (i < 0) { S.storySave = null; return; }
-
-  S.ch = i; S.ended = false;
-  S.mirror = false; MIRROR = null;
-  SCENES = buildScenes(CHAPTERS[i]);
-  S.party = save.party.slice();
-  S.equip = Object.assign({}, save.equip);
-  S.hp = Object.assign({}, save.hp);
-  S.flags = Object.assign({}, save.flags);
-  S.partyStack = (save.partyStack || []).slice();
-  S.partyBan = (save.partyBan || []).slice();
-  S.battleForced = !!save.battleForced;
-  S.sc = save.sc;
-  S.battle = null; S.waiting = false;
-  allyClear();
-  clearLog();
-  $log.classList.remove("recalling");
-  showCard(CHAPTERS[i].img || null, CHAPTERS[i].no + "  " + CHAPTERS[i].title);
-  divider();
-  say("저장해 둔 자리에서 이어합니다.", "sys");
-  divider();
-  render();
-  next();
-}
+ *  자리를 남겨 둡니다 — party/equip/hp/flags/partyStack/partyBan/
+ *  battleForced 를 통째로 담습니다. 장을 새로 시작하면(startChapter)
+ *  버리고, 마치면(chapterEnd) 지웁니다 — 그 전까지만 사는 임시 데이터입니다.
+ *
+ *  이제 이 자리는 «패배했을 때 돌아갈 자리»로만 씁니다(defeat() 참고,
+ *  사용자 지침 2026-09-03) — 예전에는 운전석에서 이 자리로 바로
+ *  건너뛰는 손잡이도 있었지만, cont() 가 매 장면마다 조용히 SAVE_KEY
+ *  쪽(save/load)에 «어디까지 읽었나»를 자동으로 남기게 되면서
+ *  (곁가지 장도 똑같이 담깁니다) 그 손잡이는 필요 없어져 지웠습니다 —
+ *  운전석의 「이어하기」 하나로 어느 장이든 돌아갈 수 있습니다. */
 
 /* ── 장 선택 ──────────────────────────────────────────────────
  *  0장은 언제나 열려 있고, 그 뒤로는 앞 장을 클리어해야 열립니다.
@@ -6843,11 +6866,13 @@ function openChapterSelect(back) {
           '앞 장을 마쳐야 다음 장이 열립니다. ' +
           '「그밖의 이야기」는 마치지 않아도 다음 장에 갈 수 있습니다.</div>';
 
-  /* 읽던 데가 있으면 맨 위에 */
-  if (readSave())
+  /* 읽던 데가 있으면 맨 위에 — 무슨 장의 몇 번째 장면인지 보여 줍니다
+   * (사용자 지침 2026-09-03, saveSpotText 참고) */
+  const spotText = saveSpotText();
+  if (spotText)
     h += '<div class="grid"><div class="slot" data-resume="1">' +
            '<div class="nm">이어하기</div>' +
-           '<div class="sub">기록해 둔 곳에서 이어서 읽습니다</div>' +
+           '<div class="sub">' + spotText + '</div>' +
          '</div></div>';
 
   /* 접히는 무리 하나. 눌러서 펴고 접습니다 — 펴 둔 자리는 CS_OPEN 이 기억합니다.
@@ -6933,22 +6958,17 @@ function openChapterSelect(back) {
 
   /* ── 다음으로 추천 ────────────────────────────────────────────
    *  펴 둔 채로 맨 위에 섭니다. 접힌 무리를 일일이 펴 보지 않아도
-   *  «지금 할 만한 것» 이 바로 눈에 들어오게 하려는 것입니다. */
+   *  «지금 할 만한 것» 이 바로 눈에 들어오게 하려는 것입니다.
+   *  편성 자리 이어하기(어디까지 읽었는지)는 이제 위쪽 「이어하기」
+   *  카드 하나로 통일했습니다(사용자 지침 2026-09-03) — cont() 가 매
+   *  장면마다 자동 저장하므로, 본편이든 곁가지든 그 카드 하나로 정확히
+   *  돌아갈 수 있습니다. 이 자리에는 따로 손대지 않습니다. */
   const pick = chapterPicks();
-  /* 본편 추천 장에 편성 자리 이어하기(storySave)가 있으면, 그 장 바로
-   * 옆에 «-장 이어하기» 카드를 하나 더 세웁니다 — resumeStorySave 참고. */
   const mainChap = pick.main >= 0 ? CHAPTERS[pick.main] : null;
-  const storyResume = (mainChap && S.storySave && S.storySave.chId === mainChap.id)
-    ? S.storySave : null;
+  const sideChap = pick.side >= 0 ? CHAPTERS[pick.side] : null;
   const rec = []
     .concat(mainChap ? [chapSlot(mainChap, pick.main, true)] : [])
-    .concat(storyResume
-      ? ['<div class="slot" data-storyresume="1">' +
-           '<div class="nm">' + mainChap.no + ' 이어하기</div>' +
-           '<div class="sub">편성을 고치던 자리에서 이어서 읽습니다</div>' +
-         '</div>']
-      : [])
-    .concat(pick.side >= 0 ? [chapSlot(CHAPTERS[pick.side], pick.side, true)] : [])
+    .concat(sideChap ? [chapSlot(sideChap, pick.side, true)] : [])
     .concat(pick.mirror ? [slot(pick.mirror, 'data-mirror="' + pick.mirror.key + '"')] : []);
 
   h += '<div class="csrec">' +
@@ -7004,8 +7024,6 @@ function openChapterSelect(back) {
   });
   const rs = $sheet.querySelector(".slot[data-resume]");
   if (rs) rs.onclick = () => { closeModal(); if (!load()) { glass(); say("기록이 손상되었다.", "todo"); } };
-  const srs = $sheet.querySelector(".slot[data-storyresume]");
-  if (srs) srs.onclick = () => { closeModal(); resumeStorySave(); };
   $sheet.querySelectorAll(".slot[data-mirror]").forEach(el => {
     el.onclick = () => { openMirrorGate(el.dataset.mirror, () => openChapterSelect(back)); };
   });
