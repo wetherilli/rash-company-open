@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.11.4";
-const VERSION_NAME = "거울던전 개편";
+const VERSION = "1.12.0";
+const VERSION_NAME = "부산행";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {

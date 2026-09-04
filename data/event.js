@@ -64,7 +64,7 @@ const EVENT_RULE = {
    * 만큼 더 받습니다. 교환소 맨 위 알림에 이 수가 그대로 적힙니다. */
   bonusPct: 20,
   /* 스토리 장을 마칠 때 들어오는 몫.
-   *   latest — «가장 마지막 장»(지금은 6.5장 괴수살인괴수) 을 마쳤을 때
+   *   latest — «가장 마지막 장»(지금은 6.5장 부산행) 을 마쳤을 때
    *   story  — 그 밖의 장을 마쳤을 때
    *   first  — 그 장을 처음 마쳤을 때 / again — 다회차로 다시 마쳤을 때
    * 거울 던전 쪽 몫은 engine.js 의 MIRROR_TIERS 각 갈래에 event 로 적혀 있습니다. */
@@ -110,17 +110,16 @@ const EVENTS = [
     ]
   },
 
-  /* 아직 만들지 않은 장입니다. CHAPTERS 맨 끝에 「부산행」이 서는 날
-   * 저절로 이 기간으로 넘어가고, 칼날이빨은 0으로 지워집니다.
-   * 그때 banner 와 from 을 채워 주십시오. */
+  /* v1.12.0(2026-09-04)에 「부산행」이 CHAPTERS 맨 끝에 서면서 이 기간이 열렸습니다 —
+   * 칼날이빨은 그 자리에서 0으로 지워지고, 교환 횟수도 다시 찹니다. */
   {
     id:      "busan",
     chapter: "부산행",
     cur:     "열차티켓",
     desc:    "어디로 가는지는 적혀 있지 않다.",
-    line:    null,                 /* ← 그때 광고 문구를 적어 주십시오 */
-    banner:  null,
-    from:    "2026-09-05",         /* 괴수살인괴수(2026-08-29 + 7일)가 끝난 다음 날부터 7일간 */
+    line:    "이 열차는 되돌아가지 않는다.",
+    banner:  "assets/scene/고속열차 내부.jpg",
+    from:    "2026-09-04",         /* 부산행이 올라간 날부터 7일간 — 사이에 빈 날을 두지 않습니다 */
     days:    7,
     goods: [
       { id: "busan_box_select", name: "인격 파편 상자 (선택) 10개",
@@ -132,7 +131,15 @@ const EVENTS = [
       { id: "busan_codex",      name: "황금교본 5권",
         cost: 10, limit: 5,  give: { codex: 5 } },
       { id: "busan_money",      name: "원고료 5",
-        cost: 1,  limit: 0,  give: { money: 5 } }
+        cost: 1,  limit: 0,  give: { money: 5 } },
+      /* 인격 — 한 번씩만입니다. 이미 지닌 인격이면 그 사람 몫 파편으로 돌려받습니다.
+       * 이 장에서 새로 난 셋 가운데 둘을 세웠습니다(지난 기간과 같은 값 200·300). */
+      { id: "busan_id_hamin",   name: "송하민 — 남부협회 분석관",
+        cost: 200, limit: 1,
+        give: { id: { who: "song_hamin", star: 3, title: "남부협회 분석관" } } },
+      { id: "busan_id_minjun",  name: "차민준 — 남부협회 2과",
+        cost: 300, limit: 1,
+        give: { id: { who: "cha_minjun", star: 3, title: "남부협회 2과" } } }
     ]
   }
 ];

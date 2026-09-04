@@ -110,5 +110,12 @@ const ACHIEVEMENTS = [
     /* synergy 는 시너지의 «이름» 으로 찾습니다 — data/characters.js SYNERGIES 의 "가면라이더 연계기" */
     when: { kill: "타나콘다", where: ["mirrorHard", "mirrorExtreme"], synergy: "가면라이더 연계기" },
     give: { support: "G사 촬영전문가|박준정" }
+  },
+  {
+    name: "실험은 계속된다",
+    desc: "하드 또는 익스트림 거울 던전에서 김연준을 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ 개화 E.G.O :: 스테고우로스 하축론",
+    when: { kill: "김연준", where: ["mirrorHard", "mirrorExtreme"] },
+    give: { support: "개화 E.G.O :: 스테고우로스|하축론" }
   }
 ];

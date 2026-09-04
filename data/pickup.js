@@ -25,6 +25,16 @@ const PICKUP_MAX = 2;
 const PICKUPS = [
   {
     on:   true,
+    name: "남부협회 특정 배정",
+    tag:  "남부협회",
+    rate: 0.60,
+    cost: 30,
+    line:   "협회의 방식대로, 확실하게.",
+    banner: "assets/scene/5장 바다 배경.jpg",
+    desc: "이름에 「남부협회」가 든 인격과 교육위원이 자주 나옵니다."
+  },
+  {
+    on:   true,
     name: "G사 특정 배정",
     tag:  "G사",
     rate: 0.60,
@@ -32,22 +42,22 @@ const PICKUPS = [
     line:   "카메라가 돌아가고 있습니다.",
     banner: "assets/scene/G사 골목.jpg",
     desc: "이름에 「G사」가 든 인격과 교육위원이 자주 나옵니다."
-  },
-  {
-    on:   true,
-    name: "모나크 특정 배정",
-    tag:  "모나크",
-    rate: 0.60,
-    cost: 30,     // 일반 배정과 같은 값. 안 적으면 자동으로 RULE.pullCost 를 씁니다
-    line:   "괴수는 아직 끝나지 않았다.",
-    banner: "assets/scene/모나크 저택.jpg",
-    desc: "이름에 「모나크」가 든 인격이 자주 나옵니다. 유아인 ★★★ · 차민준 ★★ · 이경원 ★★★."
   }
 ];
 
 /* 내려간 배정 — 기록용입니다. 게임에는 쓰이지 않습니다.
  * 다시 세우려면 그대로 베껴 PICKUPS 로 옮기면 됩니다. */
 const PICKUP_PAST = [
+  {
+    name: "모나크 특정 배정",
+    tag:  "모나크",
+    rate: 0.60,
+    cost: 30,
+    line:   "괴수는 아직 끝나지 않았다.",
+    banner: "assets/scene/모나크 저택.jpg",
+    desc: "이름에 「모나크」가 든 인격이 자주 나옵니다. 유아인 ★★★ · 차민준 ★★ · 이경원 ★★★.",
+    ver: "1.0.0 ~ 1.11.4"
+  },
   {
     name: "I사 VS 총기협회 특정 배정",
     /* 두 진영을 한 창구에 묶었습니다. 5.5장에서 서로 총을 겨눴던 쪽들입니다.

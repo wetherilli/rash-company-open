@@ -47,5 +47,15 @@ const ALLIES = [
      * { text, caption:true } 로 적은 줄은 무대 가운데에 큰 글씨로도 뜹니다. */
     line: { text: "길이 보이지 않을 때, 어디로 어떻게 나아가야 할지 모를 때… 그래서 길잡이가 있는 겁니다, 노란테.", caption: true },
     bye:  "길은 열어 두었습니다. 뒤는 보지 마십시오."
+  },
+  {
+    name: "하축론", title: "운전수",
+    idText: "개화 E.G.O :: 스테고우로스",
+    color: "#5c7a4a",
+    atk: 32, def: 26, hp: 260,
+    portrait: null,               // CREW.driver 의 그림을 저절로 씁니다
+    note: "몸으로 막아서는 쪽을 택한 사람.",
+    line: "여기는 제가 막습니다. 먼저 가세요.",
+    bye:  "이 정도면 됐습니다 — 조심히 다녀오세요."
   }
 ];
