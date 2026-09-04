@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.12.0";
+const VERSION = "1.12.1";
 const VERSION_NAME = "부산행";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -6778,6 +6778,40 @@ const SAVE_KEEPS = ["ch", "sc", "flags", "hp", "party", "equip",
                     "mirror", "mirrorHard", "mirrorTier", "ended",
                     "partyStack", "partyBan", "battleForced"];
 
+/* ── 이어하기로 돌아왔을 때 무대 되살리기 ────────────────────────
+ *  기록에 담기는 것은 «어디까지 읽었나»(S.sc)뿐입니다. 지금 깔려 있던
+ *  배경(CUR_BG)은 화면 쪽 값이라 보관함에 안 담기므로, 창을 닫았다 열고
+ *  이어하기를 하면 무대가 텅 빈 채로 대사만 흘렀습니다 — 다음
+ *  { t:"place" } 를 만나야 비로소 배경이 깔렸습니다(사용자 지침 2026-09-04).
+ *
+ *  거울 갈래는 이미 제자리를 찾아 갑니다 — 굴절철도는 resumeMirror() 가,
+ *  테마팩 갈래(노말·하드·익스트림)는 openPackGate() 가 저마다 setBackdrop
+ *  을 부릅니다. 본편·곁가지만 빠져 있었습니다.
+ *
+ *  읽던 자리에서 «뒤로» 훑어 가장 가까운 장소 표시를 찾아 그대로 다시
+ *  깝니다. 회상(recall) 안에서 멈췄으면 회상 표시까지 함께 되살리고,
+ *  회상이 이미 닫힌 뒤라면 play() 의 recallEnd 와 똑같이 그 장의 그림으로
+ *  돌아갑니다. 아무 표시도 못 찾으면 장 그림이 곧 답입니다. */
+function restoreStage() {
+  const c = CHAPTERS[S.ch] || {};
+  let img = c.img || null;
+  let name = c.no ? (c.no + "  " + c.title) : null;
+  let recalling = false;
+
+  for (let k = Math.min(S.sc || 0, SCENES.length) - 1; k >= 0; k--) {
+    const sc = SCENES[k];
+    if (!sc) continue;
+    if (sc.t === "place")       { img = sc.img || c.img || null; name = sc.name || null; break; }
+    if (sc.t === "recallStart") { if (sc.img) img = sc.img; name = sc.name || null; recalling = true; break; }
+    if (sc.t === "recallEnd")   break;      // 회상은 이미 닫혔다 — 그 장의 그림으로
+  }
+
+  $log.classList.toggle("recalling", recalling);
+  /* img 가 없으면 «비우기»를 뜻합니다 — setBackdrop 은 null 을 「그대로 두기」로
+   * 읽으므로(false 라야 지웁니다), 앞 장의 배경이 남지 않게 false 를 건넵니다. */
+  setBackdrop(img || false, name);
+}
+
 function load() {
   const raw = readSave();
   if (!raw) return false;
@@ -6791,6 +6825,7 @@ function load() {
     S.battle = null; S.waiting = false;
     SCENES = buildScenes(CHAPTERS[S.ch]);   // 기록은 본편만 남는다
     clearLog();
+    restoreStage();                        // 읽던 자리의 배경을 되살립니다
     say("기록을 불러왔다.", "sys");
     divider();
     render();
