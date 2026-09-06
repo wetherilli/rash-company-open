@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.12.1";
+const VERSION = "1.13.0";
 const VERSION_NAME = "부산행";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -274,6 +274,9 @@ function vaultBody() {
     fragBox:  S.fragBox || { select: 0, random: 0 },
     /* 엔케팔린 캡슐 — 보관함에서 바로 쓰는 소모품. 개수 하나만 남깁니다. */
     enkCap:   enkCapCount(),
+    /* 선택권 — 미보유 목록에서 하나를 골라 그 자리에서 받는 소모품.
+     * { advisor: 개수, gift: 개수 }. PICK_TICKETS 참고. */
+    pickTicket: S.pickTicket || { advisor: 0, gift: 0 },
     /* 이벤트 재화 — 남은 개수와 «어느 기간 것인가»(eventId)를 함께 적습니다.
      * 다음에 열 때 eventId 가 지금 기간과 다르면, 새 이야기가 나온 것으로 보고
      * 0으로 지웁니다. eventBuy(교환소에서 몇 개 바꿨는가)도 함께 비워 한도가 다시 찹니다. */
@@ -331,6 +334,10 @@ function loadVault() {
     sync:     v.sync || {},
     fragBox:  v.fragBox || { select: 0, random: 0 },
     enkCap:   (+v.enkCap) || 0,
+    pickTicket: {
+      advisor: (v && v.pickTicket && +v.pickTicket.advisor) || 0,
+      gift:    (v && v.pickTicket && +v.pickTicket.gift)    || 0
+    },
     event:    (+v.event) || 0,
     eventId:  v.eventId || null,
     eventBuy: v.eventBuy || {},
@@ -377,7 +384,25 @@ function vaultSig(o) {
     /* 이야기 인격 지급 자리도 같은 결입니다 — 중복 파편이 자리마다 한 번뿐이므로 */
     j(o.storyGain),
     o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
+    /* 선택권(교육위원·기프트) — 파편 상자·캡슐과 같은 결의 소모품이라 함께 셉니다 */
+    jm(o.pickTicket),
     /* 이벤트 재화 — 남은 개수, 어느 기간 것인가, 교환소에서 몇 개 바꿨는가 */
+    (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
+    o.ver
+  ].join("|"));
+}
+/* 선택권(pickTicket)이 생기기 «전» 의 셈법입니다. 그때 나간 보관함에는 그 칸이
+ * 아예 없으므로, 이것을 남겨 두지 않으면 판을 올렸다는 이유만으로 손댐으로 뜹니다. */
+function vaultSigOld6(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  const jm = m => Object.keys(m || {}).sort().map(k => k + ":" + m[k]).join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
+    j(o.mailTaken), o.newbie, j(o.mirrorDone),
+    j(o.storyGain),
+    o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
     (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
     o.ver
   ].join("|"));
@@ -451,7 +476,8 @@ function vaultSigOld(o) {
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld5(o) && o.sig !== vaultSigOld4(o) &&
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld6(o) && o.sig !== vaultSigOld5(o) &&
+         o.sig !== vaultSigOld4(o) &&
          o.sig !== vaultSigOld3(o) && o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
 }
 
@@ -1372,11 +1398,85 @@ function giftBonusFor(who) {
   return out;
 }
 
-/* 방어의 일부를 공격으로 옮기는 기프트 (제3발톱 의리사슬) */
+/* ── 작성위원 고유 능력 보정 — E.G.O 기프트 / 보조 교육위원 ──────────
+ *  gift.effect 또는 advisor.effect 에 아래 두 키를 적으면 그 작성위원의
+ *  고유 능력(data/skills.js UNIQUE_SKILLS)에 영향을 줍니다. 아직 이 키를
+ *  쓰는 기프트·교육위원은 없습니다 — 나중에 데이터에 채워 넣기만 하면
+ *  이 함수가 그대로 읽습니다.
+ *
+ *   skillUses       액티브 고유 능력의 "같은 적에게 몇 번" 횟수 +n (정수,
+ *                   skillUsesAllowed() 가 읽습니다)
+ *   skillStackMult  패시브 고유 능력의 스택 하나당 몫 +비율 (0.5 = +50%,
+ *                   passiveSkillBonus() 가 읽습니다)
+ *
+ *  대상을 고르는 규칙 — 기프트는 giftHits() 그대로(tag: 지금 장착한 인격
+ *  제목 · who: 작성위원 키·이름, 인격과 무관 · advisorTag · 아무것도 안 적으면
+ *  e.all 로 파티 전원). 교육위원도 atk/def/hp(advisorEffect)와 같은 규칙 —
+ *  tag/who 를 안 적으면 파티 전원에게 걸리고, tag(지금 장착한 인격 제목)나
+ *  who(작성위원 키·이름, 인격과 무관)를 적으면 그 인격·사람에게만 걸립니다.
+ *  「이형우의 오이샌드위치」류(교육위원 효과를 배로 만드는 기프트)는
+ *  advisorBonusFor()와 같은 방식으로 함께 걸립니다. */
+function uniqueSkillBoostFor(who) {
+  const out = { uses: 0, stackMult: 0 };
+  if (!who) return out;
+
+  equippedGifts().forEach(g => {
+    const e = g.effect;
+    if (!e) return;
+    if (e.all) {
+      out.uses      += e.all.skillUses      || 0;
+      out.stackMult += e.all.skillStackMult || 0;
+    }
+    if (giftHits(e, who)) {
+      out.uses      += e.skillUses      || 0;
+      out.stackMult += e.skillStackMult || 0;
+    }
+  });
+
+  const id = idByKey(S.equip[who]);
+  const title = id ? id.title : "";
+  equippedAdvisors().forEach(a => {
+    if (!a.effect) return;
+    /* atk/def/hp(advisorEffect)와 같은 규칙 — tag/who 를 안 적으면
+     * «파티 전원»에게 걸립니다. tag/who 를 적으면 그 인격·사람에게만 걸리는
+     * advisorBonusFor() 쪽 규칙을 그대로 씁니다. */
+    const tags = a.effect.tag ? (Array.isArray(a.effect.tag) ? a.effect.tag : [a.effect.tag]) : [];
+    const targeted = tags.length || a.effect.who;
+    const hits = !targeted ||
+                 tags.some(t => title.indexOf(t) >= 0) ||
+                 (a.effect.who && sinnerKey(a.effect.who) === who);
+    if (!hits) return;
+
+    let m = 1;
+    equippedGifts().forEach(g => {
+      if (g.effect && g.effect.advisorName && a.name === g.effect.advisorName)
+        m *= g.effect.mult || 1;
+    });
+    out.uses      += (a.effect.skillUses      || 0) * m;
+    out.stackMult += (a.effect.skillStackMult || 0) * m;
+  });
+
+  return out;
+}
+
+/* 방어의 일부를 공격으로 옮기는 기프트 (제3발톱 의리사슬)
+ *
+ *  effect.defToAtkGuardMult 를 적어 두면, «지난 차례에 방어를 골랐을 때» 만
+ *  그 배수로 커집니다 (사용자 지침 2026-09-06 — 방어로 한 턴 접고 다음 턴에
+ *  크게 치는 장단). 지난 차례의 명령은 beginTurn() 이 b.cmds 를 비우기 전에
+ *  b.persist.guardedLast 로 옮겨 적어 둡니다.
+ *
+ *  전투 밖(노트·편성 화면 등)에서는 «지난 차례» 라는 것이 없으므로 언제나
+ *  기본폭입니다 — 그 화면들이 보여 주는 값은 «방어를 안 한 채의 값» 입니다. */
 function giftConvertFor(who) {
+  const guardedLast = !!(S.battle && S.battle.persist &&
+                         S.battle.persist.guardedLast &&
+                         S.battle.persist.guardedLast[who]);
   let n = 0;
   equippedGifts().forEach(g => {
-    if (g.effect && g.effect.defToAtk && giftHits(g.effect, who)) n += g.effect.defToAtk;
+    const e = g.effect;
+    if (!e || !e.defToAtk || !giftHits(e, who)) return;
+    n += e.defToAtk * (guardedLast ? (e.defToAtkGuardMult || 1) : 1);
   });
   return n;
 }
@@ -1434,6 +1534,10 @@ function advisorEffect() {
     if (!g.effect) return;
     if (g.effect.manage)    out.manage    += g.effect.manage;
     if (g.effect.manageMax) out.manageMax += g.effect.manageMax;
+    /* 교정으로 줄이는 피해 — 교육위원 쪽에는 진작 있던 자리인데(위 e.correct)
+     * 기프트에는 없었습니다. 관리자가 쓰는 손이라 인격을 가리지 않으므로,
+     * manage 와 같이 giftHits 를 묻지 않고 그냥 더합니다(사용자 지침 2026-09-06). */
+    if (g.effect.correct)   out.correct   += g.effect.correct;
   });
   return out;
 }
@@ -1523,6 +1627,44 @@ function addFragBox(kind, n) {
   if (!n) return;
   if (!S.fragBox) S.fragBox = { select: 0, random: 0 };
   S.fragBox[kind] = (S.fragBox[kind] || 0) + n;
+}
+
+/* ── 선택권 (보조 교육위원 · E.G.O 기프트) ───────────────────
+ *  보관함에서 바로 쓰는 소모품입니다. 뽑기와 달리 «운» 이 없습니다 —
+ *  아직 못 가진 것을 죽 펴 놓고, 그중 하나를 골라 그 자리에서 받습니다.
+ *  개수는 S.pickTicket = { advisor: n, gift: n } 하나로 셉니다.
+ *
+ *  ■ 고를 수 없는 것
+ *    · 이미 가진 것은 목록에 아예 안 나옵니다.
+ *    · 교육위원 선택권만 — «지금 특정 배정에 걸려 있는» 교육위원은 못 고릅니다
+ *      (인격 교환의 pickupOnTitle 규칙을 그대로 가져왔습니다 — 돈을 주고 뽑으라고
+ *      세워 둔 것을 정가로 가로채지 않게). 기프트는 특정 배정이 없어 이 규칙이
+ *      없습니다.
+ *    · 고를 것이 하나도 안 남으면(다 가졌거나, 남은 것이 전부 특정 배정 중이면)
+ *      손잡이가 잠깁니다 — 써도 아무것도 못 받는 헛걸음을 막습니다.
+ */
+const PICK_TICKETS = [
+  { key: "advisor", name: "보조 교육위원 선택권",
+    desc: "아직 함께하지 않은 보조 교육위원 하나를 골라 받습니다. 지금 특정 배정에 걸려 있는 사람은 고를 수 없습니다." },
+  { key: "gift",    name: "E.G.O 기프트 선택권",
+    desc: "아직 지니지 않은 E.G.O 기프트 하나를 골라 받습니다." }
+];
+function pickTicketCount(kind) { return (S.pickTicket && S.pickTicket[kind]) || 0; }
+function addPickTicket(kind, n) {
+  if (!n) return;
+  if (!S.pickTicket) S.pickTicket = { advisor: 0, gift: 0 };
+  S.pickTicket[kind] = (S.pickTicket[kind] || 0) + n;
+}
+/* 지금 고를 수 있는 것들 — 비어 있으면 쓸 수 없습니다 */
+function pickTicketCands(kind) {
+  if (kind === "advisor")
+    return advisorList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]) &&
+                                     !pickupOnTitle(a.title));
+  return (typeof GIFTS !== "undefined" ? GIFTS : [])
+           .filter(g => !(S.giftsOwned && S.giftsOwned[giftId(g)]));
+}
+function pickTicketUsable(kind) {
+  return pickTicketCount(kind) > 0 && pickTicketCands(kind).length > 0;
 }
 
 /* ── 엔케팔린 캡슐 ────────────────────────────────────────────
@@ -1694,6 +1836,8 @@ function eventGiveText(g) {
   if (g.enkCap) out.push(ENK_CAPSULE.name + " " + g.enkCap + "개");
   if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
   if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
+  if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
+  if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
   return out.join("　·　") || "—";
 }
 /* 물건에 딸리는 설명 — 인격 파편 상자는 «보관함에 적힌 것과 똑같은 글» 을 씁니다.
@@ -1739,6 +1883,8 @@ function eventGiveApply(g) {
   if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
   if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
+  if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
+  if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
   if (g.enk) {
     enkSync();
     const before = enkCount();
@@ -1809,6 +1955,25 @@ function critMult() { return RULE.critMult + advisorEffect().critMult + giftCrit
 /* ── 인격 유틸 ─────────────────────────────────────────────── */
 function idKey(who, id)  { return who + "|" + id.star + "|" + id.title; }
 function parseKey(key)   { const a = key.split("|"); return { who: a[0], star: +a[1], title: a[2] }; }
+
+/* ── 숨은 인격 ─────────────────────────────────────────────────
+ *
+ *  data/characters.js 의 인격 줄에 hidden: true 를 적으면 «업적으로만 얻는
+ *  인격» 이 됩니다. todo(미작성)와는 다릅니다 — 미작성은 자리가 «(미작성)»
+ *  으로 비어 보이지만, 숨은 인격은 얻기 전까지 자리 자체가 없습니다.
+ *
+ *    · 배정(뽑기·특정 배정)에 절대 안 나옵니다 — 얻은 뒤에도 그렇습니다.
+ *      그래야 중복으로 파편만 나오는 «꽝» 이 되지 않습니다.
+ *    · 인격 교환(정가)으로도 못 바꿉니다 — 같은 까닭입니다.
+ *    · 얻기 전에는 노트·인격 장착·시너지 목록·보관함 어디에도 안 뜨고,
+ *      「n / 전체」 세는 수에도 안 들어갑니다. 있는 줄도 모르게 둡니다.
+ *    · 얻고 나면 보통 인격과 똑같이 굴어, 그때부터 모든 자리에 나옵니다.
+ *
+ *  업적 보상으로 주는 법은 data/achievements.js 의 give.id 를 보십시오.
+ */
+function idHidden(who, id) { return !!(id && id.hidden) && !(S.owned && S.owned[idKey(who, id)]); }
+/* 세는 수(전체 종수)에 넣어도 되는가 — 미작성은 원래부터 빠집니다 */
+function idCounted(who, id) { return !id.todo && !idHidden(who, id); }
 
 /* ── 인격이 이름을 바꿔도 보관함이 잃지 않도록 ──────────────────
  *
@@ -1953,22 +2118,26 @@ function passiveSkillBonus(who, effHp) {
   const v = skillTierValue(skill, level);
   const curRaw = S.hp[who] != null ? S.hp[who] : effHp;
   const lostPct = Math.max(0, (1 - curRaw / effHp) * 100);
+  /* E.G.O 기프트·보조 교육위원이 스택 하나당 몫을 올려 줄 수 있다
+   * (uniqueSkillBoostFor 참고) — 아무도 없으면 1 그대로. */
+  const stackMult = 1 + uniqueSkillBoostFor(who).stackMult;
 
   switch (who) {
     case "kim_taeseong":                          // 광신 — 이번 갈래 처치 수만큼 누적
-      out.atk = ((S.arc && S.arc.kills) || 0) * v / 100;
+      out.atk = ((S.arc && S.arc.kills) || 0) * v / 100 * stackMult;
       break;
     case "yu_ain":                                // 보복 — 아군 사망마다, 자신이 죽으면 초기화
-      out.atk = ((S.arc && S.arc.retribution[who]) || 0) * v / 100;
+      out.atk = ((S.arc && S.arc.retribution[who]) || 0) * v / 100 * stackMult;
       break;
     /* 격노·배임 — 스택 하나당 얻는 몫을 3배로 올림(사용자 지침 2026-09-02
      * — 원래 스택당 +1%·+1이던 것을 +3%·+3으로). 스택 수 자체(표시용
-     * passiveStackCount)는 그대로이고, 스택 하나가 주는 몫만 세졌습니다. */
-    case "lee_hanbeom":                           // 격노 — 잃은 체력 v%마다 추가 피해 3%
-      out.atk = Math.floor(lostPct / v) * 0.03;
+     * passiveStackCount)는 그대로이고, 스택 하나가 주는 몫만 세졌습니다.
+     * 격노만 다시 2배로(사용자 지침 2026-09-06) — 배임은 그대로 +3 유지. */
+    case "lee_hanbeom":                           // 격노 — 잃은 체력 v%마다 추가 피해 6%
+      out.atk = Math.floor(lostPct / v) * 0.06 * stackMult;
       break;
     case "lee_sojeong":                           // 배임 — 잃은 체력 v%마다 방어 +3 (플랫)
-      out.def = Math.floor(lostPct / v) * 3;
+      out.def = Math.floor(lostPct / v) * 3 * stackMult;
       break;
   }
   return out;
@@ -2098,6 +2267,21 @@ function onAllyDown(who) {
     S.arc.retribution.yu_ain = (S.arc.retribution.yu_ain || 0) + 1;
 }
 function stars(n) { return "★".repeat(n); }
+
+/* 보조 교육위원·E.G.O 기프트의 flavor(분위기 한 줄, 있으면)를 desc(효과 설명)
+ * 위에 얹을 카드용 조각. 사용자 지침(2026-09-06) — 원래 desc 한 줄에 분위기
+ * 문장과 효과 설명이 붙어 있던 것을, 화면에서도 둘로 나눠 보이게 합니다.
+ * SINNERS.quote 가 쓰는 것과 같은 스타일(.notequote, 이탤릭체)을 그대로 빌립니다.
+ * flavor 가 없는 항목은 그냥 빈 문자열입니다.
+ *
+ * "TODO" 도 «없는 것» 으로 봅니다 (사용자 지침 2026-09-06) — data/gifts.js 의
+ * 27개는 글을 직접 쓰실 수 있게 flavor: "TODO" 로 칸만 내 두었습니다. 다른
+ * "TODO" 값과 같은 규칙입니다(data/characters.js 머리말 참고) — 그대로 두면
+ * 화면에서 저절로 가려지고, 채워 넣으면 그 자리에 바로 뜹니다. */
+function flavorHTML(x) {
+  const f = x && x.flavor;
+  return (f && f !== "TODO") ? '<div class="notequote">' + f + '</div>' : '';
+}
 function rnd(n) { return Math.floor(Math.random() * n); }
 
 /* ── 지원 작성위원 ────────────────────────────────────────────
@@ -3819,6 +4003,12 @@ function startBattleFight(scene, f) {
 
 function beginTurn() {
   const b = S.battle;
+  /* 「제3발톱 의리사슬」류(effect.defToAtkGuardMult) 가 볼 «지난 차례에 방어를
+   * 골랐는가» 를 여기서 옮겨 적습니다 — b.cmds 는 바로 아래에서 비워지므로,
+   * 비우기 전이어야 합니다. giftConvertFor() 가 이걸 읽습니다. */
+  const guardedLast = {};
+  for (const w in b.cmds) if (b.cmds[w] === "guard") guardedLast[w] = true;
+  b.persist.guardedLast = guardedLast;
   b.turn++;
   b.cmds = {}; b.mods = {};
   /* 지난 차례에 누가 말을 걸었다면(신해수랜드 연계 등, battleSay 참고) 그
@@ -4059,9 +4249,14 @@ function pickTarget(cands, done) {
 /* ── 작성위원 고유 능력 — 액티브 손잡이 ─────────────────────────
  *  같은 적에게 한 번(갑주만 8·12단계에서 두 번·세 번까지 — v.uses 참고).
  *  b.skillUsed 는 이 전투(=이 적 개체) 동안만 살아, 새 전투마다 0부터
- *  다시 셉니다 — "개체 단위" 리셋을 그대로 얻는 자리입니다. */
-function skillUsesAllowed(v) {
-  return (v && typeof v === "object" && v.uses) ? v.uses : 1;
+ *  다시 셉니다 — "개체 단위" 리셋을 그대로 얻는 자리입니다.
+ *
+ *  who 를 넘기면 E.G.O 기프트·보조 교육위원의 skillUses 보정도 더합니다
+ *  (uniqueSkillBoostFor 참고) — 아무도 없으면 원래 횟수 그대로. */
+function skillUsesAllowed(v, who) {
+  const base = (v && typeof v === "object" && v.uses) ? v.uses : 1;
+  const bonus = who ? uniqueSkillBoostFor(who).uses : 0;
+  return Math.max(1, base + bonus);
 }
 function skillAvailable(who) {
   const skill = UNIQUE_SKILLS[who];
@@ -4073,7 +4268,7 @@ function skillAvailable(who) {
   if (who === "song_hamin" && b.aoe) return null;
   const v = skillTierValue(skill, level);
   const used = (b.skillUsed && b.skillUsed[who]) || 0;
-  if (used >= skillUsesAllowed(v)) return null;
+  if (used >= skillUsesAllowed(v, who)) return null;
   return { skill, level, v };
 }
 
@@ -4342,6 +4537,30 @@ function checkAchievements(foeName, cleared) {
     if (a.desc) say(a.desc, "sys");
 
     const g = a.give || {};
+    /* 인격 — 우편·이벤트와 «똑같은» 자리를 씁니다(eventGiveId/eventGiveApply).
+     * give.id 는 { who, star, title } 로 적습니다. 숨은 인격(hidden)도
+     * 여기서 넣어 줍니다 — 그때부터 노트·장착 화면에 보이기 시작합니다. */
+    if (g.id) {
+      const p = eventGiveId(g);
+      if (p) {
+        if (!S.owned[p.key]) {
+          S.owned[p.key] = true;
+          /* 배정과 같은 규칙 — 지금 세운 것보다 성급이 높으면 갈아 끼웁니다 */
+          const cur = idByKey(S.equip[p.who]);
+          if (!cur || cur.star < p.id.star) {
+            S.equip[p.who] = p.key;
+            if (S.party.indexOf(p.who) >= 0) S.hp[p.who] = maxHp(p.who);
+          }
+          say("인격 획득 — " + stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name, "gain");
+          if (p.id.note) say("(" + p.id.note + ")", "sys");
+        } else {
+          const n = dupRefund(p.id.star);
+          addFrag(p.who, n);
+          say("이미 지닌 인격이라 " + SINNERS[p.who].name + " 인격 파편 " + n + "개를 받았습니다.", "gain");
+        }
+      } else say("(보상 인격을 찾지 못했습니다: " +
+                 [g.id.who, g.id.star, g.id.title].join(" / ") + ")", "todo");
+    }
     if (g.support) {
       const sp = supportBy(SUP_PREFIX + g.support);
       if (sp) {
@@ -4353,6 +4572,10 @@ function checkAchievements(foeName, cleared) {
     }
     if (g.money) { S.money += g.money; say(CURRENCY + " " + g.money + " 획득.", "gain"); }
     if (g.codex) { S.codex += g.codex; say("황금교본 " + g.codex + "권 획득.", "gain"); }
+    if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket);
+      say("보조 교육위원 선택권 " + g.advisorTicket + "개 획득.", "gain"); }
+    if (g.giftTicket) { addPickTicket("gift", g.giftTicket);
+      say("E.G.O 기프트 선택권 " + g.giftTicket + "개 획득.", "gain"); }
     if (g.event) { addEvent(g.event); say(eventCurName() + " " + g.event + " 획득.", "gain"); }
     saveVault();
   });
@@ -5027,7 +5250,7 @@ function openParty(done) {
       const a = advs[i];
       h += '<div class="slot' + (a ? ' sel' : '') + '" data-adv="' + i + '">' +
              (a ? '<div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
-                    a.title + ' ' + a.name + '</div><div class="sub">' + a.desc + '</div>'
+                    a.title + ' ' + a.name + '</div>' + flavorHTML(a) + '<div class="sub">' + a.desc + '</div>'
                 : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
                     (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
            '</div>';
@@ -5047,7 +5270,7 @@ function openParty(done) {
       const gf = gfs[i];
       h += '<div class="slot' + (gf ? ' sel' : '') + '" data-gift="' + i + '">' +
              (gf ? '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + gf.name +
-                     '</div><div class="sub">' + gf.desc + '</div>'
+                     '</div>' + flavorHTML(gf) + '<div class="sub">' + gf.desc + '</div>'
                  : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
                      (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
            '</div>';
@@ -5250,7 +5473,7 @@ function openEquip(back) {
     const open = !!EQUIP_OPEN[who];
     const cur  = idByKey(S.equip[who]);
     const mine = ownedIds(who).length;
-    const tot  = s.ids.filter(i => !i.todo).length;
+    const tot  = s.ids.filter(i => idCounted(who, i)).length;
     const inParty = forced && S.party.indexOf(who) >= 0;
 
     h += '<div class="eqhead' + (open ? ' open' : '') + (inParty ? ' inparty' : '') +
@@ -5270,6 +5493,8 @@ function openEquip(back) {
     let body = '<div class="grid eqbody">';
     s.ids.forEach(id => {
       const key = idKey(who, id);
+      /* 숨은 인격은 얻기 전까지 자리 자체가 없습니다 (idHidden 참고) */
+      if (idHidden(who, id)) return;
       if (id.todo) {
         if (!EQUIP_OWNED_ONLY) {
           body += '<div class="slot"><div class="lock">' + stars(id.star) + ' (미작성)</div></div>';
@@ -5584,7 +5809,7 @@ function synergyMembers(sy) {
   const out = [];
   for (const w in SINNERS) {
     SINNERS[w].ids.forEach(id => {
-      if (id.todo || !match(id.title)) return;
+      if (id.todo || idHidden(w, id) || !match(id.title)) return;
       out.push({ sup: false, owned: !!S.owned[idKey(w, id)], who: SINNERS[w].name, star: id.star, title: id.title });
     });
   }
@@ -5636,7 +5861,7 @@ function openNote(back, focus) {
   const detail = (who) => {
     const s = SINNERS[who];
     const mine = ownedIds(who).length;
-    const tot  = s.ids.filter(i => !i.todo).length;
+    const tot  = s.ids.filter(i => idCounted(who, i)).length;
 
     let h = '<h2>노 트</h2>' +
             '<div class="hint">신상 기록 · 관리자 열람용</div>' +
@@ -5667,6 +5892,7 @@ function openNote(back, focus) {
          '<span class="sub">' + mine + ' / ' + tot + ' 보유</span></div>' +
          '<div class="grid">';
     s.ids.forEach(id => {
+      if (idHidden(who, id)) return;   /* 숨은 인격 — 얻기 전에는 이름도 안 보입니다 */
       if (id.todo) { h += '<div class="slot"><div class="lock">' + stars(id.star) + ' (미작성)</div></div>'; return; }
       const key = idKey(who, id);
       const has = !!S.owned[key];
@@ -5779,6 +6005,7 @@ function openNote(back, focus) {
         h += '<div class="slot">' +
                '<div class="' + (has ? 'nm' : 'lock') + '">' +
                  '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name + '</div>' +
+               (has ? flavorHTML(a) : '') +
                '<div class="sub">' + (has ? a.desc : '미보유　— 효과는 함께한 뒤에 열립니다') + '</div>' +
              '</div>';
       });
@@ -5817,7 +6044,7 @@ function openNote(back, focus) {
            * 고 잘못 뜹니다 — 교육위원도 함께 셉니다. */
           let ownedN = 0, totalN = 0;
           for (const w in SINNERS) SINNERS[w].ids.forEach(id => {
-            if (id.todo || !tags.some(tg => id.title.indexOf(tg) >= 0)) return;
+            if (id.todo || idHidden(w, id) || !tags.some(tg => id.title.indexOf(tg) >= 0)) return;
             totalN++; if (S.owned[idKey(w, id)]) ownedN++;
           });
           advisorList().forEach(a => {
@@ -6089,7 +6316,7 @@ function openShop(back) {
      * 구체적인 대상 고르기는 openExchange() 안에서. */
     const exCan = Object.keys(SINNERS).some(w =>
       fragCount(w) >= RULE.fragExchange &&
-      SINNERS[w].ids.some(id => !S.owned[idKey(w, id)] && !pickupOnTitle(id.title)));
+      SINNERS[w].ids.some(id => !S.owned[idKey(w, id)] && !id.hidden && !pickupOnTitle(id.title)));
     const aTotal = advisorList().length;
     const aMine  = Object.keys(S.advisorsOwned || {}).length;
 
@@ -6378,7 +6605,7 @@ function openGacha(done, pk, deal) {
   /* 1성도 포함 — 1성은 전원 보유 상태라 중복으로 나와 환급된다 */
   const pool = [];
   for (const who in SINNERS)
-    SINNERS[who].ids.forEach(id => { if (!id.todo) pool.push({ who, id }); });
+    SINNERS[who].ids.forEach(id => { if (!id.todo && !id.hidden) pool.push({ who, id }); });
 
   const pct = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + "%";
 
@@ -6648,7 +6875,7 @@ function openExchange(back) {
   Object.keys(SINNERS).forEach(who => {
     const s = SINNERS[who];
     const have = fragCount(who);
-    const missing = s.ids.filter(id => !S.owned[idKey(who, id)]);
+    const missing = s.ids.filter(id => !S.owned[idKey(who, id)] && !id.hidden);
     const exchangeable = missing.filter(id => !pickupOnTitle(id.title));
     const can = have >= RULE.fragExchange && exchangeable.length > 0;
     h += '<div class="slot"' + (can ? ' data-who="' + who + '"' : '') + '>' +
@@ -6679,7 +6906,7 @@ function openExchangePick(who, back) {
             '<div class="hint">보유 파편 <b>' + have + '</b>　·　1회 ' + RULE.fragExchange + '개</div>';
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
 
-    const missing = s.ids.filter(id => !S.owned[idKey(who, id)]);
+    const missing = s.ids.filter(id => !S.owned[idKey(who, id)] && !id.hidden);
     if (!missing.length) {
       h += '<div class="hint">더 바꿀 인격이 없습니다 — 이미 전부 지녔습니다.</div>';
     } else {
@@ -8870,6 +9097,8 @@ function mailGiveText(m) {
   if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
   if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
   if (g.enkCap) out.push(ENK_CAPSULE.name + " " + g.enkCap + "개");
+  if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
+  if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
     out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
@@ -8885,7 +9114,8 @@ function mailWasted(m) {
   const g = m.give || {};
   /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
   if (g.money || g.codex || g.event || g.support || g.enkCap ||
-      g.fragBoxSelect || g.fragBoxRandom) return false;   // 다른 것이 있으면 버려질 일 없습니다
+      g.fragBoxSelect || g.fragBoxRandom ||
+      g.advisorTicket || g.giftTicket) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
   return enkCount() >= ENK_RULE.max;
@@ -8912,6 +9142,8 @@ function mailTake(m) {
   if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
   if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
+  if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
+  if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
   if (g.enk) {
     enkSync();
     const before = enkCount();
@@ -9267,6 +9499,7 @@ function openAdvisor(back) {
            '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name +
              (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
+           (has ? flavorHTML(a) : '') +
            '<div class="sub">' + (has ? a.desc : '미보유') + '</div>' +
            (겹침 ? '<div class="sub" style="color:#c8403a">' + withJosa(a.name, "을") +
                    ' 이미 세웠습니다. 한 사람은 한 번만 설 수 있습니다.</div>' : '') +
@@ -9333,6 +9566,7 @@ function openGiftPick(back) {
            '<div class="' + (has ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(g.star) + '</span> ' + g.name +
              (on ? ' <span class="sub">· 지님</span>' : '') + '</div>' +
+           (has ? flavorHTML(g) : '') +
            '<div class="sub">' + (has ? g.desc : '미보유') + '</div>' +
          '</div>';
   });
@@ -9369,6 +9603,7 @@ function grantAdvisor(s) {
   S.advisorsOwned[k] = true;
   if (!advisorOnList().length) { S.advisorOn = [k]; S.advisor = k; }
   say("보조 교육위원 합류 — " + stars(a.star) + " " + a.title + " " + a.name, "gain");
+  if (a.flavor) say("“" + a.flavor + "”", "d");
   say(a.desc, "sys");
   saveVault(); render();
 }
@@ -9460,7 +9695,7 @@ function vaultStats() {
   const t = { 1: [0, 0], 2: [0, 0], 3: [0, 0] };
   for (const who in SINNERS)
     SINNERS[who].ids.forEach(id => {
-      if (id.todo) return;
+      if (!idCounted(who, id)) return;
       t[id.star][1]++;
       if (S.owned[idKey(who, id)]) t[id.star][0]++;
     });
@@ -9517,6 +9752,30 @@ function openVault(back) {
          '</div>';
   });
 
+  /* 선택권 둘 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
+   * 없거나(0개) 고를 것이 하나도 안 남았으면 손잡이를 잠급니다. */
+  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">선택권</div>' +
+       '<div class="hint">운에 기대지 않고, 아직 못 가진 것 중 하나를 직접 골라 받습니다.</div>';
+  PICK_TICKETS.forEach(t => {
+    const cnt  = pickTicketCount(t.key);
+    const left = pickTicketCands(t.key).length;
+    const can  = cnt > 0 && left > 0;
+    h += '<div class="syncrow">' +
+           '<button' + (can ? ' data-ticket="' + t.key + '"' : ' disabled') + '>사용</button>' +
+           '<div class="body">' +
+             '<div class="nm">' + t.name + '</div>' +
+             '<div class="sub">보유 ' + cnt + '개　·　고를 수 있는 것 ' + left + '가지</div>' +
+             '<div class="sub">' + t.desc + '</div>' +
+             (cnt > 0 && left === 0
+               ? '<div class="sub" style="color:#d8b26a">' +
+                 (t.key === "advisor"
+                   ? '더 고를 사람이 없습니다 — 이미 다 함께하고 있거나, 남은 사람이 전부 특정 배정 중입니다.'
+                   : '더 고를 기프트가 없습니다 — 이미 전부 지니고 있습니다.') + '</div>'
+               : '') +
+           '</div>' +
+         '</div>';
+  });
+
   /* 엔케팔린 캡슐 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
    * 없거나(0개) 엔케팔린이 이미 가득이면 손잡이를 잠급니다. */
   const capCnt  = enkCapCount();
@@ -9555,6 +9814,78 @@ function openVault(back) {
   $sheet.querySelectorAll("[data-box]").forEach(el => {
     el.onclick = () => openFragBoxUse(el.dataset.box, back);
   });
+  $sheet.querySelectorAll("[data-ticket]").forEach(el => {
+    el.onclick = () => openPickTicketUse(el.dataset.ticket, back);
+  });
+}
+
+/* ── 선택권 사용 ──────────────────────────────────────────────
+ *  아직 못 가진 것을 죽 펴 놓고 하나를 고르게 합니다. 고르면 그 자리에서
+ *  들어오고 선택권 한 장이 사라집니다 — 되돌릴 수 없으므로 한 번 묻습니다.
+ *  교육위원은 효과까지, 기프트는 설명까지 «미리» 보여 줍니다. 고르는 것이
+ *  값인 물건이라, 뽑기(얻고 나서야 열리는 자리)와 달리 가릴 까닭이 없습니다.
+ */
+function openPickTicketUse(kind, back) {
+  $modal.classList.add("on");
+  const meta = PICK_TICKETS.find(t => t.key === kind);
+  if (!meta || !pickTicketUsable(kind)) { openVault(back); return; }
+
+  const draw = () => {
+    const cands = pickTicketCands(kind);
+    let h = '<h2>' + meta.name + '</h2>' +
+            '<div class="hint">' + meta.desc +
+            '　·　보유 ' + pickTicketCount(kind) + '개</div>' +
+            '<div class="grid">';
+    cands.forEach((x, i) => {
+      if (kind === "advisor") {
+        h += '<div class="slot" data-pick="' + i + '">' +
+               '<div class="nm"><span class="star">' + stars(x.star) + '</span> ' +
+                 x.title + ' ' + x.name + '</div>' +
+               flavorHTML(x) +
+               '<div class="sub">' + x.desc + '</div>' +
+               (x.note ? '<div class="sub">' + x.note + '</div>' : '') +
+             '</div>';
+      } else {
+        h += '<div class="slot" data-pick="' + i + '">' +
+               '<div class="nm"><span class="star">' + stars(x.star) + '</span> ' + x.name + '</div>' +
+               flavorHTML(x) +
+               '<div class="sub">' + x.desc + '</div>' +
+             '</div>';
+      }
+    });
+    h += '</div><div class="modalfoot"><button id="tkback" class="ghost">그만두기</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-pick]").forEach(el => {
+      el.onclick = () => {
+        const x = cands[+el.dataset.pick];
+        if (!x) return;
+        const label = (kind === "advisor")
+          ? stars(x.star) + " " + x.title + " " + x.name
+          : stars(x.star) + " " + x.name;
+        if (!confirm(label + "\n\n이것으로 정하시겠습니까? 선택권 한 장이 사라지고, 되돌릴 수 없습니다.")) return;
+        /* 고른 뒤에 다시 한 번 확인합니다 — 창을 열어 둔 사이에 다른 자리에서
+         * 그 사람을 얻었거나 특정 배정이 바뀌었을 수 있습니다. */
+        if (!pickTicketUsable(kind) || pickTicketCands(kind).indexOf(x) < 0) { draw(); return; }
+        S.pickTicket[kind] -= 1;
+        if (kind === "advisor") {
+          if (!S.advisorsOwned) S.advisorsOwned = {};
+          S.advisorsOwned[advisorId(x)] = true;
+          if (!advisorOnList().length) { S.advisorOn = [advisorId(x)]; S.advisor = advisorId(x); }
+          say("보조 교육위원 합류 — " + label, "gain");
+        } else {
+          if (!S.giftsOwned) S.giftsOwned = {};
+          S.giftsOwned[giftId(x)] = true;
+          if (!giftOnList().length) { S.giftOn = [giftId(x)]; S.gift = giftId(x); }
+          say("E.G.O 기프트 획득 — " + label, "gain");
+        }
+        saveVault(); render();
+        openVault(back);
+      };
+    });
+    document.getElementById("tkback").onclick = () => openVault(back);
+  };
+  draw();
 }
 
 /* ── 인격 파편 상자 사용 ──────────────────────────────────────
