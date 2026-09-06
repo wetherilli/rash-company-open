@@ -64,19 +64,19 @@ const GIFTS = [
   },
   {
     star: 1, name: "L사 지급 필기구",
-    flavor: "TODO",
+    flavor: "라거슈타트 로고가 박혀있다.",
     desc: "모든 인격의 공격력 8% 강화",
     effect: { all: { atk: 0.08 } }
   },
   {
     star: 1, name: "철 지난 안전모",
-    flavor: "TODO",
+    flavor: "위험한 필드라서 준비했다고.",
     desc: "모든 인격의 방어력 8% 강화",
     effect: { all: { def: 0.08 } }
   },
   {
     star: 1, name: "구내식당 식권",
-    flavor: "TODO",
+    flavor: "식당에서 누구도 밥 굶지 않도록.",
     desc: "모든 인격의 체력 10% 강화",
     effect: { all: { hp: 0.10 } }
   },
@@ -84,7 +84,7 @@ const GIFTS = [
     /* ★★★ 「L사 교육위원회 지짐」(+2·+2)의 절반짜리입니다. manageMax 를 함께
      * 올려야 첫 턴 클램프에서 깎이지 않습니다 — engine.js advisorEffect 주석 참고. */
     star: 1, name: "밤샘용 캔커피",
-    flavor: "TODO",
+    flavor: "태성군은 몬스터를 준비해왔다.",
     desc: "전투 시작 관리력 +1, 최대 관리력 +1",
     effect: { manage: 1, manageMax: 1 }
   },
@@ -93,14 +93,14 @@ const GIFTS = [
      * 있던 자리인데 기프트는 못 읽고 있어, engine.js advisorEffect() 에
      * 한 줄을 더 붙였습니다(2026-09-06). */
     star: 1, name: "닳아빠진 교정펜",
-    flavor: "TODO",
+    flavor: "다른 펜 없어?",
     desc: "교정으로 줄이는 피해 +5%p",
     effect: { correct: 0.05 }
   },
   {
     /* ★★★ 「명경지수」(확률 +10%p·배율 +0.5)의 작은 맛보기입니다 */
     star: 1, name: "접이식 야전삽",
-    flavor: "TODO",
+    flavor: "망치가 없다고 삽을 쓸 순 없는데.",
     desc: "크리티컬 확률 +3%p",
     effect: { crit: 0.03 }
   },
