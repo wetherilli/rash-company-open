@@ -1305,9 +1305,15 @@ const CHAPTERS = [
   { t: "n", text: "옥상에는 비가 오지 않았다. 구름만 낮게 돌고 있었다." },
   { t: "n", text: "그리고 그 한가운데에, 이경원이 서 있었다." },
   { t: "d", who: "lee_gyeongwon", text: "…뭐야, 저거.",
+    /* 백룡야행을 입고 있으면 이 한 줄만 «마왕의 얼굴로» 말합니다
+     * (사용자 지침 2026-09-11 — 원본 그림 036_6장 이 곧 이 그림입니다).
+     * 저쪽에 선 것과 같은 얼굴이 이쪽에도 뜨면서 「같은 옷이잖아」가
+     * 눈으로도 맞아떨어집니다. 적 쪽은 「마왕 이경원(인게임).png」을 쓰므로
+     * (data/characters.js EXTRA_PORTRAITS) 판이 아주 같지는 않습니다. */
     alt: [ { when: { equip: { who: "lee_gyeongwon", titleHas: "모나크 백룡야행" } },
              who: "lee_gyeongwon",
-             text: "…같은 옷이잖아." } ] },
+             text: "…같은 옷이잖아.",
+             portrait: "assets/enemy/마왕 이경원.png" } ] },
   { t: "n", text: "우리 쪽 이경원은 여기 있었다. 그러니 저기 서 있는 것은 다른 것이었다." },
 
   { t: "recallStart" },
@@ -1607,12 +1613,20 @@ const CHAPTERS = [
       { t: "d", who: "manager", text: "…아니 왜 저희만 기차예요?" },
       { t: "d", who: "guide", text: "메카고질라로는 시간이 더 걸립니다. 노선이 겹치니, 먼저 가 계시면 뒤따라가겠습니다." },
       { t: "n", text: "신해수남자고등학교라는 말에, 차민준의 눈이 반짝인다." },
-      { t: "d", who: "cha_minjun", text: "신해수남고요?! 저 거기 나온 학교예요! 오랜만에 애들 보겠다!" },
+      { t: "d", who: "cha_minjun", text: "신해수남고요?! 저 거기 나온 학교예요! 오랜만에 애들 보겠다!",
+        /* 「신해수랜드 실장」 전용 — 그는 «모르지 않습니다». 들뜬 척인가, 정말 들뜬 것인가 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "신해수남고... 때가 되었나.",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "cha_minjun", text: "어? 근데 축론이 형도 이 근처 살지 않았어? 그간 작성위원들이 다 하나씩 난관을 해결했으니, 이번엔 형 차례인가?" },
       { t: "d", who: "driver", text: "나는 그, 작성위원이 아닌데?" },
       { t: "d", who: "cha_minjun", text: "걱정 마, 형! 내가 형이 잘 헤쳐나갈 수 있게 도와줄게!" },
       { t: "d", who: "driver", text: "…아니, 그러니까 내 차례가 아니라니까." },
-      { t: "n", text: "정작 무슨 일이 벌어지고 있는지도 모른 채, 차민준은 오랜만에 학교로 돌아간다는 생각에 잔뜩 들떠 있었다." },
+      { t: "n", text: "정작 무슨 일이 벌어지고 있는지도 모른 채, 차민준은 오랜만에 학교로 돌아간다는 생각에 잔뜩 들떠 있었다.",
+        /* 「신해수랜드 실장」 전용 — 위 대사와 짝입니다 — 「모른 채」가 실장에게는 안 맞습니다 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "무슨 일이 벌어지고 있는지 모르는 것인지, 아는 것인지. 차민준은 능청스레 상황을 넘겼다.",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "driver", text: "나랑, 노란테는 3호차고, 민준이는 4호차고... 다른 애들은 7호차? 꽤 멀리 떨어져있네." },
       { t: "d", who: "cha_minjun", text: "걱정 마, 형! 내가 형이 잠들면 깨워줄게." },
       { t: "d", who: "kim_taeseong", text: "우린 7호차라고요?" },
@@ -1704,7 +1718,11 @@ const CHAPTERS = [
       { t: "d", who: "김연준", text: "아니 내가 이걸 하려고 얼마나 고생했는데!" },
       { t: "n", text: "김연준은 두 손을 든다." },
       { t: "d", who: "김연준", text: "항복이야." },
-      { t: "d", who: "cha_minjun", text: "…나 방금 뭐 한 거지?" },
+      { t: "d", who: "cha_minjun", text: "…나 방금 뭐 한 거지?",
+        /* 「신해수랜드 실장」 전용 — 제 몸이 무엇인지 이미 압니다 — 시치미인가, 처음 확인한 것인가 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "패륜의 대가를 치렀나.",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "manager", text: "…나도 그게 궁금해." },
 
       /* ── 합류 ─────────────────────────────────────── */
@@ -1730,7 +1748,11 @@ const CHAPTERS = [
       { t: "d", who: "김연준", text: "네이~" },
 
       { t: "d", who: "manager", text: "…신해수남고라..." },
-      { t: "d", who: "cha_minjun", text: "형도 설레?" },
+      { t: "d", who: "cha_minjun", text: "형도 설레?",
+        /* 「신해수랜드 실장」 전용 — 장을 닫는 한마디. 신해수랜드를 눈앞에 두고 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "올 것이... 왔군.",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "manager", text: "아니." },
 
       { t: "n", text: "- 새로운 교육위원 획득 -" },
@@ -1812,7 +1834,11 @@ const CHAPTERS = [
       { t: "d", who: "kim_taeseong", text: "저것들, 그냥 다 태워버리면 안 되나요?" },
       { t: "battle", foe: "hyeolgwi" },
       { t: "n", text: "1층의 시청각실에 들어서자 마주한 것은 신해수랜드의 기록관 김이었다." },
-      { t: "d", who: "cha_minjun", text: "오랜만이야!! 여기 있었구나~" },
+      { t: "d", who: "cha_minjun", text: "오랜만이야!! 여기 있었구나~",
+        /* 「신해수랜드 실장」 전용 — 실장이면 «기록관»을 직함으로 알아봅니다 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "기록관... 그런 직책으로 끼워져 있었나.",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "김...", text: "...차 민준… 너 때문에..." },
       { t: "n", text: "...하지만 무언가 분위기가 다른 것을 알고 차민준은 멈춰서게 된다." },
       { t: "battle", foe: "gimhuijae" },
@@ -1862,7 +1888,11 @@ const CHAPTERS = [
       { t: "d", who: "신해수", text: "이 모든 사태의 원흉은…" },
       { t: "d", who: "신해수", text: "제가 아니라 그 옆의 차민준 씨한테 있습니다만…" },
       { t: "d", who: "cha_minjun", text: "...??" },
-      { t: "d", who: "cha_minjun", text: "나요?" },
+      { t: "d", who: "cha_minjun", text: "나요?",
+        /* 「신해수랜드 실장」 전용 — 신해수의 지목에 대한 반응 — 시치미인가, 다른 반응인가 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "책임을 그냥 돌리기만 하려는 것인가...",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "driver", text: "..." },
       { t: "d", who: "신해수", text: "저는 그저, 그 분이 원하시는 대로 해드렸을 뿐이고요." },
       { t: "d", who: "신해수", text: "이렇게라도 하지 않았으면, 민준씨는 이곳에 돌아오지도 않았겠죠.." },
@@ -1912,13 +1942,25 @@ const CHAPTERS = [
       { t: "d", who: "lee_gyeongwon", text: "…온다." },
       { t: "battle", foe: "hyeolgwi" },
       { t: "n", text: "차민준은 4층으로 올라가는 계단 앞에서 멈추어선다." },
-      { t: "d", who: "cha_minjun", text: "왜?" },
-      { t: "d", who: "cha_minjun", text: "여기, 올라가면 안돼." },
+      { t: "d", who: "park_suo", text: "왜?" },
+      { t: "d", who: "cha_minjun", text: "여기, 올라가면 안돼.",
+        /* 「신해수랜드 실장」 전용 — 아래 하축론 줄과 짝입니다 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "잠시... 멈추지.",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "n", text: "하축론은 상황을 예상하고 읊조린다." },
       { t: "d", who: "driver", text: "기억… 났구나." },
-      { t: "d", who: "driver", text: "네가 여기를 떠난 이유." },
+      { t: "d", who: "driver", text: "네가 여기를 떠난 이유.",
+        /* 「신해수랜드 실장」 전용 — 위와 짝 — 실장에게 「기억이 났구나」는 안 맞습니다. 화자는 하축론 그대로 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "그렇다면 운명이 다시 여기로,",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "n", text: "항상 가벼운 모습을 보이다가 무거운 목소리를 내는 차민준을 보고 수감자들은 당황한다." },
-      { t: "d", who: "cha_minjun", text: "이한범. 지금이 약속의 때야?" },
+      { t: "d", who: "cha_minjun", text: "이한범. 지금이 약속의 때야?",
+        /* 「신해수랜드 실장」 전용 — 계약을 이미 알고 온 사람의 말투로 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "이한범, 지금이 약속의 때라고, 말하고 싶은 건가?",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "n", text: "이한범은 말없이 고개를 끄덕인다." },
       { t: "d", who: "cha_minjun", text: "그럴리가 없잖아. 여기가, 여기.." },
       { t: "d", who: "cha_minjun", text: "여기서 내가 올라간다고. 그 약속이 이루어질 것 같아?" },
@@ -2100,7 +2142,11 @@ const CHAPTERS = [
       { t: "d", who: "seong_siyun", text: "…차민준씨 얘기는, 그니까, 그분이 전 여친이었던 거에요?." },
       { t: "d", who: "cha_minjun", text: "그런 거 아니야!" },
       { t: "d", who: "song_hamin", text: "…다들 무사히 끝난 것만으로 된 거... 잖아?." },
-      { t: "d", who: "cha_minjun", text: "그럼 신해수랜드, 아니 신해수남고는 이제..." },
+      { t: "d", who: "cha_minjun", text: "그럼 신해수랜드, 아니 신해수남고는 이제...",
+        /* 「신해수랜드 실장」 전용 — 스스로 고쳐 부르는 자리 — 실장이면 «안 고칠» 수도 */
+        alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+                 text: "이제 그럼 신해수랜드는,",
+                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
       { t: "d", who: "lee_hanbeom", text: "한동안 P사에서 관리하겠죠." },
       { t: "d", who: "cha_minjun", text: "... 최 군과 결탁한 것이오?" },
       { t: "d", who: "lee_hanbeom", text: "...아니 그 꼭 그런 것만은..." },

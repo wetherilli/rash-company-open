@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.9";
+const VERSION = "2.1.0";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2596,14 +2596,17 @@ function sayBold(text, cls) {
   $log.appendChild(el);
   $log.scrollTop = $log.scrollHeight;
 }
-function speak(who, text) {
+/* portraitSrc — 이 사람의 평소 초상 대신 쓸 그림. 안 주면 portraitOf(who).
+ * 같은 사람이 «다른 얼굴로» 말하는 자리에 씁니다 — data/story.js 의
+ * alt·extra 에 적는 portrait 가 여기로 들어옵니다(전투 쪽은 battleSay). */
+function speak(who, text, portraitSrc) {
   const w = document.createElement("p");
   w.className = "who";
   w.textContent = nameOf(who);
   $log.appendChild(w);
   if (text === "TODO" || text == null) say("(대사 미작성)", "todo");
   else say(text, "d");
-  const pt = portraitOf(who);
+  const pt = portraitSrc || portraitOf(who);
   if (pt) showSpeaker(pt, nameOf(who));
 }
 function divider() {
@@ -3325,6 +3328,15 @@ function next() {
  *
  *  여럿을 함께 적으면 «모두» 맞아야 합니다.
  *  말하는 사람은 who 로 못박을 수 있고, 안 적으면 걸린 사람 → 원래 화자 순으로 찾습니다.
+ *
+ *  ── 얼굴도 갈고 싶을 때 ─────────────────────────────────────
+ *    alt·extra 에 portrait 를 적으면 그 줄에서만 평소 초상 대신 그 그림을
+ *    씁니다. 다른 인격을 물었을 때 말투가 아주 달라지는 자리에 씁니다.
+ *
+ *      alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
+ *               text: "…", portrait: "assets/enemy/혈귀화한 차민준.png" } ]
+ *
+ *    전투 «중» 끼어드는 대사는 여기가 아니라 data/skills.js 의 whoPortrait 입니다.
  */
 function sceneWhen(c) {
   if (!c) return { ok: true, who: null };
@@ -3355,13 +3367,17 @@ function sceneWhen(c) {
   return { ok: true, who: hit };
 }
 
-/* 조건이 맞는 alt 를 찾아 그 줄을 갈아 끼웁니다. 없으면 원래 줄 그대로. */
+/* 조건이 맞는 alt 를 찾아 그 줄을 갈아 끼웁니다. 없으면 원래 줄 그대로.
+ * portrait 를 적어 두면 그 줄에서만 평소 초상 대신 그 그림을 씁니다 —
+ * 다른 인격을 물었을 때 얼굴까지 갈아야 말이 맞는 자리가 있어서입니다
+ * (사용자 지침 2026-09-11). 안 적으면 예전처럼 평소 초상 그대로입니다. */
 function applyAlt(s) {
   if (!s.alt) return s;
   for (const a of s.alt) {
     const m = sceneWhen(a.when);
     if (!m) continue;
-    return { t: s.t, who: a.who || m.who || s.who, text: a.text, extra: s.extra };
+    return { t: s.t, who: a.who || m.who || s.who, text: a.text,
+             portrait: a.portrait || null, extra: s.extra };
   }
   return s;
 }
@@ -3373,7 +3389,7 @@ function playExtras(s) {
     const m = sceneWhen(x.when);
     if (!m) return;
     const who = x.who || m.who || s.who;
-    if (who) speak(who, x.text);
+    if (who) speak(who, x.text, x.portrait || null);
     else say(x.text, "n");
   });
 }
@@ -3397,7 +3413,7 @@ function play(s) {
     case "n":     { const x = applyAlt(s); say(x.text, "n");
                     if (s.shake) shakeScreen(s.shake === "hard");
                     playExtras(x); return cont(); }
-    case "d":     { const x = applyAlt(s); speak(x.who, x.text);
+    case "d":     { const x = applyAlt(s); speak(x.who, x.text, x.portrait);
                     /* caption:true — 이 줄만 무대 가운데에 큰 글씨로도 띄웁니다
                      * (showBattleCaption 참고). 특히 강조하고 싶은 대사에만 답니다. */
                     if (s.caption) showBattleCaption(x.text);
