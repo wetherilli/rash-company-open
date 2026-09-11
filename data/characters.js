@@ -101,7 +101,11 @@ const SYNERGIES = [
    * 같은 «유리대포» 결로, 방어·체력은 안 건드리고 공격만 밀어 줍니다.
    * 지금은 유아인 「B구역 군주」 하나뿐이라 need:2 를 못 채워 아직 발동하지
    * 않습니다 — 8장에서 「흑수」나 「B구역」이 든 인격이 하나 더 생기면 켜집니다. */
-  { tag: ["흑수", "B구역"], name: "흑수들의 왕", need: 2, atk: 0.20, desc: "짐승들이 우두머리 앞에 엎드린다" }
+  { tag: ["흑수", "B구역"], name: "흑수들의 왕", need: 2, atk: 0.20, desc: "짐승들이 우두머리 앞에 엎드린다" },
+  { tag: "P사", name: "P사 저지선", need: 2, def: 0.14, hp: 0.08, desc: "무너뜨릴 수 없는 방어선." },
+  { tag: "익룡무리", name: "익룡무리 토벌대", need: 2, atk: 0.12, def: 0.06, desc: "하늘도 막아선다." },
+  { tag: "Y사", name: "Y사 연구실", need: 2, def: 0.08, hp: 0.08, desc: "미리 셈해 둔 값." },
+  { tag: "대륵도", name: "대륵도", need: 2, atk: 0.08, def: 0.06, desc: "파낸 것 위에, 다시 선다." }
 ];
 
 /* ── 승무원 ───────────────────────────────────────────────── */
@@ -170,9 +174,10 @@ const EXTRA_PORTRAITS = {
   /* 6장 — 적 그림을 대화 초상으로 그대로 빌려 씁니다 */
   "가렛":         "assets/enemy/치프버틀러 가렛.png",
   "마왕 이경원":  "assets/enemy/마왕 이경원(인게임).png",
-  "세리자와":     "assets/portrait/세리자와 아가씨.png"
+  "세리자와":     "assets/portrait/세리자와 아가씨.png",
   /* 로포와 정윤하는 «얼굴 없이» 갑니다 — 그림을 두지 않기로 했습니다 */
   /* "???" 는 일부러 비워 둡니다 — 정체를 밝히기 전에는 얼굴도 보이지 않습니다 */
+  "신해수": "assets/enemy/신해수랜드 교장선생님 신해수.png"
 };
 
 /* ── 작성위원 (수감자) ─────────────────────────────────────────
@@ -356,7 +361,15 @@ const SINNERS = {
       { star: 3, tier: 3.0, title: "제4발톱 도슨트",                 atk: 23, def: 15, hp: 106 , note: "이 미학을 아시겠어요?" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 아누로그나투스", atk: 35, def: 12, hp: 110, note: "날아오를 준비." },
       { star: 3, tier: 3.2, title: "N사 E.G.O :: 강철, 털",       atk: 31, def: 18, hp: 114, note: "털, 그리고 강철" },
-      { star: 3, tier: 3.0, title: "G사 3등급 가면라이더", atk: 26, def: 12, hp: 100, note: "각도는 제가 잡을게요." }
+      { star: 3, tier: 3.0, title: "G사 3등급 가면라이더", atk: 26, def: 12, hp: 100, note: "각도는 제가 잡을게요." },
+      /* 3.2성급 — 실효 예산 69.3. 업적 「퍼레이드를 끝내러 왔다」로만 오는
+       * «숨은 인격» 입니다 — hidden: true 한 줄이 배정·노트·「n / 전체」
+       * 세는 수에서 전부 가려 줍니다(위 「숨은 인격」 머리말 참고).
+       * 「타격대」라는 이름대로 공격 쪽으로 기울였습니다. 송하민 「P사
+       * 익룡무리 과장」과 마찬가지로 제목에 「P사」·「익룡무리」를 함께
+       * 담아, 둘만 세워도 새 시너지 둘이 다 켜집니다. */
+      { star: 3, tier: 3.2, title: "P사 익룡무리 타격대", atk: 34, def: 13, hp: 112, hidden: true,
+        note: "방어선 너머는, 제가 맡죠." }
     ]
   },
 
@@ -452,6 +465,9 @@ const SINNERS = {
       { star: 3, tier: 3.1, title: "북부 총기 협회 3과 저격수", atk: 31, def: 13, hp: 101, note: "숨을 참고, 한 번만."  },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 점박이",   atk: 32, def: 13, hp: 120, note: "벌레의 노래." },
       { star: 3, tier: 3.0, title: "남부협회 분석관",       atk: 26, def: 12, hp: 100, note: "숫자는 거짓말을 안 하죠." },
+      /* 3.1성급 — 실효 예산 63.5, 표준형 29/13/109. P사 이야기 쪽 사람이라
+       * 「P사」·「익룡무리」 두 시너지 태그를 제목에 함께 담았습니다. */
+      { star: 3, tier: 3.1, title: "P사 익룡무리 과장", atk: 29, def: 13, hp: 109, note: "숫자로 방어선을 그린다." },
     ]
   },
 
@@ -507,7 +523,9 @@ const SINNERS = {
       { star: 3, tier: 3.2, title: "개화 E.G.O :: 궁극의 도마뱀",  atk: 31, def: 15, hp: 120, note: "울티마 그 자체가 됨" },
       { star: 3, tier: 3.0, title: "구C사 일등대리",               atk: 25, def: 14, hp: 100, note: "보고드립니다!" },
       /* 3.1성급 — 실효 예산 63.5 (머리말 「잣대」 참고). 표준형 29/13/109 */
-      { star: 3, tier: 3.1, title: "G사 4등급 가면라이더", atk: 29, def: 13, hp: 109, note: "이번 생은 조연도 나쁘지 않다." }
+      { star: 3, tier: 3.1, title: "G사 4등급 가면라이더", atk: 29, def: 13, hp: 109, note: "이번 생은 조연도 나쁘지 않다." },
+      /* 3.0성급 — 성급 평균 그대로 26/12/100 */
+      { star: 3, tier: 3.0, title: "신해수랜드 기록관", atk: 26, def: 12, hp: 100, note: "기록은, 지워지지 않는다." }
     ]
   }
 };
@@ -796,7 +814,42 @@ const ADVISORS = [
   { name: "강호영", title: "남부협회 해양전문가", star: 3, portrait: null,
     effect: { correct: 0.10, manage: 2, manageMax: 2, def: 0.05, hp: 0.05 },
     flavor: "물길을 먼저 읽는다.",
-    desc: "교정 +10%p, 시작 관리력 +2·최대 +2, 파티 방어·체력 +5%." }
+    desc: "교정 +10%p, 시작 관리력 +2·최대 +2, 파티 방어·체력 +5%." },
+  /* 사용자 지침(2026-09-06) — 다른 능력 없이 skillUses 하나만. tag/who 를
+   * 안 적어 uniqueSkillBoostFor() 가 파티 전원에게 걸어 줍니다(atk/def/hp
+   * 가 advisorEffect() 에서 파티 전원에게 걸리는 것과 같은 규칙 — 위
+   * ADVISORS 머리말 「작성위원 고유 능력을 건드린다」참고). */
+  { name: "이정빈", title: "L사 조사원", star: 2, portrait: "assets/portrait/ha_chukron.png",
+    effect: { skillUses: 1 },
+    flavor: "작은 것 하나도 놓치지 않는다.",
+    desc: "작성위원 고유 능력(액티브) 사용 횟수 +1.",
+    note: "지원 작성위원 「개화 E.G.O :: 스테고우로스 하축론」(본명 이정빈)과 같이 세울 수 없습니다." },
+  { name: "최", title: "P사 익룡무리 부장", star: 3, portrait: null,
+    effect: { correct: 0.12, manage: 2, manageMax: 3, def: 0.10, hp: 0.06 },
+    flavor: "방어선은 함부로 무너지지 않는다.",
+    desc: "교정 +12%p, 시작 관리력 +2·최대 +3, 파티 방어 +10%·체력 +6%." },
+  { name: "이정빈", title: "신해수랜드 조사팀장", star: 3,
+    /* 하축론(CREW.driver)과 같은 사람이라 그 초상을 그대로 빌려 씁니다
+     * (사용자 지침 2026-09-06) — 「하축론」 지원 작성위원(data/characters.js
+     * SUPPORTS, 769행 부근)도 같은 그림을 이미 쓰고 있습니다. */
+    portrait: "assets/portrait/ha_chukron.png",
+    /* 「연계 효과 강화」구현 완료(2026-09-01) — engine.js checkLinkSkills()
+     * 에 advisorName/advisorMult 자리를 새로 만들었고, data/skills.js
+     * LINK_SKILLS 「shinhaesuland_cha_minjun」이 이미 advisorName:"이정빈"
+     * 으로 이 이름을 참조합니다(atkMult 2배 → 2.5배). 옮기고 나면
+     * 손볼 것 없이 바로 걸립니다 — 「탐하는 가시」(주기 단축)와는 독립된
+     * 자리라 둘 다 걸면 함께 적용됩니다. */
+    effect: { tag: "신해수랜드", atk: 0.15 },
+    flavor: "무엇을 캐물을지는 내가 정한다.",
+    desc: "신해수랜드 인격 공격 +15%, 신해수랜드 연계 효과 배율 2배 → 2.5배.",
+    /* 지원 작성위원 「개화 E.G.O :: 스테고우로스 하축론」은 본명이 이정빈이라
+     * 이 교육위원과 같이 세울 수 없습니다 — 구현 완료(2026-09-01). engine.js
+     * 에 personKey()/samePerson()을 새로 두어, data/characters.js CREW.driver
+     * (name:"이정빈", codename:"하축론")를 근거로 두 이름이 같은 사람임을
+     * 알아내고, 교육위원 고르기·지원 고르기 양쪽에서 서로 막습니다
+     * (advisorBlockedBySupport/supportBlockedByAdvisor). 옮길 때 손볼 것 없이
+     * 그대로 작동합니다. */
+    note: "지원 작성위원 「개화 E.G.O :: 스테고우로스 하축론」(본명 이정빈)과 같이 세울 수 없습니다." }
 ];
 
 /* ── 지원 작성위원 ─────────────────────────────────────────────
@@ -887,7 +940,25 @@ const SUPPORTS = [
   { name: "하축론", title: "개화 E.G.O :: 스테고우로스", star: 3, tier: 3.2,
     atk: 31, def: 14, hp: 122,
     portrait: "assets/portrait/ha_chukron.png",
-    note: "한 번 깨어난 뒤로는, 예전으로 돌아가지 않았다." }
+    note: "한 번 깨어난 뒤로는, 예전으로 돌아가지 않았다." },
+  /* 3.1성급 — 실효 예산 63.5 (data/characters.js 머리말 「잣대」 참고).
+   * 방어 특화 — 3성 평균(26/12/100) 대비 atk -23%·def +75%·hp +29%
+   * (2026-09-07 — 특화로 가르면서 hp 125 였는데, 그것은 «합» 으로 재던
+   *  시절의 값입니다. 실효로 재면 ×1.083 밖에 안 되어 hp 를 129 로
+   *  올렸습니다. 0df956a 에서 3.1성급으로 선언한 대로 맞춘 것입니다.) */
+  { name: "박상원", title: "신해수랜드 보건선생님", star: 3, tier: 3.1,
+    atk: 20, def: 21, hp: 129,
+    portrait: null,
+    note: "…처치가, 필요하신가요…?" },
+  /* 3.2성급 — 실효 예산 69.3 (data/characters.js 머리말 「잣대」 참고).
+   * 공격 특화 — 3성 평균(26/12/100) 대비 atk +50%·def -25%·hp 그대로
+   * (2026-09-07 — atk 38 이었는데 실효로는 ×1.183 이었습니다. hp 를
+   *  100 으로 못박아 둔 결이라, 모자란 몫을 공격 하나로 채웠습니다.
+   *  0df956a 에서 3.2성급으로 선언한 대로 맞춘 것입니다.) */
+  { name: "신해수", title: "신해수랜드 교장선생님", star: 3, tier: 3.2,
+    atk: 39, def: 9, hp: 100,
+    portrait: null,
+    note: "파티는, 아직 끝나지 않았습니다." }
 ];
 
 /* 지원 작성위원 규칙 */

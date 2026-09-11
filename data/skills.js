@@ -198,3 +198,47 @@ const LINK_BONUS_ATTACKS = [
     defaultReply: "수행합니다."
   }
 ];
+
+/* ── 연계 호령 ──────────────────────────────────────────────────
+ *  위 둘과 발동 조건은 같은 결입니다(who 가 needTitle 을 장착하고
+ *  synergyName 이 발동 중이면, startTurn 턴부터 every 턴마다) — 다른 것은
+ *  «누구에게 걸리나» 와 «무엇이 걸리나» 입니다.
+ *
+ *    연계 효과   한 명을 무작위로 뽑아 그 차례 공격력을 올린다 (대답 있음)
+ *    연계 추가타 한 명을 무작위로 뽑아 그 자리에서 덤 공격을 한 대 꽂는다 (대답 있음)
+ *    연계 호령   태그를 두른 «전원» 에게 그 차례 효과를 건다 (대답 없음)
+ *
+ *  뽑기가 없으니 대답할 사람도 없습니다 — who 가 한마디 외치고 그걸로 끝,
+ *  효과는 조용히 걸립니다(engine.js 의 checkLinkOrders, 턴 머리에서
+ *  checkLinkSkills 바로 뒤에 이어 부릅니다).
+ *
+ *  who / needTitle / synergyName / startTurn / every  — 위 LINK_SKILLS 와 같은 뜻.
+ *               startTurn 턴에 죽어 있으면 그냥 지나가지 않고 «빚»으로 남아,
+ *               살아 돌아온 바로 다음 차례에 냅니다(LINK_SKILLS 와 같은 규칙).
+ *  tag          제목에 이 말이 든 «편성원 전원»(who 자신도 포함 — 선장도 제
+ *               몸을 깎습니다) 에게 걸립니다. 살아 있는 사람만.
+ *  effect       걸리는 것. 지금 읽는 키는 하나입니다 —
+ *                 crit: true  이번 차례 공격이 «확정 치명타» 가 된다.
+ *                             배율은 평소 치명타와 같은 critMult() 를 씁니다
+ *                             (회피 보상처럼 따로 배율을 품지는 않습니다).
+ *               엔진이 인격 이름이 아니라 이 키를 보도록 해 두었으니, 결이
+ *               같은 호령을 다른 장에서 또 얹기 쉽습니다.
+ *  giftName / giftEvery  그 이름의 E.G.O 기프트를 지녔으면 every 대신 이 값을
+ *               씁니다(LINK_SKILLS 와 같은 자리). 기프트 쪽 effect 에는 아무것도
+ *               안 적어도 됩니다 — 이름으로만 찾아 쓰는 자리입니다.
+ *  label        전투 로그에 "(라벨)" 로 붙는 짧은 이름. 안 적으면 "호령".
+ *  callLines    who 가 선창하는 대사 — 배열이면 무작위로 하나.
+ */
+const LINK_ORDERS = [
+  {
+    id: "araon_seong_siyun",
+    who: "seong_siyun", needTitle: "아라온호 선장",
+    synergyName: "아라온호",
+    tag: "아라온호",
+    startTurn: 2, every: 3,
+    giftName: "길잃은 나침반", giftEvery: 2,
+    label: "깎아내기",
+    effect: { crit: true },
+    callLines: ["여러분 스스로를 깎아낼 시간입니다!"]
+  }
+];

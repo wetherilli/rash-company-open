@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "1.14.1";
-const VERSION_NAME = "부산행";
+const VERSION = "2.0.0";
+const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -1378,7 +1378,13 @@ function giftHits(e, who) {
   const title = id ? id.title : "";
   const tags = e.tag ? (Array.isArray(e.tag) ? e.tag : [e.tag]) : [];
   if (tags.length && tags.some(t => title.indexOf(t) >= 0)) return true;
-  if (e.who && sinnerKey(e.who) === who) return true;
+  if (e.who) {
+    if (sinnerKey(e.who) === who) return true;
+    /* 지원 작성위원·조력자는 인격이 없어 S.equip 에도, 위 tag 검사에도 안
+     * 걸립니다 — 제 이름으로 맞춥니다(「모사사우루스의 이빨」처럼 지원 한 명을
+     * 가리키는 기프트 자리). 작성위원과 이름이 겹치면 둘 다 걸립니다. */
+    if ((isSupport(who) || isAlly(who)) && memberName(who) === e.who) return true;
+  }
   return false;
 }
 
@@ -1487,6 +1493,14 @@ function giftCrit() {
 function giftCritMult() {
   return equippedGifts().reduce((s, g) => s + ((g.effect && g.effect.critMult) || 0), 0);
 }
+/* 치명타로 «주는 피해» 에 곱하는 덧붙임(critDmg) — 배율 자체를 키우는
+ * critMult 와 다른 자리입니다. 치명타가 터진 뒤 피해에 한 번 더 곱하므로,
+ * 적어 둔 20%가 다른 배율 보태기와 섞이지 않고 언제나 20%입니다.
+ * 확정 치명타(회피 보상·연계 호령)에도 똑같이 걸립니다. */
+function giftCritDmg() {
+  return equippedGifts().reduce((s, g) => s + ((g.effect && g.effect.critDmg) || 0), 0);
+}
+function critDmgMult() { return 1 + giftCritDmg(); }
 
 /* ── 보조 교육위원 효과 ────────────────────────────────────── */
 function advisorEffect() {
@@ -4102,8 +4116,10 @@ function beginTurn() {
 
   /* checkLinkSkills() 는 대사(선창·대답)를 한 줄씩 끊어 보여 주느라 이제
    * 곧바로 끝나지 않습니다 — 뒤이을 것(설득전 대사·askNext)은 그 다음에
-   * 이어 부르는 콜백(afterLinkSkills)에 넣습니다. */
-  checkLinkSkills(afterLinkSkills);
+   * 이어 부르는 콜백(afterLinkSkills)에 넣습니다. 연계 호령
+   * (checkLinkOrders)도 같은 자리에서 이어 부릅니다 — 둘 다 턴 머리에
+   * 걸리는 것이라, 대사가 겹치지 않게 차례로 세웁니다. */
+  checkLinkSkills(() => checkLinkOrders(afterLinkSkills));
 
   function afterLinkSkills() {
     /* ── 설득 전투 ──────────────────────────────────────────────────
@@ -4220,6 +4236,67 @@ function checkLinkSkills(next) {
       render();
       setTimeout(() => step(i + 1), RULE.dialogueGapMs);
     }, RULE.dialogueGapMs);
+  };
+  step(0);
+}
+
+/* ── 연계 호령 ──────────────────────────────────────────────────
+ *  data/skills.js 의 LINK_ORDERS 를 매 턴 검사합니다. 위 「연계 효과」와
+ *  발동 조건은 같지만, 한 명을 뽑는 대신 «태그를 두른 편성원 전원» 에게
+ *  이번 차례 효과를 겁니다 — 뽑기가 없으니 대답할 사람도 없습니다.
+ *  who 가 한마디 외치고, 효과는 b.mods 에 조용히 얹힙니다.
+ *
+ *  지금 있는 효과는 effect.crit 하나 — 그 차례 공격이 확정 치명타가
+ *  됩니다(b.mods 의 "_forceCrit"/"_critLabel" 을 swing() 이 읽습니다).
+ *  b.mods 는 턴 머리에서 비워지므로 이번 차례에만 걸립니다.
+ *  아라온호 선장 성시윤 — 사용자 지침 2026-09-10.
+ */
+function linkOrderList() {
+  return (typeof LINK_ORDERS !== "undefined" && LINK_ORDERS) ? LINK_ORDERS : [];
+}
+function checkLinkOrders(next) {
+  const b = S.battle;
+  /* 편성·인격·시너지 조건만 먼저 봅니다 — 선창자가 죽어 있는 경우는
+   * 아래에서 «빚»으로 돌립니다(checkLinkSkills 와 같은 규칙). */
+  const list = linkOrderList().filter(lo =>
+    S.party.indexOf(lo.who) >= 0 &&
+    memberTitle(lo.who).indexOf(lo.needTitle) >= 0 &&
+    activeSynergies().some(sy => sy.name === lo.synergyName));
+
+  const step = (i) => {
+    if (S.battle !== b) return;                  // 그 사이 전투가 바뀌었으면 조용히 그만둔다
+    if (i >= list.length) return next();
+    const lo = list[i];
+
+    /* 기프트(「길잃은 나침반」)를 지녔으면 주기가 줄어듭니다 — LINK_SKILLS 와
+     * 같은 자리입니다. 기프트가 GIFTS 에 없는 동안은 그냥 조용히 안 걸립니다. */
+    const giftBoosted = lo.giftName && equippedGifts().some(g => g.name === lo.giftName);
+    const every = giftBoosted ? (lo.giftEvery || lo.every) : lo.every;
+    const start = lo.startTurn != null ? lo.startTurn : every;
+    const dueKey = "_orderDue_" + (lo.id || lo.who);
+    if (b.turn >= start && (b.turn - start) % every === 0) b.persist[dueKey] = true;
+    if (!b.persist[dueKey]) return step(i + 1);
+    if (!alive(lo.who)) return step(i + 1);       // 선창자가 죽어 있다 — 빚은 그대로 남긴다
+
+    /* 호령을 받을 사람이 아무도 없으면(전원 쓰러짐 등) 빚을 그대로 두고
+     * 넘깁니다 — 외치고도 아무 일이 없는 자리를 만들지 않습니다. */
+    const pool = S.party.filter(w => w && alive(w) && memberTitle(w).indexOf(lo.tag) >= 0);
+    if (!pool.length) return step(i + 1);
+    b.persist[dueKey] = false;
+
+    const label = lo.label || "호령";
+    pool.forEach(w => {
+      if (lo.effect && lo.effect.crit) {
+        b.mods[w + "_forceCrit"] = true;
+        b.mods[w + "_critLabel"] = label;
+      }
+    });
+
+    const call = Array.isArray(lo.callLines) ? lo.callLines[rnd(lo.callLines.length)] : lo.callLines;
+    if (call) battleSay(lo.who, call);
+    say(pool.map(memberName).join(" · ") + " — 이번 차례 확정 치명타 (" + label + ")", "good");
+    render();
+    setTimeout(() => step(i + 1), RULE.dialogueGapMs);
   };
   step(0);
 }
@@ -4742,7 +4819,7 @@ function resolveTurn() {
           ? (passiveSkillBonus("yu_ain", 0).atk || 0) : 0;
         let dmg = st.atk * (1 + retribBonus) + rnd(4) - fdef;
         const crit = Math.random() < critRate();
-        if (crit) dmg *= critMult();
+        if (crit) dmg *= critMult() * critDmgMult();
         dmg = Math.max(1, Math.floor(dmg));
         b.hp -= dmg;
         say((crit ? (memberName(target) + "의 치명적인 공격! — " + dmg + " 피해")
@@ -4792,10 +4869,14 @@ function resolveTurn() {
       if (line) battleSay(who, line);
     }
     const evadeBonus = b.persist[who + "_evadeBonus"];
+    /* 연계 호령(LINK_ORDERS effect.crit) — 이번 차례 확정 치명타. 회피
+     * 보상과 달리 배율은 품지 않고 평소 치명타 배율을 그대로 씁니다.
+     * 겹살로 두 번 칠 때는 두 대 다 걸립니다(b.mods 가 턴 내내 남으므로). */
+    const forceCrit = b.mods[who + "_forceCrit"];
     let dmg = st.atk * atkMult + vampBonus + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
-    const crit = evadeBonus ? true : Math.random() < critRate();
-    if (crit) dmg *= evadeBonus || critMult();
+    const crit = (evadeBonus || forceCrit) ? true : Math.random() < critRate();
+    if (crit) dmg *= (evadeBonus || critMult()) * critDmgMult();
     dmg = Math.max(1, Math.floor(dmg));
     b.hp -= dmg;
     say((crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
@@ -4806,7 +4887,9 @@ function resolveTurn() {
         (linkMult !== 1 ? " (" + b.mods[who + "_linkLabel"] + ")" : "") +
         (claw1Mult !== 1 ? " (지령)" : "") +
         (vampBonus ? " (흡혈 과잉회복 +" + vampBonus + ")" : "") +
-        (evadeBonus ? " (회피 보상)" : ""), crit ? "crit" : "hit");
+        (evadeBonus ? " (회피 보상)" : "") +
+        (!evadeBonus && forceCrit ? " (" + b.mods[who + "_critLabel"] + ")" : ""),
+        crit ? "crit" : "hit");
     if (evadeBonus) delete b.persist[who + "_evadeBonus"];
     if (vampBonus) delete b.persist[who + "_vampBonus"];
 

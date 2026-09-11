@@ -64,7 +64,7 @@ const EVENT_RULE = {
    * 만큼 더 받습니다. 교환소 맨 위 알림에 이 수가 그대로 적힙니다. */
   bonusPct: 20,
   /* 스토리 장을 마칠 때 들어오는 몫.
-   *   latest — «가장 마지막 장»(지금은 6.5장 부산행) 을 마쳤을 때
+   *   latest — «가장 마지막 장»(지금은 7장 호감이 끝나는) 을 마쳤을 때
    *   story  — 그 밖의 장을 마쳤을 때
    *   first  — 그 장을 처음 마쳤을 때 / again — 다회차로 다시 마쳤을 때
    * 거울 던전 쪽 몫은 engine.js 의 MIRROR_TIERS 각 갈래에 event 로 적혀 있습니다. */
@@ -140,6 +140,43 @@ const EVENTS = [
       { id: "busan_id_minjun",  name: "차민준 — 남부협회 2과",
         cost: 300, limit: 1,
         give: { id: { who: "cha_minjun", star: 3, title: "남부협회 2과" } } }
+    ]
+  },
+  {
+    id:      "bumblebee",          /* 보관함에 남는 열쇠 — 바꾸지 마십시오 */
+    /* ⚠ 장 이름이 아닙니다 — 고치지 마십시오.
+     * 이 장의 이름은 「호감이 끝나는」이고, 차민준은 주인공입니다.
+     * 다만 CHAPTERS 의 `title` 칸에는 (0장만 빼고) 주인공이 들어가 있고,
+     * engine.js:1724 가 `e.chapter === c.title` 로 글자를 맞춰 보는 열쇠라
+     * 여기에는 «title 칸에 든 글자» 를 그대로 적어야 합니다. 화면에는
+     * 안 나옵니다. 장 이름을 적으면 이벤트가 조용히 안 열립니다. */
+    chapter: "차민준",
+    cur:     "범블비",
+    desc:    "노란색 자동차 변신로봇이다.",
+    line:    "아련한 추억을 무엇으로 바꿀 수 있을까.",   /* 상점 맨 위 띠에 얹히는 광고 문구 */
+    banner:  "assets/scene/신해수랜드 대치중.jpg",
+    from:    "2026-09-11",         /* 7장을 올린 날부터 7일간 — 부산행과 하루 겹칩니다 */
+    days:    7,
+    goods: [
+      { id: "bee_box_select", name: "인격 파편 상자 (선택) 10개",
+        cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
+      { id: "bee_box_random", name: "인격 파편 상자 (무작위) 5개",
+        cost: 10, limit: 30, give: { fragBoxRandom: 5 } },
+      { id: "bee_cap",        name: "엔케팔린 캡슐 1개",
+        cost: 10, limit: 6,  give: { enkCap: 1 } },
+      { id: "bee_codex",      name: "황금교본 5권",
+        cost: 10, limit: 5,  give: { codex: 5 } },
+      { id: "bee_money",      name: "원고료 5",
+        cost: 1,  limit: 0,  give: { money: 5 } },
+      /* 인격 — 한 번씩만입니다. 이 장에서 새로 난 셋 가운데 둘로,
+       * 값은 지난 두 기간과 같은 200·300 입니다. 이소정 「P사 익룡무리
+       * 타격대」는 hidden(업적으로만 얻는 숨은 인격)이라 뺐습니다. */
+      { id: "bee_id_duhyeon", name: "김두현 — 신해수랜드 기록관",
+        cost: 200, limit: 1,
+        give: { id: { who: "kim_duhyeon", star: 3, title: "신해수랜드 기록관" } } },
+      { id: "bee_id_hamin",   name: "송하민 — P사 익룡무리 과장",
+        cost: 300, limit: 1,
+        give: { id: { who: "song_hamin", star: 3, title: "P사 익룡무리 과장" } } }
     ]
   }
 ];

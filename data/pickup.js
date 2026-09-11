@@ -25,13 +25,13 @@ const PICKUP_MAX = 2;
 const PICKUPS = [
   {
     on:   true,
-    name: "남부협회 특정 배정",
-    tag:  "남부협회",
+    name: "신해수랜드 특정 배정",
+    tag:  "신해수랜드",
     rate: 0.60,
     cost: 30,
-    line:   "협회의 방식대로, 확실하게.",
-    banner: "assets/scene/5장 바다 배경.jpg",
-    desc: "이름에 「남부협회」가 든 인격과 교육위원이 자주 나옵니다."
+    line:   "피를 머금을 시간이다.",
+    banner: "assets/scene/P사 광장.jpg",
+    desc: "이름에 「신해수랜드」가 든 인격과 교육위원이 자주 나옵니다."
   },
   {
     on:   true,
@@ -48,6 +48,16 @@ const PICKUPS = [
 /* 내려간 배정 — 기록용입니다. 게임에는 쓰이지 않습니다.
  * 다시 세우려면 그대로 베껴 PICKUPS 로 옮기면 됩니다. */
 const PICKUP_PAST = [
+  {
+    name: "남부협회 특정 배정",
+    tag:  "남부협회",
+    rate: 0.60,
+    cost: 30,
+    line:   "협회의 방식대로, 확실하게.",
+    banner: "assets/scene/5장 바다 배경.jpg",
+    desc: "이름에 「남부협회」가 든 인격과 교육위원이 자주 나옵니다.",
+    ver: "1.12.0 ~ 1.14.1"
+  },
   {
     name: "모나크 특정 배정",
     tag:  "모나크",
