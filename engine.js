@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.7";
+const VERSION = "2.0.8";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2264,15 +2264,52 @@ function alive(who) { return curHp(who) > 0; }
  * 바꾸기」처럼 S.mirror·S.battle 이 아직 서 있는 자리)에는 지우면 안 되므로
  * 거기서는 그냥 둔다. */
 function resetArcIfIdle() {
-  if (!S.battle && !S.mirror) {
-    S.arc = { kills: 0, retribution: {} };
-    /* 2호선을 도중에 빠져나온 자리이기도 합니다 — 순환 보너스도 여기서 함께 걷습니다.
-     * 「굴레」로 늘어나 있던 체력 상한이 도로 줄어드니 넘치는 몫을 깎아 맞춥니다. */
-    if (S.rail2) {
-      S.rail2 = null;
-      S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
-    }
-  }
+  if (S.battle || S.mirror) return;
+  S.arc = { kills: 0, retribution: {} };
+  dropRail2IfIdle();
+}
+
+/* 2호선을 도중에 빠져나온 자리 — 순환 보너스를 걷습니다. 「굴레」로 늘어나
+ * 있던 체력 상한이 도로 줄어드니 넘치는 몫도 깎아 맞춥니다. */
+function dropRail2IfIdle() {
+  if (S.battle || S.mirror || !S.rail2) return;
+  S.rail2 = null;
+  S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+}
+
+/* ── 편성을 고쳐도 «제 자리가 그대로면» 스택을 지킵니다 ────────────────
+ *  「이번 갈래」 스택을 쓰는 것은 둘뿐입니다 —
+ *    광신 (김태성)  S.arc.kills            이번 갈래에 잡은 수
+ *    보복 (유아인)  S.arc.retribution      아군이 쓰러진 수
+ *  (격노·배임은 지금 체력에서 그때그때 셈하므로 여기 해당이 없습니다.)
+ *
+ *  여태는 편성 창을 «여는 순간» 통째로 지웠습니다. 그런데 이야기 도중의
+ *  편성 자리({t:"party"})는 대개 «남을 고치러» 여는 것이라, 제 편성은
+ *  하나도 안 건드렸는데 쌓아 둔 스택이 날아가는 것이 억울했습니다.
+ *
+ *  그래서 창을 열 때 그 둘의 «자기 자리»(편성에 서 있는가 · 무슨 인격을
+ *  물었는가)를 적어 두고, 닫을 때 견줍니다 — 그대로면 그 사람 몫은 지키고,
+ *  달라졌으면 그 사람 몫만 지웁니다 (사용자 지침 2026-09-11).
+ *  상점으로 «완전히 나가는» 자리는 예전처럼 통째로 지웁니다(resetArcIfIdle).
+ *  던전·전투 도중(defeat 뒤의 「편성 바꾸기」)에는 어느 쪽도 손대지 않습니다. */
+const ARC_STACK_OWNERS = ["kim_taeseong", "yu_ain"];
+function arcSetupSnapshot() {
+  const out = {};
+  ARC_STACK_OWNERS.forEach(w => {
+    out[w] = (S.party && S.party.indexOf(w) >= 0)
+      ? "in:" + ((S.equip && S.equip[w]) || "")
+      : "out";
+  });
+  return out;
+}
+function clearArcForChanged(before) {
+  if (S.battle || S.mirror || !S.arc || !before) return;
+  const now = arcSetupSnapshot();
+  ARC_STACK_OWNERS.forEach(w => {
+    if (before[w] === now[w]) return;                    // 제 편성이 그대로 — 지킵니다
+    if (w === "kim_taeseong") S.arc.kills = 0;
+    if (w === "yu_ain" && S.arc.retribution) S.arc.retribution.yu_ain = 0;
+  });
 }
 
 /* 유아인의 「보복」— 아군이 죽을 때마다 스택, 자신이 죽으면 초기화.
@@ -5483,7 +5520,11 @@ function chapterEnd() {
 function closeModal() { $modal.classList.remove("on"); }
 
 function openParty(done) {
-  resetArcIfIdle();
+  /* 예전에는 여기서 「이번 갈래」 스택을 통째로 지웠습니다. 이제는 창을
+   * 닫을 때 사람별로 가립니다 — clearArcForChanged 머리말 참고.
+   * 그냥 닫고 나가면(아무것도 안 고치면) 하나도 안 지워집니다. */
+  const arcBefore = arcSetupSnapshot();
+  dropRail2IfIdle();
   $modal.classList.add("on");
   let picking = ownParty().slice();          /* 조력자는 고르는 목록에 두지 않습니다 */
 
@@ -5668,6 +5709,8 @@ function openParty(done) {
       }
       S.party = picking.slice().concat(alliesOn());   // 조력자는 그대로 옆에 남습니다
       S.party.forEach(w => { if (S.hp[w] == null) S.hp[w] = maxHp(w); });
+      /* 편성이 실제로 바뀐 사람의 스택만 지웁니다 (openParty 머리 참고) */
+      clearArcForChanged(arcBefore);
       saveVault();
       closeModal(); render();
       if (done) done();
