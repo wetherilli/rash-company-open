@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.3";
+const VERSION = "2.0.4";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -65,6 +65,11 @@ const RULE = {
    * 짧은 대기(ms) — 초상이 바뀌는 것도, 대사를 읽는 것도 눈에 들어오게
    * 한 줄씩 끊어 보여 줍니다(사용자 지침 2026-09-02, battleSay 참고). */
   dialogueGapMs: 650,
+  /* 전투 «중» 끼어드는 대사(연계 선창·대답, 연계 호령, 설득전 대사)가 한 줄에
+   * 머무는 시간(ms) — 읽을 틈이 있어야 한다는 지침(2026-09-11)으로 2초입니다.
+   * 위 dialogueGapMs 와 달리, 이 대기 동안 손잡이는 잠기지 않습니다. 행동을
+   * 다 고르면 남은 줄은 그 자리에서 한꺼번에 나옵니다 — queueBattleLines 참고. */
+  battleLineMs: 2000,
   shakeMs:     320,    // 맞을 때 화면이 흔들리는 시간(ms)
   shakeHardMs: 620,    // 강타를 맞을 때(ms)
   gachaFxMs:   900,    // 배정에서 ★★★ 이 나왔을 때 빛이 터지는 시간(ms).
@@ -4163,20 +4168,12 @@ function beginTurn() {
     const persuadeLines = b.scene.persuade && b.scene.persuade.lines && b.scene.persuade.lines[b.turn];
     if (persuadeLines && persuadeLines.length) {
       divider();
-      let pi = 0;
-      const stepLine = () => {
-        if (S.battle !== b) return;              // 그 사이 전투가 바뀌었으면 조용히 그만둔다
-        if (pi >= persuadeLines.length) return askNext();
-        const line = persuadeLines[pi++];
-        if (line.who) battleSay(line.who, line.text);
-        else say(line.text, "sys");
-        if (line.caption) showBattleCaption(line.text);
-        setTimeout(stepLine, RULE.dialogueGapMs);
-      };
-      stepLine();
-    } else {
-      askNext();
+      queueBattleLines(persuadeLines);
     }
+    /* 대사를 기다리지 않고 곧바로 손잡이를 세웁니다(사용자 지침 2026-09-11).
+     * 대사는 그 위로 한 줄씩 흐르고, 행동을 다 고르면 남은 줄은 resolveTurn
+     * 머리에서 한꺼번에 나옵니다. */
+    askNext();
   }
 }
 
@@ -4216,9 +4213,60 @@ function battleSay(who, text) {
                  (!!pt && (pt === f.img || pt === f.heavyImg || pt === S.battle.shown));
   if (!적본인 && pt) showSpeaker(pt, nameOf(who));
 }
-/* next — 이 턴에 걸 것을 다 걸고(그리고 대사를 다 보여 주고) 나면 부릅니다.
- * 대사가 있으면 한 줄씩 끊어 보여 주느라(사용자 지침 2026-09-02) next() 가
- * 곧바로 불리지 않을 수 있습니다 — beginTurn() 은 이 콜백 안에서 뒷일을 잇습니다. */
+/* ── 전투 중 끼어드는 대사 ──────────────────────────────────────────
+ *  연계 선창·대답, 연계 호령, 설득 전투의 중간 대사처럼 «전투가 흐르는
+ *  도중에» 끼어드는 줄들입니다. 사용자 지침(2026-09-11) —
+ *
+ *    · 한 줄에 2초쯤(RULE.battleLineMs) 머물러 읽을 틈을 줍니다.
+ *    · 그동안 «손잡이를 잠그지 않습니다». 대사가 흐르는 중에도 행동을
+ *      고를 수 있습니다 — 예전에는 줄이 다 나올 때까지 기다려야 했습니다.
+ *    · 행동을 다 고르면(resolveTurn 머리에서 flushBattleLines) 남은 줄은
+ *      그 자리에서 한꺼번에 쏟아 내고 넘어갑니다. 더 기다릴 까닭이 없으니까요.
+ *
+ *  줄 하나는 { who, text }(대사 — battleSay) 또는 { text, cls }(지문 — say)
+ *  입니다. caption:true 를 달면 무대 가운데에 큰 글씨로도 띄웁니다.
+ *
+ *  이미 흐르고 있으면 «뒤에 잇습니다» — 한 턴 머리에서 연계 효과·연계 호령·
+ *  설득 대사가 잇따라 쌓여도 순서가 섞이지 않습니다. */
+function queueBattleLines(lines) {
+  const b = S.battle;
+  if (!b) return;
+  const list = (lines || []).filter(Boolean);
+  if (!list.length) return;
+  if (b._lineQ) { b._lineQ.list.push.apply(b._lineQ.list, list); return; }
+
+  const q = { i: 0, list: list, timer: null };
+  q.show = () => {
+    const L = q.list[q.i++];
+    if (L.who) battleSay(L.who, L.text);
+    else say(L.text, L.cls || "sys");
+    if (L.caption) showBattleCaption(L.text);
+  };
+  const step = () => {
+    if (S.battle !== b || b._lineQ !== q) return;   // 전투가 바뀌었거나 이미 털렸다
+    if (q.i >= q.list.length) { b._lineQ = null; render(); return; }
+    q.show();
+    render();
+    q.timer = setTimeout(step, RULE.battleLineMs);
+  };
+  b._lineQ = q;
+  step();
+}
+
+/* 남은 줄을 그 자리에서 한꺼번에 내고 큐를 비웁니다. */
+function flushBattleLines() {
+  const b = S.battle;
+  const q = b && b._lineQ;
+  if (!q) return;
+  if (q.timer) clearTimeout(q.timer);
+  b._lineQ = null;
+  while (q.i < q.list.length) q.show();
+  render();
+}
+
+/* next — 이 턴에 걸 것을 다 겁니다. 대사는 큐에 얹고 곧바로 돌아오므로
+ * (queueBattleLines 참고) next() 는 더 이상 대사를 기다리지 않습니다 —
+ * 손잡이가 바로 서고, 대사는 그 위로 한 줄씩 흘러갑니다. */
 function checkLinkSkills(next) {
   const b = S.battle;
   /* alive(ls.who) 는 일부러 안 봅니다 — 선창자가 죽어 있어도 «낼 차례를
@@ -4229,9 +4277,8 @@ function checkLinkSkills(next) {
     memberTitle(ls.who).indexOf(ls.needTitle) >= 0 &&
     activeSynergies().some(sy => sy.name === ls.synergyName));
 
-  const step = (i) => {
-    if (S.battle !== b) return;                  // 그 사이 전투가 바뀌었으면 조용히 그만둔다
-    if (i >= list.length) return next();
+  const lines = [];
+  for (let i = 0; i < list.length; i++) {
     const ls = list[i];
 
     const giftBoosted = ls.giftName && equippedGifts().some(g => g.name === ls.giftName);
@@ -4242,12 +4289,12 @@ function checkLinkSkills(next) {
      * 기다리지 않습니다). 살아 있어 바로 내면 그 자리에서 갚고 지웁니다. */
     const dueKey = "_linkDue_" + (ls.id || ls.who);
     if (b.turn >= start && (b.turn - start) % every === 0) b.persist[dueKey] = true;
-    if (!b.persist[dueKey]) return step(i + 1);
-    if (!alive(ls.who)) return step(i + 1);       // 선창자가 죽어 있다 — 다음 차례로 유예(빚은 그대로)
+    if (!b.persist[dueKey]) continue;
+    if (!alive(ls.who)) continue;                 // 선창자가 죽어 있다 — 다음 차례로 유예(빚은 그대로)
     b.persist[dueKey] = false;
 
     const pool = S.party.filter(w => w && alive(w) && memberTitle(w).indexOf(ls.pickTag) >= 0);
-    if (!pool.length) return step(i + 1);
+    if (!pool.length) continue;
     const target = pool[rnd(pool.length)];
 
     /* 보조 교육위원 강화 — advisorName 을 세우고 있으면 atkMult 대신
@@ -4259,18 +4306,13 @@ function checkLinkSkills(next) {
 
     const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
     const reply = (target === ls.who) ? ls.selfLine : ls.otherLine;
-    /* 선창 → (대기) → 대답 → (대기) → 다음 항목 — 초상이 바뀌는 것도,
-     * 대사를 읽을 틈도 있게 한 줄씩 끊어 보여 줍니다. */
-    if (call) battleSay(ls.who, call);
-    render();
-    setTimeout(() => {
-      if (S.battle !== b) return;
-      if (reply) battleSay(target, reply);
-      render();
-      setTimeout(() => step(i + 1), RULE.dialogueGapMs);
-    }, RULE.dialogueGapMs);
-  };
-  step(0);
+    /* 선창 → 대답 순서로 큐에 얹습니다. 효과(b.mods)는 위에서 이미 걸렸으니
+     * 대사를 기다릴 까닭이 없습니다 — 손잡이는 바로 섭니다. */
+    if (call)  lines.push({ who: ls.who, text: call });
+    if (reply) lines.push({ who: target, text: reply });
+  }
+  queueBattleLines(lines);
+  next();
 }
 
 /* ── 연계 호령 ──────────────────────────────────────────────────
@@ -4296,9 +4338,8 @@ function checkLinkOrders(next) {
     memberTitle(lo.who).indexOf(lo.needTitle) >= 0 &&
     activeSynergies().some(sy => sy.name === lo.synergyName));
 
-  const step = (i) => {
-    if (S.battle !== b) return;                  // 그 사이 전투가 바뀌었으면 조용히 그만둔다
-    if (i >= list.length) return next();
+  const lines = [];
+  for (let i = 0; i < list.length; i++) {
     const lo = list[i];
 
     /* 기프트(「길잃은 나침반」)를 지녔으면 주기가 줄어듭니다 — LINK_SKILLS 와
@@ -4308,13 +4349,13 @@ function checkLinkOrders(next) {
     const start = lo.startTurn != null ? lo.startTurn : every;
     const dueKey = "_orderDue_" + (lo.id || lo.who);
     if (b.turn >= start && (b.turn - start) % every === 0) b.persist[dueKey] = true;
-    if (!b.persist[dueKey]) return step(i + 1);
-    if (!alive(lo.who)) return step(i + 1);       // 선창자가 죽어 있다 — 빚은 그대로 남긴다
+    if (!b.persist[dueKey]) continue;
+    if (!alive(lo.who)) continue;                 // 선창자가 죽어 있다 — 빚은 그대로 남긴다
 
     /* 호령을 받을 사람이 아무도 없으면(전원 쓰러짐 등) 빚을 그대로 두고
      * 넘깁니다 — 외치고도 아무 일이 없는 자리를 만들지 않습니다. */
     const pool = S.party.filter(w => w && alive(w) && memberTitle(w).indexOf(lo.tag) >= 0);
-    if (!pool.length) return step(i + 1);
+    if (!pool.length) continue;
     b.persist[dueKey] = false;
 
     const label = lo.label || "호령";
@@ -4326,12 +4367,12 @@ function checkLinkOrders(next) {
     });
 
     const call = Array.isArray(lo.callLines) ? lo.callLines[rnd(lo.callLines.length)] : lo.callLines;
-    if (call) battleSay(lo.who, call);
-    say(pool.map(memberName).join(" · ") + " — 이번 차례 확정 치명타 (" + label + ")", "good");
-    render();
-    setTimeout(() => step(i + 1), RULE.dialogueGapMs);
-  };
-  step(0);
+    if (call) lines.push({ who: lo.who, text: call });
+    lines.push({ text: pool.map(memberName).join(" · ") + " — 이번 차례 확정 치명타 (" + label + ")",
+                 cls: "good" });
+  }
+  queueBattleLines(lines);
+  next();
 }
 
 /* ── 관리자 능력의 대상 고르기 ──────────────────────────────────
@@ -4758,6 +4799,9 @@ function shakeScreen(hard) {
  * 이제 때리는 사람을 하나씩 끊어 보여 주고, 적이 칠 때 화면이 흔들린다. */
 function resolveTurn() {
   const b = S.battle;
+  /* 행동을 다 골랐으면 더 기다릴 까닭이 없습니다 — 아직 흐르고 있던 대사를
+   * 그 자리에서 한꺼번에 내고 넘어갑니다 (사용자 지침 2026-09-11). */
+  flushBattleLines();
   b.cur = null;
   render();
   buttons([{ label: "…", cls: "primary", disabled: true }]);   // 푸는 동안은 잠근다
@@ -5187,6 +5231,12 @@ function scriptedEnd() {
  * persuade.lines 마지막 턴에 이미 나온 뒤입니다)로 곧장 이어집니다. */
 function persuadeEnd() {
   const b = S.battle;
+  flushBattleLines();
+  /* 설득이 끝나면 무대 가운데에 선 적을 치웁니다(사용자 지침 2026-09-11).
+   * 쓰러뜨려 이긴 것이 아니라 «설득된» 것이라 foeFalls 같은 쓰러지는 연출은
+   * 쓰지 않지만, 그렇다고 적인 채로 계속 서 있으면 곧바로 이어지는 대화가
+   * 어긋납니다 — 그 자리만 조용히 비웁니다. 배경은 그대로 둡니다. */
+  showFoe(null, null, null);
   healParty(RULE.winHeal, null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
