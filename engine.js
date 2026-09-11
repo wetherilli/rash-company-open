@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.1";
+const VERSION = "2.0.2";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3453,7 +3453,12 @@ function play(s) {
             party: S.party.slice(), equip: Object.assign({}, S.equip),
             hp: Object.assign({}, S.hp), flags: Object.assign({}, S.flags),
             partyStack: S.partyStack.slice(), partyBan: S.partyBan.slice(),
-            battleForced: S.battleForced
+            battleForced: S.battleForced,
+            /* 그때 깔려 있던 배경도 함께 담습니다 — 돌아갔을 때 진 자리의
+             * 배경(교장실)이 그대로 남아 있으면 «어디로 돌아온 건지» 가
+             * 어긋납니다. CUR_BG 는 판이 살아 있는 동안 그대로 남는 값이라
+             * 되돌리지 않으면 안 바뀝니다. */
+            bg: CUR_BG || null, bgName: CUR_NAME || null
           };
           saveVault();
         }
@@ -5246,15 +5251,30 @@ function defeat() {
       : storyCP
       ? { label: "중간 저장 지점으로", cls: "primary", fn: () => {
           S.waiting = false;
-          S.party = storyCP.party.slice();
-          S.equip = Object.assign({}, storyCP.equip);
-          S.hp = Object.assign({}, storyCP.hp);
-          S.flags = Object.assign({}, storyCP.flags);
-          S.partyStack = (storyCP.partyStack || []).slice();
-          S.partyBan = (storyCP.partyBan || []).slice();
-          S.battleForced = !!storyCP.battleForced;
-          S.sc = storyCP.sc;
-          next();
+          /* 돌아가기 전에 한 줄 — 아무 말 없이 화면만 갈리면 «졌는데 왜
+           * 여기지» 가 됩니다(사용자 지침 2026-09-11). 그 전투 장면에
+           * rewindText 를 적어 두면 그 말을, 안 적었으면 아래 기본 줄을
+           * 씁니다. 지금은 7장 교장실 신해수 전투에만 적혀 있습니다.
+           *
+           * 배경과 판을 먼저 그 자리로 되돌려 놓고 말합니다 — 진 자리의
+           * 배경 위에 「되감긴다」라고 적으면 그림과 글이 어긋납니다. */
+          clearLog();
+          if (storyCP.bg !== undefined) setBackdrop(storyCP.bg || false, storyCP.bgName);
+          else drawStage(null, null, null);
+          say(scene.rewindText ||
+              "시간이 되감긴다 — 아직 아무 일도 벌어지지 않은 자리로.", "n");
+          render();
+          buttons([{ label: "계속", cls: "primary", fn: () => {
+            S.party = storyCP.party.slice();
+            S.equip = Object.assign({}, storyCP.equip);
+            S.hp = Object.assign({}, storyCP.hp);
+            S.flags = Object.assign({}, storyCP.flags);
+            S.partyStack = (storyCP.partyStack || []).slice();
+            S.partyBan = (storyCP.partyBan || []).slice();
+            S.battleForced = !!storyCP.battleForced;
+            S.sc = storyCP.sc;
+            next();
+          } }]);
         } }
       : { label: "다시 도전", cls: "primary", fn: () => {
           S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
