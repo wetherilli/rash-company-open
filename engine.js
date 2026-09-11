@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.2.0";
+const VERSION = "2.2.1";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2744,6 +2744,16 @@ function clearSpeaker() {
   renderStage();
 }
 
+/* 전투가 끝나면 전투 중 대사(연계 선창·대답, 연계 호령, 설득전 대사)로 떠 있던
+ * 초상을 내립니다(사용자 지침 2026-09-11). clearSpeaker 와 달리 무대를 통째로
+ * 다시 그리지 않고 그 자리만 떼어 냅니다 — 다시 그리면 막 쓰러지기 시작한 적
+ * 그림(foeFalls)과 마지막 일격의 피해 숫자(showBigDamage)가 새로 그려져 끊깁니다. */
+function dropSpeaker() {
+  CUR_SPEAKER = null;
+  const w = $stage.querySelector(".figwrap.left");
+  if (w) w.remove();
+}
+
 /* 전투 중 대사를 적이 선 자리(무대 가운데)에 큰 글씨로 얹는다 — battleSay 전용.
  * drawStage 를 다시 부르지 않고 지금 그려진 칸에 얹기만 하므로, 초상·적 그림은
  * 그대로 둔 채 글씨만 갈아 끼웁니다. 다음에 drawStage 가 무대를 다시 그리면
@@ -2958,7 +2968,9 @@ function allyHitFx(who, dmg, opt) {
 function foeFalls(after) {
   const el = document.getElementById("figure");
   CUR_FOE = null;
-  CUR_SPEAKER = null;   // 싸움이 끝났으니, 말하던 사람의 초상도 함께 내린다
+  /* 싸움이 끝났으니, 말하던 사람의 초상도 함께 내린다. 예전엔 CUR_SPEAKER 만 비워서
+   * 다음에 무대를 다시 그릴 때까지 그림이 그대로 남아 있었습니다 — 화면에서도 뗍니다. */
+  dropSpeaker();
   if (!el) { if (after) after(); return; }
   el.classList.remove("hit");
   el.classList.add("gone");
@@ -5454,6 +5466,9 @@ function persuadeEnd() {
    * 쓰러뜨려 이긴 것이 아니라 «설득된» 것이라 foeFalls 같은 쓰러지는 연출은
    * 쓰지 않지만, 그렇다고 적인 채로 계속 서 있으면 곧바로 이어지는 대화가
    * 어긋납니다 — 그 자리만 조용히 비웁니다. 배경은 그대로 둡니다. */
+  /* 초상을 먼저 내립니다 — showFoe 가 무대를 다시 그리므로, 그 전에 비워 두지 않으면
+   * 마지막 설득 대사의 초상이 새 무대에 그대로 다시 그려집니다. */
+  dropSpeaker();
   showFoe(null, null, null);
   healParty(RULE.winHeal, null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
@@ -5497,6 +5512,7 @@ function defeat() {
   }
   const scene = b.scene;
   S.battle = null;
+  dropSpeaker();   // 다시 도전 화면에 전투 중 대사의 초상이 남지 않게
 
   /* 익스트림 거울 던전·거울굴절철도처럼 길잡이가 중간에 들르는 갈래는, 그 자리를
    * 지난 뒤에 지면 그 보스만 다시 하는 대신 «길잡이를 다시 만나는 자리»로 돌아갑니다
