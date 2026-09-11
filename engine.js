@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.2";
+const VERSION = "2.0.3";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4196,13 +4196,25 @@ function battleSay(who, text) {
   w.textContent = nameOf(who);
   $log.appendChild(w);
   say(text, "d");
-  /* 지금 화면에 이미 적으로 떠 있는 상대(S.battle.id)는 초상을 다시
-   * 띄우지 않습니다 — 각본 전투(설득전 등) 중 적 본인의 대사에
-   * 겹쳐 그리지 않기 위함입니다. */
-  if (who !== S.battle.id) {
-    const pt = portraitOf(who);
-    if (pt) showSpeaker(pt, nameOf(who));
-  }
+  /* 지금 무대 가운데에 적으로 서 있는 본인은 초상을 다시 띄우지 않습니다 —
+   * 같은 얼굴이 적 자리와 대사 자리에 둘로 겹쳐 보이기 때문입니다.
+   *
+   * 여태 S.battle.id(FOES 의 «열쇠») 하나만 보고 있었습니다. 이야기에서
+   * 화자를 열쇠로 적으면(who:"cha_minjun_bloodfiend") 걸렸지만, 사람이
+   * 읽는 이름으로 적으면(who:"호감에 도달하지 못한 차민준") 그대로 새어
+   * 나갔습니다 — 2026-09-11 에 화면에 열쇠가 그대로 보이던 것을 이름으로
+   * 고치면서 실제로 터진 자리입니다.
+   *
+   * 그래서 셋을 다 봅니다 — 열쇠 · 화면에 뜬 이름 · 그리고 찾아낸 초상이
+   * 지금 그 적으로 걸려 있는 그림과 같은지. 마지막 것이 있어서 이름을
+   * 또 다르게 적더라도(별칭·강타 그림 중이더라도) 겹쳐 그리지 않습니다. */
+  const pt = portraitOf(who);
+  const f  = FOES[S.battle.id] || {};
+  const 적본인 = who === S.battle.id ||
+                 who === S.battle.name ||
+                 nameOf(who) === S.battle.name ||
+                 (!!pt && (pt === f.img || pt === f.heavyImg || pt === S.battle.shown));
+  if (!적본인 && pt) showSpeaker(pt, nameOf(who));
 }
 /* next — 이 턴에 걸 것을 다 걸고(그리고 대사를 다 보여 주고) 나면 부릅니다.
  * 대사가 있으면 한 줄씩 끊어 보여 주느라(사용자 지침 2026-09-02) next() 가
