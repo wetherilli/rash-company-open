@@ -30,7 +30,7 @@ const PICKUPS = [
     rate: 0.60,
     cost: 30,
     line:   "피를 머금을 시간이다.",
-    banner: "assets/scene/P사 광장.jpg",
+    banner: "assets/scene/신해수랜드 대치중.jpg",
     desc: "이름에 「신해수랜드」가 든 인격과 교육위원이 자주 나옵니다."
   },
   {

@@ -107,6 +107,6 @@ const MIRROR_PACKS = [
     foes: ["monarch_a", "tanaconda", "ju3pino"] },
   { id: "rail2pack", name: "괴악한 복원", railOnly: true, bg: "assets/scene/거울굴절철도2호선.jpg",
     foes: ["gsa_riders", "kevin", "david_peters"] },
-  { id: "pack11", name: "신해수랜드의 소동", bg: "assets/scene/P사 광장.jpg",
+  { id: "pack11", name: "신해수랜드의 소동", bg: "assets/scene/신해수랜드 대치중.jpg",
     foes: ["hyeolgwi", "baksangwon", "shinhaesuland_gan"] }
 ];

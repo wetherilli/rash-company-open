@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.0";
+const VERSION = "2.0.1";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3981,6 +3981,22 @@ function startBattleFight(scene, f) {
     persist: {},
     scene: scene
   };
+
+  /* ── 이 전투 하나만 다르게 굴리고 싶을 때 ─────────────────────────
+   *  data/story.js 의 battle 장면에 아래 이름을 그대로 적으면, FOES 표는
+   *  건드리지 않고 «이 전투에서만» 그 값을 씁니다. 같은 적이 한 장 안에서
+   *  두 번 서는데 결이 달라야 할 때 쓰는 자리입니다 — 7장의 차민준이
+   *  3층(각본 전투)과 4층(설득 전투)에 같은 개체로 두 번 서는 것이 그렇습니다.
+   *
+   *      { t:"battle", foe:"…", aoeEvery: 9, aoeFlat: 1000, aoeLine: "…" }
+   *
+   *  hp 를 적으면 최대 체력도 함께 맞춥니다. */
+  ["hp", "atk", "def", "noHeavy", "heavyLine",
+   "aoeEvery", "aoeFrom", "aoeFlat", "aoeLine", "aoeWarn",
+   "healEvery", "healFrom", "healAtk", "healLine", "healWarn"].forEach(k => {
+    if (scene[k] != null) S.battle[k] = scene[k];
+  });
+  if (scene.hp != null) S.battle.maxhp = scene.hp;
   S.restManage = false;
   const b = S.battle;            // 딜레이가 끝났을 때 같은 전투인지 확인용
 
@@ -4923,7 +4939,16 @@ function resolveTurn() {
   /* ② 다 때렸으면 결판을 본다 */
   const afterAllies = () => {
     if (!same()) return;
-    if (b.hp <= 0) return victory();
+    /* 설득 전투는 «체력으로» 끝나지 않습니다 — 정해진 턴을 채워야 끝납니다.
+     * 여태 이 줄이 그것을 앞질러, 턴이 차기 전에 적을 눕히면 보통 승리로
+     * 끝나 버렸습니다. 그러면 persuade.lines 에 심어 둔 대사가 통째로
+     * 날아갑니다(7장 4층 차민준 설득전 — 2026-09-11 확인). 체력이 바닥나도
+     * 1 로 붙들어 두고 이어 갑니다. 깎는 맛은 그대로 남고, 끝내는 것은
+     * 턴수뿐입니다. */
+    if (b.hp <= 0) {
+      if (b.scene.persuade) b.hp = 1;
+      else return victory();
+    }
     if (b.loseOk && b.hp <= b.maxhp * RULE.scriptedOut) return scriptedEnd();
     if (b.scene.persuade && b.turn >= b.scene.persuade.turns) return persuadeEnd();
 
@@ -4968,7 +4993,14 @@ function resolveTurn() {
       shakeScreen(true);
       say("▶ " + b.name + "의 광역 공격!", "heavy");
 
+      /* aoeFlat — 피해를 수로 못박습니다. 방어도, 방어 태세도, 교정도, 갑주도
+       * 깎지 못합니다. 각본상 «반드시 전멸해야 하는» 자리에만 씁니다
+       * (7장 3층 차민준 각본 전투의 9턴째 — 사용자 지침 2026-09-11).
+       * 책임(추민수)만은 그대로 대신 받습니다 — 그래도 합이 훨씬 크므로
+       * 혼자 버텨 내지는 못합니다. */
+      const flatAoe = b.aoeFlat || (FOES[b.id] || {}).aoeFlat || 0;
       const hitOne = t => {
+        if (flatAoe) return flatAoe;
         const st = effStats(t);
         let dmg = b.atk * 1.2 + rnd(4) - st.def;
         if (b.cmds[t] === "guard") dmg *= RULE.guardCut;
@@ -5275,6 +5307,34 @@ function chapterEnd() {
     divider();
     sayBold("'동기화' 기능이 해금되었습니다!", "good");
     say("유리창의 [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
+  }
+
+  /* ── 장착 칸이 늘어나는 장을 마쳤을 때 ─────────────────────────────
+   *  사용자 지침(2026-09-11) — 6장을 마치면 E.G.O 기프트 칸이, 7장을 마치면
+   *  보조 교육위원 칸이 하나 더 열리는데, 여태 아무 말 없이 조용히 늘기만
+   *  했습니다. 편성 화면을 다시 열어 보지 않으면 알 길이 없던 자리라,
+   *  위의 '동기화' 해금과 같은 모양으로 한 줄 크게 알립니다.
+   *
+   *  «어느 장에서 무엇이 열리는가» 는 여기에 적지 않고 SLOT_RULE 을 그대로
+   *  읽습니다 — 그 표에 줄을 하나 더 얹으면(8장 기프트 3칸·9장 교육위원
+   *  3칸이 이미 그렇습니다) 이 알림도 저절로 따라옵니다. 이 함수는 다시
+   *  손댈 일이 없습니다.
+   *
+   *  S.cleared[c.id] 는 위에서 이미 켜 두었으므로 slotCount() 가 늘어난
+   *  뒤의 수를 돌려줍니다. first 로 걸러 두어 다회차로 같은 장을 다시
+   *  마쳐도 두 번 뜨지 않습니다 — '동기화' 쪽과 같은 규칙입니다. */
+  if (first) {
+    const 칸이름 = { gift: "E.G.O 기프트", advisor: "보조 교육위원" };
+    const 어디서 = { gift: "편성", advisor: "편성" };
+    for (const kind in SLOT_RULE) {
+      const r = (SLOT_RULE[kind] || []).find(x => x.needCleared === c.id);
+      if (!r) continue;
+      const n = slotCount(kind);
+      divider();
+      sayBold(칸이름[kind] + " 장착 칸이 하나 더 열렸습니다!", "good");
+      say("[" + 어디서[kind] + "] 에서 " + 칸이름[kind] + "을 " + n +
+          "개까지 세울 수 있습니다.", "sys");
+    }
   }
 
   const firstEver = first && CHAPTERS[0] && c.id === CHAPTERS[0].id;
