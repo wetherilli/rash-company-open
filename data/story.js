@@ -2014,6 +2014,12 @@ const CHAPTERS = [
       { t: "battle", foe: "cha_minjun_bloodfiend",
         persuade: {
           turns: 10,
+          /* 8턴이 끝나는 순간부터 차민준의 모습을 무대에서 내립니다
+           * (사용자 지침 2026-09-11). 9턴째부터는 그가 제 목소리로
+           * 말하기 시작하므로(아래 lines 의 9·10), 혈귀가 된 모습이
+           * 계속 서 있으면 글과 그림이 어긋납니다. 전투는 그대로
+           * 이어집니다 — 안 보일 뿐 여전히 칩니다. */
+          hideFoeAfter: 8,
           lines: {
             7: [
               { who: "lee_hanbeom", text: "민준형 이건 형이 원하던 이야기가 아니야." },

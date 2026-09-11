@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.6";
+const VERSION = "2.0.7";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4097,10 +4097,28 @@ function beginTurn() {
   b.aim     = (b.aoe || b.foeHeal) ? null
                                    : (standing.length ? standing[rnd(standing.length)] : null);
 
+  /* ── 설득 전투 — 정해진 차례가 지나면 적을 무대에서 내립니다 ──────
+   *  { t:"battle", …, persuade: { turns: 10, hideFoeAfter: 8, lines: {…} } }
+   *
+   *  hideFoeAfter 에 적은 차례가 «끝나는 순간»(그 다음 차례 머리)부터
+   *  그림이 사라지고, 그 뒤로는 강타·광역이어도 다시 세우지 않습니다.
+   *  7장 4층에서 9턴째부터는 차민준이 제 목소리로 말하기 시작하므로,
+   *  혈귀가 된 모습이 계속 서 있으면 글과 그림이 어긋납니다.
+   *  전투 자체는 그대로 이어집니다 — 안 보일 뿐 여전히 칩니다
+   *  (사용자 지침 2026-09-11 — "부자연스러워 보일 수 있지만 이 편이 낫다"). */
+  {
+    const ps = b.scene.persuade;
+    if (ps && ps.hideFoeAfter && b.turn > ps.hideFoeAfter && !b.foeHidden) {
+      b.foeHidden = true;
+      b.shown = null;
+      showFoe(null, null, null);
+    }
+  }
+
   /* 강타를 준비하는 턴에는 그림이 바뀝니다.
    * data/story.js 의 FOES 에 heavyImg 로 적습니다. 안 적은 적은 그대로 서 있습니다.
    * 크게 휘두를 자세라는 말과 함께 모습이 달라지도록 한 것입니다. */
-  {
+  if (!b.foeHidden) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg · b.imgScale) */
     const nowImg   = b.img      || f.img      || null;
