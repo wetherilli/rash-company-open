@@ -171,6 +171,13 @@ const EXTRA_PORTRAITS = {
    * 「김연준」은 보조 교육위원 이름과도 겹쳐(초상 null), 여기 적어 두지 않으면
    * portraitOf 가 교육위원 쪽에서 멈춰 적 그림이 있는데도 얼굴이 안 떴습니다. */
   "김연준":       "assets/enemy/김연준.png",
+  /* 7장 P사 부장 「최」 — 이야기에서 화자를 who: "'최'" 로 적습니다.
+   * 작은따옴표까지 글자입니다(원작이 「P사 부장 '최'」로 적어 둔 것을 그대로
+   * 따랐고, 화면에도 그렇게 뜹니다). 보조 교육위원 쪽 이름은 그냥 "최" 라
+   * portraitOf() 가 이름으로 맞춰 보는 자리에서 빗나갑니다 — 그래서 위
+   * ADVISORS 의 portrait 만 채워서는 대사에 얼굴이 안 붙고, 여기 한 줄이
+   * 더 있어야 합니다. 7장 대사 열다섯 줄이 여기 걸립니다. */
+  "'최'":        "assets/portrait/부장 최.png",
   /* 6장 — 적 그림을 대화 초상으로 그대로 빌려 씁니다 */
   "가렛":         "assets/enemy/치프버틀러 가렛.png",
   "마왕 이경원":  "assets/enemy/마왕 이경원(인게임).png",
@@ -824,7 +831,7 @@ const ADVISORS = [
     flavor: "작은 것 하나도 놓치지 않는다.",
     desc: "작성위원 고유 능력(액티브) 사용 횟수 +1.",
     note: "지원 작성위원 「개화 E.G.O :: 스테고우로스 하축론」(본명 이정빈)과 같이 세울 수 없습니다." },
-  { name: "최", title: "P사 익룡무리 부장", star: 3, portrait: null,
+  { name: "최", title: "P사 익룡무리 부장", star: 3, portrait: "assets/portrait/부장 최.png",
     effect: { correct: 0.12, manage: 2, manageMax: 3, def: 0.10, hp: 0.06 },
     flavor: "방어선은 함부로 무너지지 않는다.",
     desc: "교정 +12%p, 시작 관리력 +2·최대 +3, 파티 방어 +10%·체력 +6%." },
