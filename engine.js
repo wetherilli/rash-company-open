@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.5";
+const VERSION = "2.0.6";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5269,6 +5269,15 @@ function defeat() {
     say("…하지만 이야기는 멈추지 않는다.", "sys");
     S.party.forEach(w => { if (w) S.hp[w] = Math.max(1, Math.floor(maxHp(w) * 0.3)); });
     if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
+    /* 각본 전투는 져도 이야기가 그대로 이어지므로, 무대에 선 적을 치웁니다
+     * (사용자 지침 2026-09-11). 여태 이 갈래만 빠져 있어서, 진 뒤에 이어지는
+     * 나레이션 내내 적이 그대로 서 있었습니다 — 「쓰러뜨리고 4층으로
+     * 올라간다」고 적혀 있는데 화면에는 그대로 남아 있는 꼴이었습니다.
+     * 이긴 쪽이 적이라 foeFalls(깜빡이다 내려앉는 연출)는 쓰지 않습니다.
+     * 체력을 깎아 물러나게 한 갈래(scriptedEnd)는 원래부터 foeFalls 로
+     * 치우고 있었습니다. */
+    showFoe(null, null, null);
+    clearSpeaker();
     S.battle = null; S.waiting = false;
     render(); cont();
     return;
