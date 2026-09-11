@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.4";
+const VERSION = "2.0.5";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3038,6 +3038,11 @@ function bigWinLine(r) {
  *  손잡이에 key 를 적어 두면 그 글쇠로도 눌립니다. 예) key: "p"
  *  창이 떠 있거나, 글자를 치는 중이거나, 잠긴 손잡이면 듣지 않습니다.
  *  늘리려면 손잡이 쪽에 key 한 줄만 더하면 됩니다.
+ *
+ *  «지금 화면에 서 있는» 손잡이 줄에서만 찾으므로, 서로 다른 화면이 같은
+ *  글쇠를 써도 부딪히지 않습니다 — P 가 이야기에서는 「계속」, 전투에서는
+ *  「전원 공격」인데 둘이 한 화면에 함께 서는 일이 없습니다. 둘 다 «그냥
+ *  넘긴다»는 뜻이라 일부러 같은 글쇠로 맞춘 것입니다(사용자 지침 2026-09-11).
  */
 document.addEventListener("keydown", function (e) {
   if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
@@ -3537,7 +3542,7 @@ function play(s) {
 function cont() {
   render();
   save(true);
-  buttons([{ label: "계속", cls: "primary", fn: next },
+  buttons([{ label: "계속", cls: "primary", key: "p", fn: next },
            { label: "유리창", cls: "ghost", fn: () => toGlass(() => cont()) }]);
 }
 
@@ -3945,10 +3950,10 @@ function startBossCine(s) {
   } else {
     blackout();
     render();
-    buttons([{ label: "계속", cls: "primary", fn: () => {
+    buttons([{ label: "계속", cls: "primary", key: "p", fn: () => {
       showVoice(() => {}, false);   // 「계속」을 누른 그 순간이라 소리는 그대로 납니다
       render();
-      buttons([{ label: "계속", cls: "primary", fn: reveal }]);
+      buttons([{ label: "계속", cls: "primary", key: "p", fn: reveal }]);
     } }]);
   }
 }
@@ -5326,7 +5331,7 @@ function defeat() {
           say(scene.rewindText ||
               "시간이 되감긴다 — 아직 아무 일도 벌어지지 않은 자리로.", "n");
           render();
-          buttons([{ label: "계속", cls: "primary", fn: () => {
+          buttons([{ label: "계속", cls: "primary", key: "p", fn: () => {
             S.party = storyCP.party.slice();
             S.equip = Object.assign({}, storyCP.equip);
             S.hp = Object.assign({}, storyCP.hp);
