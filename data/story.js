@@ -1617,7 +1617,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 그는 «모르지 않습니다». 들뜬 척인가, 정말 들뜬 것인가 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "신해수남고... 때가 되었나.",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "cha_minjun", text: "어? 근데 축론이 형도 이 근처 살지 않았어? 그간 작성위원들이 다 하나씩 난관을 해결했으니, 이번엔 형 차례인가?" },
       { t: "d", who: "driver", text: "나는 그, 작성위원이 아닌데?" },
       { t: "d", who: "cha_minjun", text: "걱정 마, 형! 내가 형이 잘 헤쳐나갈 수 있게 도와줄게!" },
@@ -1626,7 +1626,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 위 대사와 짝입니다 — 「모른 채」가 실장에게는 안 맞습니다 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "무슨 일이 벌어지고 있는지 모르는 것인지, 아는 것인지. 차민준은 능청스레 상황을 넘겼다.",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "driver", text: "나랑, 노란테는 3호차고, 민준이는 4호차고... 다른 애들은 7호차? 꽤 멀리 떨어져있네." },
       { t: "d", who: "cha_minjun", text: "걱정 마, 형! 내가 형이 잠들면 깨워줄게." },
       { t: "d", who: "kim_taeseong", text: "우린 7호차라고요?" },
@@ -1722,7 +1722,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 제 몸이 무엇인지 이미 압니다 — 시치미인가, 처음 확인한 것인가 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "패륜의 대가를 치렀나.",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "manager", text: "…나도 그게 궁금해." },
 
       /* ── 합류 ─────────────────────────────────────── */
@@ -1752,7 +1752,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 장을 닫는 한마디. 신해수랜드를 눈앞에 두고 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "올 것이... 왔군.",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "manager", text: "아니." },
 
       { t: "n", text: "- 새로운 교육위원 획득 -" },
@@ -1838,7 +1838,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 실장이면 «기록관»을 직함으로 알아봅니다 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "기록관... 그런 직책으로 끼워져 있었나.",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "김...", text: "...차 민준… 너 때문에..." },
       { t: "n", text: "...하지만 무언가 분위기가 다른 것을 알고 차민준은 멈춰서게 된다." },
       { t: "battle", foe: "gimhuijae" },
@@ -1892,7 +1892,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 신해수의 지목에 대한 반응 — 시치미인가, 다른 반응인가 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "책임을 그냥 돌리기만 하려는 것인가...",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "driver", text: "..." },
       { t: "d", who: "신해수", text: "저는 그저, 그 분이 원하시는 대로 해드렸을 뿐이고요." },
       { t: "d", who: "신해수", text: "이렇게라도 하지 않았으면, 민준씨는 이곳에 돌아오지도 않았겠죠.." },
@@ -1947,20 +1947,27 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 아래 하축론 줄과 짝입니다 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "잠시... 멈추지.",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "n", text: "하축론은 상황을 예상하고 읊조린다." },
       { t: "d", who: "driver", text: "기억… 났구나." },
       { t: "d", who: "driver", text: "네가 여기를 떠난 이유.",
-        /* 「신해수랜드 실장」 전용 — 위와 짝 — 실장에게 「기억이 났구나」는 안 맞습니다. 화자는 하축론 그대로 */
+        /* 「신해수랜드 실장」 전용 — 위 「여기, 올라가면 안돼.」와 짝입니다.
+         * ⚠ 이 alt 가 걸리면 «말하는 사람이 차민준으로 바뀝니다» — applyAlt 가
+         * 화자를 who → 조건에 걸린 사람 → 원래 화자 순으로 찾는데,
+         * equip: { who: "cha_minjun" } 이 「걸린 사람」을 만들어 원래 화자
+         * (하축론)를 밀어내기 때문입니다. 그래서 실제로는
+         *   하축론: 기억… 났구나.  /  차민준: 그렇다면 운명이 다시 여기로,
+         * 로 나옵니다 — 확인받고 그대로 두기로 했습니다(2026-09-11).
+         * 하축론이 말하게 하려면 아래 alt 안에 who: "driver" 를 더하면 됩니다. */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "그렇다면 운명이 다시 여기로,",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "n", text: "항상 가벼운 모습을 보이다가 무거운 목소리를 내는 차민준을 보고 수감자들은 당황한다." },
       { t: "d", who: "cha_minjun", text: "이한범. 지금이 약속의 때야?",
         /* 「신해수랜드 실장」 전용 — 계약을 이미 알고 온 사람의 말투로 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "이한범, 지금이 약속의 때라고, 말하고 싶은 건가?",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "n", text: "이한범은 말없이 고개를 끄덕인다." },
       { t: "d", who: "cha_minjun", text: "그럴리가 없잖아. 여기가, 여기.." },
       { t: "d", who: "cha_minjun", text: "여기서 내가 올라간다고. 그 약속이 이루어질 것 같아?" },
@@ -2146,7 +2153,7 @@ const CHAPTERS = [
         /* 「신해수랜드 실장」 전용 — 스스로 고쳐 부르는 자리 — 실장이면 «안 고칠» 수도 */
         alt: [ { when: { equip: { who: "cha_minjun", titleHas: "신해수랜드 실장" } },
                  text: "이제 그럼 신해수랜드는,",
-                 /* portrait: "assets/enemy/혈귀화한 차민준.png" */ } ] },
+                 portrait: "assets/enemy/혈귀화한 차민준.png" } ] },
       { t: "d", who: "lee_hanbeom", text: "한동안 P사에서 관리하겠죠." },
       { t: "d", who: "cha_minjun", text: "... 최 군과 결탁한 것이오?" },
       { t: "d", who: "lee_hanbeom", text: "...아니 그 꼭 그런 것만은..." },
