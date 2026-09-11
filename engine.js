@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.1.3";
+const VERSION = "2.1.4";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -50,7 +50,7 @@ const RULE = {
   clearPay:    200,
   /* 체포로 깎는 적 방어 비율. 이번 턴에만 걸립니다.
    * data/characters.js 의 「체포」 설명 글에도 같은 수가 적혀 있습니다 — 함께 고치십시오. */
-  arrestCut:   0.20,
+  arrestCut:   0.40,
   winHeal:     0.25,   // 전투에 이기면 최대 체력의 이만큼 회복
   scriptedOut: 0.20,   // 각본 전투(lose:"story")에서 적이 물러나는 체력 비율
   battleDelay: 700,    // 전투 시작 시 버튼이 잠기는 시간(ms). 0 이면 바로 시작
