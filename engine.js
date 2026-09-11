@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.1.4";
+const VERSION = "2.2.0";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -57,6 +57,11 @@ const RULE = {
   foeFallMs:   1100,   // 적이 쓰러질 때 깜빡이며 사라지는 시간(ms)
   hitFxMs:     420,    // 참격이 그어지고 적이 흔들리는 시간(ms)
   hitFxGap:    170,    // 여럿이 때릴 때 참격 사이 간격(ms)
+  /* 큰 피해 숫자 — 한 방에 이만큼 이상 들어가면 적 위에 숫자를 크게 띄웁니다
+   * (showBigDamage, 사용자 지침 2026-09-11). 0 이면 모든 피해에, 아주 크게 잡으면 사실상 끕니다. */
+  bigHitMin:   100,
+  bigHitMs:    1000,   // 그 숫자가 떴다 사라지는 시간(ms) — index.html 의 dmgfx 애니메이션 길이와 맞춥니다
+  allyHitMs:   900,    // 아군이 맞을 때 카드 번쩍임·피해 숫자가 머무는 시간(ms) — index.html 의 allyhit·allyflash 길이와 맞춥니다
   /* 한 턴을 풀어 놓는 속도 — 턴제처럼 느껴지도록 끊어 보여 줍니다 */
   allyStepMs:  260,    // 아군이 하나씩 때리는 간격(ms)
   foePauseMs:  420,    // 아군이 다 때린 뒤 적이 되받아치기까지(ms)
@@ -303,6 +308,10 @@ function vaultBody() {
      * 돌아갈 자리로만 씁니다(defeat() 참고). 장을 새로 시작하거나 마치면
      * 지워지는 임시 데이터입니다(startChapter/chapterEnd 참고). */
     storySave: S.storySave || null,
+    /* 화면 글꼴 — 보관함 [화면 글꼴] 에서 고른 것(FONT_CHOICES 참고). 내보낸 vault.js 에도
+     * 함께 들어가 기기를 옮기면 따라갑니다. vaultSig() 에는 일부러 안 넣습니다 —
+     * 지키려는 값이 아니라 보는 취향이라서요. */
+    font:     S.font || null,
     ver:      VERSION
   };
 }
@@ -351,6 +360,7 @@ function loadVault() {
     railSave: v.railSave || null,
     storySave: v.storySave || null,
     mirrorRecords: v.mirrorRecords || [],
+    font:     v.font || null,
     ver:      v.ver || null
   };
 }
@@ -519,9 +529,14 @@ function saveVault() {
  *  아무것도 안 적혀 있으면(기본) 맨 처음으로 돌아갑니다 —
  *  신입 관리자 기념 배정도 다시 열립니다. */
 function clearVault() {
+  /* 화면 글꼴만은 남깁니다 — 진행 기록이 아니라 보는 취향이라, 비우자마자 글꼴이
+   * 처음 값으로 돌아가면 «보관함을 비웠더니 화면이 바뀌었다» 가 됩니다.
+   * 새 보관함에 곧바로 적어 두어야 다음에 켤 때(glass → newState)도 이어집니다. */
+  const font = S && S.font;
   Store.del(VAULT_KEY);
   Store.del(SAVE_KEY);      // 어디까지 읽었나 하는 기록도 함께
   S = newState();           // 머릿속도 같이 비워야 곧바로 되살아나지 않습니다
+  if (font) { S.font = font; saveVault(); }
   enkSync();
 }
 
@@ -583,7 +598,7 @@ function vaultExportText() {
     " *\n" +
     " *  ■ 여기 담기는 것\n" +
     " *    보관함에 남는 것 «전부» 입니다 — 인격 · 인격 파편 · 동기화 · 교육위원 · 기프트 · 지원 작성위원 ·\n" +
-    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린 · 엔케팔린 캡슐.\n" +
+    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린 · 엔케팔린 캡슐 · 화면 글꼴.\n" +
     " *\n" +
     " *  ■ 무언가 없어진 것 같으면\n" +
     " *    고칠 것 없이 이 파일을 그대로 보내 주십시오.\n" +
@@ -1016,6 +1031,7 @@ function newState() {
      * partyStack, partyBan, battleForced }. */
     storySave: (v && v.storySave) || null,
     mirrorRecords: (v && v.mirrorRecords) || [],   // 거울굴절철도 결과 카드 — 최근 세 판
+    font: fontClean(v && v.font),                  // 화면 글꼴 — 못 알아보는 값은 처음 값으로
     partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
     partyBan: [],            // 지금은 편성할 수 없는 사람 — banParty/unbanParty 가 씁니다
     battleForced: false,
@@ -2812,8 +2828,10 @@ function playSound(src, onBlocked) {
   } catch (e) { if (onBlocked) onBlocked(); return null; }
 }
 
-/* 맞는 연출 — 참격이 한 번 그어지고, 적이 좌우로 흔들리며 점멸한다 */
-function foeHit(delay) {
+/* 맞는 연출 — 참격이 한 번 그어지고, 적이 좌우로 흔들리며 점멸한다.
+ * dmg · crit 를 넘기면 그 피해가 크면(RULE.bigHitMin 이상) 숫자도 크게 띄웁니다 —
+ * 참격과 같은 순간에 뜨도록 여기서 함께 부릅니다(showBigDamage). */
+function foeHit(delay, dmg, crit) {
   setTimeout(() => {
     const box = document.querySelector(".scenebox");
     if (!box) return;
@@ -2833,7 +2851,104 @@ function foeHit(delay) {
     s.onerror = function () { if (this.parentNode) this.parentNode.removeChild(this); };
     box.appendChild(s);
     setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, RULE.hitFxMs);
+
+    showBigDamage(box, dmg, crit);
   }, delay || 0);
+}
+
+/* 큰 피해 숫자 — 적 그림의 가운데 조금 위에 띄웁니다. 그림이 없으면(가려진 적 등)
+ * 무대 가운데에. 무대 밖으로 잘려 나가지 않게 가장자리 안쪽으로 붙잡습니다.
+ *
+ * ■ 잇달아 때릴 때 — 자리 칸(DMG_LANES)
+ *   셋이 한 턴에 260ms 간격으로 때리면 숫자가 1초씩 머무는 동안 서로 겹칩니다.
+ *   무작위로 조금 흩뜨리는 것만으로는 세 자리 숫자가 포개져 읽을 수 없었습니다
+ *   (미리보기로 확인, 2026-09-11). 그래서 가운데 → 오른쪽 아래 → 왼쪽 아래 →
+ *   오른쪽 위 → 왼쪽 위 순으로 칸을 정해 두고, 아직 떠 있는 숫자가 쓰는 칸은 건너뜁니다.
+ *   칸 간격은 숫자 크기 48px(데스크톱) 기준입니다. 무대 너비가 아니라 «숫자 크기» 에
+ *   맞춰 줄입니다 — 너비로 줄였더니 좁은 화면에서 간격이 숫자 폭보다 좁아져 도로 겹쳤습니다. */
+const DMG_LANES = [
+  { dx: 0,    dy: 0   },
+  { dx: 125,  dy: 46  },
+  { dx: -125, dy: 46  },
+  { dx: 110,  dy: -52 },
+  { dx: -110, dy: -52 }
+];
+function showBigDamage(box, dmg, crit) {
+  if (!(dmg >= RULE.bigHitMin)) return;
+  const br = box.getBoundingClientRect();
+  let x = br.width / 2, y = br.height * 0.42;
+  const fig = document.getElementById("figure");
+  if (fig && fig.style.display !== "none") {
+    const fr = fig.getBoundingClientRect();
+    if (fr.width && fr.height) {
+      x = fr.left - br.left + fr.width / 2;
+      y = fr.top  - br.top  + fr.height * 0.38;
+    }
+  }
+  const used = {};
+  box.querySelectorAll(".dmgfx").forEach(e => { used[e.dataset.lane] = true; });
+  let lane = DMG_LANES.findIndex((_, i) => !used[i]);
+  if (lane < 0) lane = Math.floor(Math.random() * DMG_LANES.length);   // 다섯 칸이 다 차면 아무 데나
+  const el = document.createElement("div");
+  el.className = "dmgfx" + (crit ? " crit" : "");
+  el.dataset.lane = lane;
+  el.innerHTML = (crit ? '<span class="tag">치명타</span>' : '') + Math.floor(dmg).toLocaleString("ko-KR");
+  box.appendChild(el);
+
+  /* 붙인 뒤에야 index.html 이 정한 글씨 크기(좁은 화면이면 작게)를 읽을 수 있습니다.
+   * 같은 틀 안에서 자리를 박으므로 엉뚱한 자리에 한 번 그려지는 일은 없습니다.
+   * 치명타는 한 치수 크지만 칸 간격은 보통 크기에 맞춥니다 — 칸마다 간격이 달라지면 흐트러집니다. */
+  const k = (parseFloat(getComputedStyle(el).fontSize) || 48) / (crit ? 60 : 48);
+  x += DMG_LANES[lane].dx * k + (Math.random() - 0.5) * 16 * k;
+  y += DMG_LANES[lane].dy * k + (Math.random() - 0.5) * 10 * k;
+  x = Math.max(70 * k, Math.min(br.width  - 70 * k, x));
+  y = Math.max(50 * k, Math.min(br.height - 40 * k, y));
+  el.style.left = x + "px";
+  el.style.top  = y + "px";
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, RULE.bigHitMs);
+}
+
+/* ── 아군이 맞는 연출 ─────────────────────────────────────────────
+ *  적의 공격이 들어가면 맞은 사람의 파티 카드가 붉게 번쩍이고, 그 위에 피해 숫자가
+ *  떴다가 사라집니다(사용자 지침 2026-09-11). 적 쪽 큰 숫자(showBigDamage)와 달리
+ *  문턱이 없습니다 — 아군 체력이 두 자리라 문턱을 두면 거의 뜨지 않습니다.
+ *
+ *  카드는 render() 때마다 새로 그려지므로(renderParty) 카드 «안» 에 붙이면 곧바로
+ *  지워집니다. 그래서 카드 자리를 재서 화면 위(position:fixed, body)에 따로 띄웁니다.
+ *  카드를 다 그린 «뒤» 에 불러야 자리가 맞습니다 — foeTurn 은 render() 다음에 부릅니다.
+ *
+ *  opt.tag    숫자 위 작은 글씨 — 강타 · 광역 · 방어 · 교정 · 책임
+ *  opt.heavy  숫자와 번쩍임을 한 치수 세게 (강타, 못박은 광역)
+ *  opt.miss   회피 — 번쩍임 없이 숫자 대신 초록 「회피」
+ *  opt.blue   교정으로 덜어 낸 피해 — 숫자와 작은 글씨를 파랗게
+ */
+function allyHitFx(who, dmg, opt) {
+  opt = opt || {};
+  const card = $party.querySelector('.pcard[data-who="' + who + '"]');
+  if (!card) return;
+  const r = card.getBoundingClientRect();
+  if (!r.width) return;
+
+  if (!opt.miss) {
+    const fl = document.createElement("div");
+    fl.className = "allyflash" + (opt.heavy ? " heavy" : "");
+    fl.style.left   = r.left + "px";
+    fl.style.top    = r.top + "px";
+    fl.style.width  = r.width + "px";
+    fl.style.height = r.height + "px";
+    document.body.appendChild(fl);
+    setTimeout(() => fl.remove(), RULE.allyHitMs);
+  }
+
+  const el = document.createElement("div");
+  el.className = "allyhit" + (opt.heavy ? " heavy" : "") + (opt.miss ? " miss" : "") +
+                 (opt.blue ? " shield" : "");
+  el.style.left = (r.left + r.width / 2) + "px";
+  el.style.top  = (r.top + r.height * 0.45) + "px";
+  el.innerHTML = (opt.tag ? '<span class="tag">' + opt.tag + '</span>' : '') +
+                 (opt.miss ? "회피" : Math.floor(dmg).toLocaleString("ko-KR"));
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), RULE.allyHitMs);
 }
 
 /* 쓰러지는 연출 — 깜빡이다 살짝 내려앉으며 사라진다.
@@ -2926,6 +3041,7 @@ function renderParty() {
     const sup    = supportBy(who);
     const ally   = allyBy(who);
     const div = document.createElement("div");
+    div.dataset.who = who;   // 맞는 연출(allyHitFx)이 이 카드를 찾는 열쇠
     div.className = "pcard" + (hp <= 0 ? " down" : "") +
                     (sup ? " sup" : "") + (ally ? " ally" : "") +
                     (acting ? " acting" : "") +
@@ -4389,10 +4505,11 @@ function checkLinkSkills(next) {
     /* 선창 → 대답 순서로 큐에 얹습니다. 효과(b.mods)는 위에서 이미 걸렸으니
      * 대사를 기다릴 까닭이 없습니다 — 손잡이는 바로 섭니다. */
     /* whoPortrait — 선창자가 «다른 얼굴로» 말하게 합니다(data/skills.js 참고).
-     * 뽑힌 사람이 선창자 자신일 때(selfLine)도 같은 얼굴로 이어 말합니다. */
+     * 뽑힌 사람이 선창자 자신일 때(selfLine)는 selfPortrait 가 있으면 그 그림,
+     * 없으면 whoPortrait 를 그대로 이어 씁니다. */
     if (call)  lines.push({ who: ls.who, text: call,  portrait: ls.whoPortrait });
     if (reply) lines.push({ who: target, text: reply,
-                            portrait: (target === ls.who) ? ls.whoPortrait : null });
+                            portrait: (target === ls.who) ? (ls.selfPortrait || ls.whoPortrait) : null });
   }
   queueBattleLines(lines);
   next();
@@ -4987,7 +5104,7 @@ function resolveTurn() {
             " (" + (ls.label || "연계") + ")" +
             (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : ""),
             crit ? "crit" : "hit");
-        foeHit(0);
+        foeHit(0, dmg, crit);
         checkJoinIn();
         render();
         if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
@@ -5066,7 +5183,7 @@ function resolveTurn() {
       if (overheal > 0) b.persist[who + "_vampBonus"] = (b.persist[who + "_vampBonus"] || 0) + overheal;
     }
 
-    foeHit(0);
+    foeHit(0, dmg, crit);
     checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
     render();
 
@@ -5154,6 +5271,8 @@ function resolveTurn() {
         return Math.max(1, Math.floor(dmg));
       };
 
+      /* 맞는 연출은 카드를 다 다시 그린 뒤(render) 한꺼번에 띄웁니다 — allyHitFx 참고 */
+      const hits = [];
       if (hero) {
         /* 각자 몫을 계산해 경감한 뒤, 전부 추민수 한 명에게 몬다 */
         let total = 0;
@@ -5162,12 +5281,16 @@ function resolveTurn() {
           total += dmg;
         });
         setHp(hero, curHp(hero) - total);
+        hits.push({ who: hero, dmg: total, tag: "책임" });
         say("　" + memberName(hero) + "이 전원의 몫을 대신 받았다 — " + total + " 피해 (책임)", "heavy");
         if (!alive(hero)) say(withJosa(memberName(hero), "이") + " 쓰러졌다.", "bad");
       } else {
         targets.forEach(t => {
           const dmg = hitOne(t);
           setHp(t, curHp(t) - dmg);
+          /* 무엇이 덜었는지 하나 — 교정 > 방어. 교정이면 숫자를 파랗게(allyHitFx 의 blue) */
+          hits.push({ who: t, dmg, blue: !!b.mods[t + "_guard"],
+                      tag: b.mods[t + "_guard"] ? "교정" : b.cmds[t] === "guard" ? "방어" : "광역" });
           say("　" + memberName(t) + "에게 " + dmg + " 피해" +
               (b.cmds[t] === "guard" ? " (방어)" : "") +
               (b.mods[t + "_guard"] ? " (교정)" : "") +
@@ -5177,6 +5300,8 @@ function resolveTurn() {
         });
       }
       render();
+      /* 못박은 광역(aoeFlat)은 «반드시 전멸» 자리라 강타처럼 세게 보여 줍니다 */
+      hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: h.tag, heavy: !!flatAoe, blue: h.blue }));
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
     }
@@ -5195,6 +5320,7 @@ function resolveTurn() {
       say(memberName(t) + " — 완전히 피했다! (회피)", "good");
       b.persist[t + "_evadeBonus"] = b.mods[t + "_evadeActive"];
       render();
+      allyHitFx(t, 0, { miss: true });
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
     }
@@ -5228,6 +5354,15 @@ function resolveTurn() {
 
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     render();
+    /* 작은 글씨 — 강타면 「강타」, 그리고 무엇이 피해를 덜었는지 하나(교정 > 방어 > 책임).
+     * 교정으로 덜었으면 숫자를 파랗게 — 파티 카드의 교정 딱지(.corrtag)와 같은 결의
+     * 색입니다(사용자 지침 2026-09-11). 방어는 붉은 그대로 둡니다. */
+    const corrected = !!b.mods[t + "_guard"];
+    const eased = corrected ? "교정"
+                : b.cmds[t] === "guard" ? "방어"
+                : (t === hero && heroPct) ? "책임" : "";
+    allyHitFx(t, dmg, { heavy, blue: corrected,
+      tag: [heavy ? "강타" : "", eased].filter(Boolean).join("·") });
 
     /* 반격 — 맞고도 살아 있으면, 방금 «경감되기 전» 받은 피해(rawDmg)에
      * ×v 를 곱해 그대로 되돌려준다(사용자 지침 2026-09-02). */
@@ -5235,7 +5370,7 @@ function resolveTurn() {
       const cdmg = Math.max(1, Math.floor(rawDmg * b.mods[t + "_counter"]));
       b.hp -= cdmg;
       say(memberName(t) + "의 반격! — " + cdmg + " 피해", "crit");
-      foeHit(0);
+      foeHit(0, cdmg, false);
       checkJoinIn();
       render();
       if (b.hp <= 0) return setTimeout(victory, RULE.turnGapMs);
@@ -10052,6 +10187,123 @@ function vaultItemCategories() {
   ];
 }
 
+/* ── 화면 글꼴 ──────────────────────────────────────────────────
+ *  보관함 화면의 [화면 글꼴] 에서 고릅니다(사용자 지침 2026-09-11).
+ *  글꼴 파일은 index.html 의 <link> 가 받아 오고, 여기서는 :root 의 변수
+ *  (--font-ui · --font-dlg · --dlg-plus) 만 <html> 에 덮어씁니다 — 화면 전체가 곧바로 따라옵니다.
+ *
+ *  고른 것은 보관함에 font 칸으로 함께 저장됩니다(vaultBody). 내보낸 vault.js 에도
+ *  들어가므로 기기를 옮기면 따라갑니다. 보관함을 비워도 글꼴은 남습니다(clearVault).
+ *
+ *  ■ 고를 거리를 늘리려면
+ *    구글 글꼴이면 index.html 의 <link> 에 family 를 더하고, 아래에 한 줄 얹습니다.
+ *    key 는 보관함에 남는 열쇠라 한 번 정하면 바꾸지 않습니다 — 못 알아보는 key 는
+ *    fontClean() 이 처음 값으로 돌립니다.
+ */
+const FONT_CHOICES = {
+  ui: [
+    { key: "pretendard", name: "Pretendard", sub: "화면 전체의 기본 고딕",
+      stack: '"Pretendard Variable","Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif' },
+    { key: "system", name: "기기 기본 고딕", sub: "맑은 고딕 · 애플 SD 산돌고딕 Neo — 인터넷이 없어도 같습니다",
+      stack: '"Malgun Gothic","Apple SD Gothic Neo",sans-serif' }
+  ],
+  dlg: [
+    { key: "gowun",     name: "고운바탕",        sub: "붓맛이 도는 부드러운 바탕체", family: '"Gowun Batang"' },
+    { key: "notoserif", name: "Noto Serif KR",  sub: "또렷하고 무게 있는 명조",     family: '"Noto Serif KR"' },
+    { key: "ui",        name: "기본 글꼴과 같게", sub: "대사도 위에서 고른 고딕으로", family: null }
+  ],
+  size: [
+    { key: 0, name: "지문과 같게" , px: 0 },
+    { key: 1, name: "조금 크게",   px: 1 },
+    { key: 2, name: "크게",       px: 2 }
+  ]
+};
+const FONT_DEFAULT = { ui: "pretendard", dlg: "gowun", size: 1 };
+
+/* 보관함에서 읽은 값을 그대로 믿지 않고 한 번 거릅니다 — 손으로 고친 vault.js 도 들어오니까요 */
+function fontClean(f) {
+  const pick = (list, k, d) => list.some(x => x.key === k) ? k : d;
+  f = f || {};
+  return {
+    ui:   pick(FONT_CHOICES.ui,   f.ui,   FONT_DEFAULT.ui),
+    dlg:  pick(FONT_CHOICES.dlg,  f.dlg,  FONT_DEFAULT.dlg),
+    size: pick(FONT_CHOICES.size, f.size, FONT_DEFAULT.size)
+  };
+}
+function applyFont(f) {
+  f = fontClean(f);
+  const ui   = FONT_CHOICES.ui.find(x => x.key === f.ui);
+  const dlg  = FONT_CHOICES.dlg.find(x => x.key === f.dlg);
+  const size = FONT_CHOICES.size.find(x => x.key === f.size);
+  const st = document.documentElement.style;
+  st.setProperty("--font-ui", ui.stack);
+  /* 대사 글꼴을 못 받아 오면 고른 고딕으로 돌아가게 뒤에 붙입니다 */
+  st.setProperty("--font-dlg", dlg.family ? dlg.family + "," + ui.stack : ui.stack);
+  st.setProperty("--dlg-plus", size.px + "px");
+}
+function fontChoiceName(kind, key) {
+  const c = FONT_CHOICES[kind].find(x => x.key === key);
+  return c ? c.name : "";
+}
+
+/* 고르는 창 — 누르는 대로 곧바로 입히고 저장합니다. 맛보기 줄은 로그와 같은
+ * 규칙(.fontsample)을 써서, 보이는 그대로가 실제 화면입니다.
+ * 맛보기 대사는 어느 장의 것도 아닙니다 — 아직 안 읽은 장이 새지 않도록. */
+function openFontPick(back) {
+  $modal.classList.add("on");
+  const f = fontClean(S.font);
+
+  const block = (kind, title, note) => {
+    let h = '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + title + '</div>' +
+            (note ? '<div class="hint">' + note + '</div>' : '') +
+            '<div class="grid">';
+    FONT_CHOICES[kind].forEach(c => {
+      /* 글꼴 이름은 그 글꼴로 적어, 누르기 전에 결을 볼 수 있게 합니다 */
+      const face = kind === "ui"  ? c.stack
+                 : kind === "dlg" ? (c.family ? c.family + "," : "") + "var(--font-ui)"
+                 : null;
+      h += '<div class="slot' + (f[kind] === c.key ? ' sel' : '') + '" data-fk="' + kind + '" data-fv="' + c.key + '">' +
+             '<div class="nm"' + (face ? " style='font-family:" + face + "'" : "") + '>' + c.name + '</div>' +
+             (c.sub ? '<div class="sub">' + c.sub + '</div>' : '') +
+           '</div>';
+    });
+    return h + '</div>';
+  };
+
+  $sheet.innerHTML =
+    '<h2>화 면 글 꼴</h2>' +
+    '<div class="hint">누르는 대로 곧바로 바뀝니다. 보관함에 함께 저장되어, ' +
+      '[기록 · 내보내기] 로 옮기면 글꼴도 따라갑니다.</div>' +
+    '<div class="fontsample">' +
+      '<p class="who">' + nameOf("manager") + '</p>' +
+      '<p class="d">창밖이 조용하네요. 오늘은 모두 무사히 돌아갈 수 있을까요?</p>' +
+      '<p class="n">유리창 너머로 도시의 불빛이 천천히 흘러간다.</p>' +
+    '</div>' +
+    block("ui",   "기본 글꼴") +
+    block("dlg",  "대사 글꼴", "이야기와 전투에서 사람이 하는 말, 그리고 무대 가운데 큰 자막에 씁니다.") +
+    block("size", "대사 크기", "바탕체·명조는 같은 크기에서도 작아 보여, 처음에는 조금 키워 두었습니다.") +
+    '<div class="hint" style="margin-top:12px">Pretendard · 고운바탕 · Noto Serif KR 은 인터넷에서 받아 옵니다. ' +
+      '연결이 없으면 기기 기본 고딕으로 보입니다.</div>' +
+    '<div class="modalfoot"><button id="fclose">닫기</button>' +
+      '<button id="fdefault" class="ghost">처음 값으로</button></div>';
+
+  const set = next => {
+    S.font = fontClean(next);
+    applyFont(S.font);
+    saveVault();
+    openFontPick(back);   // 고른 칸 표시를 다시 그립니다
+  };
+  $sheet.querySelectorAll("[data-fk]").forEach(el => {
+    el.onclick = () => {
+      const k = el.dataset.fk;
+      const val = k === "size" ? Number(el.dataset.fv) : el.dataset.fv;
+      set(Object.assign({}, f, { [k]: val }));
+    };
+  });
+  document.getElementById("fdefault").onclick = () => set(FONT_DEFAULT);
+  document.getElementById("fclose").onclick = () => { if (back) back(); else { closeModal(); render(); } };
+}
+
 function openVault(back) {
   $modal.classList.add("on");
   let h = '<h2>보 관 함</h2>' +
@@ -10126,6 +10378,18 @@ function openVault(back) {
          '</div>' +
        '</div>';
 
+  /* 화면 글꼴 — 고르는 창은 openFontPick. 보관함에 함께 저장됩니다. */
+  const fnow = fontClean(S.font);
+  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">화면 글꼴</div>' +
+       '<div class="hint">보관함에 함께 저장되어, [기록 · 내보내기] 로 옮기면 따라갑니다.</div>' +
+       '<div class="syncrow">' +
+         '<button id="vfont">바꾸기</button>' +
+         '<div class="body">' +
+           '<div class="nm">' + fontChoiceName("ui", fnow.ui) + '　·　대사 ' + fontChoiceName("dlg", fnow.dlg) + '</div>' +
+           '<div class="sub">대사 크기 — ' + fontChoiceName("size", fnow.size) + '</div>' +
+         '</div>' +
+       '</div>';
+
   h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
        '<button id="vrec">기록 · 내보내기</button>' +
        '<button id="vreset" class="ghost">보관함 비우기</button></div>';
@@ -10145,6 +10409,7 @@ function openVault(back) {
   document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
   document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
+  document.getElementById("vfont").onclick = () => openFontPick(() => openVault(back));
   $sheet.querySelectorAll("[data-box]").forEach(el => {
     el.onclick = () => openFragBoxUse(el.dataset.box, back);
   });
@@ -10585,7 +10850,8 @@ function gate(msg) {
   inp.focus();
 }
 
-function boot() { if (gateOpen()) glass(); else gate(); }
+/* 글꼴을 가장 먼저 입힙니다 — 출입 코드 화면부터 고른 글꼴로 보이도록 */
+function boot() { applyFont((loadVault() || {}).font); if (gateOpen()) glass(); else gate(); }
 
 /* ── wip 확장 자리 ────────────────────────────────────────────
  *  특정 장·전투만을 위해 엔진을 손봐야 할 때, 매번 여기 engine.js 를

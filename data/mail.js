@@ -16,7 +16,10 @@
  *    give    주는 것
  *      money           원고료
  *      codex           황금교본
+ *      event           이벤트 재화 — 이름은 그때 서 있는 이벤트를 따릅니다
+ *                      (data/event.js 의 cur — 7장 기간이면 「범블비」)
  *      enk             엔케팔린 (보유 상한을 넘겨 받지는 못합니다)
+ *      enkCap          엔케팔린 캡슐 개수
  *      support         지원 작성위원 — "제목|이름"
  *      fragBoxSelect   인격 파편 상자(선택) 개수
  *      fragBoxRandom   인격 파편 상자(무작위) 개수
@@ -38,6 +41,15 @@ const MAIL_RULE = {
 };
 
 const MAILS = [
+  {
+    id: "2026-09-11-ch7",
+    title: "신규 스토리 업데이트 기념 지급",
+    body: "7장 「호감이 끝나는」이 들어왔습니다. 신해수남고를 오르실 때와 " +
+          "범블비 교환소에서 쓰실 몫입니다.",
+    from: "2026-09-11",
+    days: 7,          // 범블비 이벤트 기간(data/event.js — 2026-09-11 부터 7일)과 같게
+    give: { money: 200, event: 100 }
+  },
   {
     id: "2026-09-04-rail-reward",
     title: "거울굴절철도 보상 개편 관련 보상",

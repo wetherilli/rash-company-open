@@ -143,6 +143,10 @@ function skillTierValue(skill, level) {
  *               otherLine 은 다른 사람이 하는 말이라 걸리지 않습니다.
  *               needTitle 로 인격이 이미 걸러진 뒤라, 그 인격을 물고 있을
  *               때만 바뀝니다(engine.js checkLinkSkills).
+ *  selfPortrait 뽑힌 사람이 who 자신일 때의 대답(selfLine)에만 쓰는 그림.
+ *               안 적으면 whoPortrait 를 그대로 이어 씁니다 — 선창은 한
+ *               얼굴로, 제가 받아 치는 대답은 다른 얼굴(강타 자세 등)로
+ *               갈라 보이고 싶을 때 씁니다.
  */
 const LINK_SKILLS = [
   {
@@ -165,7 +169,11 @@ const LINK_SKILLS = [
      * (사용자 지침 2026-09-11). 대사의 결이 평소 차민준과 아주 다른
      * 자리라(「피를 머금을 시간이다」), 평소 얼굴로 말하면 어긋납니다.
      * 7장이 나가면서 이 그림이 공개 저장소에도 올라가 있습니다. */
-    whoPortrait: "assets/enemy/혈귀화한 차민준.png"
+    whoPortrait: "assets/enemy/혈귀화한 차민준.png",
+    /* 차민준이 제게 돌아온 차례를 받아 치는 대답(「내가 직접 창을 들겠다」)은
+     * 강타 자세로 말합니다(사용자 지침 2026-09-11) — 선창은 혈귀 얼굴,
+     * 창을 드는 대답은 7장 그 전투의 강타 그림입니다. */
+    selfPortrait: "assets/enemy/혈귀화한 차민준(강타).png"
   }
 ];
 
