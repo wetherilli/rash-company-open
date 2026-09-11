@@ -137,6 +137,12 @@ function skillTierValue(skill, level) {
  *  callLines    who 가 선창하는 대사 — 배열이면 무작위로 하나.
  *  selfLine     뽑힌 사람이 who 자신일 때 하는 대답.
  *  otherLine    뽑힌 사람이 다른 사람일 때 하는 대답.
+ *  whoPortrait  이 연계가 걸리는 동안 who 가 «다른 얼굴로» 말하게 합니다.
+ *               안 적으면 평소 초상 그대로입니다. 선창(callLines)과,
+ *               뽑힌 사람이 who 자신일 때의 대답(selfLine)에 걸립니다 —
+ *               otherLine 은 다른 사람이 하는 말이라 걸리지 않습니다.
+ *               needTitle 로 인격이 이미 걸러진 뒤라, 그 인격을 물고 있을
+ *               때만 바뀝니다(engine.js checkLinkSkills).
  */
 const LINK_SKILLS = [
   {
@@ -154,7 +160,12 @@ const LINK_SKILLS = [
     label: "가시꽃",
     callLines: ["피를 머금을 시간이다.", "준비해라.", "가시꽃을 피워낼 때군."],
     selfLine: "내가 직접 창을 들겠다.",
-    otherLine: "받들겠습니다."
+    otherLine: "받들겠습니다.",
+    /* 「신해수랜드 실장」을 물고 이 연계를 낼 때만 혈귀가 된 얼굴로 말합니다
+     * (사용자 지침 2026-09-11). 대사의 결이 평소 차민준과 아주 다른
+     * 자리라(「피를 머금을 시간이다」), 평소 얼굴로 말하면 어긋납니다.
+     * 7장이 나가면서 이 그림이 공개 저장소에도 올라가 있습니다. */
+    whoPortrait: "assets/enemy/혈귀화한 차민준.png"
   }
 ];
 

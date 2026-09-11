@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.0.8";
+const VERSION = "2.0.9";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4247,7 +4247,10 @@ function beginTurn() {
 function linkSkillList() {
   return (typeof LINK_SKILLS !== "undefined" && LINK_SKILLS) ? LINK_SKILLS : [];
 }
-function battleSay(who, text) {
+/* portraitSrc — 이 사람의 평소 초상 대신 쓸 그림. 안 주면 portraitOf(who).
+ * 「연계 효과」처럼 같은 사람이 «다른 얼굴로» 말하는 자리에 씁니다
+ * (data/skills.js 의 whoPortrait 참고). */
+function battleSay(who, text, portraitSrc) {
   const w = document.createElement("p");
   w.className = "who";
   w.textContent = nameOf(who);
@@ -4265,7 +4268,7 @@ function battleSay(who, text) {
    * 그래서 셋을 다 봅니다 — 열쇠 · 화면에 뜬 이름 · 그리고 찾아낸 초상이
    * 지금 그 적으로 걸려 있는 그림과 같은지. 마지막 것이 있어서 이름을
    * 또 다르게 적더라도(별칭·강타 그림 중이더라도) 겹쳐 그리지 않습니다. */
-  const pt = portraitOf(who);
+  const pt = portraitSrc || portraitOf(who);
   const f  = FOES[S.battle.id] || {};
   const 적본인 = who === S.battle.id ||
                  who === S.battle.name ||
@@ -4285,6 +4288,7 @@ function battleSay(who, text) {
  *
  *  줄 하나는 { who, text }(대사 — battleSay) 또는 { text, cls }(지문 — say)
  *  입니다. caption:true 를 달면 무대 가운데에 큰 글씨로도 띄웁니다.
+ *  portrait 를 적으면 그 줄에서만 평소 초상 대신 그 그림을 씁니다.
  *
  *  이미 흐르고 있으면 «뒤에 잇습니다» — 한 턴 머리에서 연계 효과·연계 호령·
  *  설득 대사가 잇따라 쌓여도 순서가 섞이지 않습니다. */
@@ -4298,7 +4302,7 @@ function queueBattleLines(lines) {
   const q = { i: 0, list: list, timer: null };
   q.show = () => {
     const L = q.list[q.i++];
-    if (L.who) battleSay(L.who, L.text);
+    if (L.who) battleSay(L.who, L.text, L.portrait);
     else say(L.text, L.cls || "sys");
     if (L.caption) showBattleCaption(L.text);
   };
@@ -4368,8 +4372,11 @@ function checkLinkSkills(next) {
     const reply = (target === ls.who) ? ls.selfLine : ls.otherLine;
     /* 선창 → 대답 순서로 큐에 얹습니다. 효과(b.mods)는 위에서 이미 걸렸으니
      * 대사를 기다릴 까닭이 없습니다 — 손잡이는 바로 섭니다. */
-    if (call)  lines.push({ who: ls.who, text: call });
-    if (reply) lines.push({ who: target, text: reply });
+    /* whoPortrait — 선창자가 «다른 얼굴로» 말하게 합니다(data/skills.js 참고).
+     * 뽑힌 사람이 선창자 자신일 때(selfLine)도 같은 얼굴로 이어 말합니다. */
+    if (call)  lines.push({ who: ls.who, text: call,  portrait: ls.whoPortrait });
+    if (reply) lines.push({ who: target, text: reply,
+                            portrait: (target === ls.who) ? ls.whoPortrait : null });
   }
   queueBattleLines(lines);
   next();
