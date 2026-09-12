@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.2.4";
+const VERSION = "2.2.5";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -312,6 +312,10 @@ function vaultBody() {
      * 함께 들어가 기기를 옮기면 따라갑니다. vaultSig() 에는 일부러 안 넣습니다 —
      * 지키려는 값이 아니라 보는 취향이라서요. */
     font:     S.font || null,
+    /* 유리창 배경 — 설정에서 고른 «장 묶음» 의 열쇠(openSettings 참고). 글꼴과 같은 결로
+     * vaultSig() 에는 넣지 않고, 보관함을 비워도 남깁니다. 비어 있으면 기본값(마지막으로
+     * 마친 장)을 씁니다 — 그 값은 S.cleared 에서 알아내므로 여기 적을 것이 없습니다. */
+    glassBg:  S.glassBg || null,
     ver:      VERSION
   };
 }
@@ -361,6 +365,7 @@ function loadVault() {
     storySave: v.storySave || null,
     mirrorRecords: v.mirrorRecords || [],
     font:     v.font || null,
+    glassBg:  v.glassBg || null,
     ver:      v.ver || null
   };
 }
@@ -529,14 +534,17 @@ function saveVault() {
  *  아무것도 안 적혀 있으면(기본) 맨 처음으로 돌아갑니다 —
  *  신입 관리자 기념 배정도 다시 열립니다. */
 function clearVault() {
-  /* 화면 글꼴만은 남깁니다 — 진행 기록이 아니라 보는 취향이라, 비우자마자 글꼴이
+  /* 화면 글꼴과 유리창 배경만은 남깁니다 — 진행 기록이 아니라 보는 취향이라, 비우자마자 글꼴이
    * 처음 값으로 돌아가면 «보관함을 비웠더니 화면이 바뀌었다» 가 됩니다.
    * 새 보관함에 곧바로 적어 두어야 다음에 켤 때(glass → newState)도 이어집니다. */
   const font = S && S.font;
+  /* 고른 배경 묶음도 같이 — 마친 장이 없어지므로 화면에는 기본값(단체 그림)이 걸리지만,
+   * 나중에 그 장을 다시 마치면 고른 것이 그대로 살아납니다. */
+  const glassBg = S && S.glassBg;
   Store.del(VAULT_KEY);
   Store.del(SAVE_KEY);      // 어디까지 읽었나 하는 기록도 함께
   S = newState();           // 머릿속도 같이 비워야 곧바로 되살아나지 않습니다
-  if (font) { S.font = font; saveVault(); }
+  if (font || glassBg) { if (font) S.font = font; if (glassBg) S.glassBg = glassBg; saveVault(); }
   enkSync();
 }
 
@@ -598,7 +606,7 @@ function vaultExportText() {
     " *\n" +
     " *  ■ 여기 담기는 것\n" +
     " *    보관함에 남는 것 «전부» 입니다 — 인격 · 인격 파편 · 동기화 · 교육위원 · 기프트 · 지원 작성위원 ·\n" +
-    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린 · 엔케팔린 캡슐 · 화면 글꼴.\n" +
+    " *    업적 · 클리어한 장 · 편성 3칸 · 받은 우편 · 원고료 · 황금교본 · 엔케팔린 · 엔케팔린 캡슐 · 화면 글꼴 · 유리창 배경.\n" +
     " *\n" +
     " *  ■ 무언가 없어진 것 같으면\n" +
     " *    고칠 것 없이 이 파일을 그대로 보내 주십시오.\n" +
@@ -1032,6 +1040,9 @@ function newState() {
     storySave: (v && v.storySave) || null,
     mirrorRecords: (v && v.mirrorRecords) || [],   // 거울굴절철도 결과 카드 — 최근 세 판
     font: fontClean(v && v.font),                  // 화면 글꼴 — 못 알아보는 값은 처음 값으로
+    /* 유리창 배경 — 여기서는 거르지 않습니다. 쓸 수 있는 묶음인지는 볼 때마다
+     * glassBgKey() 가 보고, 못 쓰면 기본값으로 물러납니다(고른 값은 지우지 않습니다). */
+    glassBg: (v && v.glassBg) || null,
     partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
     partyBan: [],            // 지금은 편성할 수 없는 사람 — banParty/unbanParty 가 씁니다
     battleForced: false,
@@ -2576,7 +2587,7 @@ function portraitOf(who) {
   if (CREW[who])     return CREW[who].portrait;
   /* 이야기가 같은 사람을 어떤 데선 영문 열쇠로, 어떤 데선 한글 이름으로 부릅니다 —
    * who:"kim_taeseong" 과 who:"김태성" 이 함께 있습니다. 이름으로도 찾아 줍니다.
-   * 보조 교육위원보다 «먼저» 봐야 합니다. 저쪽은 초상이 전부 null 이라,
+   * 보조 교육위원보다 «먼저» 봐야 합니다. 저쪽은 초상이 빈 자리가 많아,
    * 이름이 겹치면 그 자리에서 null 을 돌려주고 멈춰 버립니다. */
   for (const k in SINNERS) if (SINNERS[k].name === who) return SINNERS[k].portrait;
   /* 이야기에만 나오는 사람 — data/characters.js 의 EXTRA_PORTRAITS */
@@ -10323,6 +10334,257 @@ function openFontPick(back) {
   document.getElementById("fclose").onclick = () => { if (back) back(); else { closeModal(); render(); } };
 }
 
+/* ── 유리창 배경 ────────────────────────────────────────────────
+ *  유리창(glass)의 그림은 작성위원 단체 그림 한 장으로 고정이었습니다.
+ *  이제 «마친 장의 배경» 으로 갈아 끼울 수 있습니다 (사용자 지침 2026-09-12).
+ *  고르는 곳은 유리창의 [설정] — 아래 openSettings() 입니다.
+ *
+ *  ■ 고르는 단위는 «묶음» 입니다 — 낱장이 아닙니다.
+ *    배경이 마흔 몇 장이라, 낱장으로 늘어놓으면 설정 화면이 한없이 길어집니다.
+ *    그래서 장마다 한 묶음으로 묶고, 묶음 안에서는 «유리창에 들어올 때마다»
+ *    한 장씩 돌아갑니다. 한 장이 걸릴 자리에 여러 장을 걸어 두는 셈입니다.
+ *    (낱장으로 다섯까지 골라 담는 방식도 함께 이야기했는데 — 그림 수를 세어 보고
+ *     묶음으로 갔습니다. 낱장이면 마흔 몇 줄이 한 화면에 서야 합니다.)
+ *
+ *  ■ 무엇이 걸리는가 — glassBgPick()
+ *      S.glassBg 에 적힌 묶음을 쓸 수 있으면       그 묶음
+ *      아니면(기본)                              가장 마지막으로 마친 장의 묶음
+ *      마친 장이 하나도 없으면                    작성위원 단체 그림
+ *
+ *  ■ 마친 장만 보여 줍니다
+ *    아직 안 읽은 장의 배경은 그 장이 «어디인지» 를 말해 버립니다. 그래서 묶음
+ *    목록에는 마친 장만 세웁니다 — 보관함의 S.cleared 를 그대로 봅니다(마지막으로
+ *    마친 장도 여기서 알아냅니다. 따로 남기는 값이 없습니다). 거울 갈래는
+ *    «완주해 봤는가»(S.mirrorDone) 로 봅니다.
+ *
+ *  ■ 어디에 남는가
+ *    보관함의 glassBg 칸입니다. 화면 글꼴(font)과 같은 결이라 —
+ *    손댐 검사(vaultSig)에는 넣지 않고, 보관함을 비워도 남깁니다.
+ */
+const GLASS_BG_HOME = "assets/logo/작성위원 전원.png";   // 걸 배경이 없을 때의 그림
+
+/* 바로 앞에 걸었던 그림 — 들어올 때마다 «다른» 장이 걸리게 하는 몫입니다.
+ * 창을 닫으면 잊습니다. 어느 장이 걸렸는지는 기록이 아니라 보관함에 남기지 않습니다. */
+let GLASS_BG_LAST = null;
+
+/* 한 장에 딸린 배경을 죄다 긁어 옵니다.
+ * 장 덩이를 통째로 훑어 "assets/scene/" 으로 시작하는 글자를 모읍니다 — 장 대표
+ * 그림(img) · 장면마다의 img · 상이 엎어진 뒤의 failImg · 되짚기(recall) 안쪽까지
+ * 한 번에 걸립니다. 앞에 나온 것이 먼저이고, 같은 그림은 한 번만 담습니다.
+ * 첫째 것이 그 장의 대표 그림입니다(장 덩이 맨 위에 img 가 적혀 있으므로). */
+function chapterBGs(c) {
+  const out = [];
+  const walk = v => {
+    if (!v) return;
+    if (typeof v === "string") {
+      if (v.indexOf("assets/scene/") === 0 && out.indexOf(v) < 0) out.push(v);
+      return;
+    }
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    if (typeof v === "object") { for (const k in v) walk(v[k]); }
+  };
+  walk(c);
+  return out;
+}
+
+/* 고를 수 있는 묶음들 — 카테고리 셋으로 묶어 돌려줍니다(사용자 지침 순서).
+ *   { id, cat, note, items: [{ key, name, short, imgs }] }
+ * 배경이 하나도 없는 장은 아예 세우지 않습니다. */
+function glassBgGroups() {
+  const done = id => !!(S.cleared && S.cleared[id]);
+  /* 이름은 «이야기 제목» 으로 답니다 (사용자 지침 2026-09-12). 본편은 title 이
+   * 그 장의 작성위원 이름이고(1장 김두현), 이야기 제목은 subtitle 에 있습니다
+   * (「공식 설정에 속하지 못하는」). 곁가지와 0장은 title 이 곧 이야기 제목입니다. */
+  const ch = c => ({ key: c.id, name: c.no + "  " + (c.subtitle || c.title || ""),
+                     short: c.no, imgs: chapterBGs(c) });
+  /* 거울 갈래는 배경이 한 장씩입니다. 2호선만 종착역 그림이 하나 더 있습니다. */
+  const mir = r => ({ key: "mirror:" + r.key, name: r.name, short: r.name,
+                      imgs: [mirrorBG(r), r.finalBg || null]
+                              .filter((p, i, a) => p && a.indexOf(p) === i) });
+  const list = (src, make) => src.map(make).filter(x => x.imgs.length);
+  return [
+    { id: "main", cat: "주요 이야기",
+      items: list(CHAPTERS.filter(c => !isSide(c) && done(c.id)), ch) },
+    { id: "side", cat: "곁가지 이야기",
+      items: list(CHAPTERS.filter(c => isSide(c) && done(c.id)), ch) },
+    { id: "etc", cat: "그 외", note: "거울 던전 · 거울굴절철도",
+      items: list(MIRROR_TIERS.filter(r => S.mirrorDone && S.mirrorDone[r.key]), mir) }
+  ];
+}
+function glassBgItems() { return glassBgGroups().reduce((a, g) => a.concat(g.items), []); }
+function glassBgItem(key) { return key ? (glassBgItems().find(x => x.key === key) || null) : null; }
+
+/* 기본값 — «가장 마지막으로 마친 장». 따로 남겨 둔 값은 없습니다. CHAPTERS 가
+ * 이야기 순서로 적혀 있으므로, 뒤에서부터 마친 장을 찾으면 그것이 마지막으로 마친
+ * 장입니다(곁가지도 «장» 이라 함께 봅니다). 거울 갈래는 기본값이 되지 않습니다 —
+ * 이야기를 따라가는 자리가 아니니까요. */
+function glassBgDefaultKey() {
+  for (let i = CHAPTERS.length - 1; i >= 0; i--) {
+    const c = CHAPTERS[i];
+    if (S.cleared && S.cleared[c.id] && chapterBGs(c).length) return c.id;
+  }
+  return null;
+}
+/* 지금 걸리는 묶음의 열쇠. 고른 것이 없거나 (보관함을 비웠다 · 손으로 고쳤다 등으로)
+ * 못 쓰게 됐으면 기본값으로 물러납니다 — 고른 값 자체를 지우지는 않습니다. */
+function glassBgKey() {
+  return (S.glassBg && glassBgItem(S.glassBg)) ? S.glassBg : glassBgDefaultKey();
+}
+/* 이번에 유리창에 걸 그림 한 장 */
+function glassBgPick() {
+  const it = glassBgItem(glassBgKey());
+  if (!it || !it.imgs.length) return GLASS_BG_HOME;
+  if (it.imgs.length === 1) return (GLASS_BG_LAST = it.imgs[0]);
+  /* 바로 앞에 걸었던 것은 빼고 고릅니다 — 두 번 내리 같은 그림이 걸리지 않게 */
+  const pool = it.imgs.filter(p => p !== GLASS_BG_LAST);
+  return (GLASS_BG_LAST = pool[rnd(pool.length)] || it.imgs[0]);
+}
+
+/* ── 설정 ──────────────────────────────────────────────────────
+ *  유리창의 [설정] 로 열립니다. 들어 있는 것은 «유리창 배경» 과, 이미 있던
+ *  [화면 글꼴] · [기록 · 내보내기] 로 가는 손잡이입니다(둘 다 보관함에서도 그대로 열립니다).
+ *
+ *  배경은 띠(.pkline.small — 특정 배정이 쓰는 그 띠)로 작게 보여 줍니다.
+ *  배경을 통째로 세우면 설정 화면이 배경 구경하는 곳이 되어 버려, «어느 묶음인지
+ *  알아볼 만큼» 만 보이게 줄였습니다(사용자 지침 2026-09-12).
+ *
+ *  묶음이 스물 남짓이라 그래도 화면이 깁니다. 그래서 무리마다 접어 둡니다 —
+ *  운전석과 같은 장치(.csec)를 그대로 씁니다(사용자 지침 2026-09-12).
+ *
+ *  ■ 고르는 것은 «확정» 을 눌러야 남습니다 (사용자 지침 2026-09-12)
+ *    화면 글꼴(openFontPick)은 누르는 대로 곧바로 저장하지만, 배경은 그렇게 하지
+ *    않습니다. 고르고 있는 열쇠는 draft 에만 두고, [확정] 을 눌러야 S 와 보관함에
+ *    씁니다. [저장하지 않고 나가기] 는 그래서 «되돌릴» 것이 없습니다 — 애초에
+ *    아무것도 쓰지 않았으니까요.
+ *
+ *    화면 글꼴과 기록 화면을 들렀다 오는 길에는 고르던 것을 들고 다닙니다 —
+ *    돌아올 때 openSettings(back, draft) 로 넘겨줍니다. 안 그러면 잠깐 글꼴을
+ *    보고 온 사이에 고르던 것이 날아갑니다.
+ */
+/* 편 무리 — 판이 도는 동안만 기억합니다(운전석의 CS_OPEN 과 같은 결).
+ * 설정을 닫았다 다시 열어도 방금 펴 둔 자리가 그대로 있게 하려는 것입니다. */
+let SET_SEC_OPEN = {};
+
+function openSettings(back, draft0) {
+  $modal.classList.add("on");
+  /* 고르고 있는 묶음. undefined 로 들어오면(유리창에서 갓 열었을 때) 저장된 것부터 */
+  let draft = (draft0 === undefined) ? (S.glassBg || null) : draft0;
+
+  const draw = () => {
+    const groups = glassBgGroups().filter(g => g.items.length);
+    const items  = glassBgItems();
+    /* 확정 전이라 S 는 아직 그대로입니다 — 화면은 «고르고 있는 것» 으로 그립니다 */
+    const 고름  = !!(draft && glassBgItem(draft));
+    const now   = 고름 ? draft : glassBgDefaultKey();
+    const nowIt = glassBgItem(now);
+    const 바뀜  = (draft || null) !== (S.glassBg || null);
+
+    /* 처음 열 때는 «지금 걸린 묶음이 든 무리» 만 펴 둡니다. 셋 다 펴 두면
+     * 스크롤이 한참입니다. 한 번이라도 접었다 폈으면 그 자리를 그대로 둡니다. */
+    if (groups.length && !Object.keys(SET_SEC_OPEN).length) {
+      const g = groups.find(x => x.items.some(it => it.key === now)) || groups[0];
+      SET_SEC_OPEN[g.id] = true;
+    }
+
+    let h = '<h2>설 정</h2>' +
+            '<div class="hint">유리창 배경은 [확정] 을 눌러야 보관함에 남습니다. ' +
+            '아래 [화면 글꼴] 은 고르는 대로 곧바로 저장됩니다.</div>' +
+            '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">유리창 배경</div>' +
+            '<div class="hint">마친 장의 배경만 나옵니다. 묶음을 고르면 그 장의 배경이 ' +
+            '유리창에 들어올 때마다 한 장씩 돌아갑니다.</div>' +
+            '<div class="hint" style="color:#d8b26a">' + (바뀜 ? '고르는 중 — ' : '지금 걸린 것 — ') +
+              '<b>' + (nowIt ? nowIt.name : "작성위원 단체 그림") + '</b>' +
+              (nowIt ? '　·　배경 ' + nowIt.imgs.length + '장' : '') +
+              (고름 ? '' : '　·　기본값(마지막으로 마친 장)') + '</div>' +
+            /* 배경을 되돌리는 손잡이는 이 구역에 답니다 — 창 맨 아래 [닫기] 옆에 두면
+             * «설정 전체» 를 되돌리는 것처럼 읽힙니다(사용자 지침 2026-09-12). */
+            '<div style="margin:8px 0 12px"><button id="sdefault" class="ghost"' +
+              (고름 ? '' : ' disabled') + '>배경을 기본값으로</button></div>';
+
+    if (!items.length)
+      h += '<div class="grid"><div class="slot"><div class="sub">아직 마친 장이 없습니다 — ' +
+           '한 장을 마치면 그 장의 배경을 고를 수 있습니다. 그때까지는 작성위원 ' +
+           '단체 그림이 걸립니다.</div></div></div>';
+
+    groups.forEach(g => {
+      let body = '<div class="grid">';
+      g.items.forEach(it => {
+        body += '<div class="slot' + (now === it.key ? ' sel' : '') + '" data-bgk="' + it.key + '">' +
+                  '<div class="pkline small pic" style="background-image:url(\'' +
+                    assetURL(it.imgs[0]) + '\')"><span>' + it.short + '</span></div>' +
+                  /* 띠에 이미 적힌 이름이면 아래에 또 적지 않습니다 — 거울 갈래가 그렇습니다 */
+                  (it.short === it.name ? '' : '<div class="nm">' + it.name + '</div>') +
+                  '<div class="sub">배경 ' + it.imgs.length + '장' +
+                    (now === it.key ? (고름 ? '　·　고른 것' : '　·　기본값') : '') + '</div>' +
+                '</div>';
+      });
+      body += '</div>';
+      /* 접힌 채로도 «지금 걸린 것이 이 안에 있다» 는 것은 보이게 해 둡니다 */
+      const 여기 = g.items.some(it => it.key === now);
+      h += '<div class="csec' + (SET_SEC_OPEN[g.id] ? ' on' : '') + '" data-sec="' + g.id + '">' +
+             '<div class="csechead"><b>' + g.cat + '</b><span>' +
+               (g.note ? g.note + '　·　' : '') + g.items.length + '묶음' +
+               (여기 ? '　·　' + (바뀜 ? '고르는 중' : '지금 걸린 것') : '') + '</span><i></i></div>' +
+             '<div class="csecbody">' + body + '</div>' +
+           '</div>';
+    });
+
+    h += '<div style="margin:16px 0 6px;color:#e8e4de;font-weight:700">다른 설정</div>' +
+         '<div class="grid">' +
+           '<div class="slot" data-go="font">' +
+             '<div class="nm">화면 글꼴</div>' +
+             '<div class="sub">기본 글꼴 · 대사 글꼴 · 대사 크기를 고릅니다. ' +
+             '누르는 대로 곧바로 저장됩니다.</div></div>' +
+           '<div class="slot" data-go="rec">' +
+             '<div class="nm">기록 · 내보내기</div>' +
+             '<div class="sub">보관함을 파일로 받아 두거나, 받아 둔 파일을 다시 읽습니다. ' +
+             '보관함에서도 같은 화면이 열립니다.</div></div>' +
+         '</div>';
+
+    if (바뀜)
+      h += '<div class="hint" style="color:#c8403a;margin-top:14px">' +
+           '고른 배경이 아직 저장되지 않았습니다 — [확정] 을 눌러야 남습니다.</div>';
+
+    h += '<div class="modalfoot">' +
+           '<button id="sok" class="primary">확정</button>' +
+           '<button id="scancel" class="ghost">저장하지 않고 나가기</button></div>';
+
+    $sheet.innerHTML = h;
+
+    /* 무리 이름을 누르면 접혔다 펴집니다 — 운전석과 같은 규칙입니다 */
+    $sheet.querySelectorAll(".csec .csechead").forEach(el => {
+      el.onclick = () => {
+        const box = el.parentNode;
+        SET_SEC_OPEN[box.dataset.sec] = !SET_SEC_OPEN[box.dataset.sec];
+        box.classList.toggle("on", !!SET_SEC_OPEN[box.dataset.sec]);
+      };
+    });
+
+    $sheet.querySelectorAll("[data-bgk]").forEach(el => {
+      el.onclick = () => { draft = el.dataset.bgk; draw(); };
+    });
+    document.getElementById("sdefault").onclick = () => { draft = null; draw(); };
+
+    /* 들렀다 오는 길에도 고르던 것을 들고 다닙니다 */
+    const go = k => $sheet.querySelector('[data-go="' + k + '"]');
+    go("font").onclick = () => openFontPick(() => openSettings(back, draft));
+    go("rec").onclick  = () => openRecord(() => openSettings(back, draft));
+
+    document.getElementById("sok").onclick = () => {
+      S.glassBg = draft;
+      /* 묶음이 갈렸으니 «앞에 걸었던 그림» 도 잊습니다 — 새 묶음에는 없는 그림이니까요 */
+      GLASS_BG_LAST = null;
+      saveVault();
+      if (back) back(); else { closeModal(); render(); }
+    };
+    /* 고른 것을 S 에도 보관함에도 쓴 적이 없으므로, 그냥 나가면 그만입니다 */
+    document.getElementById("scancel").onclick =
+      () => { if (back) back(); else { closeModal(); render(); } };
+  };
+
+  draw();
+}
+
 function openVault(back) {
   $modal.classList.add("on");
   let h = '<h2>보 관 함</h2>' +
@@ -10736,7 +10998,8 @@ function glass() {
   SCENES = [];
   if (vaultLocked()) return vaultLockScreen();
   clearLog();
-  showCard("assets/logo/작성위원 전원.png", "라슈 컴퍼니");
+  /* 유리창 그림 — 고른 묶음(기본은 마지막으로 마친 장)에서 한 장. 아래 glassBgPick 참고 */
+  showCard(glassBgPick(), "라슈 컴퍼니");
   say("유 리 창", "place");
   say("라슈 컴퍼니 · 신생 L사　　v" + VERSION + " «" + VERSION_NAME + "»", "sys");
   divider();
@@ -10803,6 +11066,8 @@ function glass() {
     /* 3장을 마치기 전에는 손잡이를 아예 내놓지 않습니다 */
     syncUnlocked() ? { label: "동기화", fn: () => openSync(() => glass()) } : null,
     { label: "보관함", fn: () => openVault(() => glass()) },
+    /* 유리창 배경 · 화면 글꼴 — openSettings */
+    { label: "설정", cls: "ghost", fn: () => openSettings(() => glass()) },
     /* 「다음부터 표시하지 않음」을 누른 판에서는 이 손잡이가 사라집니다 */
     patchHidden() ? null
                   : { label: "패치 노트", cls: "ghost", fn: () => openPatch(() => glass()) }

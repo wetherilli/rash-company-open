@@ -159,17 +159,20 @@ const EXTRA_PORTRAITS = {
   "경성피스톨":   "assets/portrait/경성피스톨.png",
   "오르도제노스": "assets/enemy/오르도제노스.png",
   /* 3.5장·5장 — 이 셋은 «보조 교육위원» 이름과 겹칩니다.
-   *  보조 교육위원은 초상이 전부 null 이라 engine.js 의 portraitOf 가
+   *  예전에는 보조 교육위원 초상이 전부 null 이라 engine.js 의 portraitOf 가
    *  거기서 멈춰 버려, 적 그림이 있는데도 대사에 얼굴이 안 떴습니다.
-   *  EXTRA_PORTRAITS 는 그보다 먼저 보므로 여기에 적어 두면 풀립니다. */
+   *  EXTRA_PORTRAITS 는 그보다 먼저 보므로 여기에 적어 두면 풀립니다.
+   *  2026-09-12 부터 ADVISORS 쪽에도 같은 그림을 적어 두었으니 이 세 줄이
+   *  없어도 얼굴이 뜹니다 — 같은 그림이라 그대로 둡니다. */
   "이형우":       "assets/enemy/다시 끌려온 이형우.png",
   "이서진":       "assets/enemy/이서진.png",
   "강호영":       "assets/enemy/뒤틀린 모사사우루스.png",
   /* 6.5장 — 이름이 적 이름(「G사 특촬전대」)과 안 겹쳐 자동으로 못 찾습니다 */
   "G사 2등급 가면라이더": "assets/enemy/가면라이더.png",
   /* 6.5장 부산행 — 위의 이형우·이서진·강호영과 똑같은 자리입니다.
-   * 「김연준」은 보조 교육위원 이름과도 겹쳐(초상 null), 여기 적어 두지 않으면
-   * portraitOf 가 교육위원 쪽에서 멈춰 적 그림이 있는데도 얼굴이 안 떴습니다. */
+   * 「김연준」도 보조 교육위원 이름과 겹칩니다 — 예전에는 그쪽 초상이 null 이라
+   * portraitOf 가 교육위원 쪽에서 멈춰 적 그림이 있는데도 얼굴이 안 떴습니다
+   * (2026-09-12 에 ADVISORS 쪽에도 같은 그림을 적었습니다 — 이 줄은 그대로 둡니다). */
   "김연준":       "assets/enemy/김연준.png",
   /* 7장 P사 부장 「최」 — 이야기에서 화자를 who: "'최'" 로 적습니다.
    * 작은따옴표까지 글자입니다(원작이 「P사 부장 '최'」로 적어 둔 것을 그대로
@@ -607,38 +610,38 @@ const SINNERS = {
 const ADVISORS = [
 
   /* ── N사 인격 ── */
-  { name: "이형우", title: "N사 이단심문관", star: 2, portrait: null,
+  { name: "이형우", title: "N사 이단심문관", star: 2, portrait: "assets/enemy/다시 끌려온 이형우.png",
     effect: { correct: 0.05, manage: 2, manageMax: 1, def: 0.05, hp: 0.03 },
     flavor: "틀린 문장을 먼저 찾아낸다.",
     desc: "교정 +5%p, 시작 관리력 +2·최대 +1, 파티 방어 +5%·체력 +3%." },
 
-  { name: "이형우", title: "L사 에프터팀", star: 2, portrait: null,
+  { name: "이형우", title: "L사 에프터팀", star: 2, portrait: "assets/enemy/다시 끌려온 이형우.png",
     effect: { revive: 0.25, manage: 1, def: 0.04 },
     flavor: "뒤처리를 맡는다.",
     desc: "첨삭 회복 +25%p, 시작 관리력 +1, 파티 방어 +4%." },
 
-  { name: "이형우", title: "북부 총기 협회 4과 부장", star: 3, portrait: null,
+  { name: "이형우", title: "북부 총기 협회 4과 부장", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
     effect: { push: 0.4, manage: 2, manageMax: 2, atk: 0.05 },
     flavor: "몰아붙이는 법을 안다.",
     desc: "독촉 +0.4배, 시작 관리력 +2·최대 +2, 파티 공격 +5%." },
 
-  { name: "이형우", title: "구J사 수석연구원", star: 3, portrait: null,
+  { name: "이형우", title: "구J사 수석연구원", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
     effect: { gain: 2, manage: 3, manageMax: 3, def: 0.05 },
     flavor: "설계도부터 다시 그린다.",
     desc: "턴당 관리력 +2, 시작 +3·최대 +3, 파티 방어 +5%." },
 
-  { name: "강호영", title: "K사 해군 과장", star: 2, portrait: null,
+  { name: "강호영", title: "K사 해군 과장", star: 2, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
     effect: { correct: 0.05, manage: 3, manageMax: 2, def: 0.07, hp: 0.06 },
     flavor: "갑판 위의 규율.",
     desc: "교정 +5%p, 시작 관리력 +3·최대 +2, 파티 방어 +7%·체력 +6%.",
     note: "평범하게 해군 입대를 한 강호영" },
 
-  { name: "강호영", title: "U사 해양의 왕", star: 2, portrait: null,
+  { name: "강호영", title: "U사 해양의 왕", star: 2, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
     effect: { gain: 1, manage: 2, manageMax: 2, hp: 0.05 },
     flavor: "바다가 등을 받친다.",
     desc: "턴당 관리력 +1, 시작 +2·최대 +2, 파티 체력 +5%." },
 
-  { name: "강호영", title: "북부 총기 협회 3과", star: 3, portrait: null,
+  { name: "강호영", title: "북부 총기 협회 3과", star: 3, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
     effect: { push: 0.3, gain: 1, atk: 0.05 },
     flavor: "화력을 끊지 않는다.",
     desc: "독촉 +0.3배, 턴당 관리력 +1, 파티 공격 +5%." },
@@ -656,12 +659,12 @@ const ADVISORS = [
     desc: "시작 관리력 +2·최대 +2, 턴당 +1, 파티 전 능력치 +3%." },
 
   /* ── 남부협회 인격 ── */
-  { name: "김연준", title: "남부협회 3과", star: 2, portrait: null,
+  { name: "김연준", title: "남부협회 3과", star: 2, portrait: "assets/enemy/김연준.png",
     effect: { manage: 2, manageMax: 1, atk: 0.05 },
     flavor: "협회의 방식대로 처리한다.",
     desc: "시작 관리력 +2·최대 +1, 파티 공격 +5%." },
 
-  { name: "김연준", title: "C사 미군 일등대리", star: 3, portrait: null,
+  { name: "김연준", title: "C사 미군 일등대리", star: 3, portrait: "assets/enemy/김연준.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
     effect: { correct: 0.05, cheap: 1, manage: 1, def: 0.03 },
@@ -669,35 +672,35 @@ const ADVISORS = [
     desc: "교정 +5%p, 첨삭·퇴고 비용 -1, 시작 관리력 +1, 파티 방어 +3%.",
     note: "카투사 입대에 성공한 세계선의 김연준" },
 
-  { name: "이승찬", title: "C사 육군 수송부", star: 2, portrait: null,
+  { name: "이승찬", title: "C사 육군 수송부", star: 2, portrait: "assets/portrait/guide.png",
     effect: { gain: 1, hp: 0.04 },
     flavor: "제때 실어 나른다.",
     desc: "턴당 관리력 +1, 파티 체력 +4%.",
     note: "운전병으로 입대한 세계선의 이승찬" },
 
-  { name: "이승찬", title: "참깨라면 애호가", star: 2, portrait: null,
+  { name: "이승찬", title: "참깨라면 애호가", star: 2, portrait: "assets/portrait/guide.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
     effect: { revive: 0.10, cheap: 1, manage: 1 },
     flavor: "한 봉지와 한 캔이면 충분하다.",
     desc: "첨삭 회복 +10%p, 첨삭·퇴고 비용 -1, 시작 관리력 +1." },
 
-  { name: "이승찬", title: "남부협회 2과", star: 2, portrait: null,
+  { name: "이승찬", title: "남부협회 2과", star: 2, portrait: "assets/portrait/guide.png",
     effect: { push: 0.15, manage: 2, atk: 0.03 },
     flavor: "협회 2과의 일처리.",
     desc: "독촉 +0.15배, 시작 관리력 +2, 파티 공격 +3%." },
 
-  { name: "이승찬", title: "L사 에프터팀", star: 2, portrait: null,
+  { name: "이승찬", title: "L사 에프터팀", star: 2, portrait: "assets/portrait/guide.png",
     effect: { revive: 0.20, manageMax: 2, def: 0.05 },
     flavor: "마지막에야 길을 닫는다.",
     desc: "첨삭 회복 +20%p, 관리력 최대 +2, 파티 방어 +5%." },
 
-  { name: "이승찬", title: "아라온호 작살잡이", star: 3, portrait: null,
+  { name: "이승찬", title: "아라온호 작살잡이", star: 3, portrait: "assets/portrait/guide.png",
     effect: { push: 0.4, manage: 2, manageMax: 2, crit: 0.06, atk: 0.03 },
     flavor: "겨눈 곳에 한 번에 꽂는다.",
     desc: "독촉 +0.4배, 시작 관리력 +2·최대 +2, 치명타 +6%p, 파티 공격 +3%." },
 
-  { name: "이승찬", title: "Y사 수석연구원", star: 3, portrait: null,
+  { name: "이승찬", title: "Y사 수석연구원", star: 3, portrait: "assets/portrait/guide.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
     effect: { manage: 1, cheap: 1 },
@@ -705,7 +708,7 @@ const ADVISORS = [
     desc: "시작 관리력 +1, 첨삭·퇴고 비용 -1.",
     note: "연세대 입학한 세계선" },
 
-  { name: "이승찬", title: "렐주먹 사무소 해결사", star: 3, portrait: null,
+  { name: "이승찬", title: "렐주먹 사무소 해결사", star: 3, portrait: "assets/portrait/guide.png",
     effect: { crit: 0.12, critMult: 0.4, manage: 3, manageMax: 3, atk: 0.05, hp: 0.04 },
     flavor: "주먹으로 해결한다.",
     desc: "치명타 +12%p·배율 +0.4, 시작 관리력 +3·최대 +3, 파티 공격 +5%·체력 +4%." },
@@ -721,12 +724,12 @@ const ADVISORS = [
     flavor: "층을 걷어내며 나아간다.",
     desc: "교정 +13%p, 턴당 관리력 +1, 시작 +3·최대 +3, 파티 공격 +5%." },
 
-  { name: "김연준", title: "대륵도 발굴팀원", star: 2, portrait: null,
+  { name: "김연준", title: "대륵도 발굴팀원", star: 2, portrait: "assets/enemy/김연준.png",
     effect: { push: 0.2, manage: 3, manageMax: 3, def: 0.05, hp: 0.03 },
     flavor: "삽자루를 놓지 않는다.",
     desc: "독촉 +0.2배, 시작 관리력 +3·최대 +3, 파티 방어 +5%·체력 +3%." },
 
-  { name: "이형우", title: "대륵도의 환자", star: 3, portrait: null,
+  { name: "이형우", title: "대륵도의 환자", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
     effect: { revive: 0.15, cheap: 1, manage: 1 },
@@ -739,24 +742,24 @@ const ADVISORS = [
    *  단 관리력 계열(manage/manageMax/gain/cheap)과 관리자 능력 계열은
    *  tag 와 무관하게 파티 전체에 걸립니다 — tag 로 걸러지는 것은 atk/def/hp 셋뿐입니다.
    */
-  { name: "이서진", title: "아라온호 갑판닦이", star: 2, portrait: null,
+  { name: "이서진", title: "아라온호 갑판닦이", star: 2, portrait: "assets/enemy/이서진.png",
     effect: { correct: 0.05, manage: 1, manageMax: 2, def: 0.06, hp: 0.03 },
     flavor: "갑판이 미끄러우면 아무도 못 선다.",
     desc: "교정 +5%p, 시작 관리력 +1·최대 +2, 파티 방어 +6%·체력 +3%." },
 
   /* ── 영덕의 밤 ── */
-  { name: "이형우", title: "영덕의 요리사", star: 2, portrait: null,
+  { name: "이형우", title: "영덕의 요리사", star: 2, portrait: "assets/enemy/다시 끌려온 이형우.png",
     effect: { correct: 0.10, manage: 2, manageMax: 1, hp: 0.04 },
     flavor: "잘라낼 데를 먼저 본다.",
     desc: "교정 +10%p, 시작 관리력 +2·최대 +1, 파티 체력 +4%.",
     note: "3.5장에서 상을 차린 장본인" },
 
-  { name: "강호영", title: "영덕의 요리사", star: 3, portrait: null,
+  { name: "강호영", title: "영덕의 요리사", star: 3, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
     effect: { correct: 0.20, manage: 3, manageMax: 3, hp: 0.05, def: 0.04 },
     flavor: "다듬을 자리를 손끝으로 안다.",
     desc: "교정 +20%p, 시작 관리력 +3·최대 +3, 파티 체력 +5%·방어 +4%." },
 
-  { name: "이서진", title: "제3발톱 상티아스", star: 3, portrait: null,
+  { name: "이서진", title: "제3발톱 상티아스", star: 3, portrait: "assets/enemy/이서진.png",
     effect: { tag: "제3발톱", def: 0.25, hp: 0.10, manage: 2, manageMax: 2 },
     flavor: "제3발톱을 등지고 선다.",
     desc: "제3발톱 인격 방어 +25%·체력 +10%, 시작 관리력 +2·최대 +2.",
@@ -787,7 +790,7 @@ const ADVISORS = [
    * 공룡의날 인격이 열 종이나 되는데 그동안 전용 교육위원이 없었습니다.
    * 축제를 총괄하는 자리이므로 «다 같이 버틴다» 쪽으로 잡았습니다 —
    * 시너지(체력 +18%)와 겹쳐 공룡의날 편성이 확 두꺼워집니다. */
-  { name: "이형우", title: "공룡의날 책임자", star: 3, portrait: null,
+  { name: "이형우", title: "공룡의날 책임자", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
     effect: { tag: "공룡의날", hp: 0.24, def: 0.14, manage: 2, gain: 1 },
     flavor: "축제를 굴러가게 한다.",
     desc: "공룡의날 인격 체력 +24%·방어 +14%, 시작 관리력 +2, 턴마다 +1.",
@@ -812,13 +815,13 @@ const ADVISORS = [
     flavor: "각을 미리 짜 둔다.",
     desc: "교정 +8%p, 시작 관리력 +2·최대 +2, 파티 공격·체력 +4%." },
 
-  { name: "이서진", title: "남부협회 수산시장", star: 2, portrait: null,
+  { name: "이서진", title: "남부협회 수산시장", star: 2, portrait: "assets/enemy/이서진.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
     effect: { cheap: 1, manage: 1 },
     flavor: "싱싱한 것부터 먼저 판다.",
     desc: "첨삭·퇴고 비용 -1, 시작 관리력 +1." },
-  { name: "강호영", title: "남부협회 해양전문가", star: 3, portrait: null,
+  { name: "강호영", title: "남부협회 해양전문가", star: 3, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
     effect: { correct: 0.10, manage: 2, manageMax: 2, def: 0.05, hp: 0.05 },
     flavor: "물길을 먼저 읽는다.",
     desc: "교정 +10%p, 시작 관리력 +2·최대 +2, 파티 방어·체력 +5%." },
