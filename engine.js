@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.2.3";
+const VERSION = "2.2.4";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -10107,15 +10107,16 @@ function openSync(back) {
     const cap = syncMax();
     const next = nextSyncChapter();
     let h = '<h2>동 기 화</h2>' +
-      '<div class="hint">인격 파편으로 작성위원의 동기화 단계를 올립니다. ' +
+      '<div class="hint" data-tut="sync-what">인격 파편으로 작성위원의 동기화 단계를 올립니다. ' +
       '단계 1당 그 작성위원의 공격·방어·체력이 모두 ' + Math.round(SYNC_RULE.statPct * 100) +
       '%씩 강해집니다. 지원 작성위원은 자기 단계가 없어, 함께 편성된 두 작성위원 중 ' +
       '낮은 쪽의 단계를 빌려 씁니다.<br>' +
-      '지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
-      (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</div>';
+      '<span data-tut="sync-cap">지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
+      (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</span></div>';
 
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
 
+    let first = true;
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
       const lv = syncLevel(who);
@@ -10126,7 +10127,7 @@ function openSync(back) {
         ? '　·　<span class="uskill"><b>' + skill.name + '</b> ' +
             skill.desc(skillTierValue(skill, lv)) + '</span>'
         : '';
-      h += '<div class="syncrow">' +
+      h += '<div class="syncrow"' + (first ? ' data-tut="sync-row"' : '') + '>' +
              (maxed ? '<button disabled>상한 도달</button>'
                     : '<button data-sync="' + who + '">동기화　' + cost + '</button>') +
              '<div class="body">' +
@@ -10139,6 +10140,7 @@ function openSync(back) {
                '</div>' +
              '</div>' +
            '</div>';
+      first = false;
     });
 
     h += '<div class="modalfoot"><button id="syclose">닫기</button></div>';
@@ -10173,6 +10175,7 @@ function openSync(back) {
     document.getElementById("syclose").onclick = () => { closeModal(); render(); if (back) back(); };
   };
   draw(null);
+  tutorOnce("sync");    /* 동기화에 처음 들어왔을 때 한 번 */
 }
 
 /* ── 보관함 ──────────────────────────────────────────────── */
