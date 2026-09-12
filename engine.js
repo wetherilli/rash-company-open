@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.3.0";
+const VERSION = "2.4.0";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -44,6 +44,11 @@ const RULE = {
   healRatio:   0.30,   // 퇴고로 회복하는 양 (최대 체력 대비)
   correctCut:  0.25,   // 교정 대상이 받는 피해 비율
   pushMult:    1.5,    // 독촉 배수
+  /* 되받아치기 배수 — 적이 «되받아칠 자세» 인 턴에 아군이 공격했을 때
+   * 돌아오는 한 대입니다. 강타(1.7)보다 확실히 세야 «건드리지 말라» 는
+   * 말이 되므로 그 위로 잡았습니다. 적마다 counterMult 로 따로 적을 수
+   * 있고, 안 적으면 이 값을 씁니다 (FOES 의 counterEvery 머리말 참고). */
+  counterMult: 2.4,
   startMoney:  400,    // 보관함이 아예 없을 때 손에 쥐고 시작하는 원고료
   /* 장을 마칠 때 주는 원고료. «처음 마칠 때만» 나옵니다 (storyPays 참고).
    * 장마다 다르게 주고 싶으면 그 장에 clearPay 를 적으면 그것이 이깁니다. */
@@ -284,6 +289,8 @@ function vaultBody() {
     fragBox:  S.fragBox || { select: 0, random: 0 },
     /* 엔케팔린 캡슐 — 보관함에서 바로 쓰는 소모품. 개수 하나만 남깁니다. */
     enkCap:   enkCapCount(),
+    /* 동기화 모듈 — 캡슐과 같은 결의 소모품. 개수 하나만 남깁니다. SYNC_MODULE 참고. */
+    syncModule: syncModuleCount(),
     /* 선택권 — 미보유 목록에서 하나를 골라 그 자리에서 받는 소모품.
      * { advisor: 개수, gift: 개수 }. PICK_TICKETS 참고. */
     pickTicket: S.pickTicket || { advisor: 0, gift: 0 },
@@ -352,6 +359,7 @@ function loadVault() {
     sync:     v.sync || {},
     fragBox:  v.fragBox || { select: 0, random: 0 },
     enkCap:   (+v.enkCap) || 0,
+    syncModule: (+v.syncModule) || 0,
     pickTicket: {
       advisor: (v && v.pickTicket && +v.pickTicket.advisor) || 0,
       gift:    (v && v.pickTicket && +v.pickTicket.gift)    || 0
@@ -406,7 +414,26 @@ function vaultSig(o) {
     o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
     /* 선택권(교육위원·기프트) — 파편 상자·캡슐과 같은 결의 소모품이라 함께 셉니다 */
     jm(o.pickTicket),
+    /* 동기화 모듈 — 같은 결의 소모품 */
+    (o.syncModule || 0),
     /* 이벤트 재화 — 남은 개수, 어느 기간 것인가, 교환소에서 몇 개 바꿨는가 */
+    (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
+    o.ver
+  ].join("|"));
+}
+/* 동기화 모듈(syncModule)이 생기기 «전» 의 셈법입니다. 그때 나간 보관함에는 그 칸이
+ * 아예 없으므로, 이것을 남겨 두지 않으면 판을 올렸다는 이유만으로 손댐으로 뜹니다. */
+function vaultSigOld7(o) {
+  if (!o) return "";
+  const j = a => (a || []).slice().sort().join(",");
+  const jm = m => Object.keys(m || {}).sort().map(k => k + ":" + m[k]).join(",");
+  return codeHash([
+    j(o.ids), j(o.advisors), j(o.gifts), j(o.supports),
+    j(o.achieved), j(o.cleared),
+    j(o.mailTaken), o.newbie, j(o.mirrorDone),
+    j(o.storyGain),
+    o.money, o.codex, jm(o.frags), jm(o.sync), jm(o.fragBox), (o.enkCap || 0),
+    jm(o.pickTicket),
     (o.event || 0), (o.eventId || ""), jm(o.eventBuy),
     o.ver
   ].join("|"));
@@ -496,7 +523,8 @@ function vaultSigOld(o) {
 /* 저장된 값과 지금 셈한 값이 다른가 */
 function vaultTouched(o) {
   if (!o || !o.sig) return false;      // 옛 판에는 없던 값이라, 없으면 «모름» 으로 봅니다
-  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld6(o) && o.sig !== vaultSigOld5(o) &&
+  return o.sig !== vaultSig(o) && o.sig !== vaultSigOld7(o) &&
+         o.sig !== vaultSigOld6(o) && o.sig !== vaultSigOld5(o) &&
          o.sig !== vaultSigOld4(o) &&
          o.sig !== vaultSigOld3(o) && o.sig !== vaultSigOld2(o) && o.sig !== vaultSigOld(o);
 }
@@ -1005,6 +1033,7 @@ function newState() {
     sync,
     fragBox,
     enkCap: (v && +v.enkCap) || 0,   // 엔케팔린 캡슐 — 보관함에 남는 소모품
+    syncModule: (v && +v.syncModule) || 0,   // 동기화 모듈 — 보관함에 남는 소모품
     /* 이벤트 재화 — 이름은 기간마다 갈리고(eventCurName), 개수는 이 한 칸입니다 */
     event,
     eventId: evId,
@@ -1262,6 +1291,19 @@ function storageNotice() {
  *    was 는 지우지 마세요 — 더 옛날 보관함이 언제 들어올지 모릅니다.
  */
 function advisorList() { return (typeof ADVISORS !== "undefined" && ADVISORS) ? ADVISORS : []; }
+
+/* ── 업적으로만 오는 숨은 교육위원 ────────────────────────────
+ *  ADVISORS 에 hidden: true 를 적으면, 얻기 전에는 배정(뽑기)·선택권·도감
+ *  어디에도 안 나옵니다. 인격의 hidden 과 같은 결입니다(idHidden 머리말 참고).
+ *  얻고 나면 평소처럼 다 보입니다 — 그때부터는 숨길 까닭이 없습니다.
+ *
+ *  이름으로 찾는 자리(advisorById · portraitOf 등)는 그대로 advisorList() 를
+ *  씁니다. 숨겼다고 «없는 사람» 이 되면 이미 얻은 사람의 화면이 깨집니다. */
+function advisorHidden(a) {
+  return !!(a && a.hidden) && !(S && S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
+}
+/* 배정·선택권·도감이 훑는 목록 — 숨은 것은 뺍니다 */
+function advisorOpenList() { return advisorList().filter(a => !advisorHidden(a)); }
 function advisorId(a)  { return a ? a.title + "|" + a.name : null; }
 
 /* 이 위원이 예전에 쓰던 이름들 */
@@ -1534,6 +1576,23 @@ function giftCritDmg() {
 }
 function critDmgMult() { return 1 + giftCritDmg(); }
 
+/* ── 이 사람만의 치명타 배율 ──────────────────────────────────
+ *  교육위원 effect 에 { tag: "아라온호", critMult: 0.5 } 처럼 적으면, 그 말이
+ *  «인격 제목» 에 든 사람에게만 배율이 얹힙니다. tag 없이 적으면 예전처럼
+ *  파티 전체 몫이고(advisorEffect), 그쪽은 critMult() 가 이미 셉니다.
+ *  지원 작성위원·조력자는 인격이 없어 제 제목을 그대로 봅니다(memberTitle). */
+function critMultFor(who) {
+  let v = critMult();
+  const title = memberTitle(who) || "";
+  equippedAdvisors().forEach(a => {
+    const e = a.effect || {};
+    if (!e.tag || !e.critMult) return;
+    const tags = Array.isArray(e.tag) ? e.tag : [e.tag];
+    if (tags.some(t => title.indexOf(t) >= 0)) v += e.critMult;
+  });
+  return v;
+}
+
 /* ── 보조 교육위원 효과 ────────────────────────────────────── */
 function advisorEffect() {
   const out = {
@@ -1560,8 +1619,10 @@ function advisorEffect() {
       push:      e.push      || 0,
       cheap:     e.cheap     || 0,
       arrest:    e.arrest    || 0,   // 체포로 깎는 적 방어 +
-      crit:      e.crit      || 0,
-      critMult:  e.critMult  || 0
+      /* 치명타도 tag 가 있으면 그 제목을 낀 사람에게만 걸립니다(critMultFor) —
+       * 여기(파티 전체 몫)에서는 빼 둡니다. atk/def/hp 와 같은 결입니다. */
+      crit:      e.tag ? 0 : (e.crit     || 0),
+      critMult:  e.tag ? 0 : (e.critMult || 0)
     };
     /* 기프트가 이 교육위원을 북돋우면 그 사람 몫만 배가 됩니다 */
     gifts.forEach(g => {
@@ -1704,13 +1765,56 @@ function addPickTicket(kind, n) {
 /* 지금 고를 수 있는 것들 — 비어 있으면 쓸 수 없습니다 */
 function pickTicketCands(kind) {
   if (kind === "advisor")
-    return advisorList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]) &&
+    return advisorOpenList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]) &&
                                      !pickupOnTitle(a.title));
   return (typeof GIFTS !== "undefined" ? GIFTS : [])
            .filter(g => !(S.giftsOwned && S.giftsOwned[giftId(g)]));
 }
 function pickTicketUsable(kind) {
   return pickTicketCount(kind) > 0 && pickTicketCands(kind).length > 0;
+}
+
+/* ── 동기화 모듈 ──────────────────────────────────────────────
+ *  보관함에서 바로 쓰는 소모품입니다. 하나를 쓰면 작성위원 열둘 중 하나를
+ *  골라 그 사람의 동기화를 «두 단계» 올립니다 (사용자 지침 2026-09-12).
+ *  파편은 한 개도 들지 않습니다 — 값 대신 이 물건 하나입니다.
+ *
+ *  ■ 상한은 그대로 지킵니다
+ *    지금 상한(syncMax — 본편을 어디까지 마쳤나)을 넘겨서는 오르지 않습니다.
+ *    상한까지 한 단계밖에 안 남은 사람에게 쓰면 한 단계만 오르고 모듈은
+ *    그대로 사라집니다. 그래서 고르는 화면에 사람마다 «몇 단계가 오르는지»
+ *    를 미리 적어 둡니다 — 알고 쓰라는 뜻입니다.
+ *
+ *  ■ 연출
+ *    올리는 자리(openSync)와 같은 연출을 씁니다. 두 단계를 한 번에 오르는
+ *    사이에 고유 능력이 해금·강화되는 단계(UNIQUE_SKILL_TIERS)가 끼어 있으면
+ *    그쪽 연출이 이깁니다 — 그편이 «무슨 일이 일어났는지» 를 더 크게 알립니다.
+ *
+ *  개수는 S.syncModule 하나로 셉니다. 보관함에 그대로 담깁니다
+ *  (vaultToObject · loadVault · newState · vaultSig 참고).
+ */
+const SYNC_MODULE = {
+  name: "동기화 모듈",
+  step: 2,
+  desc: "작성위원 한 명을 골라 그 사람의 동기화를 두 단계 올립니다. " +
+        "인격 파편은 들지 않습니다. 지금 상한을 넘겨서는 오르지 않습니다."
+};
+function syncModuleCount() { return (S && +S.syncModule) || 0; }
+function addSyncModule(n) {
+  if (!n) return;
+  S.syncModule = syncModuleCount() + n;
+}
+/* 이 사람에게 쓰면 실제로 몇 단계가 오르는가 — 상한에 걸리면 그만큼만 */
+function syncModuleGain(who) {
+  const cap = syncMax(), lv = syncLevel(who);
+  return Math.max(0, Math.min(lv + SYNC_MODULE.step, cap) - lv);
+}
+/* 아직 올릴 데가 남은 작성위원들 — 하나도 없으면 쓸 수 없습니다 */
+function syncModuleCands() {
+  return Object.keys(SINNERS).filter(who => syncModuleGain(who) > 0);
+}
+function syncModuleUsable() {
+  return syncModuleCount() > 0 && syncUnlocked() && syncModuleCands().length > 0;
 }
 
 /* ── 엔케팔린 캡슐 ────────────────────────────────────────────
@@ -1884,6 +1988,8 @@ function eventGiveText(g) {
   if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
   if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
   if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
+  if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
+  if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
   return out.join("　·　") || "—";
 }
 /* 물건에 딸리는 설명 — 인격 파편 상자는 «보관함에 적힌 것과 똑같은 글» 을 씁니다.
@@ -1931,6 +2037,15 @@ function eventGiveApply(g) {
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
   if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
   if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
+  if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); }
+  if (g.advisor) {
+    const ad = advisorById(g.advisor);
+    if (ad) {
+      if (!S.advisorsOwned) S.advisorsOwned = {};
+      if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); }
+      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); }
+    }
+  }
   if (g.enk) {
     enkSync();
     const before = enkCount();
@@ -2877,6 +2992,17 @@ function foeHit(delay, dmg, crit) {
   }, delay || 0);
 }
 
+/* ── 적이 피하는 연출 ─────────────────────────────────────────────
+ *  적이 «피하는 턴»(FOES 의 evadeEvery)에는 아군 공격이 전부 빗나갑니다.
+ *  맞은 것이 아니므로 흔들지도, 베는 그림을 얹지도 않습니다 — 숫자 자리에
+ *  「빗나감」만 띄웁니다. */
+function foeMiss(delay) {
+  setTimeout(() => {
+    const box = document.querySelector(".scenebox");
+    if (box) showBigDamage(box, 0, false, "빗나감");
+  }, delay || 0);
+}
+
 /* 큰 피해 숫자 — 적 그림의 가운데 조금 위에 띄웁니다. 그림이 없으면(가려진 적 등)
  * 무대 가운데에. 무대 밖으로 잘려 나가지 않게 가장자리 안쪽으로 붙잡습니다.
  *
@@ -2894,8 +3020,10 @@ const DMG_LANES = [
   { dx: 110,  dy: -52 },
   { dx: -110, dy: -52 }
 ];
-function showBigDamage(box, dmg, crit) {
-  if (!(dmg >= RULE.bigHitMin)) return;
+/* label 을 적으면 수 대신 그 글을 띄웁니다 — 「빗나감」처럼 셀 수 없는 것 몫입니다.
+ * 그때는 큰 피해 문턱(bigHitMin)을 보지 않습니다. */
+function showBigDamage(box, dmg, crit, label) {
+  if (!label && !(dmg >= RULE.bigHitMin)) return;
   const br = box.getBoundingClientRect();
   let x = br.width / 2, y = br.height * 0.42;
   const fig = document.getElementById("figure");
@@ -2913,7 +3041,8 @@ function showBigDamage(box, dmg, crit) {
   const el = document.createElement("div");
   el.className = "dmgfx" + (crit ? " crit" : "");
   el.dataset.lane = lane;
-  el.innerHTML = (crit ? '<span class="tag">치명타</span>' : '') + Math.floor(dmg).toLocaleString("ko-KR");
+  el.innerHTML = label ? label
+    : (crit ? '<span class="tag">치명타</span>' : '') + Math.floor(dmg).toLocaleString("ko-KR");
   box.appendChild(el);
 
   /* 붙인 뒤에야 index.html 이 정한 글씨 크기(좁은 화면이면 작게)를 읽을 수 있습니다.
@@ -3617,10 +3746,18 @@ function play(s) {
      *  거울 던전처럼 쉬지 않고 이어지는 자리 가운데에 숨 돌릴 곳을 두려는 것입니다. */
     case "rest": {
       divider();
-      if (s.who) speak(s.who, s.say);
+      /* 거울굴절철도의 쉼표라면 «자기가 세운 교육위원» 이 나와 한마디 합니다
+       * (railSpeaker — 사용자 지침 2026-09-12). 아무도 안 세웠거나 초상이 없으면
+       * 장면에 적힌 본래 사람(길잡이)이 그대로 나옵니다. */
+      const rsp = (S.mirror && mirrorRuleNow().group === "rail")
+        ? railSpeaker(mirrorRuleNow()) : null;
+      if (rsp && rsp.advisor) speak(rsp.name, railLine(rsp), rsp.portrait);
+      else if (s.who) speak(s.who, s.say);
       S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 쓰러진 사람도 함께 일어납니다
       S.restManage = true;                                     // 다음 전투는 관리력을 가득 채우고 연다
-      say(s.text || "길잡이가 관리력과 체력을 전부 회복시켰다.", "good");
+      say((rsp && rsp.advisor)
+        ? withJosa(rsp.name, "이") + " 관리력과 체력을 전부 회복시켰다."
+        : (s.text || "길잡이가 관리력과 체력을 전부 회복시켰다."), "good");
       /* 거울굴절철도(1호선 등) 체크포인트에 실제로 닿은 자리입니다 — 보관함에도
        * 남겨서, 창을 닫았다 다시 열어도 여기서부터 이어할 수 있게 합니다.
        * 편성은 담지 않습니다(사용자 지침) — mirrorClear() 에서 지웁니다. */
@@ -4200,7 +4337,11 @@ function startBattleFight(scene, f) {
    *  hp 를 적으면 최대 체력도 함께 맞춥니다. */
   ["hp", "atk", "def", "noHeavy", "heavyLine",
    "aoeEvery", "aoeFrom", "aoeFlat", "aoeLine", "aoeWarn",
-   "healEvery", "healFrom", "healAtk", "healLine", "healWarn"].forEach(k => {
+   "healEvery", "healFrom", "healAtk", "healLine", "healWarn",
+   "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
+   "evadeEvery", "evadeFrom", "evadeLine", "evadeWarn",
+   "firstEvery", "firstFrom", "firstLine", "firstWarn",
+   "firstAoeEvery", "firstAoeFrom", "firstAoeLine", "firstAoeWarn"].forEach(k => {
     if (scene[k] != null) S.battle[k] = scene[k];
   });
   if (scene.hp != null) S.battle.maxhp = scene.hp;
@@ -4262,16 +4403,28 @@ function beginTurn() {
    * 실제로 때리는 것은 resolveTurn 이고, 여기서 정한 표적을 그대로 씁니다. */
   const standing = S.party.filter(w => w && alive(w));
   /* ── 이번 턴에 적이 무엇을 하는가 ──────────────────────────────
-   *  셋 중 하나입니다. 겹치면 위에 적은 것이 이깁니다.
+   *  넷 중 하나입니다. 겹치면 위에 적은 것이 이깁니다.
    *
    *    광역   aoeEvery 턴마다. aoeFrom 을 적으면 그 턴부터 셉니다 —
    *           aoeEvery:6, aoeFrom:3 이면 3 · 9 · 15 …  안 적으면 예전처럼
    *           aoeEvery 의 배수(9 턴마다면 9 · 18 …)입니다.
    *    회복   healEvery / healFrom 도 같은 셈. 그 턴에는 때리지 않고 저를 되붙입니다.
+   *    선공   firstEvery · firstAoeEvery. 이 턴만 차례가 뒤집혀 적이 «먼저»
+   *           칩니다(단일은 한 사람, 광역은 판 전체). resolveTurn 참고.
+   *    되받아치기  counterEvery / counterFrom 도 같은 셈. 이 턴에는 적이
+   *           «먼저» 치지 않습니다 — 아군 중 하나라도 공격을 골랐으면 그때만
+   *           무작위 한 사람에게 강타보다 센 한 대가 돌아오고, 아무도 치지
+   *           않았으면 적은 아무 일도 하지 않습니다 (foeTurn 참고).
+   *    회피   evadeEvery / evadeFrom. 이 턴 아군의 공격이 모두 빗나갑니다.
+   *           적은 평소대로 노리고 칩니다.
    *    강타   3턴마다. noHeavy 를 단 적은 아예 쓰지 않습니다.
    *
-   *  광역과 회복은 겨누는 데가 «전원» 이거나 «저 자신» 이라 노려지는 사람이
-   *  없습니다. 그래서 aim 을 비웁니다. */
+   *  겹치는 턴의 차례 — 광역 > 회복 > 선공 > 되받아치기 > 회피 > 강타.
+   *  선공을 되받아치기·회피 위에 둔 것은, 차례 자체를 뒤집는 것이라 판이 가장
+   *  크게 달라지기 때문입니다 (2026-09-12).
+   *
+   *  광역·회복·되받아치기는 겨누는 데가 «전원»·«저 자신»·«그때 가 봐야 아는
+   *  하나» 라 미리 노려지는 사람이 없습니다. 그래서 aim 을 비웁니다. */
   const fnow = FOES[b.id] || {};
   const 주기 = (every, from) => {
     if (!every) return false;
@@ -4282,11 +4435,33 @@ function beginTurn() {
   const aoeFrom  = (b.aoeFrom != null) ? b.aoeFrom : fnow.aoeFrom;
   const hEvery   = b.healEvery || fnow.healEvery || 0;
   const hFrom    = (b.healFrom != null) ? b.healFrom : fnow.healFrom;
-  b.aoe     = !!(b.boss && 주기(aoeEvery, aoeFrom));
-  b.foeHeal = !b.aoe && !!(b.boss && 주기(hEvery, hFrom));
-  b.heavy   = !b.aoe && !b.foeHeal &&
+  const cEvery   = b.counterEvery || fnow.counterEvery || 0;
+  const cFrom    = (b.counterFrom != null) ? b.counterFrom : fnow.counterFrom;
+  const eEvery   = b.evadeEvery || fnow.evadeEvery || 0;
+  const eFrom    = (b.evadeFrom != null) ? b.evadeFrom : fnow.evadeFrom;
+  const fEvery   = b.firstEvery || fnow.firstEvery || 0;
+  const fFrom    = (b.firstFrom != null) ? b.firstFrom : fnow.firstFrom;
+  const faEvery  = b.firstAoeEvery || fnow.firstAoeEvery || 0;
+  const faFrom   = (b.firstAoeFrom != null) ? b.firstAoeFrom : fnow.firstAoeFrom;
+  b.aoe      = !!(b.boss && 주기(aoeEvery, aoeFrom));
+  b.foeHeal  = !b.aoe && !!(b.boss && 주기(hEvery, hFrom));
+  /* 선공 — 이 턴만 차례가 뒤집혀 적이 먼저 칩니다(resolveTurn 참고).
+   * 둘로 갈립니다. 광역 선공이 단일 선공보다 위입니다 — 둘 다 걸리는 턴이면
+   * 판을 쓰는 쪽이 «먼저 친다» 는 말에 더 맞습니다.
+   *
+   * 되받아치기·회피보다 «위» 에 둡니다 (2026-09-12). 선공은 차례 자체를
+   * 뒤집는 것이라 판이 가장 크게 달라지고, 무엇보다 3턴 회피 · 6턴 광역선공
+   * 처럼 짜면 6턴이 늘 회피에 먹혀 광역선공이 영영 안 나오기 때문입니다. */
+  const 선공광역 = !b.aoe && !b.foeHeal && !!(b.boss && 주기(faEvery, faFrom));
+  const 선공단일 = !선공광역 && !b.aoe && !b.foeHeal && !!(b.boss && 주기(fEvery, fFrom));
+  b.foeFirst = 선공광역 || 선공단일;
+  if (선공광역) b.aoe = true;        // 이 턴 적의 «행동» 은 광역입니다
+  b.counter  = !b.aoe && !b.foeHeal && !b.foeFirst && !!(b.boss && 주기(cEvery, cFrom));
+  b.foeEvade = !b.aoe && !b.foeHeal && !b.foeFirst && !b.counter &&
+               !!(b.boss && 주기(eEvery, eFrom));
+  b.heavy   = !b.aoe && !b.foeHeal && !b.foeFirst && !b.counter && !b.foeEvade &&
               !(b.noHeavy || fnow.noHeavy) && !!(b.boss && b.turn % 3 === 0);
-  b.aim     = (b.aoe || b.foeHeal) ? null
+  b.aim     = (b.aoe || b.foeHeal || b.counter) ? null
                                    : (standing.length ? standing[rnd(standing.length)] : null);
 
   /* ── 설득 전투 — 정해진 차례가 지나면 적을 무대에서 내립니다 ──────
@@ -4319,7 +4494,20 @@ function beginTurn() {
     const want = ((b.heavy || b.aoe) && nowHeavy) ? nowHeavy : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
-  if (b.foeHeal) {
+  if (b.foeFirst) {
+    /* 선공 — 이번 차례는 적이 먼저 칩니다. 무엇으로 치는지(판 전체냐 하나냐)와
+     * 함께, «차례가 뒤집힌다» 는 것을 못박아 알립니다. 방어를 깔지, 그래도
+     * 치고 볼지를 고르는 자리라 알려 주지 않으면 고를 수가 없습니다. */
+    const f = FOES[b.id] || {};
+    say("▷ " + withJosa(b.name, "이") + " " + (b.aoe
+          ? (b.firstAoeWarn || f.firstAoeWarn ||
+             "판 전체를 한 번에 훑는다.  이쪽이 손쓰기 전에 쓸어버릴 자세다.")
+          : (b.firstWarn || f.firstWarn ||
+             "무게를 앞으로 옮긴다.  이쪽보다 먼저 움직일 자세다.")), "bad");
+    if (!b.aoe && b.aim)
+      say("　" + withJosa(memberName(b.aim), "을") + " 노리고 있다!", "bad");
+    say("　이번 차례는 상대가 먼저 친다.", "bad");
+  } else if (b.foeHeal) {
     /* 이번 턴엔 때리지 않고 저를 되붙입니다 — 그 전에 얼마든 깎아 두라는 뜻으로
      * 미리 알립니다. 노려지는 사람은 없습니다. */
     const f = FOES[b.id] || {};
@@ -4331,19 +4519,38 @@ function beginTurn() {
     const f = FOES[b.id] || {};
     say("▷ " + withJosa(b.name, "이") + " " + (b.aoeWarn || f.aoeWarn ||
         "숨을 크게 들이쉰다.  광역 공격을 준비하는 듯하다."), "bad");
+  } else if (b.counter) {
+    /* 되받아치기 — «지금 치면 돌아온다» 는 말을 반드시 미리 해 둡니다.
+     * 이 턴에 무엇을 할지(치느냐 참느냐)가 곧 이 기믹이므로, 알려 주지
+     * 않으면 고르는 것이 아니라 찍는 것이 됩니다 (사용자 지침 2026-09-12). */
+    const f = FOES[b.id] || {};
+    say("▷ " + withJosa(b.name, "이") + " " + (b.counterWarn || f.counterWarn ||
+        "몸을 웅크린 채 이쪽을 본다.  되받아칠 준비를 하고 있다."), "bad");
+    say("　지금 공격하는 것은 위험할 것 같다.", "bad");
   } else if (b.aim)
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
         (b.heavy ? "  크게 휘두를 자세다." : ""), "bad");
 
+  /* 피하는 턴 — 적은 평소대로 노리고 치되, 이번 차례 아군의 공격은 전부
+   * 빗나갑니다. 노려진 사람은 위에서 이미 알렸으므로 여기서는 «쳐 봐야
+   * 안 맞는다» 는 것만 한 줄 덧붙입니다 (사용자 지침 2026-09-12). */
+  if (b.foeEvade)
+    say("▷ " + withJosa(b.name, "이") + " " + (b.evadeWarn || fnow.evadeWarn ||
+        "무게를 발끝으로 옮긴다.  이번 차례에는 힘을 빼지 않는 것이 좋아 보인다."), "bad");
+
   /* 보스가 강타·광역·회복을 준비하는 턴에는 한마디 한다.
    * data/story.js 의 FOES 에 heavyLine · aoeLine · healLine 으로 적습니다.
    * 여럿이면 배열로 — 그중 하나가 무작위로 나옵니다. */
-  if (b.aoe || b.foeHeal || (b.heavy && b.aim)) {
+  if (b.aoe || b.foeHeal || b.counter || b.foeEvade || b.foeFirst || (b.heavy && b.aim)) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 대사가 이깁니다 (b.heavyLine) */
-    let line = b.foeHeal ? (b.healLine || f.healLine)
-             : b.aoe     ? (b.aoeLine  || f.aoeLine)
-             :             (b.heavyLine || f.heavyLine);
+    let line = b.foeFirst ? (b.aoe ? (b.firstAoeLine || f.firstAoeLine)
+                                   : (b.firstLine || f.firstLine))
+             : b.foeHeal  ? (b.healLine || f.healLine)
+             : b.aoe      ? (b.aoeLine  || f.aoeLine)
+             : b.counter  ? (b.counterLine || f.counterLine)
+             : b.foeEvade ? (b.evadeLine || f.evadeLine)
+             :              (b.heavyLine || f.heavyLine);
     if (Array.isArray(line)) line = line[rnd(line.length)];
     if (line) {
       const w = document.createElement("p");
@@ -4935,6 +5142,22 @@ function checkAchievements(foeName, cleared) {
       } else say("(보상 인격을 찾지 못했습니다: " +
                  [g.id.who, g.id.star, g.id.title].join(" / ") + ")", "todo");
     }
+    /* 보조 교육위원 — 「제목|이름」. 숨은 교육위원(hidden)도 여기서 넣어 줍니다.
+     * 그때부터 도감·배정 화면에 보이기 시작합니다(advisorHidden 참고). */
+    if (g.advisor) {
+      const ad = advisorById(g.advisor);
+      if (ad) {
+        if (!S.advisorsOwned) S.advisorsOwned = {};
+        if (S.advisorsOwned[g.advisor]) {
+          S.codex += dupRefund(ad.star);
+          say("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권을 받았습니다.", "gain");
+        } else {
+          S.advisorsOwned[g.advisor] = true;
+          say("보조 교육위원 합류 — " + stars(ad.star) + " " + ad.title + " " + ad.name, "gain");
+          if (ad.desc) say("(" + ad.desc + ")", "sys");
+        }
+      } else say("(보상 교육위원을 찾지 못했습니다: " + g.advisor + ")", "todo");
+    }
     if (g.support) {
       const sp = supportBy(SUP_PREFIX + g.support);
       if (sp) {
@@ -4950,6 +5173,8 @@ function checkAchievements(foeName, cleared) {
       say("보조 교육위원 선택권 " + g.advisorTicket + "개 획득.", "gain"); }
     if (g.giftTicket) { addPickTicket("gift", g.giftTicket);
       say("E.G.O 기프트 선택권 " + g.giftTicket + "개 획득.", "gain"); }
+    if (g.syncModule) { addSyncModule(g.syncModule);
+      say(SYNC_MODULE.name + " " + g.syncModule + "개 획득.", "gain"); }
     if (g.event) { addEvent(g.event); say(eventCurName() + " " + g.event + " 획득.", "gain"); }
     saveVault();
   });
@@ -5030,7 +5255,9 @@ function resolveTurn() {
   buttons([{ label: "…", cls: "primary", disabled: true }]);   // 푸는 동안은 잠근다
 
   const same = () => S.battle === b;
-  const hitters = S.party.filter(w => w && alive(w) && b.cmds[w] === "attack");
+  /* 선공 턴(b.foeFirst)에는 적이 먼저 치고 나서 이 목록을 다시 셉니다 —
+   * 먼저 맞고 쓰러진 사람은 그 차례를 못 씁니다. 그래서 const 가 아닙니다. */
+  let hitters = S.party.filter(w => w && alive(w) && b.cmds[w] === "attack");
   let i = 0;
 
   /* ── 난입 ────────────────────────────────────────────────────
@@ -5119,7 +5346,7 @@ function resolveTurn() {
           ? (passiveSkillBonus("yu_ain", 0).atk || 0) : 0;
         let dmg = st.atk * (1 + retribBonus) + rnd(4) - fdef;
         const crit = Math.random() < critRate();
-        if (crit) dmg *= critMult() * critDmgMult();
+        if (crit) dmg *= critMultFor(target) * critDmgMult();
         dmg = Math.max(1, Math.floor(dmg));
         b.hp -= dmg;
         say((crit ? (memberName(target) + "의 치명적인 공격! — " + dmg + " 피해")
@@ -5142,6 +5369,21 @@ function resolveTurn() {
     if (i >= hitters.length) return setTimeout(afterAllies, RULE.foePauseMs);
 
     const who = hitters[i];
+
+    /* ── 적이 피하는 턴 ───────────────────────────────────────────
+     *  이번 차례 아군의 공격은 전부 빗나갑니다. «때린 것» 으로 치지 않으므로
+     *  흡혈·회피 보상처럼 맞혀야 붙는 것들은 쓰이지 않고 그대로 남습니다.
+     *  겹살로 두 번 치는 사람도 두 대 다 빗나갑니다(같은 자리를 다시 지나므로).
+     *  독촉·체포처럼 이미 걸어 둔 것은 그대로 이번 턴 몫으로 사라집니다 —
+     *  피하는 턴에 힘을 쓰면 그만큼 손해라는 것이 이 기믹입니다. */
+    if (b.foeEvade) {
+      say(memberName(who) + "의 공격 — 빗나갔다.　" +
+          withJosa(b.name, "이") + " 몸을 틀어 흘려보냈다.", "sys");
+      foeMiss(0);
+      i++;
+      return setTimeout(swing, RULE.allyStepMs);
+    }
+
     const st = effStats(who);
     /* 체포는 이번 턴 «적 방어» 를 깎습니다. 뺄셈 피해라 방어 한 점이 크게 먹히므로,
      * 방어가 두꺼운 상대에게 걸수록 효과가 큽니다. */
@@ -5176,7 +5418,7 @@ function resolveTurn() {
     let dmg = st.atk * atkMult + vampBonus + rnd(4) - fdef;
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
     const crit = (evadeBonus || forceCrit) ? true : Math.random() < critRate();
-    if (crit) dmg *= (evadeBonus || critMult()) * critDmgMult();
+    if (crit) dmg *= (evadeBonus || critMultFor(who)) * critDmgMult();
     dmg = Math.max(1, Math.floor(dmg));
     b.hp -= dmg;
     say((crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
@@ -5236,12 +5478,38 @@ function resolveTurn() {
     if (b.loseOk && b.hp <= b.maxhp * RULE.scriptedOut) return scriptedEnd();
     if (b.scene.persuade && b.turn >= b.scene.persuade.turns) return persuadeEnd();
 
+    /* 선공 턴이면 적은 이 턴에 이미 쳤습니다 — 여기서 또 치게 두면 한 턴에
+     * 두 번 맞습니다. 아군 차례까지 끝난 것이므로 그대로 턴 머리로 갑니다. */
+    if (b.foeFirst) {
+      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+    }
+
     const targets = S.party.filter(w => w && alive(w));
     if (!targets.length) return defeat();
     foeTurn(targets);
   };
 
-  /* ③ 적이 되받아친다 — 이때 화면이 흔들린다 */
+  /* 아군 차례를 연다 — 평소에는 턴 머리에서 곧바로, 선공 턴에는 적이 친 뒤에.
+   * 목록을 여기서 다시 세는 것은 선공에 맞고 쓰러진 사람을 빼기 위해서입니다. */
+  const allyPhase = () => {
+    if (!same()) return;
+    hitters = S.party.filter(w => w && alive(w) && b.cmds[w] === "attack");
+    i = 0;
+    if (!hitters.length) setTimeout(afterAllies, RULE.foePauseMs);
+    else swing();
+  };
+
+  /* 적이 제 몫을 끝낸 뒤 — 평소에는 턴 머리로, 선공 턴에는 이제야 아군 차례로.
+   * foeTurn 안에서 «다음으로 넘어가는» 자리는 전부 이 하나를 부릅니다. */
+  const afterFoe = () => {
+    if (!same()) return;
+    if (b.foeFirst) return allyPhase();
+    beginTurn();
+  };
+
+  /* ③ 적이 되받아친다 — 이때 화면이 흔들린다
+   *  («되받아친다» 는 평소의 말이고, 선공 턴에는 이 차례가 맨 앞에 섭니다) */
   const foeTurn = (targets) => {
     if (!same()) return;
 
@@ -5270,7 +5538,7 @@ function resolveTurn() {
           (오른몫 > 0 ? "체력 " + 오른몫 + " 회복" : "더 채울 곳이 없다") +
           "　(" + b.hp + " / " + b.maxhp + ")", 오른몫 > 0 ? "heavy" : "sys");
       render();
-      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+      return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
     if (b.aoe) {
@@ -5326,12 +5594,30 @@ function resolveTurn() {
       /* 못박은 광역(aoeFlat)은 «반드시 전멸» 자리라 강타처럼 세게 보여 줍니다 */
       hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: h.tag, heavy: !!flatAoe, blue: h.blue }));
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
-      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+      return setTimeout(afterFoe, RULE.turnGapMs);
+    }
+
+    /* ── 되받아치기 ───────────────────────────────────────────────
+     *  «먼저» 치지 않는 턴입니다. 이번 차례에 아군 중 하나라도 공격을
+     *  골랐으면 그 자리에서 무작위 한 사람에게 강타보다 센 한 대가
+     *  돌아오고, 아무도 치지 않았으면 적은 아무 일도 하지 않습니다.
+     *  «참을 것인가» 를 한 턴 동안 고르게 하는 기믹이라, 턴 머리에서
+     *  반드시 미리 알립니다(beginTurn 의 counterWarn).
+     *
+     *  누가 맞을지는 여기서 뽑습니다 — 예고한 표적이 없는 턴이라
+     *  b.aim 이 비어 있고, 그래서 도발처럼 «노려진 한 사람» 을 전제로
+     *  하는 것들은 걸리지 않습니다. 방어·교정·갑주·책임은 그대로 먹습니다.
+     *  적은 쪽이 이득이 되지 않도록 회복·광역과 마찬가지로 보스만 씁니다. */
+    const 되받음 = !!b.counter && S.party.some(w => w && b.cmds[w] === "attack");
+    if (b.counter && !되받음) {
+      say("▶ " + withJosa(b.name, "이") + " 웅크린 채 그대로 있다. 되받아칠 것이 없었다.", "sys");
+      render();
+      return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
     /* 턴 머리에서 예고한 그 표적을 그대로 친다.
      * 그 사이 쓰러졌다면(첨삭 전이라면) 서 있는 사람 중에서 다시 고른다. */
-    const heavy = !!b.heavy;
+    const heavy = !!b.heavy || 되받음;   // 화면 흔들림·굵은 글씨는 강타와 같게 갑니다
     let t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
 
     /* 책임 — 노려진 게 누구든 추민수가 대신 받는다 */
@@ -5345,11 +5631,15 @@ function resolveTurn() {
       render();
       allyHitFx(t, 0, { miss: true });
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
-      return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+      return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
     const st = effStats(t);
-    let dmg = (heavy ? b.atk * 1.7 : b.atk) + rnd(4) - st.def;
+    /* 되받아치기는 강타(1.7)보다 셉니다 — 적마다 counterMult 로 따로 적을 수
+     * 있고, 안 적으면 RULE.counterMult 를 씁니다. */
+    const 배수 = 되받음 ? (b.counterMult || (FOES[b.id] || {}).counterMult || RULE.counterMult)
+               : heavy  ? 1.7 : 1;
+    let dmg = b.atk * 배수 + rnd(4) - st.def;
     /* 반격(김하주) 몫의 바탕 — 방어·교정·도발·갑주·강공 등 «경감»이 걸리기
      * 전의 값입니다(사용자 지침 2026-09-02 — 원래는 자기 공격력 기반의
      * 확정 치명타였다가, 실제로 맞은 피해를 되돌려주는 것으로 바뀜). */
@@ -5365,8 +5655,11 @@ function resolveTurn() {
 
     shakeScreen(heavy);
 
-    /* 강타는 보통 공격과 한눈에 갈리도록 따로 적습니다 */
-    say((heavy ? "▶ " + b.name + "의 강타! — " : b.name + "의 공격 — ") +
+    /* 강타는 보통 공격과 한눈에 갈리도록 따로 적습니다.
+     * 되받아치기는 «반격» 이라는 말을 쓰지 않습니다 — 그 말은 이미 아군
+     * 쪽 몫(김하주)이라, 같은 말을 쓰면 대화록에서 누가 친 것인지 헷갈립니다. */
+    say((되받음 ? "▶ " + b.name + "의 되받아치기! — "
+       : heavy  ? "▶ " + b.name + "의 강타! — " : b.name + "의 공격 — ") +
         memberName(t) + "에게 " + dmg + " 피해" +
         (b.cmds[t] === "guard" ? " (방어)" : "") +
         (b.mods[t + "_guard"] ? " (교정)" : "") +
@@ -5385,7 +5678,7 @@ function resolveTurn() {
                 : b.cmds[t] === "guard" ? "방어"
                 : (t === hero && heroPct) ? "책임" : "";
     allyHitFx(t, dmg, { heavy, blue: corrected,
-      tag: [heavy ? "강타" : "", eased].filter(Boolean).join("·") });
+      tag: [되받음 ? "되받아치기" : heavy ? "강타" : "", eased].filter(Boolean).join("·") });
 
     /* 반격 — 맞고도 살아 있으면, 방금 «경감되기 전» 받은 피해(rawDmg)에
      * ×v 를 곱해 그대로 되돌려준다(사용자 지침 2026-09-02). */
@@ -5400,10 +5693,23 @@ function resolveTurn() {
     }
 
     if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
-    setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
+    setTimeout(afterFoe, RULE.turnGapMs);
   };
 
-  if (!hitters.length) setTimeout(afterAllies, RULE.foePauseMs);
+  /* ── 차례를 뒤집는다 (선공) ─────────────────────────────────────
+   *  평소에는 아군이 먼저 치고 적이 되받아칩니다. 선공 턴에는 그 차례가
+   *  통째로 뒤집혀, 적이 먼저 치고 그 뒤에 아군이 움직입니다 —
+   *  먼저 맞고 쓰러진 사람은 그 차례를 못 씁니다(allyPhase 가 목록을
+   *  다시 셉니다). 방어·교정처럼 미리 걸어 둔 것은 그대로 먹습니다,
+   *  고르는 것은 어차피 턴 머리에서 이미 끝났으므로 (사용자 지침 2026-09-12). */
+  if (b.foeFirst) {
+    const targets = S.party.filter(w => w && alive(w));
+    if (!targets.length) return defeat();
+    say("▶ " + withJosa(b.name, "이") + " 이쪽보다 먼저 움직인다!", "heavy");
+    render();
+    setTimeout(() => { if (same()) foeTurn(targets); }, RULE.foePauseMs);
+  }
+  else if (!hitters.length) setTimeout(afterAllies, RULE.foePauseMs);
   else swing();
 }
 
@@ -6304,7 +6610,7 @@ function synergyMembers(sy) {
    * «아무도 안 걸린다» 로 잘못 보입니다. 인격과 같은 결로, 미보유도 이름은
    * 보여줍니다(지원 작성위원과 달리 얻기 전에도 제목·이름이 가려지지 않는
    * 기존 규칙을 그대로 따릅니다 — openNote() 의 교육위원 목록 참고). */
-  advisorList().forEach(a => {
+  advisorOpenList().forEach(a => {
     if (!match(a.title)) return;
     out.push({ sup: false, adv: true, owned: !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]),
                who: a.name, star: a.star, title: a.title });
@@ -6481,7 +6787,7 @@ function openNote(back, focus) {
     });
     h += '</div>';
 
-    const advAll = advisorList();
+    const advAll = advisorOpenList();
     if (advAll.length) {
       h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">교육위원</div><div class="grid">';
       advAll.forEach(a => {
@@ -6532,7 +6838,7 @@ function openNote(back, focus) {
             if (id.todo || idHidden(w, id) || !tags.some(tg => id.title.indexOf(tg) >= 0)) return;
             totalN++; if (S.owned[idKey(w, id)]) ownedN++;
           });
-          advisorList().forEach(a => {
+          advisorOpenList().forEach(a => {
             if (!tags.some(tg => a.title.indexOf(tg) >= 0)) return;
             totalN++; if (S.advisorsOwned && S.advisorsOwned[advisorId(a)]) ownedN++;
           });
@@ -6802,7 +7108,7 @@ function openShop(back) {
     const exCan = Object.keys(SINNERS).some(w =>
       fragCount(w) >= RULE.fragExchange &&
       SINNERS[w].ids.some(id => !S.owned[idKey(w, id)] && !id.hidden && !pickupOnTitle(id.title)));
-    const aTotal = advisorList().length;
+    const aTotal = advisorOpenList().length;
     const aMine  = Object.keys(S.advisorsOwned || {}).length;
 
     /* ── 기프트 · 인격 교환 · 교육위원 — 한 줄에 셋 ────────────────
@@ -7174,7 +7480,7 @@ function openGacha(done, pk, deal) {
     };
 
     const pullAdvisor = () => {
-      const all = advisorList();
+      const all = advisorOpenList();
       if (!all.length) return pullIdentity(3);          // 교육위원이 없으면 3성으로 대신
       let cand = all.filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
       if (!cand.length) cand = all;
@@ -7261,7 +7567,7 @@ function pullGiftOnce() {
 }
 
 function pullAdvisorOnce() {
-  const all = advisorList();
+  const all = advisorOpenList();
   if (!all.length) return null;
   const star = Math.random() < ADVISOR_RULE.rate3 ? 3 : 2;
   let cand = all.filter(a => a.star === star && !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
@@ -7287,7 +7593,7 @@ function openStockGacha(kind, done) {
   const pct    = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + "%";
 
   const draw = (result) => {
-    const total = isGift ? GIFTS.length : advisorList().length;
+    const total = isGift ? GIFTS.length : advisorOpenList().length;
     const mine  = Object.keys((isGift ? S.giftsOwned : S.advisorsOwned) || {}).length;
 
     let h = '<h2>' + (isGift ? '기 프 트 배 정' : '교 육 위 원 파 견') + '</h2>' +
@@ -7900,6 +8206,26 @@ const MIRROR_RAIL1 = {
   bg:   "assets/scene/거울굴절철도1호선.jpg",
   prefix: "굴절된 ",
   count:  7,        // 일곱을 연달아 상대합니다 (종점 포함)
+
+  /* ── 고정 편성 (2026-09-12 사용자 지침) ──────────────────────
+   *  거울굴절철도는 이제 «정해진 조합» 으로 섭니다. 무작위로 뽑던 것을 접은
+   *  것은, 선로라는 말에 맞게 «늘 같은 역, 같은 순서» 여야 하기 때문입니다.
+   *  여기 적은 차례가 곧 서는 차례입니다(정렬하지 않습니다). 종점(finalFoe)은
+   *  따로 적혀 있으니 여기 다시 적지 않습니다.
+   *
+   *  1호선은 본편 1~5장을 한 장에 하나씩 되짚습니다 — 5장을 마쳐야 열리는
+   *  조건과 맞물립니다. 김준성이 둘인 것은 일부러입니다(3장의 그 사람과,
+   *  게가 된 그 사람). */
+  foes: [
+    "csa_grunt",           // 1장 · 구C사 경비 (잡졸)
+    "kim_junseong",        // 3장 · 김준성
+    "viper_twisted",       // 2장 · 뒤틀린 바이퍼
+    "kim_junseong_crab",   // 3장 · '게'화 E.G.O :: 사지동물 김준성
+    /* ↑ 넷을 넘기면 길잡이가 들릅니다 (rest.after) */
+    "twisted_shrimp",      // 4장 · 뒤틀린 빛새우
+    "twisted_mosasaur"     // 5장 · 뒤틀린 모사사우루스 :: 강호영
+  ],
+
   scale:  3.5,      // 본편의 3.5배
   defScale: 0,      // 방어는 본편 그대로 (2026-09-11 — DEF_SCALE 머리말 참고)
 
@@ -7990,8 +8316,13 @@ const MIRROR_RAIL2 = {
   warn: "1호선보다 길고 셉니다. 순환을 셋 돌아야 종착역이 열리고, 그 사이 쉼표는 " +
         "순환과 순환 사이뿐입니다. 도중에 유리창으로 나가면 처음부터입니다.",
 
+  /* 고정 편성 (2026-09-12 사용자 지침) — 순환마다 다시 만나는 셋입니다.
+   * 들어올 때 뽑던 것을 접었습니다. 한 자리(6장)에서 모은 것은 «같은 곳을
+   * 몇 번이고 지난다» 는 순환의 결에 맞추려는 것입니다. 적은 차례대로 섭니다. */
+  loopFoes: ["tanaconda", "deathleaper", "kevin"],
+
   loop: {
-    foes:  3,     // 한 순환에 세우는 보스 수
+    foes:  3,     // 한 순환에 세우는 보스 수 (loopFoes 를 적었으면 그 수가 곧 이 수입니다)
     free:  3,     // 이만큼 돌아야 종착역으로 갈 수 있습니다
     scale: 3.0,   // 1순환 배수
     step:  0.5    // 순환마다 오르는 몫
@@ -8047,6 +8378,13 @@ function railFinalFoe(r, cycle) {
 let RAIL2_PICK = null;   // { tier, bosses:[열쇠 셋] }
 
 function buildLoopFoes(r) {
+  /* 고정 편성 (2026-09-12 사용자 지침) — 적어 둔 셋이 적어 둔 차례로 섭니다.
+   * 뽑지 않으므로 «약한 것부터» 정렬도 하지 않습니다. */
+  if (r.loopFoes && r.loopFoes.length) {
+    RAIL2_PICK = { tier: r.key, bosses: r.loopFoes.filter(x => FOES[x]) };
+    return railCycleFoes(r, 1, RAIL2_PICK.bosses).concat([railFinalFoe(r, 1)]);
+  }
+
   const met = metFoes();
   const 설수있나 = x =>
     x.indexOf("__mirror_") !== 0 && !FOES[x].noMirror && typeof FOES[x].hp === "number";
@@ -8138,8 +8476,9 @@ function mirrorFacts(rule) {
      * 「한 순환 / 보스 3」이 「상대 / 보스 3 × 순환」보다 좁고 또렷합니다. */
     o.세기 = railScaleText(r.loop.scale) + '부터';
     o.상대라벨 = '한 순환';
-    o.상대 = '보스 ' + r.loop.foes;
-    o.자세히 = '이미 만난 보스 ' + countWord(r.loop.foes) + ' 한 순환으로 묶어, ' +
+    o.상대 = '보스 ' + (r.loopFoes ? r.loopFoes.length : r.loop.foes);
+    o.자세히 = (r.loopFoes ? '정해진 보스 ' : '이미 만난 보스 ') +
+               countWord(r.loopFoes ? r.loopFoes.length : r.loop.foes) + ' 한 순환으로 묶어, ' +
                '순환마다 다시 만납니다. 세기는 순환마다 ' + r.loop.step.toFixed(1) + '씩 올라, ' +
                countBefore(r.loop.free) + ' 순환을 돌면 종착역으로 가는 문이 열립니다. ' +
                '그 뒤로는 순환을 더 돌지 종착역으로 갈지 고를 수 있습니다.' + 처치몫없음;
@@ -8161,11 +8500,12 @@ function mirrorFacts(rule) {
     return o;
   }
 
-  /* 나오는 수는 «만나 본 적» 만큼입니다. 적게 만났으면 그만큼만 섭니다. */
-  const n = Math.min(r.count, metCount());
+  /* 나오는 수는 «만나 본 적» 만큼입니다. 적게 만났으면 그만큼만 섭니다.
+   * 고정 편성(foes)을 적어 둔 갈래는 그 수가 곧 서는 수입니다. */
+  const n = r.foes ? (r.foes.length + (r.finalFoe ? 1 : 0)) : Math.min(r.count, metCount());
   o.세기 = railScaleText(r.scale);
   o.상대 = '적 ' + n;
-  o.자세히 = '이미 만난 적 ' + countWord(n) + ' 연달아 상대합니다.' +
+  o.자세히 = (r.foes ? '정해진 적 ' : '이미 만난 적 ') + countWord(n) + ' 연달아 상대합니다.' +
              (r.maxNormal === 1 ? ' 맨 앞 하나를 빼면 모두 보스이고, 맨 뒤는 종점입니다.'
               : r.maxBoss >= r.count ? ' 모두 보스일 수 있습니다.'
               : r.maxBoss > 1 ? ' 보스가 ' + countBare(r.maxBoss) + '까지 섞입니다.' : '') +
@@ -8238,6 +8578,21 @@ function buildMirrorFoes(rule) {
   const r = rule || MIRROR_RULE;
   /* 순환 갈래(2호선)는 뽑는 방식이 아주 다릅니다 — 셋을 못박고 순환마다 다시 빚습니다 */
   if (r.loop) return buildLoopFoes(r);
+
+  /* ── 고정 편성 (2026-09-12 사용자 지침) ──────────────────────
+   *  foes 를 적어 둔 갈래(거울굴절철도)는 뽑지 않습니다. 적힌 차례 그대로
+   *  세우고, 종점이 있으면 맨 뒤에 붙입니다 — 정렬도 하지 않습니다.
+   *  «이미 만난 적만» 도 보지 않습니다: 조합이 정해져 있으니 그 갈래를 열
+   *  만큼 왔으면 다 겪어 본 것이고, 곁가지에서 한 번 마주친 얼굴이 섞이는
+   *  것도 그대로 둡니다(사용자 지침). */
+  if (r.foes && r.foes.length) {
+    const list = r.foes.filter(x => FOES[x])
+                       .concat((r.finalFoe && FOES[r.finalFoe]) ? [r.finalFoe] : []);
+    const kk = r.scale;
+    const dkk = (r.defScale != null) ? (1 + (kk - 1) * r.defScale) : defK(kk);
+    return list.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, kk, dkk));
+  }
+
   const k = r.scale;
   const met = metFoes();
   /* 거울에 세울 수 있는 적인가.
@@ -8589,14 +8944,24 @@ function drawPackChoices(rule, round, clearedPacks) {
   const picks = [];
 
   /* 익스트림 마지막 라운드 — 한 자리는 거울굴절철도 팩으로 고정.
-   * 그 갈래(1호선·2호선)가 열려 있고, met 검사도 통과해야 합니다 —
-   * 익스트림 자체가 1호선 완주를 요구하지만(needMirrorDone), 그렇다고
-   * 6장·6.5장까지 반드시 다 마쳤다는 보장은 아니라서(needCleared 는
-   * «아무 5장»을 셉니다) 그대로 둡니다. 둘 다 못 뽑으면 그냥 평소
-   * 풀에서 셋을 채웁니다. */
+   *
+   *  그 갈래를 «완주해 봤는가»(S.mirrorDone) 로 겁니다 (사용자 지침 2026-09-12).
+   *  갈래가 열렸는지만 보면, 종점에 무엇이 서 있는지 직접 닿아 보기도 전에
+   *  익스트림에서 먼저 마주치게 됩니다 — 거울굴절철도의 종점은 «만나 봐야
+   *  안다» 가 규칙이라 그러면 안 됩니다. (1호선 팩은 익스트림 자체가 1호선
+   *  완주를 요구해 우연히 안전했지만, 2호선 팩은 6장만 마치면 떠서 데이비드
+   *  피터스를 먼저 보여 주고 있었습니다 — 이번에 함께 막았습니다.)
+   *
+   *  met 검사(packUnlocked)도 그대로 함께 봅니다. 하나도 못 뽑으면 그냥 평소
+   *  풀에서 셋을 채웁니다. */
   if (rule.guaranteeRailPackOnFinalRound && round === rule.packRounds) {
+    /* 팩이 어느 갈래에 딸린 것인지는 팩에 적힌 tier 로 봅니다 — 갈래가 늘어도
+     * 여기는 안 고쳐도 됩니다. tier 를 안 적은 옛 팩은 id 로 짐작합니다
+     * (rail1pack → 1호선, 그 밖 → 2호선). 2026-09-12 — 갈래가 늘어도 여기는
+     * 안 고치도록, 「rail1pack 이 아니면 전부 2호선」이라고 찍던 것을 고쳤습니다. */
+    const 팩갈래 = p => p.tier || (p.id === "rail1pack" ? "railLine1" : "railLine2");
     const railBag = MIRROR_PACKS.filter(p => p.railOnly && packUnlocked(p) &&
-      mirrorUnlocked(MIRROR_TIERS.find(r => r.key === (p.id === "rail1pack" ? "railLine1" : "railLine2"))));
+      !!(S.mirrorDone && S.mirrorDone[팩갈래(p)]));
     if (railBag.length) picks.push(railBag[rnd(railBag.length)]);
   }
   while (picks.length < 3 && bag.length) picks.push(bag.splice(rnd(bag.length), 1)[0]);
@@ -9024,26 +9389,77 @@ SCENE_EXT.railCamp = function (s) {
   say("── " + s.cycle + "순환 종료 ──", "place");
   setBackdrop(mirrorBG(rule), rule.name);
 
+  /* 캠프를 지키는 사람 — 편성한 교육위원이 있으면 그쪽입니다(railSpeaker).
+   * 아무도 없으면 본래대로 이형우가 맞아 줍니다. */
+  const sp = railSpeaker(rule);
+
   const 처음 = (r2.picks.length < s.cycle);   // 이 순환의 몫을 아직 안 골랐는가
   if (처음) {
-    speak(rule.camp.who, s.cycle === 1
+    if (sp.advisor) speak(sp.name, railLine(sp), sp.portrait);
+    else speak(rule.camp.who, s.cycle === 1
       ? "여기에 베이스캠프를 세워 뒀습니다. 선로가 돌아오는 자리니까요."
       : "또 오셨군요. 캠프는 그대로 있습니다.");
-    railCampHeal();
-    speak(rule.camp.who, "순환은 어떠셨습니까. …도움이 될 만한 것들을 좀 찾아 뒀습니다. 하나 챙기시죠.");
+    railCampHeal(sp.name);
+    /* 몫을 고르라는 말은 누가 서 있든 같아야 해서 나레이션으로 흐릅니다 */
+    if (sp.advisor) say("캠프에 쓸 만한 것들이 모여 있다. 하나 챙길 수 있다.", "sys");
+    else speak(rule.camp.who, "순환은 어떠셨습니까. …도움이 될 만한 것들을 좀 찾아 뒀습니다. 하나 챙기시죠.");
     return railBonusPick(rule, s.cycle);
   }
   /* 져서 되돌아온 자리입니다. 몫은 이미 받았으니 다시 주지 않습니다. */
-  speak(rule.camp.who, "돌아오셨습니까. 캠프는 그대로입니다. 다시 나가시죠.");
-  railCampHeal();
+  if (sp.advisor) speak(sp.name, railLine(sp, true), sp.portrait);
+  else speak(rule.camp.who, "돌아오셨습니까. 캠프는 그대로입니다. 다시 나가시죠.");
+  railCampHeal(sp.name);
   return railFork(rule, s.cycle);
 };
 
-function railCampHeal() {
+function railCampHeal(who) {
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
   S.restManage = true;                 // 다음 전투는 관리력을 가득 채우고 엽니다
-  say("이형우가 관리력과 체력을 전부 회복시켰다.", "good");
+  say(withJosa(who || "이형우", "이") + " 관리력과 체력을 전부 회복시켰다.", "good");
   render();
+}
+
+/* ── 거울굴절철도 쉼표에 나오는 사람 ────────────────────────────
+ *  1호선의 길잡이 자리 · 2호선의 베이스캠프 —
+ *  거울굴절철도의 중간 저장 자리에는 «자기가 세운 교육위원» 이 나와
+ *  한마디 합니다 (사용자 지침 2026-09-12).
+ *
+ *  누가 나오는지는 유리창 한마디(glassSpeaker)와 같은 규칙입니다 —
+ *  편성한 1·2·3번 칸을 차례로 보아 «초상이 있는» 첫 사람. 다만 아무도
+ *  없을 때 노란테가 대신 읊는 유리창과 달리, 여기서는 그 갈래에 본래
+ *  적혀 있던 사람(1호선은 길잡이 베르렐리우스, 2호선은 이형우)이
+ *  그대로 나옵니다 — 관리자 제 얼굴이 거울 안에 서 있으면 이상하고,
+ *  길잡이가 들르는 자리라는 짜임도 그대로 두는 편이 낫기 때문입니다.
+ *
+ *  advisor 가 거짓이면 «본래 사람» 이라는 뜻입니다. 그때는 대사도 표
+ *  (RAIL_LINES)가 아니라 갈래에 적힌 말을 그대로 씁니다.
+ */
+function railSpeaker(rule) {
+  const list = equippedAdvisors();
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].portrait)
+      return { name: list[i].name, id: advisorId(list[i]),
+               portrait: list[i].portrait, advisor: true };
+  }
+  const 본래 = (rule && ((rule.camp && rule.camp.who) || (rule.rest && rule.rest.who))) || null;
+  return { name: 본래, id: null, portrait: null, advisor: false };
+}
+
+/* 그 사람이 할 한마디. data/characters.js 의 표를 봅니다 —
+ * 인격별(RAIL_LINES_BY_ID)이 사람별(RAIL_LINES)보다 먼저입니다.
+ * back 이 참이면 «졌다가 되돌아온 자리» 몫(RAIL_LINES_BACK)을 먼저 보고,
+ * 그 사람 몫이 없으면 처음 닿았을 때의 말을 그대로 씁니다.
+ * 아무것도 없으면 "TODO" — speak() 가 «(대사 미작성)» 으로 흐리게 찍습니다. */
+function railLine(sp, back) {
+  const pick = v => Array.isArray(v) ? (v[rnd(v.length)] || "TODO") : v;
+  let v = null;
+  if (back && typeof RAIL_LINES_BACK !== "undefined") {
+    if (sp.id && RAIL_LINES_BACK[sp.id]) v = RAIL_LINES_BACK[sp.id];
+    if (!v && RAIL_LINES_BACK[sp.name]) v = RAIL_LINES_BACK[sp.name];
+  }
+  if (!v && sp.id && typeof RAIL_LINES_BY_ID !== "undefined") v = RAIL_LINES_BY_ID[sp.id];
+  if (!v && typeof RAIL_LINES !== "undefined") v = RAIL_LINES[sp.name];
+  return v ? pick(v) : "TODO";
 }
 
 function railBonusPick(rule, cycle) {
@@ -9600,6 +10016,8 @@ function mailGiveText(m) {
   if (g.enkCap) out.push(ENK_CAPSULE.name + " " + g.enkCap + "개");
   if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
   if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
+  if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
+  if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
     out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
@@ -9616,7 +10034,7 @@ function mailWasted(m) {
   /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
   if (g.money || g.codex || g.event || g.support || g.enkCap ||
       g.fragBoxSelect || g.fragBoxRandom ||
-      g.advisorTicket || g.giftTicket) return false;   // 다른 것이 있으면 버려질 일 없습니다
+      g.advisorTicket || g.giftTicket || g.syncModule || g.advisor) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
   return enkCount() >= ENK_RULE.max;
@@ -9645,6 +10063,15 @@ function mailTake(m) {
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
   if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
   if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
+  if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); }
+  if (g.advisor) {
+    const ad = advisorById(g.advisor);
+    if (ad) {
+      if (!S.advisorsOwned) S.advisorsOwned = {};
+      if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); }
+      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); }
+    }
+  }
   if (g.enk) {
     enkSync();
     const before = enkCount();
@@ -10223,7 +10650,8 @@ function vaultItemCategories() {
 }
 
 /* ── 화면 글꼴 ──────────────────────────────────────────────────
- *  보관함 화면의 [화면 글꼴] 에서 고릅니다(사용자 지침 2026-09-11).
+ *  유리창의 [설정] 에서 고릅니다 — 처음에는 보관함에 있었는데(2026-09-11)
+ *  설정 화면이 생기면서 그쪽으로 옮겼습니다(2026-09-12 사용자 지침).
  *  글꼴 파일은 index.html 의 <link> 가 받아 오고, 여기서는 :root 의 변수
  *  (--font-ui · --font-dlg · --dlg-plus) 만 <html> 에 덮어씁니다 — 화면 전체가 곧바로 따라옵니다.
  *
@@ -10722,17 +11150,32 @@ function openVault(back) {
          '</div>' +
        '</div>';
 
-  /* 화면 글꼴 — 고르는 창은 openFontPick. 보관함에 함께 저장됩니다. */
-  const fnow = fontClean(S.font);
-  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">화면 글꼴</div>' +
-       '<div class="hint">보관함에 함께 저장되어, [기록 · 내보내기] 로 옮기면 따라갑니다.</div>' +
-       '<div class="syncrow">' +
-         '<button id="vfont">바꾸기</button>' +
-         '<div class="body">' +
-           '<div class="nm">' + fontChoiceName("ui", fnow.ui) + '　·　대사 ' + fontChoiceName("dlg", fnow.dlg) + '</div>' +
-           '<div class="sub">대사 크기 — ' + fontChoiceName("size", fnow.size) + '</div>' +
-         '</div>' +
-       '</div>';
+  /* 동기화 모듈 — 캡슐과 같은 모양입니다. 동기화 자체가 아직 안 열렸으면
+   * (3장 전) 칸을 아예 내지 않습니다 — 쓸 수 없는 물건을 보여 줄 까닭이 없습니다. */
+  if (syncUnlocked() || syncModuleCount() > 0) {
+    const modCnt  = syncModuleCount();
+    const modLeft = syncModuleCands().length;
+    h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + SYNC_MODULE.name + '</div>' +
+         '<div class="hint">' + SYNC_MODULE.desc + '</div>' +
+         '<div class="syncrow">' +
+           '<button' + (syncModuleUsable() ? ' id="vsyncmod"' : ' disabled') + '>사용</button>' +
+           '<div class="body">' +
+             '<div class="nm">' + SYNC_MODULE.name + '</div>' +
+             '<div class="sub">보유 ' + modCnt + '개　·　지금 상한 ' + syncMax() + '단계' +
+               '　·　올릴 수 있는 작성위원 ' + modLeft + '명</div>' +
+             (modCnt > 0 && !syncUnlocked()
+               ? '<div class="sub" style="color:#d8b26a">동기화가 아직 열리지 않았습니다.</div>'
+               : modCnt > 0 && modLeft === 0
+               ? '<div class="sub" style="color:#d8b26a">열둘이 모두 지금 상한에 닿아 있습니다 — ' +
+                 (nextSyncChapter() ? nextSyncChapter() + '을 마치면 상한이 오릅니다.' : '더 오를 곳이 없습니다.') +
+                 '</div>'
+               : '') +
+           '</div>' +
+         '</div>';
+  }
+
+  /* 화면 글꼴 칸은 여기 없습니다 — [설정] 으로 옮겼습니다(2026-09-12 사용자 지침).
+   * 고르는 창(openFontPick)은 그대로이고, 부르는 자리만 설정 화면 하나로 모았습니다. */
 
   h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
        '<button id="vrec">기록 · 내보내기</button>' +
@@ -10753,13 +11196,100 @@ function openVault(back) {
   document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
   document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
-  document.getElementById("vfont").onclick = () => openFontPick(() => openVault(back));
   $sheet.querySelectorAll("[data-box]").forEach(el => {
     el.onclick = () => openFragBoxUse(el.dataset.box, back);
   });
   $sheet.querySelectorAll("[data-ticket]").forEach(el => {
     el.onclick = () => openPickTicketUse(el.dataset.ticket, back);
   });
+  const vmod = document.getElementById("vsyncmod");
+  if (vmod) vmod.onclick = () => openSyncModuleUse(back);
+}
+
+/* ── 동기화 모듈 사용 ─────────────────────────────────────────
+ *  작성위원 열둘을 줄로 늘어놓고, 사람마다 «지금 몇 단계에서 몇 단계가 되는지»
+ *  를 미리 적어 둡니다. 상한에 닿은 사람은 손잡이가 잠깁니다.
+ *
+ *  고르면 그 자리에서 오르고 모듈 한 개가 사라집니다 — 되돌릴 수 없으므로
+ *  한 번 묻습니다(선택권과 같은 결). 오른 뒤에는 동기화 화면에서 올렸을 때와
+ *  똑같은 연출이 뜨고, 두 단계를 오르는 사이에 고유 능력이 열리거나 강해지는
+ *  단계가 끼어 있으면 그쪽 연출을 대신 보여 줍니다(사용자 지침 2026-09-12).
+ */
+function openSyncModuleUse(back) {
+  $modal.classList.add("on");
+
+  const draw = (msg) => {
+    const cap = syncMax();
+    const next = nextSyncChapter();
+    let h = '<h2>' + SYNC_MODULE.name + '</h2>' +
+      '<div class="hint">' + SYNC_MODULE.desc + '　지금 <b>' + syncModuleCount() +
+      '개</b>를 가지고 있습니다.<br>지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
+      (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</div>';
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    Object.keys(SINNERS).forEach(who => {
+      const s = SINNERS[who];
+      const lv = syncLevel(who);
+      const up = syncModuleGain(who);
+      const skill = UNIQUE_SKILLS[who];
+      /* 두 단계를 오르는 사이에 능력이 열리거나 강해지는 자리가 있으면 미리 알립니다 —
+       * 누구에게 쓸지 고르는 데 가장 큰 몫이라, 감출 까닭이 없습니다. */
+      const tier = (skill && up)
+        ? UNIQUE_SKILL_TIERS.filter(t => t > lv && t <= lv + up).sort((a, b) => b - a)[0]
+        : null;
+      h += '<div class="syncrow">' +
+             (up ? '<button data-mod="' + who + '">사용</button>'
+                 : '<button disabled>상한 도달</button>') +
+             '<div class="body">' +
+               '<div class="nm">' + s.name + '</div>' +
+               '<div class="sub">' +
+                 (lv > 0 ? '동기화 ' + lv + '단계' : '아직 동기화되지 않음') +
+                 (up ? '　→　<b>' + (lv + up) + '단계</b>' +
+                       (up < SYNC_MODULE.step ? '　(상한까지 ' + up + '단계만)' : '')
+                     : '　(상한)') +
+               '</div>' +
+               (tier ? '<div class="sub"><span class="uskill"><b>' + skill.name + '</b> — ' +
+                       (tier === 1 ? '해금' : tier + '단계로 강화') + '</span></div>' : '') +
+             '</div>' +
+           '</div>';
+    });
+
+    h += '<div class="modalfoot"><button id="smclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll("[data-mod]").forEach(el => {
+      el.onclick = () => {
+        const who = el.dataset.mod;
+        const s = SINNERS[who];
+        const up = syncModuleGain(who);
+        if (!up || syncModuleCount() <= 0) return draw("지금은 쓸 수 없습니다.");
+        /* 되돌릴 수 없는 자리라 한 번 묻습니다 — 선택권과 같은 결입니다 */
+        const lv = syncLevel(who);
+        if (!confirm(s.name + " — 동기화 " + lv + "단계 → " + (lv + up) + "단계\n\n" +
+                     "이 사람에게 쓰시겠습니까? " + SYNC_MODULE.name +
+                     " 한 개가 사라지고, 되돌릴 수 없습니다.")) return;
+        S.syncModule = syncModuleCount() - 1;
+        if (!S.sync) S.sync = {};
+        S.sync[who] = lv + up;
+        saveVault(); render();
+        const newLevel = lv + up;
+        const settled = () => {
+          if (syncModuleUsable()) draw(s.name + " — 동기화 " + newLevel + "단계에 이르렀다.");
+          else { closeModal(); render(); openVault(back); }
+        };
+        const skill = UNIQUE_SKILLS[who];
+        /* 두 단계를 오르는 사이에 능력이 열리거나 강해지는 자리가 끼어 있으면
+         * 그쪽 연출이 이깁니다 (사용자 지침 2026-09-12). 둘 다 끼면 높은 쪽. */
+        const tier = skill
+          ? UNIQUE_SKILL_TIERS.filter(t => t > lv && t <= newLevel).sort((a, b) => b - a)[0]
+          : null;
+        if (tier) uniqueSkillFlash(tier, s.quote, skill.name, settled);
+        else syncFlash(newLevel, s.quote, settled);
+      };
+    });
+    document.getElementById("smclose").onclick = () => { closeModal(); render(); openVault(back); };
+  };
+  draw(null);
 }
 
 /* ── 선택권 사용 ──────────────────────────────────────────────

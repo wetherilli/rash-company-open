@@ -27,6 +27,28 @@
  *                  (이 넷은 data/story.js 의 battle 장면에 그대로 적어
  *                   «그 전투에서만» 쓸 수도 있습니다 — startBattleFight 참고)
  *    healEvery / healFrom / healAtk / healLine / healWarn   자가 회복
+ *    counterEvery / counterFrom / counterMult / counterLine / counterWarn
+ *                  되받아치기. 그 턴에는 적이 «먼저» 치지 않습니다 —
+ *                  아군 중 하나라도 공격을 고르면 그때만 무작위 한 사람에게
+ *                  강타보다 센 한 대(기본 RULE.counterMult = 2.4배)가 돌아오고,
+ *                  아무도 안 치면 적은 아무 일도 하지 않습니다. 「참을 것인가」를
+ *                  한 턴 동안 고르게 하는 자리라, 턴 머리에 반드시 미리 알립니다.
+ *                  주기 세는 법은 광역·회복과 같습니다(counterFrom 턴부터).
+ *                  겹치면 광역 > 회복 > 선공 > 되받아치기 > 회피 > 강타 차례입니다.
+ *    evadeEvery / evadeFrom / evadeLine / evadeWarn
+ *                  회피. 그 턴에는 아군의 «모든» 공격이 빗나갑니다 — 겹살의
+ *                  둘째 대도, 연계 추가타도 나가지 않습니다. 맞힌 것이 아니므로
+ *                  흡혈·회피 보상처럼 «맞혀야» 붙는 것은 쓰이지 않고 그대로
+ *                  남습니다. 적은 평소대로 노리고 칩니다(강타는 안 씁니다) —
+ *                  그 밖의 효과는 없습니다. 주기 세는 법은 위와 같습니다.
+ *    firstEvery / firstFrom / firstLine / firstWarn            선공 (단일)
+ *    firstAoeEvery / firstAoeFrom / firstAoeLine / firstAoeWarn  선공 (광역)
+ *                  그 턴만 차례가 뒤집혀 «적이 먼저» 칩니다. 먼저 맞고 쓰러진
+ *                  사람은 그 차례를 못 씁니다. 단일은 한 사람을 노려 평소 공격을,
+ *                  광역은 판 전체를 칩니다(광역 피해는 여느 광역과 같습니다).
+ *                  방어·교정처럼 턴 머리에서 고른 것은 그대로 먹습니다.
+ *                  둘 다 걸리는 턴이면 광역 선공이 이깁니다. 되받아치기·회피보다
+ *                  위라, 「3턴 회피 · 6턴 광역선공」처럼 짜면 6턴은 광역선공입니다.
  *    imgScale      그림만 키웁니다 (자리는 그대로)
  *    sound         등장 음성 파일
  *    cineEntrance  암전 → 등장 대사 → 흔들리며 등장
@@ -363,8 +385,9 @@ const FOES = {
   david_peters: {
     name: "데이비드 피터스", hp: 900, atk: 38, def: 14, boss: true, noMirror: true,
     img: "assets/enemy/데이비드 피터스.png",
-    /* 쥬3피노처럼 암전을 거쳐 등장합니다. 전용 등장 음성은 아직 없어(sound 없음)
-     * 암전 → 등장 대사 → 흔들리며 등장 까지만 흐릅니다. */
+    /* 쥬3피노처럼 암전 → 등장 음성 → 흔들리며 등장 을 거칩니다.
+     * 음성은 2026-09-12 에 들어왔습니다(그 전에는 cineNoVoiceMs 로 고정 대기). */
+    sound: "assets/sound/거울굴절철도 2호선 종착역.mp3",
     cineEntrance: true,
     desc: "사진 위에 선을 덧그어, 아무도 찾지 못한 뼈를 찾아낸다.",
     intro: "갤러리에는 아름다운 그림들이 걸려있다.",

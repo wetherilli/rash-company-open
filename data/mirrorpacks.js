@@ -35,6 +35,10 @@
  *           나오도록). 첫 번째가 잡졸(몸풀기), 둘째·셋째가 보스 둘입니다.
  *    railOnly  true 를 달면 «익스트림의 세 번째 팩 선택»에서만 나옵니다
  *           (아래 「거울굴절철도 팩」 참고) — 평소 무작위 풀에는 안 섞입니다.
+ *    tier   railOnly 팩에만 적습니다 — 그 팩이 딸린 갈래의 열쇠
+ *           («railLine1» 처럼). 그 갈래를 «완주해 본» 사람에게만 이 팩이
+ *           나옵니다(S.mirrorDone). 열린 것만으로는 안 나옵니다 —
+ *           종점은 직접 닿아 봐야 아는 것이라서입니다.
  *
  *  ■ 지금 들어 있는 것 — 본편(main, wip 제외) 기준 11팩
  *    2026-09-02 사용자 지침으로 열 팩을 처음 짰고, 부산행이 병합되면서(v1.12.0,
@@ -66,8 +70,10 @@
  *
  *  ■ 거울굴절철도 팩 (railOnly) — 익스트림 세 번째 선택 전용
  *    사용자 지침(2026-09-02) — 익스트림의 «세 번째(마지막)» 테마팩
- *    선택에서는, 보여 주는 셋 중 하나가 **반드시** 이 둘(1호선·2호선)
- *    가운데 하나로 고정됩니다(무작위로 어느 쪽이 나올지만 정합니다).
+ *    선택에서는, 보여 주는 셋 중 하나가 **반드시** 이 팩들 가운데 하나로
+ *    고정됩니다(무작위로 어느 것이 나올지만 정합니다) — 그때 «이미 완주해 본
+ *    갈래» 의 팩만 후보에 듭니다(tier · 사용자 지침 2026-09-12). 하나도 없으면
+ *    그 자리도 평소 풀에서 채웁니다.
  *    나머지 두 자리는 평소처럼 일반 풀(아래 열 팩)에서 뽑습니다.
  *    노말·하드에서는, 그리고 익스트림의 1·2번째 선택에서는 절대 안
  *    나옵니다. 잡졸·보스는 자유롭게 골랐습니다(사용자 지침에는
@@ -102,10 +108,15 @@ const MIRROR_PACKS = [
   { id: "pack12", name: "곁가지의 밤", bg: "assets/scene/고속열차 내부 (전투).jpg",
     foes: ["viper", "zombie_horde", "kim_yeonjun_busan"] },
 
-  /* ── 거울굴절철도 팩 — 익스트림 세 번째 선택 전용 ── */
-  { id: "rail1pack", name: "익숙한 벨소리", railOnly: true, bg: "assets/scene/거울굴절철도1호선.jpg",
+  /* ── 거울굴절철도 팩 — 익스트림 세 번째 선택 전용 ──
+   *  tier 에 그 팩이 딸린 갈래를 적습니다(2026-09-12에 더한 칸) — 그 갈래가
+   *  아직 안 열렸으면 이 팩도 안 나옵니다. 갈래가 늘어도 engine.js 는
+   *  안 고쳐도 되게 하려는 몫입니다(drawPackChoices 참고). */
+  { id: "rail1pack", name: "익숙한 벨소리", railOnly: true, tier: "railLine1",
+    bg: "assets/scene/거울굴절철도1호선.jpg",
     foes: ["monarch_a", "tanaconda", "ju3pino"] },
-  { id: "rail2pack", name: "괴악한 복원", railOnly: true, bg: "assets/scene/거울굴절철도2호선.jpg",
+  { id: "rail2pack", name: "괴악한 복원", railOnly: true, tier: "railLine2",
+    bg: "assets/scene/거울굴절철도2호선.jpg",
     foes: ["gsa_riders", "kevin", "david_peters"] },
   { id: "pack11", name: "신해수랜드의 소동", bg: "assets/scene/신해수랜드 대치중.jpg",
     foes: ["hyeolgwi", "baksangwon", "shinhaesuland_gan"] }
