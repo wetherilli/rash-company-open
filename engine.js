@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.2.5";
+const VERSION = "2.3.0";
 const VERSION_NAME = "호감이 끝나는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -7826,6 +7826,7 @@ const MIRROR_RULE = {
   key:  "mirror",
   name: "거울 던전",
   sub:  "유리창에 비친 것들",
+  glassNote: "비친 것들이 이쪽을 마주 본다.",   // 유리창 나레이션 — data/story.js 의 glassNote 와 같은 자리
   prefix: "거울의 ",   // 비쳐 나온 적 이름 앞에 붙는 말
   packRounds: 1,  // 테마팩을 몇 번 고르는가
   scale:  2.0,    // 본편 대비 강화 배수 (테마팩 개편, 2026-09-02 — 1.3배에서 올림)
@@ -7841,6 +7842,7 @@ const MIRROR_HARD = {
   key:  "mirrorHard",
   name: "하드 거울 던전",
   sub:  "깨진 유리창에 비친 것들",
+  glassNote: "금이 간 자리마다 다른 것이 서 있다.",
   bg:   "assets/scene/하드거울던전.jpg",
   prefix: "깨진 거울의 ",
   packRounds: 2,  // 테마팩을 두 번 연달아 고릅니다
@@ -7857,6 +7859,7 @@ const MIRROR_EXTREME = {
   key:  "mirrorExtreme",
   name: "익스트림 거울 던전",
   sub:  "산산이 부서진 유리창에 비친 것들",
+  glassNote: "조각마다 다른 것이 비친다. 어느 쪽도 이쪽이 아니다.",
   bg:   "assets/scene/익스트림거울던전.jpg",
   prefix: "조각난 거울의 ",
   packRounds: 3,  // 테마팩을 세 번 연달아 고릅니다
@@ -7893,6 +7896,7 @@ const MIRROR_RAIL1 = {
   group: "rail",
   name: "거울굴절철도 1호선",
   sub:  "굴절되어 이어지는 선로",
+  glassNote: "선로가 굴절되어 끝이 보이지 않는다.",
   bg:   "assets/scene/거울굴절철도1호선.jpg",
   prefix: "굴절된 ",
   count:  7,        // 일곱을 연달아 상대합니다 (종점 포함)
@@ -7960,6 +7964,7 @@ const MIRROR_RAIL2 = {
   group: "rail",
   name: "거울굴절철도 2호선",
   sub:  "돌아오고, 돌아오고, 또 돌아오는 선로",
+  glassNote: "지나온 역이 다시 다가온다.",
   bg:   "assets/scene/거울굴절철도2호선.jpg",
   prefix: "굴절된 ",
   defScale: 0,         // 1호선과 같게 — 방어는 본편 그대로 (2026-09-11)
@@ -10440,6 +10445,52 @@ function glassBgPick() {
   return (GLASS_BG_LAST = pool[rnd(pool.length)] || it.imgs[0]);
 }
 
+/* ── 유리창 나레이션 한 줄 ──────────────────────────────────────
+ *  지금 걸린 배경 «묶음» 에 붙은 한 줄입니다 — 낱장마다가 아닙니다
+ *  (사용자 지침 2026-09-12). 장 쪽은 data/story.js 의 glassNote,
+ *  거울 갈래는 위 MIRROR_RULE·MIRROR_HARD·… 의 같은 이름 칸에 적혀 있습니다.
+ *  안 적혔으면 null 을 돌려주고, 유리창은 그 줄만 비웁니다. */
+function glassNote() {
+  const k = glassBgKey();
+  if (!k) return null;
+  if (k.indexOf("mirror:") === 0) {
+    const r = MIRROR_TIERS.find(x => x.key === k.slice(7));
+    return (r && r.glassNote) || null;
+  }
+  const c = CHAPTERS.find(x => x.id === k);
+  return (c && c.glassNote) || null;
+}
+
+/* ── 유리창 한마디 — 누가 읊는가 ────────────────────────────────
+ *  편성한 교육위원 1·2·3번 칸을 차례로 보아 «초상이 있는» 첫 사람입니다
+ *  (사용자 지침 2026-09-12). 초상이 없는 위원은 건너뜁니다 — 얼굴 없이
+ *  이름만 뜨면 무대가 비어 보이기 때문입니다. 셋 다 초상이 없거나 아무도
+ *  안 세웠으면 노란테가 대신 읊습니다.
+ *
+ *  «초상이 있는가» 는 ADVISORS 의 portrait 칸만 봅니다. portraitOf() 처럼
+ *  이름이 닮은 적 그림까지 빌려 오지는 않습니다 — 빌려 온 얼굴이 유리창에
+ *  큼직하게 서면 엉뚱한 사람이 말하는 것처럼 보입니다. */
+function glassSpeaker() {
+  const list = equippedAdvisors();
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].portrait)
+      return { name: list[i].name, id: advisorId(list[i]), portrait: list[i].portrait };
+  }
+  return { name: CREW.manager.codename, id: null, portrait: CREW.manager.portrait };
+}
+
+/* 그 사람이 읊을 한 줄. data/characters.js 의 표를 봅니다 —
+ * 인격별(GLASS_LINES_BY_ID)이 사람별(GLASS_LINES)보다 먼저입니다.
+ * 배열로 적혀 있으면 그중 하나를 무작위로 고릅니다.
+ * 아무것도 없으면 "TODO" — speak() 가 «(대사 미작성)» 으로 흐리게 찍습니다. */
+function glassLine(sp) {
+  let v = null;
+  if (sp.id && typeof GLASS_LINES_BY_ID !== "undefined") v = GLASS_LINES_BY_ID[sp.id];
+  if (!v && typeof GLASS_LINES !== "undefined") v = GLASS_LINES[sp.name];
+  if (!v) return "TODO";
+  return Array.isArray(v) ? (v[rnd(v.length)] || "TODO") : v;
+}
+
 /* ── 설정 ──────────────────────────────────────────────────────
  *  유리창의 [설정] 로 열립니다. 들어 있는 것은 «유리창 배경» 과, 이미 있던
  *  [화면 글꼴] · [기록 · 내보내기] 로 가는 손잡이입니다(둘 다 보관함에서도 그대로 열립니다).
@@ -10570,16 +10621,28 @@ function openSettings(back, draft0) {
     go("font").onclick = () => openFontPick(() => openSettings(back, draft));
     go("rec").onclick  = () => openRecord(() => openSettings(back, draft));
 
+    /* ── 나가는 길은 반드시 창을 먼저 닫습니다 ────────────────────
+     *  이 창은 «유리창에서 바로» 열립니다 — 다른 창 위에 얹히는 창이 아닙니다.
+     *  그래서 back() 이 glass() 입니다. 닫지 않고 back() 만 부르면 유리창이
+     *  창 «뒤에서» 다시 그려질 뿐, 창은 그대로 떠 있습니다 — [확정] 을 눌러도
+     *  [저장하지 않고 나가기] 를 눌러도 안 나가지던 것이 이것이었습니다
+     *  (제보 2026-09-12). 보관함([vclose])과 업적([acclose])이 진작
+     *  closeModal() 을 먼저 부르고 있던 것과 같은 꼴로 맞췄습니다.
+     *
+     *  창 위에 얹히는 창(글꼴·기록)에서 돌아올 때도 탈이 없습니다 —
+     *  돌아오는 길이 openSettings 를 다시 부르고, 그쪽이 맨 앞에서
+     *  $modal 에 "on" 을 도로 답니다. */
+    const 나가기 = () => { closeModal(); render(); if (back) back(); };
+
     document.getElementById("sok").onclick = () => {
       S.glassBg = draft;
       /* 묶음이 갈렸으니 «앞에 걸었던 그림» 도 잊습니다 — 새 묶음에는 없는 그림이니까요 */
       GLASS_BG_LAST = null;
       saveVault();
-      if (back) back(); else { closeModal(); render(); }
+      나가기();
     };
     /* 고른 것을 S 에도 보관함에도 쓴 적이 없으므로, 그냥 나가면 그만입니다 */
-    document.getElementById("scancel").onclick =
-      () => { if (back) back(); else { closeModal(); render(); } };
+    document.getElementById("scancel").onclick = 나가기;
   };
 
   draw();
@@ -11001,25 +11064,33 @@ function glass() {
   /* 유리창 그림 — 고른 묶음(기본은 마지막으로 마친 장)에서 한 장. 아래 glassBgPick 참고 */
   showCard(glassBgPick(), "라슈 컴퍼니");
   say("유 리 창", "place");
-  say("라슈 컴퍼니 · 신생 L사　　v" + VERSION + " «" + VERSION_NAME + "»", "sys");
-  divider();
-  say("당신은 관리자 노란테다.", "n");
-  say("작성위원들을 이끌고 흩어진 황금교본을 되찾아야 한다.", "n");
   divider();
 
-  const t = vaultStats();
-  const total = t[1][0] + t[2][0] + t[3][0];
-  const adv = Object.keys(S.advisorsOwned || {}).length;
   /* 클리어 수는 «본편» 만 셉니다. 곁가지(.5장)는 세지 않습니다. */
   const mains = mainChapters();
   const done  = mains.filter(c => S.cleared && S.cleared[c.id]).length;
   const sides = CHAPTERS.filter(c => isSide(c) && S.cleared && S.cleared[c.id]).length;
-  say("보유 인격 " + total + "종　·　보조 교육위원 " + adv + "명　·　클리어 " +
-      done + "/" + mains.length + "장" +
-      (sides ? "　·　그밖의 이야기 " + sides + "편" : ""), "sys");
-  /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
-  say(CURRENCY + " " + S.money + "　·　황금교본 " + S.codex, "sys");
-  say(ENK_RULE.name + " " + enkCount() + " / " + ENK_RULE.max + "　·　" + enkNextText(), "sys");
+
+  /* ── 머리글 두 갈래 (사용자 지침 2026-09-12) ─────────────────
+   *  보관함이 비었거나 아직 한 장도 안 마친 판에서는, «여기가 무엇을 하는 곳인지»
+   *  부터 일러 줍니다. 그 뒤로는 두 줄을 비우고 그 자리에 —
+   *    ① 지금 걸린 배경 묶음의 나레이션 한 줄 (glassNote)
+   *    ② 지금 세운 보조 교육위원의 한마디  (glassSpeaker · glassLine)
+   *
+   *  판 번호·보유 현황·재화 줄은 여기서 뺐습니다 — 판 번호와 원고료·황금교본은
+   *  상단바에, 보유 인격과 클리어 수는 보관함에, 엔케팔린은 아래 눈금 막대에
+   *  이미 있습니다. 같은 것을 두 번 적을 자리가 아닙니다. */
+  if (!done && !sides) {
+    say("당신은 관리자 노란테다.", "n");
+    say("작성위원들을 이끌고 흩어진 황금교본을 되찾아야 한다.", "n");
+  } else {
+    const note = glassNote();
+    if (note) say(note, "n");
+    const sp = glassSpeaker();
+    speak(sp.name, glassLine(sp), sp.portrait);
+  }
+  divider();
+
   versionNotice();          // 옛 판 보관함을 열었으면 여기서 한 번 알린다
   eventNotice();            // 새 이야기가 나와 이벤트 재화가 갈렸으면 한 번 알린다
   storageNotice();          // 저장이 막혔거나(사파리 file://) 지워질 수 있는(사파리 7일) 환경이면 일러 준다
@@ -11047,11 +11118,8 @@ function glass() {
     return openNotice(() => { noticeHide(); closeModal(); glass(); });
   }
 
-  /* 받지 않은 우편이 있으면 눈에 띄게 알려 줍니다 */
-  if (mailWaiting()) {
-    divider();
-    say(MAIL_RULE.name + "에 받지 않은 우편이 " + mailWaiting() + "통 있습니다.", "gain");
-  }
+  /* 받지 않은 우편은 로그에 따로 적지 않습니다 — 아래 [우편함] 손잡이에
+   * 통수가 적히고 테두리가 금빛으로 바뀝니다 (사용자 지침 2026-09-12). */
 
   render();
   buttons([
@@ -11060,9 +11128,10 @@ function glass() {
     { label: "상점",   fn: () => openShop(() => glass()) },
     { label: "노트",   fn: () => openNote(() => glass()) },
     { label: "업적",   fn: () => openAchieve(() => glass()) },
-    /* 받지 않은 우편이 있으면 몇 통인지 손잡이에 적습니다 */
+    /* 받지 않은 우편이 있으면 몇 통인지 손잡이에 적고, 테두리를 금빛으로
+     * 두릅니다(button.mailon — index.html). 없으면 흐린 손잡이입니다. */
     { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
-      cls: mailWaiting() ? "" : "ghost", fn: () => openMail(() => glass()) },
+      cls: mailWaiting() ? "mailon" : "ghost", fn: () => openMail(() => glass()) },
     /* 3장을 마치기 전에는 손잡이를 아예 내놓지 않습니다 */
     syncUnlocked() ? { label: "동기화", fn: () => openSync(() => glass()) } : null,
     { label: "보관함", fn: () => openVault(() => glass()) },

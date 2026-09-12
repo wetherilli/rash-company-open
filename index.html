@@ -488,6 +488,10 @@
    * 연두색으로 짚어 준다. 지원 작성위원의 연두(#9ccc65)와 같은 색이다. */
   button.claw1{border-color:#9ccc65;color:#c5e1a5;}
   body.battling button.claw1{border-color:#a8d876;color:#d0e8a8;}
+  /* 우편함 — 받지 않은 우편이 있을 때만 금빛으로 짚어 준다 (유리창 · 2026-09-12).
+     로그에 「우편이 n통 있습니다」 한 줄을 적던 것을 이 테두리로 옮겼다. */
+  button.mailon{border-color:#d8b26a;color:#e6cf9a;}
+  button.mailon:hover:not(:disabled){border-color:#f0d79a;color:#fff;}
   .codein{
     background:#0b0b0f;border:1px solid #34343c;color:#e8e4de;
     font-family:inherit;font-size:14px;padding:7px 12px;min-width:180px;outline:none;
@@ -1021,23 +1025,23 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.2.5"></script>
-<script src="data/vault.js?v=2.2.5"></script>
-<script src="data/characters.js?v=2.2.5"></script>
-<script src="data/skills.js?v=2.2.5"></script>
-<script src="data/allies.js?v=2.2.5"></script>
-<script src="data/gifts.js?v=2.2.5"></script>
-<script src="data/pickup.js?v=2.2.5"></script>
-<script src="data/achievements.js?v=2.2.5"></script>
-<script src="data/mail.js?v=2.2.5"></script>
-<script src="data/notice.js?v=2.2.5"></script>
-<script src="data/patch.js?v=2.2.5"></script>
-<script src="data/event.js?v=2.2.5"></script>
-<script src="data/tutorial.js?v=2.2.5"></script>
-<script src="data/foes.js?v=2.2.5"></script>
-<script src="data/story.js?v=2.2.5"></script>
-<script src="data/mirrorpacks.js?v=2.2.5"></script>
-<script src="engine.js?v=2.2.5"></script>
+<script src="data/access.js?v=2.3.0"></script>
+<script src="data/vault.js?v=2.3.0"></script>
+<script src="data/characters.js?v=2.3.0"></script>
+<script src="data/skills.js?v=2.3.0"></script>
+<script src="data/allies.js?v=2.3.0"></script>
+<script src="data/gifts.js?v=2.3.0"></script>
+<script src="data/pickup.js?v=2.3.0"></script>
+<script src="data/achievements.js?v=2.3.0"></script>
+<script src="data/mail.js?v=2.3.0"></script>
+<script src="data/notice.js?v=2.3.0"></script>
+<script src="data/patch.js?v=2.3.0"></script>
+<script src="data/event.js?v=2.3.0"></script>
+<script src="data/tutorial.js?v=2.3.0"></script>
+<script src="data/foes.js?v=2.3.0"></script>
+<script src="data/story.js?v=2.3.0"></script>
+<script src="data/mirrorpacks.js?v=2.3.0"></script>
+<script src="engine.js?v=2.3.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

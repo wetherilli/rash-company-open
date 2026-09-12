@@ -17,6 +17,11 @@
  *             «들어가 볼 마음이 들게» 하는 자리라, 이야기의 반전은 적지 않고
  *             누가 어디로 가서 무엇을 하려는지 — 들머리까지만 적습니다.
  *             안 적으면 summary 한 줄이 대신 섭니다.
+ *    glassNote 한 줄. 유리창(메인 화면)에 그 장의 배경이 걸렸을 때 뜨는 나레이션입니다
+ *             (사용자 지침 2026-09-12). 배경 낱장마다가 아니라 «장 한 묶음에 한 줄» 입니다 —
+ *             [설정] 의 유리창 배경 묶음과 같은 단위입니다. 안 적으면 그 줄만 비고
+ *             교육위원 한마디는 그대로 뜹니다. 거울 갈래 쪽 줄은 engine.js 의
+ *             MIRROR_RULE·MIRROR_HARD·… 에 같은 이름으로 적혀 있습니다.
  *
  *  ■ 채워 넣는 법
  *    { t:"TODO" } 를 지우고 그 자리에 { t:"d", ... } 를 넣으면 바로 반영됩니다.
@@ -69,6 +74,7 @@ const CHAPTERS = [
 {
   id: "ch0", no: "0장", title: "돌아갈 수 없는", lead: "manager", subtitle: null,
   img: "assets/scene/메카고질라 내부.jpg",
+  glassNote: "K사 앞은 언제든 한적하다. 카페에 들러볼까?",
   summary: "관리자가 되다.",
   pitch: ["K사 입사를 꿈꾸던 사원 왕지성.", "길잡이 베르렐리우스가 그를 메카고질라에 태운다.", "신생 L사의 관리자가 되는 날."],
   scenes: [
@@ -98,6 +104,7 @@ const CHAPTERS = [
   id: "ch1", no: "1장", title: "김두현", lead: "kim_duhyeon",
   img: "assets/scene/구C사 지하실.jpg",
   place: "구C사", subtitle: "공식 설정에 속하지 못하는",
+  glassNote: "구C사의 지하는 아직도 눅눅하다. 여기서 유리 양을 잃었다.",
   summary: "첫 임무는 파국을 맞는다.",
   pitch: ["첫 임무는 구C사 지부에 남겨진 황금교본을 찾는 것.", "혼돈 전쟁 때 몰락한 지부의 지하에는 아직 무언가가 남아 있다.", "순조롭던 일이 한순간에 뒤집힌다."],
   scenes: [
@@ -148,6 +155,7 @@ const CHAPTERS = [
   id: "ch2", no: "2장", title: "송하민", lead: "song_hamin",
   img: "assets/scene/공룡의날 광장.jpg",
   place: "올림피아드 / 공룡의 날", subtitle: "합류할 수 없는",
+  glassNote: "축제 소리가 멀리서 들려온다. 저 인파 어딘가에 한범군이 서 있었다.",
   summary: "첫 번째 황금교본을 손에 넣는다.",
   pitch: ["빼앗긴 황금교본이 올림피아드 우승 상품으로 걸린다.", "축제가 한창인 공룡의 날, 작성위원들은 저마다의 자리를 맡는다.", "첫 번째 황금교본을 두고 겨루는 자리."],
   scenes: [
@@ -209,6 +217,7 @@ const CHAPTERS = [
   id: "ch3", no: "3장", title: "김태성", lead: "kim_taeseong",
   img: "assets/scene/P사 광장.jpg",
   place: "P사", subtitle: "대응하지 않는",
+  glassNote: "치우고 난 광장에도 탄 냄새는 남는다.",
   summary: "두 번째 황금교본.",
   pitch: ["P사 한복판에서 창조론자들의 대규모 테러가 벌어진다.", "태성군은 오래 묻어 두었던 기억을 떠올린다.", "두 번째 황금교본이 걸린 자리."],
   scenes: [
@@ -301,6 +310,7 @@ const CHAPTERS = [
   id: "ch3_5", no: "3.5장", title: "영덕의 밤", side: true,
   img: "assets/scene/영덕 평상시.jpg",
   place: "영덕",
+  glassNote: "영덕의 밤은 여전히 고소하다. 갑판이 또 부엌이 될 것 같다.",
   summary: "차려도 소용없는 상.",
   pitch: ["N사 중간관리자 이형우가 길잡이에게 저녁을 대접하려 한다.", "그런데 너도나도 상을 차리기 시작하고, 일은 요리 대결로 번진다.", "차려도 소용없는 상."],
   scenes: [
@@ -517,6 +527,7 @@ const CHAPTERS = [
   id: "ch4", no: "4장", title: "박수오", lead: "park_suo",
   img: "assets/scene/F사 내부.jpg",
   place: "F사", subtitle: "동심이 변하지 않는",
+  glassNote: "진열장의 불은 밤에도 꺼지지 않는다. 화석은 아무것도 묻지 않는다.",
   summary: "세 번째 황금교본. 그리고 극야의 기억.",
   pitch: ["정박지 근처에서 F사의 무료 화석 나눔 행사가 열린다.", "본사에 와서 전시를 구경하라는 초대에 응하면서.", "세 번째 황금교본, 그리고 극야의 기억."],
   scenes: [
@@ -664,6 +675,7 @@ const CHAPTERS = [
   id: "ch5", no: "5장", title: "성시윤", lead: "seong_siyun",
   img: "assets/scene/5장 바다 배경.jpg",
   place: "U사", subtitle: "바다로 갈 수 없는",
+  glassNote: "파도 소리가 갑판까지 올라온다. 바다는 여전히 아무 말이 없다.",
   summary: "네 번째 황금교본. 바다 위의 요새와, 바다로 갈 수 없는 사람들.",
   pitch: ["다음 행선지는 바다 위의 요새, U사.", "해양으로 간다는 말을 들은 뒤로 노란테는 자꾸 일을 그르친다.", "네 번째 황금교본과, 바다로 갈 수 없는 사람들."],
   require: ["seong_siyun"],         // 이 사람이 편성되어 있어야 들어갈 수 있습니다
@@ -899,6 +911,7 @@ const CHAPTERS = [
   id: "ch5_5", no: "5.5장", title: "육참골탄", side: true,
   img: "assets/scene/G사 골목.jpg",
   place: "G사 외곽",
+  glassNote: "포탄 자국이 아직 메워지지 않았다.",
   summary: "살을 내주고 뼈를 끊는다.",
   pitch: ["다음 황금교본을 찾아 G사 둥지로 향하는 메카고질라.", "괴수들의 기업을 앞두고 승무원들은 저마다 들떠 있다.", "살을 내주고 뼈를 끊는다."],
   scenes: [
@@ -1052,6 +1065,7 @@ const CHAPTERS = [
   id: "ch6", no: "6장", title: "이경원", lead: "lee_gyeongwon",
   img: "assets/scene/모나크 저택.jpg",
   place: "G사", subtitle: "기대가 어긋나는",
+  glassNote: "불을 꺼 두어도 이 집은 비싸 보인다.",
   summary: "다섯 번째 황금교본. 괴수의 기업과, 이미 끝나 있던 장례식.",
   pitch: ["창밖으로 도시가 물러나고, 커다란 것들의 그림자가 늘어선다.", "G사와 연이 닿는 작성위원은 경원군뿐이다.", "다섯 번째 황금교본과, 이미 끝나 있던 장례식."],
   require: ["lee_gyeongwon"],       // 이 장은 경원군의 차례입니다
@@ -1406,6 +1420,7 @@ const CHAPTERS = [
    * 배수로 그림이 더 강렬해 사용자 지침으로 이걸로 골랐습니다 */
   banner: "assets/scene/배수로 내부.jpg",
   place: "G사",
+  glassNote: "골목 안쪽에서 물비린내가 난다.",
   summary: "괴수가 사람을 죽였다면, 범인도 괴수뿐.",
   pitch: ["황금교본을 손에 넣고, 며칠간의 자유시간이 주어진다.", "그 며칠 사이에 사건이 벌어진다.", "괴수가 사람을 죽였다면, 범인도 괴수뿐."],
   scenes: [
@@ -1606,6 +1621,7 @@ const CHAPTERS = [
     place: "급행열차",
     require: ["cha_minjun"],
     forceParty: ["cha_minjun"],   // 이 장은 처음부터 끝까지 차민준 혼자다 — 원작 그대로
+    glassNote: "선로 이음매가 규칙적으로 발밑을 친다.",
     summary: "다행히, 사상자는 없었다.",
     scenes: [
       { t: "place", img: "assets/scene/메카고질라 내부.jpg", name: "메카고질라 내부" },
@@ -1765,6 +1781,7 @@ const CHAPTERS = [
     id: "ch7", no: "7장", title: "차민준", lead: "cha_minjun",
     img: "assets/scene/신해수랜드 대치중.jpg",
     place: "P사", subtitle: "호감이 끝나는",
+    glassNote: "기괴한 노래가 흘러나온다.",
     summary: "여섯 번째 황금교본. 되돌아간 학교, 그리고 끝나지 않은 마음.",
     require: ["cha_minjun"],
     scenes: [
