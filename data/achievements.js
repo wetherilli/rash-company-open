@@ -178,5 +178,26 @@ const ACHIEVEMENTS = [
     reward: "지원 작성위원 ★★★ 신해수랜드 교장선생님 신해수",
     when: { kill: "교장 신해수", where: "story" },
     give: { support: "신해수랜드 교장선생님|신해수" }
+  },
+  {
+    name: "기차 여행의 목적지",
+    desc: "거울굴절철도 3호선을 종착역까지 끝낸다.",
+    reward: "지원 작성위원 ★★★ C사 미군 특수부대 이재호",
+    when: { clear: "railLine3" },
+    give: { support: "C사 미군 특수부대|이재호" }
+  },
+  {
+    name: "메뚜기의 재앙",
+    desc: "거울굴절철도 3호선을 급행으로(×4.0 이상) 끝낸다.",
+    reward: "보조 교육위원 ★★★ 아라온호 찬탈자 이형우",
+    when: { clear: "railLine3:k40" },
+    give: { advisor: "아라온호 찬탈자|이형우" }
+  },
+  {
+    name: "눈먼 공포",
+    desc: "거울굴절철도 3호선을 무정차로(×6.0) 끝낸다.",
+    reward: "보조 교육위원 선택권 1개",
+    when: { clear: "railLine3:k60" },
+    give: { advisorTicket: 1 }
   }
 ];

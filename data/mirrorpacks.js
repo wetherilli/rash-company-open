@@ -119,5 +119,11 @@ const MIRROR_PACKS = [
     bg: "assets/scene/거울굴절철도2호선.jpg",
     foes: ["gsa_riders", "kevin", "david_peters"] },
   { id: "pack11", name: "신해수랜드의 소동", bg: "assets/scene/신해수랜드 대치중.jpg",
-    foes: ["hyeolgwi", "baksangwon", "shinhaesuland_gan"] }
+    foes: ["hyeolgwi", "baksangwon", "shinhaesuland_gan"] },
+  { id: "rail3pack1", name: "두 번 우는 것", railOnly: true, tier: "railLine3",
+    bg: "assets/scene/거울굴절철도3호선중간역.jpg",
+    foes: ["geugya_remnant", "deathleaper", "rail3_locust"] },
+  { id: "rail3pack2", name: "감은 눈", railOnly: true, tier: "railLine3",
+    bg: "assets/scene/거울굴절철도3호선종착역.jpg",
+    foes: ["hwangjeo_phantasm", "tanaconda", "rail3_therizino"] }
 ];

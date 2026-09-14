@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.4.0";
-const VERSION_NAME = "호감이 끝나는";
+const VERSION = "2.5.0";
+const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -8406,8 +8406,467 @@ function buildLoopFoes(r) {
   return railCycleFoes(r, 1, picked).concat([railFinalFoe(r, 1)]);
 }
 
+/* ── 거울굴절철도 3호선 · 급행 ─────────────────────────────────
+ *  1호선은 한 줄, 2호선은 순환, 3호선은 «서지 않는 선로» 입니다.
+ *
+ *  ■ 어떻게 가는가
+ *    역이 여덟입니다. 역마다 문이 열리기 전에 한 번 묻습니다 —
+ *    정차할 것인가, 통과할 것인가.
+ *
+ *      정차  그 역에 선 것과 싸웁니다. 세기는 지금 배수 그대로.
+ *      통과  싸우지 않고 지나갑니다. 그 대신 선로가 빨라져,
+ *            «남은 역부터» 0.5 씩 세집니다.
+ *
+ *    중간역(넷째)과 종착역(여덟째)은 급행도 반드시 섭니다. 그래서
+ *    통과할 수 있는 것은 여섯이고, 배수는 ×3.0 에서 ×6.0 까지 갑니다.
+ *
+ *  ■ 중간역을 넘기면
+ *    길잡이가 들러 체력·관리력을 채우고 편성도 손볼 수 있습니다.
+ *    그 자리가 곧 «져도 돌아오는 자리» 이고(defeat), 창을 닫았다 열어도
+ *    거기서 이어할 수 있습니다(railSave — 지나친 역 수도 함께 담습니다).
+ *
+ *  ■ 완주 삯은 계단입니다 (RAIL3_PRIZES)
+ *    한 번씩만 받고, 높은 배수로 끝내면 아직 안 받은 낮은 몫도 함께
+ *    받습니다. 그래서 «한 번은 완행으로, 한 번은 무정차로» 가 아니라
+ *    «세게 한 번이면 아래까지 쓸어 온다» 가 됩니다 (사용자 지침).
+ *
+ *  ■ 1·2호선과 다른 점
+ *    count 는 있으나 scale 은 «시작 배수» 입니다 — 실제로 서는 세기는
+ *    지나친 역 수에 달려 있어 들어설 때 못 박을 수가 없습니다. 그래서
+ *    적을 미리 다 빚어 두지 않고, 역 앞에서 그때그때 다시 빚습니다
+ *    (SCENE_EXT.railExpressGate).
+ */
+const MIRROR_RAIL3 = {
+  key:  "railLine3",
+  group: "rail",
+  express: true,        // 급행 — 이 표가 붙은 갈래는 역마다 정차/통과를 고릅니다
+  name: "거울굴절철도 3호선",
+  sub:  "서지 않고 지나가는 선로",
+  glassNote: "역이 여덟이다. 어디에 설지는 아직 정해지지 않았다.",
+
+  /* 배경 셋이 이어집니다 (2026-09-12 사용자 그림) —
+   *   선로      사고로 폐쇄된 역. 「역 폐쇄 · 서비스 중단」이 켜져 있습니다
+   *   중간역    정글에 먹힌 환승역(JUNGLE JUNCTION). 급행도 여기엔 섭니다
+   *   종착역    정글 급행역. 「폐쇄 — 탈출 사고 발생」
+   * 통과하는 역은 전부 선로 배경 위에 섭니다. 중간역·종착역에서만 갈립니다. */
+  bg:      "assets/scene/거울굴절철도3호선.jpg",
+  midBg:   "assets/scene/거울굴절철도3호선중간역.jpg",
+  midName: "정글 환승역",
+  finalBg:  "assets/scene/거울굴절철도3호선종착역.jpg",
+  finalName: "정글 급행역",
+  prefix: "굴절된 ",
+
+  count:  8,        // 역 여덟 — 중간역과 종착역을 뺀 여섯이 통과할 수 있는 역입니다
+  scale:  3.0,      // 시작 배수. 한 역 통과할 때마다 skipStep 씩 오릅니다
+  skipStep: 0.5,
+  defScale: 0,      // 1·2호선과 같게 — 방어는 본편 그대로 (2026-09-11 DEF_SCALE 머리말)
+
+  /* ── 고정 편성 (2026-09-12 사용자 지침) ──────────────────────
+   *  1·2호선과 같게 «정해진 조합» 입니다. 여기 적은 여섯이 통과할 수 있는
+   *  역에 서고, 앞의 셋 뒤에 중간역(midFoe)이, 맨 뒤에 종착역(finalFoe)이
+   *  끼어 여덟이 됩니다 — buildExpressFoes 참고.
+   *
+   *  「탈출 사고로 닫힌 정글 급행역」이라는 배경에 맞춰 공룡·괴수 쪽으로
+   *  골랐습니다. 곁가지(5.5장 오르토제노스)에서 한 번 마주친 얼굴이 섞이는
+   *  것도 그대로 둡니다(사용자 지침). 데스리퍼·타나콘다·케빈이 1·2호선과
+   *  겹치는 것도 그대로입니다 — 같은 것이 다른 선로에도 비치는 셈입니다. */
+  foes: [
+    "geugya_remnant",      // 4장   · 극야의 잔재
+    "hwangjeo_phantasm",   // 2장   · 그림에서 나온 환상체
+    "unknown_squad",       // 5.5장 · I사 포획2팀 오르토제노스
+    /* ↑ 여기까지가 앞 구간. 다음이 중간역(용골을 집어삼킨 메뚜기)입니다 */
+    "deathleaper",         // 6장   · 데스리퍼
+    "tanaconda",           // 6장   · 타나콘다
+    "kevin"                // 6장   · 머리 없는 드래곤 케빈
+  ],
+
+  midFoe:   "rail3_locust",     // 중간역 — 급행도 선다
+  finalFoe: "rail3_therizino",  // 종착역 — 만나 봐야 안다
+
+  /* 1·2호선과 같게 — 선로 위에서는 처치 원고료가 안 나옵니다(victory 참고).
+   * 그 몫은 아래 계단 삯으로 옮겨 두었습니다. bonus 를 적지 않는 것도 그래서입니다
+   * — mirrorClear 의 «첫 완주 삯» 자리는 비우고, 계단 삯이 그 일을 합니다. */
+  noKillPay: true,
+  codex:  10,
+  event:  300,
+  fragBoxSelect: 25,
+  cost: ENK_RULE.costRail,
+
+  /* 본편 7장을 마쳐야 열립니다. 2호선(ch6)과 같은 결로 장을 콕 집습니다 —
+   * 클리어 수로 세면 곁가지(.5장)까지 함께 세어 버립니다. */
+  needChapter: "ch7",
+
+  warn: "지금까지 중 가장 센 갈래입니다. 역을 지나칠수록 남은 것들이 세지고, " +
+        "쉼표는 중간역 하나뿐입니다.",
+
+  /* 중간역을 넘기면 들르는 자리. after 는 적어 두기만 하고 장면을 짓는 것은
+   * buildExpressScenes 가 중간역 위치를 보고 직접 합니다 — defeat() 이
+   * «이 갈래에 쉼표가 있는가» 를 rest 로 보므로 여기 그대로 둡니다. */
+  rest: {
+    after: 4,
+    who:  "베르렐리우스",
+    say:  "여기서부터 선로가 빨라집니다. 통과하신 만큼은, 뒤에서 돌아옵니다.",
+    text: "길잡이가 관리력과 체력을 전부 회복시켰다.",
+    party: true
+  }
+};
+
+/* ── 계단 삯 ──────────────────────────────────────────────────
+ *  «어느 배수로 끝냈는가» 로 갈립니다. 각각 한 번씩만 받고, 높은 배수로
+ *  끝내면 아직 안 받은 낮은 몫도 그 자리에서 함께 받습니다 (사용자 지침).
+ *
+ *  받았다는 표는 S.mirrorDone 에 「railLine3:k40」 처럼 적습니다 —
+ *  이미 보관함에 담기고(vaultToObject · loadVault) 열쇠로만 읽는 자리라,
+ *  새 칸을 만들지 않고 그대로 얹었습니다. 갈래 목록을 그릴 때는
+ *  MIRROR_TIERS 쪽에서 훑으므로 이 열쇠들은 걸리지 않습니다.
+ */
+const RAIL3_PRIZES = [
+  { id: "k30", k: 3.0, name: "완행",   money: 1500, frag: 20, module: 0,
+    note: "종착역까지 완주" },
+  { id: "k40", k: 4.0, name: "급행",   money: 1000, frag: 10, module: 1,
+    note: "두 역 이상 지나치고 완주" },
+  { id: "k60", k: 6.0, name: "무정차", money: 2000, frag: 20, module: 2,
+    note: "지나칠 수 있는 여섯 역을 모두 지나치고 완주" }
+];
+/* 한 몫을 한 줄로 폅니다 — 분실물 보관함과 들어가기 전 화면이 같은 말을 하도록 */
+function rail3PrizeText(p) {
+  return [CURRENCY + " " + p.money,
+          "인격 파편 상자(선택) " + p.frag + "개"]
+         .concat(p.module ? [SYNC_MODULE.name + " " + p.module + "개"] : [])
+         .join("　·　");
+}
+
+/* 지금 서 있는 세기 — 지나친 역 수가 그대로 배수가 됩니다 */
+function railExpressScale(r) {
+  return r.scale + r.skipStep * ((S.rail3 && S.rail3.skipped) || 0);
+}
+function rail3PrizeKey(p)   { return MIRROR_RAIL3.key + ":" + p.id; }
+function rail3PrizeTaken(p) { return !!(S.mirrorDone && S.mirrorDone[rail3PrizeKey(p)]); }
+
+/* ── 역에 설 것들을 뽑는다 ────────────────────────────────────
+ *  통과할 수 있는 여섯은 이미 만난 적에서 뽑습니다 — 1호선과 같은 원칙으로
+ *  잡졸은 맨 앞 하나뿐이고 나머지는 보스입니다. 약한 것부터 세우고,
+ *  그 사이(넷째)에 중간역을, 맨 뒤에 종착역을 끼웁니다.
+ *
+ *  여기서는 시작 배수로 한 번 빚어 두기만 합니다 — 실제로 설 세기는
+ *  역 앞에서 다시 빚습니다(railExpressGate). 열쇠를 「__mirror_0」 부터로
+ *  두는 것은 일부러입니다: 이어하기(resumeMirror)가 같은 열쇠로 다시
+ *  지으므로, 저장해 둔 자리에서 돌아와도 장면 차례가 어긋나지 않습니다.
+ */
+function buildExpressFoes(r) {
+  /* 고정 편성 (2026-09-12 사용자 지침) — 적어 둔 여섯이 적어 둔 차례로 서고,
+   * 앞 셋 뒤에 중간역, 맨 뒤에 종착역이 끼어 여덟이 됩니다. 정렬하지 않습니다. */
+  if (r.foes && r.foes.length) {
+    const 있는것 = r.foes.filter(x => FOES[x]);
+    const stops = 있는것.slice(0, 3).concat([r.midFoe], 있는것.slice(3), [r.finalFoe])
+                        .filter(x => FOES[x]);
+    const k0 = r.scale, dk0 = railDefK(r, k0);
+    return stops.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k0, dk0));
+  }
+
+  const met = metFoes();
+  const 설수있나 = x =>
+    x.indexOf("__mirror_") !== 0 && !FOES[x].noMirror && typeof FOES[x].hp === "number";
+  let keys = Object.keys(FOES).filter(x => 설수있나(x) && met[x]);
+  if (!keys.length) keys = Object.keys(FOES).filter(설수있나);
+
+  const want   = Math.max(0, r.count - 2);          // 중간역·종착역을 뺀 몫
+  const bosses = keys.filter(x => FOES[x].boss);
+  const mobs   = keys.filter(x => !FOES[x].boss);
+  const 뽑기 = bag => bag.splice(rnd(bag.length), 1)[0];
+
+  const picked = [];
+  /* 맨 앞 하나는 잡졸로 — 없으면 그냥 보스로 채웁니다 */
+  for (let i = 0; i < (r.maxNormal || 0) && picked.length < want && mobs.length; i++)
+    picked.push(뽑기(mobs));
+  /* 나머지는 보스. 만나 본 보스가 모자라면 잡졸로 채웁니다 */
+  const bag = bosses.concat();
+  while (picked.length < want && bag.length) picked.push(뽑기(bag));
+  while (picked.length < want && mobs.length) picked.push(뽑기(mobs));
+  picked.sort((a, b) => FOES[a].hp - FOES[b].hp);   // 약한 것부터
+
+  const 앞 = picked.slice(0, 3), 뒤 = picked.slice(3);
+  const stops = 앞.concat([r.midFoe], 뒤, [r.finalFoe]).filter(x => FOES[x]);
+
+  const k = r.scale, dk = railDefK(r, k);
+  return stops.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k, dk));
+}
+
+/* ── 급행 한 벌을 짓는다 ──────────────────────────────────────
+ *  역마다 «문»(railExpressGate) 하나와 전투 하나가 짝을 이룹니다.
+ *  통과를 고르면 문이 바로 뒤의 전투 하나를 건너뜁니다(S.sc 를 하나 더
+ *  밀어 냅니다) — 장면 목록 자체는 들어설 때 한 번 지어 놓고 그대로 둡니다.
+ *  2호선처럼 이어 붙이지 않아도 되는 것은, 갈 길의 «수» 가 정해져 있고
+ *  달라지는 것은 «세기» 뿐이기 때문입니다.
+ */
+function buildExpressScenes(r, ids) {
+  const scenes = [
+    { t: "place", img: mirrorBG(r), name: r.name },
+    { t: "n", text: "유리창이 앞뒤로 길게 늘어난다. 역이 여덟, 그러나 어디에 설지는 정해져 있지 않다." },
+    { t: "n", text: "급행은 서지 않는다. 한 역을 지나칠 때마다 선로가 빨라지고, 남은 것들이 그만큼 세진다." }
+  ];
+  let checkpoint = null;
+  ids.forEach((id, i) => {
+    const src   = (FOES[id] && FOES[id].src) || null;
+    const mid   = (src === r.midFoe);
+    const final = (src === r.finalFoe);
+    scenes.push({ t: "railExpressGate", no: i + 1, total: ids.length, id: id,
+                  must: mid || final, mid: mid, final: final,
+                  boss: !!(FOES[id] && FOES[id].boss) });
+    /* k 는 문이 열릴 때 그 자리에서 채워 넣습니다 — 전투 화면 눈금 몫입니다 */
+    const rail = { no: i + 1, total: ids.length, k: r.scale };
+    scenes.push(FOES[id] && FOES[id].cineEntrance
+      ? { t: "bossCine", foe: id, rail: rail }
+      : { t: "battle",   foe: id, rail: rail });
+    if (mid) {
+      checkpoint = scenes.length;             // 이 쉼표가 «져도 돌아오는 자리»
+      scenes.push({ t: "railExpressRest" });
+      if (r.rest && r.rest.party)
+        scenes.push({ t: "party", text: "여기서 편성을 고칠 수 있습니다." });
+    }
+  });
+  scenes.push({ t: "railExpressPrize" });
+  scenes.push({ t: "mirrorClear" });
+  return { scenes: scenes, checkpoint: checkpoint };
+}
+
+/* ── 역 앞 ────────────────────────────────────────────────────
+ *  정차할 것인가, 통과할 것인가. 여기서 그 역에 설 것을 «지금 세기로»
+ *  다시 빚습니다 — 앞에서 몇 역을 지나쳐 왔느냐가 곧 세기라서입니다.
+ *
+ *  무엇이 서 있는지는 알려 주지 않습니다(거울 갈래의 원칙). 다만 «큰
+ *  것인지 아닌지»(보스 여부)는 창밖으로 보이는 것으로 칩니다 — 아무것도
+ *  모르고 고르면 고르는 것이 아니라 찍는 것이 되기 때문입니다.
+ */
+SCENE_EXT.railExpressGate = function (s) {
+  const rule = mirrorRuleNow();
+  if (s.no === 1 || !S.rail3) S.rail3 = { skipped: 0 };
+
+  const 빚기 = () => {
+    const k = railExpressScale(rule), dk = railDefK(rule, k);
+    const src = (FOES[s.id] && FOES[s.id].src) || s.id;
+    mirrorFoeCopy(s.id, src, rule, k, dk);
+    const bs = SCENES[S.sc];                 // 바로 뒤가 이 역의 전투입니다
+    if (bs && bs.rail) bs.rail.k = k;
+    return k;
+  };
+
+  const k = railExpressScale(rule);
+  /* 통과할 수 있는 역은 전부 선로 배경 위에 섭니다. 중간역과 종착역에서만
+   * 배경이 갈립니다 — 그 둘만 «내려서는» 역이기 때문입니다. */
+  if (s.mid && rule.midBg)        setBackdrop(rule.midBg, rule.midName || rule.name);
+  else if (s.final && rule.finalBg) setBackdrop(rule.finalBg, rule.finalName || rule.name);
+  else                            setBackdrop(mirrorBG(rule), rule.name);
+  divider();
+
+  /* 내려서는 두 역(중간역·종착역)은 «닿았다» 고 알리고, 통과할 수 있는 역은
+   * «다음 역이 다가온다» 고 알립니다 — 이 자리가 곧 앞 전투를 마친 직후라,
+   * 도착을 알리는 것보다 달리는 중이라고 적는 편이 결에 맞습니다
+   * (사용자 지침 2026-09-12). */
+  if (s.must) {
+    say("── " + (s.mid ? (rule.midName || "중간역") : (rule.finalName || "종착역")) +
+        " ──　" + railScaleText(k) +
+        (S.rail3.skipped ? "　(지나친 역 " + S.rail3.skipped + ")" : ""), "place");
+    say(s.mid ? "급행도 이 역에는 선다. 덩굴에 먹힌 승강장으로 문이 열린다."
+              : "선로가 여기서 끝난다. 울타리가 넘어져 있고, 그 너머는 정글이다.", "sys");
+    빚기();
+    return cont();
+  }
+
+  say("다음 역 — " + s.no + "번째　" + railScaleText(k) +
+      (S.rail3.skipped ? "　(지나친 역 " + S.rail3.skipped + ")" : ""), "place");
+  say(s.no === 1 ? "열차가 움직인다. 첫 승강장이 다가온다."
+                 : "열차가 다시 달리기 시작한다. 다음 승강장이 다가온다.", "sys");
+  say(s.boss ? "창밖으로 보인다 — 큰 것이 서 있다."
+             : "창밖으로 보인다 — 무언가 서성인다.", "sys");
+  S.waiting = true;
+  buttons([
+    { label: "정차　" + railScaleText(k), cls: "primary", fn: () => {
+        빚기();
+        say("→ 정차. 문이 열린다.", "sys");
+        S.waiting = false;
+        next();
+      } },
+    { label: "통과　다음 역부터 " + railScaleText(k + rule.skipStep), cls: "ghost", fn: () => {
+        S.rail3.skipped++;
+        say("→ 통과. 승강장이 그대로 흘러간다. 선로가 빨라진다.", "sys");
+        S.sc++;                              // 이 역의 전투를 건너뜁니다
+        S.waiting = false;
+        next();
+      } }
+  ]);
+};
+
+/* ── 중간역의 쉼표 ────────────────────────────────────────────
+ *  1호선의 {t:"rest"} 와 하는 일이 같되, 저장할 것이 하나 더 있습니다 —
+ *  지나친 역 수. 그것이 곧 세기이자 삯이라, 담지 않으면 창을 닫았다
+ *  열었을 때 뒤 구간이 ×3.0 으로 돌아가 버립니다.
+ */
+SCENE_EXT.railExpressRest = function () {
+  const rule = mirrorRuleNow();
+  if (!S.rail3) {
+    const saved = (S.railSave && S.railSave.key === rule.key) ? S.railSave.rail3 : null;
+    S.rail3 = { skipped: (saved && saved.skipped) || 0 };
+  }
+  S.mirrorCheckpoint = S.sc - 1;             // 이 장면이 «져도 돌아오는 자리»
+
+  divider();
+  setBackdrop(rule.midBg || mirrorBG(rule), rule.midName || rule.name);
+  say("── " + (rule.midName || "중간역") + " ──", "place");
+
+  /* 여기 서 있는 사람 — 편성한 교육위원이 있으면 그쪽입니다(railSpeaker).
+   * 아무도 없으면 본래대로 길잡이가 들릅니다. 져서 되돌아온 자리면
+   * 「되돌아왔을 때」 몫의 말을 합니다(RAIL_LINES_BACK). */
+  const sp = railSpeaker(rule);
+  const 되돌아옴 = !!(S.railSave && S.railSave.key === rule.key);
+  if (sp.advisor) speak(sp.name, railLine(sp, 되돌아옴), sp.portrait);
+  else if (rule.rest.who) speak(rule.rest.who, rule.rest.say);
+
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 쓰러진 사람도 함께 일어납니다
+  S.restManage = true;                                    // 다음 전투는 관리력을 채우고 엽니다
+  say(sp.advisor ? withJosa(sp.name, "이") + " 관리력과 체력을 전부 회복시켰다."
+                 : rule.rest.text, "good");
+  say("여기까지 지나친 역 " + S.rail3.skipped + "곳.　지금 세기 " +
+      railScaleText(railExpressScale(rule)) + ".", "sys");
+  /* 이 갈래의 저장 자리는 여기 하나뿐입니다 (사용자 지침 2026-09-12) —
+   * 통과·정차를 고르는 자리마다 저장하지 않습니다. 그러니 «여기가 그 자리» 라고
+   * 화면에 못박아 둡니다. 창을 닫아도, 뒤 구간에서 져도 여기로 돌아옵니다. */
+  say("이 선로에서 멈춰 설 수 있는 자리는 여기뿐이다 — 창을 닫아도 여기서 이어한다.", "good");
+
+  S.railSave = { key: rule.key, picked: ((MIRROR && MIRROR.foeSrc) || []).slice(),
+                 checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0, arc: S.arc,
+                 rail3: { skipped: S.rail3.skipped } };
+  saveVault();
+  render();
+  return cont();
+};
+
+/* ── 계단 삯 ──────────────────────────────────────────────────
+ *  mirrorClear 바로 앞에 섭니다. 완주할 때마다 나오는 몫(황금교본·파편
+ *  상자·이벤트 재화)은 그대로 mirrorClear 가 주고, 여기서는 «이번 배수로
+ *  처음 끝냈을 때만» 나오는 것을 줍니다.
+ */
+SCENE_EXT.railExpressPrize = function () {
+  const rule = mirrorRuleNow();
+  const k = railExpressScale(rule);
+  const 지난역 = (S.rail3 && S.rail3.skipped) || 0;
+
+  divider();
+  say("종착역 표지판이 꺼진다. 이번 운행 " + railScaleText(k) +
+      " — 지나친 역 " + 지난역 + "곳.", "sys");
+  render();
+  S.waiting = true;
+  openRail3Lost(rule, k);
+};
+
+/* ── 분실물 보관함 ────────────────────────────────────────────
+ *  계단 삯은 «어느 배수로 끝냈는가» 로 갈리고 각각 한 번씩만 나옵니다.
+ *  그냥 대화록에 몫만 흘리면 «왜 이번엔 이것만 나왔는지» 를 알 수가 없어,
+ *  결과 카드보다 «먼저» 이 화면을 세워 셋을 한눈에 보이고 손으로 받게
+ *  했습니다 (사용자 지침 2026-09-12).
+ *
+ *  받지 않고 나가는 길은 두지 않습니다 — 닫는 손잡이는 받고 나서야 섭니다.
+ *  한 번뿐인 삯이라, 잘못 닫아 잃는 일이 있어서는 안 됩니다.
+ */
+function openRail3Lost(rule, k) {
+  $modal.classList.add("on");
+
+  const draw = (msg) => {
+    const 받을것 = RAIL3_PRIZES.filter(p => k >= p.k - 0.001 && !rail3PrizeTaken(p));
+
+    let h = '<h2>분 실 물 보 관 함</h2>' +
+      '<div class="hint">급행은 서지 않는다. 지나친 역에 두고 온 것들이 여기 모인다.</div>' +
+      '<div class="hint">삯은 <b>어느 배수로 끝냈는가</b>로 갈립니다. 셋 다 <b>한 번씩만</b> ' +
+      '받을 수 있고, 높은 배수로 끝내면 <b>아직 안 받아 둔 아래 몫도 함께</b> 나옵니다.</div>' +
+      '<div class="hint">이번 운행 <b>' + railScaleText(k) + '</b>　·　지나친 역 ' +
+      ((S.rail3 && S.rail3.skipped) || 0) + '곳</div>';
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    RAIL3_PRIZES.forEach(p => {
+      const 받음 = rail3PrizeTaken(p);
+      const 닿음 = k >= p.k - 0.001;
+      const chip = 받음 ? "받음" : 닿음 ? "이번에" : "잠김";
+      h += '<div class="syncrow">' +
+             '<button disabled>' + chip + '</button>' +
+             '<div class="body">' +
+               '<div class="nm">' + railScaleText(p.k) + '　' + p.name + '</div>' +
+               '<div class="sub">' + rail3PrizeText(p) + '</div>' +
+               '<div class="sub"' +
+                 (받음 ? ' style="color:#7f8a99"' : 닿음 ? ' style="color:#8fbf7f"' : '') + '>' +
+                 (받음 ? '이미 받아 둔 몫입니다.'
+                  : 닿음 ? p.note + ' — 이번에 받습니다.'
+                  : p.note + ' — ' + railScaleText(p.k) + ' 이상으로 끝내야 합니다.') +
+               '</div>' +
+             '</div>' +
+           '</div>';
+    });
+
+    h += '<div class="modalfoot">' +
+         (받을것.length
+           ? '<button id="r3take">받기</button>'
+           : '<button id="r3close">나가기</button>') +
+         '</div>';
+    $sheet.innerHTML = h;
+
+    const take = document.getElementById("r3take");
+    if (take) take.onclick = () => {
+      if (!S.mirrorDone) S.mirrorDone = {};
+      받을것.forEach(p => {
+        S.mirrorDone[rail3PrizeKey(p)] = true;
+        S.money += p.money;
+        addFragBox("select", p.frag);
+        if (p.module) addSyncModule(p.module);
+        say("【" + p.name + "　" + railScaleText(p.k) + "】 " + rail3PrizeText(p), "gain");
+      });
+      if (받을것.length > 1)
+        say("아직 안 받아 둔 아래 배수의 삯까지 한꺼번에 나왔다.", "sys");
+      /* 「급행으로」·「무정차로」 업적은 여기서 걸립니다 — 계단 삯 열쇠를 그대로
+       * 업적 조건(clear)으로 넘깁니다. 갈래 완주 업적(railLine3)은 이 뒤의
+       * mirrorClear 가 따로 봅니다. */
+      받을것.forEach(p => checkAchievements(null, rail3PrizeKey(p)));
+      saveVault();
+      render();
+      draw("받았습니다. " + (받을것.length > 1 ? "아래 배수의 몫까지 함께 나왔습니다." : ""));
+    };
+
+    const close = document.getElementById("r3close");
+    if (close) close.onclick = () => {
+      closeModal();
+      render();
+      S.waiting = false;
+      next();                       // 결과 카드(mirrorClear)로
+    };
+  };
+  draw(null);
+}
+
+/* ── 들어가기 전·운전석 칸에 적을 말 ──────────────────────────
+ *  mirrorFacts 가 지은 것을 받아 급행 몫으로 고쳐 씁니다.
+ */
+function expressFacts(r, o) {
+  const 최대 = r.scale + r.skipStep * Math.max(0, r.count - 2);
+  const 남은 = RAIL3_PRIZES.filter(p => !rail3PrizeTaken(p));
+  o.세기 = railScaleText(r.scale) + " ~ " + railScaleText(최대);
+  o.상대라벨 = "역";
+  o.상대 = countBare(r.count) + " 역";
+  o.첫몫 = 남은.length ? "계단 삯 " + countBare(남은.length) + " 남음" : "계단 삯 모두 받음";
+  o.첫몫받음 = !남은.length;
+  o.자세히 =
+    "역이 " + countBare(r.count) + "입니다. 역마다 정차할지 통과할지 고르고, " +
+    "한 역을 통과할 때마다 남은 것들이 " + r.skipStep.toFixed(1) + "씩 세집니다 — " +
+    "여섯을 다 지나치면 " + railScaleText(최대) + "입니다. " +
+    "중간역과 종착역에는 급행도 섭니다. 중간역을 넘기면 " +
+    withJosa(r.rest.who, "이") + " 한 번 들러 체력과 관리력을 채워 줍니다. " +
+    "완주 삯은 어느 배수로 끝냈는지로 갈려, 끝난 뒤 「분실물 보관함」에서 받습니다 — " +
+    RAIL3_PRIZES.map(p => railScaleText(p.k) + " " + rail3PrizeText(p) +
+                          (rail3PrizeTaken(p) ? " (받음)" : "")).join("　/　") +
+    ". 한 번씩만 받고, 높은 배수로 끝내면 아직 안 받은 아래 몫도 함께 받습니다. " +
+    "선로 위에서는 적을 잡아도 " + CURRENCY + "가 나오지 않습니다.";
+  return o;
+}
+
 /* 갈래를 늘리려면 여기에 얹으면 됩니다. 순서가 곧 화면에 서는 순서입니다. */
-const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME, MIRROR_RAIL1, MIRROR_RAIL2];
+const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME, MIRROR_RAIL1, MIRROR_RAIL2, MIRROR_RAIL3];
 
 /* 갈래를 어떻게 부르든 받아 줍니다 — 번호, key 문자열, 규칙 그 자체,
  * 그리고 예전에 쓰던 참/거짓(하드인가 아닌가)까지. */
@@ -8470,6 +8929,8 @@ function mirrorFacts(rule) {
     ? ' 선로 위에서는 적을 잡아도 ' + CURRENCY + '가 나오지 않습니다 — 대신 첫 완주 삯이 ' +
       '거울 던전보다 훨씬 큽니다.'
     : '';
+
+  if (r.express) return expressFacts(r, o);
 
   if (r.loop) {
     /* 눈금은 좁습니다. 값을 늘리는 대신 이름표를 갈래에 맞게 바꿉니다 —
@@ -8578,6 +9039,8 @@ function buildMirrorFoes(rule) {
   const r = rule || MIRROR_RULE;
   /* 순환 갈래(2호선)는 뽑는 방식이 아주 다릅니다 — 셋을 못박고 순환마다 다시 빚습니다 */
   if (r.loop) return buildLoopFoes(r);
+  /* 급행 갈래(3호선)는 중간역·종착역을 끼워 여덟을 세웁니다 */
+  if (r.express) return buildExpressFoes(r);
 
   /* ── 고정 편성 (2026-09-12 사용자 지침) ──────────────────────
    *  foes 를 적어 둔 갈래(거울굴절철도)는 뽑지 않습니다. 적힌 차례 그대로
@@ -8835,6 +9298,8 @@ function openMirrorGate(tier, back) {
  *  전투 화면에 보여주려는 것입니다(renderFoeBar 참고, 2호선의 rail:{cycle,no,k}
  *  와 같은 자리를 씁니다). */
 function buildMirrorRunScenes(rule, ids) {
+  /* 급행 갈래(3호선)는 역마다 정차/통과를 고르는 문이 끼므로 따로 짓습니다 */
+  if (rule.express) return buildExpressScenes(rule, ids);
   const 첫줄 = rule === MIRROR_EXTREME
     ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
     : rule === MIRROR_HARD
@@ -9550,6 +10015,8 @@ function mirrorRecordBuild(rule, packIds) {
     name: rule.loop ? rule.finalName : rule.name,   // 2호선은 「종착역」 이름으로 남깁니다
     turns: S.mirrorRunTurns || 0,
     cycles: (S.rail2 && S.rail2.done) || null,       // 1호선 등 순환 없는 갈래는 null
+    skips: rule.express ? ((S.rail3 && S.rail3.skipped) || 0) : null,   // 3호선 — 지나친 역 수
+    railK: rule.express ? railExpressScale(rule) : null,               // 3호선 — 끝낸 배수
     party, advisors, gifts, picks, synergies, packs
   };
 }
@@ -9590,6 +10057,7 @@ function mirrorRecordText(rec) {
   const lines = [
     "「라슈 컴퍼니」 " + rec.name + " 클리어",
     "턴수 " + rec.turns + "턴" + (rec.cycles ? "　(" + rec.cycles + "순환)" : ""),
+    ...(rec.railK != null ? ["운행 " + railScaleText(rec.railK) + "　(지나친 역 " + (rec.skips || 0) + ")"] : []),
     "편성 " + partyStr,
     "교육위원 " + advStr,
     "기프트 " + giftStr
@@ -11753,5 +12221,6 @@ function boot() { applyFont((loadVault() || {}).font); if (gateOpen()) glass(); 
  *  바로 넣으십시오 — 여기는 «그 장 하나만을 위한» 자리입니다.
  */
 /* @wip anchor: EXT */
+
 
 boot();   // 코드를 통과하면 유리창부터
