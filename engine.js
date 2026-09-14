@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.5.0";
+const VERSION = "2.5.1";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1447,6 +1447,9 @@ function giftHits(e, who) {
   if (!e) return false;
   if (e.advisorTag) {                       // 그 계열 교육위원을 세웠는가
     return equippedAdvisors().some(adv => adv.title.indexOf(e.advisorTag) >= 0);
+  }
+  if (e.advisorWho) {                       // 그 사람을 교육위원으로 세웠는가 (제목은 가리지 않습니다)
+    return equippedAdvisors().some(adv => adv.name === e.advisorWho);
   }
   const id = idByKey(S.equip[who]);
   const title = id ? id.title : "";
@@ -10486,6 +10489,7 @@ function mailGiveText(m) {
   if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
   if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
   if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
+  if (g.gift)          { const gf = giftById(g.gift); out.push("E.G.O 기프트 " + (gf ? stars(gf.star) + " " + gf.name : g.gift)); }
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
     out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
@@ -10502,7 +10506,7 @@ function mailWasted(m) {
   /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
   if (g.money || g.codex || g.event || g.support || g.enkCap ||
       g.fragBoxSelect || g.fragBoxRandom ||
-      g.advisorTicket || g.giftTicket || g.syncModule || g.advisor) return false;   // 다른 것이 있으면 버려질 일 없습니다
+      g.advisorTicket || g.giftTicket || g.syncModule || g.advisor || g.gift) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
   return enkCount() >= ENK_RULE.max;
@@ -10539,6 +10543,22 @@ function mailTake(m) {
       if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); }
       else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); }
     }
+  }
+  /* E.G.O 기프트 — 이름으로 적습니다. 이미 지녔으면 상점 배정에서 겹쳤을 때와
+   * 똑같이 원고료로 돌려주고(pullGiftOnce), 지닌 기프트가 하나도 없으면 바로 겁니다. */
+  if (g.gift) {
+    const gf = giftById(g.gift);
+    if (gf) {
+      if (!S.giftsOwned) S.giftsOwned = {};
+      if (S.giftsOwned[giftId(gf)]) {
+        S.money += dupRefund(gf.star);
+        got.push("이미 지닌 기프트라 " + CURRENCY + " " + dupRefund(gf.star));
+      } else {
+        S.giftsOwned[giftId(gf)] = true;
+        if (!giftOnList().length) { S.giftOn = [giftId(gf)]; S.gift = giftId(gf); }
+        got.push("E.G.O 기프트 " + stars(gf.star) + " " + gf.name);
+      }
+    } else got.push("(기프트를 찾지 못했습니다: " + g.gift + ")");
   }
   if (g.enk) {
     enkSync();
