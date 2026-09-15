@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.5.2";
+const VERSION = "2.5.3";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -9169,6 +9169,26 @@ function mirrorFoeCopy(id, src, r, k, dk) {
     healAtk: f.healAtk || 0,
     healLine: f.healLine || null,
     healWarn: f.healWarn || null,
+    /* 되받아치기·회피·선공(단일·광역)도 함께 옮깁니다 — beginTurn 이 읽는 것은
+     * 원본이 아니라 이 사본(FOES[b.id])이라, 빠뜨리면 3호선의 메뚜기·테리지노가
+     * 거울 위에서는 여느 보스처럼 강타만 하게 됩니다. */
+    counterEvery: f.counterEvery || 0,
+    counterFrom: f.counterFrom != null ? f.counterFrom : null,
+    counterMult: f.counterMult || 0,
+    counterLine: f.counterLine || null,
+    counterWarn: f.counterWarn || null,
+    evadeEvery: f.evadeEvery || 0,
+    evadeFrom: f.evadeFrom != null ? f.evadeFrom : null,
+    evadeLine: f.evadeLine || null,
+    evadeWarn: f.evadeWarn || null,
+    firstEvery: f.firstEvery || 0,
+    firstFrom: f.firstFrom != null ? f.firstFrom : null,
+    firstLine: f.firstLine || null,
+    firstWarn: f.firstWarn || null,
+    firstAoeEvery: f.firstAoeEvery || 0,
+    firstAoeFrom: f.firstAoeFrom != null ? f.firstAoeFrom : null,
+    firstAoeLine: f.firstAoeLine || null,
+    firstAoeWarn: f.firstAoeWarn || null,
     desc: "유리창에 비쳐 나온 것. 본래보다 " +
           Math.round((k - 1) * 100) + "% 강하다."
   };
