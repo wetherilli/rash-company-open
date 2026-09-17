@@ -51,6 +51,25 @@
  *             값과 같이 그대로 두면 게임에서 저절로 가려지고(engine.js flavorHTML),
  *             글을 채워 넣으면 그 자리에 바로 뜹니다.
  *    desc     실제 효과를 수치로 풀어 쓴 설명. 필수입니다.
+ *
+ *  ■ 강화 — up (사용자 지침 2026-09-17)
+ *    유리창 [강화] → [E.G.O 기프트 강화] 에서 황금교본을 태워 두 단계까지
+ *    올립니다. 화면에는 「이름 +」·「이름 ++」 로 뜹니다.
+ *
+ *    up: [ { desc, effect },     + 단계 — 그 단계의 효과 «전부» (기본에 더하는 것이 아닙니다)
+ *          { desc, effect } ]    ++ 단계
+ *
+ *    엔진은 단계에 맞는 effect 를 통째로 바꿔 읽습니다(engine.js giftView) —
+ *    그래서 발동 조건(tag·who·advisor…)은 단계마다 다시 적어야 하고, 강화가
+ *    조건을 지우는 일은 없습니다. 값·해금 장은 아래 GIFT_UP_RULE 에 있습니다.
+ *    「길잃은 나침반」·「탐하는 가시」의 «재사용 차례 단축» 은 data/skills.js 가
+ *    이름으로 찾아 쓰는 자리라 단계와 무관하게 늘 1턴입니다.
+ *
+ *  ■ noGacha: true — 상점 뽑기에 안 나옵니다 (사용자 지침 2026-09-17)
+ *    ★★★★ 다섯이 이렇습니다 — **E.G.O 기프트 합성으로만** 얻습니다(아래 GIFT_FUSES).
+ *    뽑기·선택권·상점의 「보유 n / m」 셈에서 빠지고(engine.js giftGachaList),
+ *    편성의 기프트 고르기에서도 가지기 전엔 안 보입니다.
+ *    우편·업적·이벤트 상점처럼 «이름으로 주는» 자리(gift: "이름")로는 그대로 줄 수 있습니다.
  * ===================================================================== */
 
 const GIFTS = [
@@ -71,24 +90,48 @@ const GIFTS = [
     star: 1, name: "L사 기본 교본",
     flavor: "모든 신규 입사자를 위한 안내서.",
     desc: "모든 인격의 공격력과 방어력 5% 강화",
+    up: [
+      { desc: "모든 인격의 공격력과 방어력 8% 강화",
+        effect: { all: { atk: 0.08, def: 0.08 } } },
+      { desc: "모든 인격의 공격력과 방어력 10% 강화",
+        effect: { all: { atk: 0.10, def: 0.10 } } }
+    ],
     effect: { all: { atk: 0.05, def: 0.05 } }
   },
   {
     star: 1, name: "L사 지급 필기구",
     flavor: "라거슈타트 로고가 박혀있다.",
     desc: "모든 인격의 공격력 8% 강화",
+    up: [
+      { desc: "모든 인격의 공격력 12% 강화",
+        effect: { all: { atk: 0.12 } } },
+      { desc: "모든 인격의 공격력 15% 강화",
+        effect: { all: { atk: 0.15 } } }
+    ],
     effect: { all: { atk: 0.08 } }
   },
   {
     star: 1, name: "철 지난 안전모",
     flavor: "위험한 필드라서 준비했다고.",
     desc: "모든 인격의 방어력 8% 강화",
+    up: [
+      { desc: "모든 인격의 방어력 12% 강화",
+        effect: { all: { def: 0.12 } } },
+      { desc: "모든 인격의 방어력 15% 강화",
+        effect: { all: { def: 0.15 } } }
+    ],
     effect: { all: { def: 0.08 } }
   },
   {
     star: 1, name: "구내식당 식권",
     flavor: "식당에서 누구도 밥 굶지 않도록.",
     desc: "모든 인격의 체력 10% 강화",
+    up: [
+      { desc: "모든 인격의 체력 15% 강화",
+        effect: { all: { hp: 0.15 } } },
+      { desc: "모든 인격의 체력 20% 강화",
+        effect: { all: { hp: 0.20 } } }
+    ],
     effect: { all: { hp: 0.10 } }
   },
   {
@@ -97,6 +140,12 @@ const GIFTS = [
     star: 1, name: "밤샘용 캔커피",
     flavor: "태성군은 몬스터를 준비해왔다.",
     desc: "전투 시작 관리력 +1, 최대 관리력 +1",
+    up: [
+      { desc: "전투 시작 관리력 +1, 최대 관리력 +2",
+        effect: { manage: 1, manageMax: 2 } },
+      { desc: "전투 시작 관리력 +2, 최대 관리력 +2",
+        effect: { manage: 2, manageMax: 2 } }
+    ],
     effect: { manage: 1, manageMax: 1 }
   },
   {
@@ -106,6 +155,12 @@ const GIFTS = [
     star: 1, name: "닳아빠진 교정펜",
     flavor: "다른 펜 없어?",
     desc: "교정으로 줄이는 피해 +5%p",
+    up: [
+      { desc: "교정으로 줄이는 피해 +8%p",
+        effect: { correct: 0.08 } },
+      { desc: "교정으로 줄이는 피해 +10%p",
+        effect: { correct: 0.10 } }
+    ],
     effect: { correct: 0.05 }
   },
   {
@@ -113,6 +168,12 @@ const GIFTS = [
     star: 1, name: "접이식 야전삽",
     flavor: "망치가 없다고 삽을 쓸 순 없는데.",
     desc: "크리티컬 확률 +3%p",
+    up: [
+      { desc: "크리티컬 확률 +5%p",
+        effect: { crit: 0.05 } },
+      { desc: "크리티컬 확률 +7%p",
+        effect: { crit: 0.07 } }
+    ],
     effect: { crit: 0.03 }
   },
 
@@ -121,12 +182,24 @@ const GIFTS = [
     star: 2, name: "N사 지질망치",
     flavor: "N사의 학과 사무실에서 빌려주는 망치.",
     desc: "N사 인격의 공격력 20% 강화",
+    up: [
+      { desc: "N사 인격의 공격력 30% 강화",
+        effect: { tag: "N사", atk: 0.30 } },
+      { desc: "N사 인격의 공격력 40% 강화",
+        effect: { tag: "N사", atk: 0.40 } }
+    ],
     effect: { tag: "N사", atk: 0.20 }
   },
   {
     star: 2, name: "북부 총기협회 제식소총",
     flavor: "없으면 훈련소 앞 마트에서 사서 와야 한다.",
     desc: "총기협회 인격의 공격력 20% 강화",
+    up: [
+      { desc: "총기협회 인격의 공격력 30% 강화",
+        effect: { tag: "총기 협회", atk: 0.30 } },
+      { desc: "총기협회 인격의 공격력 40% 강화",
+        effect: { tag: "총기 협회", atk: 0.40 } }
+    ],
     effect: { tag: "총기 협회", atk: 0.20 }
   },
   {
@@ -137,12 +210,24 @@ const GIFTS = [
     star: 2, name: "L사의 기본 지침",
     flavor: "관리자가 없을 때 어떻게 해야 하는지 적혀있다.",
     desc: "L사 인격들의 시너지 효과 200% 강화",
+    up: [
+      { desc: "L사 인격들의 시너지 효과 250% 강화",
+        effect: { synergy: "L사", mult: 3.5 } },
+      { desc: "L사 인격들의 시너지 효과 300% 강화",
+        effect: { synergy: "L사", mult: 4 } }
+    ],
     effect: { synergy: "L사", mult: 3 }
   },
   {
     star: 2, name: "탱고 양념장",
     flavor: "이형우의 비밀소스가 들어있다.",
     desc: "영덕의 요리사 시너지 50% 강화",
+    up: [
+      { desc: "영덕의 요리사 시너지 75% 강화",
+        effect: { synergy: "영덕의 요리사", mult: 1.75 } },
+      { desc: "영덕의 요리사 시너지 100% 강화",
+        effect: { synergy: "영덕의 요리사", mult: 2 } }
+    ],
     effect: { synergy: "영덕의 요리사", mult: 1.5 }
   },
   {
@@ -153,6 +238,12 @@ const GIFTS = [
     star: 2, name: "I사 특수부대 장비",
     flavor: "I사에서는 제식으로 사용 중이라고 알려져있다.",
     desc: "I사 인격의 방어력 20%, 체력 20% 강화",
+    up: [
+      { desc: "I사 인격의 방어력 30%, 체력 30% 강화",
+        effect: { tag: "I사", def: 0.30, hp: 0.30 } },
+      { desc: "I사 인격의 방어력 40%, 체력 40% 강화",
+        effect: { tag: "I사", def: 0.40, hp: 0.40 } }
+    ],
     effect: { tag: "I사", def: 0.20, hp: 0.20 }
   },
   /* ── 대가를 치르는 기프트 둘 ─────────────────────────────
@@ -163,6 +254,12 @@ const GIFTS = [
     star: 3, name: "치프버틀러의 비급서",
     flavor: "때릴 때 아프게 때릴 수 있는데, 왜인지 맞는 것도 아프다.",
     desc: "모나크 인격의 공격력 50% 강화, 방어력 10% 감소",
+    up: [
+      { desc: "모나크 인격의 공격력 65% 강화, 방어력 10% 감소",
+        effect: { tag: "모나크", atk: 0.65, def: -0.10 } },
+      { desc: "모나크 인격의 공격력 80% 강화, 방어력 10% 감소",
+        effect: { tag: "모나크", atk: 0.80, def: -0.10 } }
+    ],
     effect: { tag: "모나크", atk: 0.50, def: -0.10 }
   },
   {
@@ -174,18 +271,36 @@ const GIFTS = [
     star: 2, name: "길잃은 초상",
     flavor: "세 번 보면 죽는 그림.",
     desc: "모든 인격의 공격력 30% 강화, 체력 35% 감소",
+    up: [
+      { desc: "모든 인격의 공격력 35% 강화, 체력 35% 감소",
+        effect: { all: { atk: 0.35, hp: -0.35 } } },
+      { desc: "모든 인격의 공격력 40% 강화, 체력 35% 감소",
+        effect: { all: { atk: 0.40, hp: -0.35 } } }
+    ],
     effect: { all: { atk: 0.30, hp: -0.35 } }
   },
   {
     star: 2, name: "공룡의날 무전기",
     flavor: "공룡의 날에 사용하려고 했던 무전기.",
     desc: "공룡의 날 인격들의 공격력 10%, 방어력 10% 강화",
+    up: [
+      { desc: "공룡의 날 인격들의 공격력 15%, 방어력 15% 강화",
+        effect: { tag: "공룡의날", atk: 0.15, def: 0.15 } },
+      { desc: "공룡의 날 인격들의 공격력 20%, 방어력 20% 강화",
+        effect: { tag: "공룡의날", atk: 0.20, def: 0.20 } }
+    ],
     effect: { tag: "공룡의날", atk: 0.10, def: 0.10 }
   },
   {
     star: 2, name: "박수오의 스케이트",
     flavor: "왜인지 아픈 추억이 서려있다.",
     desc: "박수오 인격의 공격력 40% 강화",
+    up: [
+      { desc: "박수오 인격의 공격력 55% 강화",
+        effect: { who: "박수오", atk: 0.55 } },
+      { desc: "박수오 인격의 공격력 70% 강화",
+        effect: { who: "박수오", atk: 0.70 } }
+    ],
     effect: { who: "박수오", atk: 0.40 }
   },
   {
@@ -198,12 +313,24 @@ const GIFTS = [
     star: 2, name: "모사사우루스의 이빨",
     flavor: "톱날처럼 날카롭다.",
     desc: "지원 작성위원 윤희준의 공격력 50% 강화",
+    up: [
+      { desc: "지원 작성위원 윤희준의 공격력 70% 강화",
+        effect: { who: "윤희준", atk: 0.70 } },
+      { desc: "지원 작성위원 윤희준의 공격력 90% 강화",
+        effect: { who: "윤희준", atk: 0.90 } }
+    ],
     effect: { who: "윤희준", atk: 0.50 }
   },
   {
     star: 2, name: "로포의 입간판",
     flavor: "설익은 로포가 간직하던 물건.",
     desc: "공룡의날 인격들의 방어력 +20%",
+    up: [
+      { desc: "공룡의날 인격들의 방어력 +30%",
+        effect: { tag: "공룡의날", def: 0.30 } },
+      { desc: "공룡의날 인격들의 방어력 +40%",
+        effect: { tag: "공룡의날", def: 0.40 } }
+    ],
     effect: { tag: "공룡의날", def: 0.20 }
   },
   {
@@ -216,6 +343,12 @@ const GIFTS = [
      * 가장 큰 시너지라, ×1.5 면 둘만 세워도 전원 방 45%·체 45% 에 공격
      * 20% 까지 얹혀 ★★ 로는 과했습니다. ×1.25 면 방 37.5%·체 37.5%. */
     desc: "신해수랜드 인격의 공격력 20%, 시너지 효과 25% 강화",
+    up: [
+      { desc: "신해수랜드 인격의 공격력 25%, 시너지 효과 30% 강화",
+        effect: { tag: "신해수랜드", atk: 0.25, synergy: "신해수랜드", mult: 1.30 } },
+      { desc: "신해수랜드 인격의 공격력 30%, 시너지 효과 35% 강화",
+        effect: { tag: "신해수랜드", atk: 0.30, synergy: "신해수랜드", mult: 1.35 } }
+    ],
     effect: { tag: "신해수랜드", atk: 0.20, synergy: "신해수랜드", mult: 1.25 }
   },
   {
@@ -225,36 +358,72 @@ const GIFTS = [
     star: 2, name: "제3발톱 의리사슬",
     flavor: "카르텔의 모두는 서로 연결되어 있다.",
     desc: "제3발톱 인격이 방어력 절반만큼 공격력 강화. 지난 차례에 방어했다면 방어력만큼.",
+    up: [
+      { desc: "제3발톱 인격이 방어력의 60%만큼 공격력 강화. 지난 차례에 방어했다면 120%만큼.",
+        effect: { tag: "제3발톱", defToAtk: 0.6, defToAtkGuardMult: 2 } },
+      { desc: "제3발톱 인격이 방어력의 75%만큼 공격력 강화. 지난 차례에 방어했다면 150%만큼.",
+        effect: { tag: "제3발톱", defToAtk: 0.75, defToAtkGuardMult: 2 } }
+    ],
     effect: { tag: "제3발톱", defToAtk: 0.5, defToAtkGuardMult: 2 }
   },
   {
     star: 2, name: "이한범의 지질망치",
     flavor: "이한범이 특별히 구매한 지질망치.",
     desc: "이한범 인격의 공격력 40% 강화",
+    up: [
+      { desc: "이한범 인격의 공격력 55% 강화",
+        effect: { who: "이한범", atk: 0.55 } },
+      { desc: "이한범 인격의 공격력 70% 강화",
+        effect: { who: "이한범", atk: 0.70 } }
+    ],
     effect: { who: "이한범", atk: 0.40 }
   },
   {
     star: 2, name: "이소정의 아이패드",
     flavor: "이소정이 특별히 구매한 아이패드.",
     desc: "이소정 인격의 공격력 20%, 방어력 20% 강화",
+    up: [
+      { desc: "이소정 인격의 공격력 30%, 방어력 30% 강화",
+        effect: { who: "이소정", atk: 0.30, def: 0.30 } },
+      { desc: "이소정 인격의 공격력 40%, 방어력 40% 강화",
+        effect: { who: "이소정", atk: 0.40, def: 0.40 } }
+    ],
     effect: { who: "이소정", atk: 0.20, def: 0.20 }
   },
   {
     star: 2, name: "김준성이 쥐어준 벌레",
     flavor: "태성군이 갖고 싶었던 벌레다.",
     desc: "김태성 인격의 공격력 30% 강화",
+    up: [
+      { desc: "김태성 인격의 공격력 45% 강화",
+        effect: { who: "김태성", atk: 0.45 } },
+      { desc: "김태성 인격의 공격력 60% 강화",
+        effect: { who: "김태성", atk: 0.60 } }
+    ],
     effect: { who: "김태성", atk: 0.30 }
   },
   {
     star: 2, name: "남부협회 족보",
     flavor: "이 족보만 있다면 시험을 잘 볼 수 있을 것.",
     desc: "남부협회 인격들의 공격력 +20%",
+    up: [
+      { desc: "남부협회 인격들의 공격력 +30%",
+        effect: { tag: "남부협회", atk: 0.30 } },
+      { desc: "남부협회 인격들의 공격력 +40%",
+        effect: { tag: "남부협회", atk: 0.40 } }
+    ],
     effect: { tag: "남부협회", atk: 0.20 }
   },
   {
     star: 2, name: "가면라이더의 품격",
     flavor: "가면라이더의 포즈에 대한 철학이 담겨있다.",
     desc: "가면라이더 인격의 방어력 20% 강화",
+    up: [
+      { desc: "가면라이더 인격의 방어력 30% 강화",
+        effect: { tag: "가면라이더", def: 0.30 } },
+      { desc: "가면라이더 인격의 방어력 40% 강화",
+        effect: { tag: "가면라이더", def: 0.40 } }
+    ],
     effect: { tag: "가면라이더", def: 0.20 }
   },
 
@@ -263,18 +432,36 @@ const GIFTS = [
     star: 3, name: "L사 교육위원회 지짐",
     flavor: "교육위원들이 꼭 숙지해야 되는 내용.",
     desc: "전투 시작 관리력 +2, 최대 관리력 +2",
+    up: [
+      { desc: "전투 시작 관리력 +2, 최대 관리력 +3",
+        effect: { manage: 2, manageMax: 3 } },
+      { desc: "전투 시작 관리력 +3, 최대 관리력 +3",
+        effect: { manage: 3, manageMax: 3 } }
+    ],
     effect: { manage: 2, manageMax: 2 }
   },
   {
     star: 3, name: "달의 기억",
     flavor: "15층까지 가려면 필수라고 적혀있다.",
     desc: "모든 인격 공격력 +20% 강화",
+    up: [
+      { desc: "모든 인격 공격력 +25% 강화",
+        effect: { all: { atk: 0.25 } } },
+      { desc: "모든 인격 공격력 +30% 강화",
+        effect: { all: { atk: 0.30 } } }
+    ],
     effect: { all: { atk: 0.20 } }
   },
   {
     star: 3, name: "이형우의 오이샌드위치",
     flavor: "이형우에게는 가까이하지 말 것.",
     desc: "이형우 보조 교육위원의 효과 +100%",
+    up: [
+      { desc: "이형우 보조 교육위원의 효과 +150%",
+        effect: { advisorName: "이형우", mult: 2.5 } },
+      { desc: "이형우 보조 교육위원의 효과 +200%",
+        effect: { advisorName: "이형우", mult: 3 } }
+    ],
     effect: { advisorName: "이형우", mult: 2 }
   },
   {
@@ -284,12 +471,24 @@ const GIFTS = [
     star: 3, name: "대륵도의 바다",
     flavor: "이제는 바다가 아니라 땅이다.",
     desc: "대륵도 교육위원이 편성되어 있을 경우 공격력 +30%",
+    up: [
+      { desc: "대륵도 교육위원이 편성되어 있을 경우 공격력 +40%",
+        effect: { advisorTag: "대륵도", atk: 0.40 } },
+      { desc: "대륵도 교육위원이 편성되어 있을 경우 공격력 +50%",
+        effect: { advisorTag: "대륵도", atk: 0.50 } }
+    ],
     effect: { advisorTag: "대륵도", atk: 0.30 }
   },
   {
     star: 3, name: "빛새우의 껍질",
     flavor: "빛새우의 허물, 기분 나쁜 냄새가 난다.",
     desc: "모든 인격들의 방어력 +20% 강화",
+    up: [
+      { desc: "모든 인격들의 방어력 +25% 강화",
+        effect: { all: { def: 0.25 } } },
+      { desc: "모든 인격들의 방어력 +30% 강화",
+        effect: { all: { def: 0.30 } } }
+    ],
     effect: { all: { def: 0.20 } }
   },
   {
@@ -301,6 +500,12 @@ const GIFTS = [
     star: 3, name: "명경지수",
     flavor: "노란테, 당신도 명경지수를 쓰네?",
     desc: "크리티컬 확률 +10%p, 크리티컬 배율 +0.5",
+    up: [
+      { desc: "크리티컬 확률 +12%p, 크리티컬 배율 +0.65",
+        effect: { crit: 0.12, critMult: 0.65 } },
+      { desc: "크리티컬 확률 +15%p, 크리티컬 배율 +0.8",
+        effect: { crit: 0.15, critMult: 0.8 } }
+    ],
     effect: { crit: 0.10, critMult: 0.5 }
   },
   {
@@ -312,6 +517,12 @@ const GIFTS = [
     star: 3, name: "길잃은 나침반",
     flavor: "어디로 가야할지 모를 때.",
     desc: "아라온호 연계 효과의 재사용 차례를 1턴 줄인다 · 치명타로 주는 피해 20% 증가",
+    up: [
+      { desc: "아라온호 연계 효과의 재사용 차례를 1턴 줄인다 · 치명타로 주는 피해 30% 증가",
+        effect: { critDmg: 0.30 } },
+      { desc: "아라온호 연계 효과의 재사용 차례를 1턴 줄인다 · 치명타로 주는 피해 40% 증가",
+        effect: { critDmg: 0.40 } }
+    ],
     effect: { critDmg: 0.20 }
   },
   {
@@ -322,15 +533,33 @@ const GIFTS = [
     star: 2, name: "G사의 초대형 소품",
     flavor: "이 커다란 것을 어디에 쓰겠다는 걸까?",
     desc: "G사 인격의 체력 35% 강화",
+    up: [
+      { desc: "G사 인격의 체력 50% 강화",
+        effect: { tag: "G사", hp: 0.50 } },
+      { desc: "G사 인격의 체력 65% 강화",
+        effect: { tag: "G사", hp: 0.65 } }
+    ],
     effect: { tag: "G사", hp: 0.35 }
   },
   { star: 3, name: "남부협회의 비밀 하드디스크",
     flavor: "남부협회의 모든 족보가 들어있다고 한다.",
     desc: "남부협회 인격의 공격력 30%, 방어력 15% 강화",
+    up: [
+      { desc: "남부협회 인격의 공격력 40%, 방어력 20% 강화",
+        effect: { tag: "남부협회", atk: 0.40, def: 0.20 } },
+      { desc: "남부협회 인격의 공격력 50%, 방어력 25% 강화",
+        effect: { tag: "남부협회", atk: 0.50, def: 0.25 } }
+    ],
     effect: { tag: "남부협회", atk: 0.30, def: 0.15 } },
   { star: 2, name: "남부협회 수산시장 광어",
     flavor: "이형우가 피를 빼고 보관해달라고 요청했다.",
     desc: "남부협회 시너지 효과 50% 강화",
+    up: [
+      { desc: "남부협회 시너지 효과 75% 강화",
+        effect: { synergy: "남부협회", mult: 1.75 } },
+      { desc: "남부협회 시너지 효과 100% 강화",
+        effect: { synergy: "남부협회", mult: 2 } }
+    ],
     effect: { synergy: "남부협회", mult: 1.5 } },
   {
     star: 3, name: "탐하는 가시",
@@ -342,6 +571,12 @@ const GIFTS = [
     desc: "신해수랜드 연계 효과의 재사용 차례를 1턴 줄인다.",
     /* data/skills.js LINK_SKILLS 「shinhaesuland_cha_minjun」이 이름으로
      * 찾아 쓰므로, 여기 effect 는 비워 둬도(=따로 손대지 않아도) 됩니다. */
+    up: [
+      { desc: "신해수랜드 연계 효과의 재사용 차례를 1턴 줄인다 · 신해수랜드 인격의 공격력 10% 강화",
+        effect: { tag: "신해수랜드", atk: 0.10 } },
+      { desc: "신해수랜드 연계 효과의 재사용 차례를 1턴 줄인다 · 신해수랜드 인격의 공격력 20% 강화",
+        effect: { tag: "신해수랜드", atk: 0.20 } }
+    ],
     effect: {}
   },
   {
@@ -358,6 +593,12 @@ const GIFTS = [
      * 태블릿이 둘이라, 한쪽이 다른 쪽을 곁눈질하게 두었습니다. */
     flavor: "P사는 아이패드를 안 쓴다고 한다.",
     desc: "P사 인격의 방어력 15%, 체력 35% 강화",
+    up: [
+      { desc: "P사 인격의 방어력 20%, 체력 50% 강화",
+        effect: { tag: "P사", def: 0.20, hp: 0.50 } },
+      { desc: "P사 인격의 방어력 30%, 체력 65% 강화",
+        effect: { tag: "P사", def: 0.30, hp: 0.65 } }
+    ],
     effect: { tag: "P사", def: 0.15, hp: 0.35 }
   },
   {
@@ -369,7 +610,87 @@ const GIFTS = [
     star: 3, name: "돔배기 케이크",
     flavor: "생일 축하해요, 라거슈타트의 작은 형님.",
     desc: "이서진 교육위원이 편성되어 있을 경우 모든 인격의 방어력 +50%",
+    up: [
+      { desc: "이서진 교육위원이 편성되어 있을 경우 모든 인격의 방어력 +60%",
+        effect: { advisorWho: "이서진", def: 0.60 } },
+      { desc: "이서진 교육위원이 편성되어 있을 경우 모든 인격의 방어력 +75%",
+        effect: { advisorWho: "이서진", def: 0.75 } }
+    ],
     effect: { advisorWho: "이서진", def: 0.50 }
+  },
+
+  /* ── 4성 ──────────────────────────────────────────────────────
+   *  ★★★ 최고급(「달의 기억」 전원 공 20%)을 또렷이 넘되, 하나만 지니는 구조라
+   *  «이걸 끼면 끝» 이 되지 않게 다섯이 서로 다른 축을 맡습니다(2026-09-17) —
+   *  만능 · 관리자 · 전원 시너지 · 고유 능력 · 치명타.
+   *  전부 noGacha — 상점 뽑기에 안 나옵니다. 얻는 길은 따로 정합니다. */
+  {
+    star: 4, noGacha: true, name: "황금교본 원본",
+    flavor: "흩어진 것들이 아니라, 처음 그 한 권.",
+    desc: "모든 인격의 공격력·방어력·체력 15% 강화",
+    up: [
+      { desc: "모든 인격의 공격력·방어력·체력 20% 강화",
+        effect: { all: { atk: 0.20, def: 0.20, hp: 0.20 } } },
+      { desc: "모든 인격의 공격력·방어력·체력 25% 강화",
+        effect: { all: { atk: 0.25, def: 0.25, hp: 0.25 } } }
+    ],
+    effect: { all: { atk: 0.15, def: 0.15, hp: 0.15 } }
+  },
+  {
+    /* ★★★ 「L사 교육위원회 지짐」(+2/+2)·★ 「닳아빠진 교정펜」(+5%p)의 윗급.
+     * ++ 의 교정 +15%p 는 교정 피해 25% → 10% (engine.js RULE.correctCut, 바닥 5%). */
+    star: 4, noGacha: true, name: "노란테의 결재 도장",
+    flavor: "관리자 권한. 찍히면 돌이킬 수 없다.",
+    desc: "전투 시작 관리력 +3, 최대 관리력 +3 · 교정으로 줄이는 피해 +10%p",
+    up: [
+      { desc: "전투 시작 관리력 +3, 최대 관리력 +4 · 교정으로 줄이는 피해 +12%p",
+        effect: { manage: 3, manageMax: 4, correct: 0.12 } },
+      { desc: "전투 시작 관리력 +4, 최대 관리력 +4 · 교정으로 줄이는 피해 +15%p",
+        effect: { manage: 4, manageMax: 4, correct: 0.15 } }
+    ],
+    effect: { manage: 3, manageMax: 3, correct: 0.10 }
+  },
+  {
+    /* 「작성위원회」는 유일한 need 3 시너지(전원 체 15%·방 10%)라 어떤 편성이든
+     * 작성위원 셋이면 걸립니다 — 그래서 «우리 팀» 기프트가 됩니다. */
+    star: 4, noGacha: true, name: "작성위원회 명부",
+    flavor: "열두 명의 이름이 전부 적혀 있다.",
+    desc: "작성위원회 시너지 효과 100% 강화 · 모든 인격의 체력 10% 강화",
+    up: [
+      { desc: "작성위원회 시너지 효과 150% 강화 · 모든 인격의 체력 15% 강화",
+        effect: { synergy: "작성위원회", mult: 2.5, all: { hp: 0.15 } } },
+      { desc: "작성위원회 시너지 효과 200% 강화 · 모든 인격의 체력 20% 강화",
+        effect: { synergy: "작성위원회", mult: 3, all: { hp: 0.20 } } }
+    ],
+    effect: { synergy: "작성위원회", mult: 2, all: { hp: 0.10 } }
+  },
+  {
+    /* skillUses·skillStackMult 를 처음 쓰는 기프트입니다(engine.js uniqueSkillBoostFor).
+     * 고유 능력은 동기화 1단계에서 열리므로, 동기화를 올린 사람일수록 값이 붙습니다. */
+    star: 4, noGacha: true, name: "동기화 모듈 원형",
+    flavor: "양산품이 아니라 시제품. 출력이 다르다.",
+    desc: "모든 작성위원의 고유 능력 — 액티브는 같은 적에게 쓰는 횟수 +1, 패시브는 스택 하나당 몫 +50%",
+    up: [
+      { desc: "모든 작성위원의 고유 능력 — 액티브는 같은 적에게 쓰는 횟수 +1, 패시브는 스택 하나당 몫 +75%",
+        effect: { all: { skillUses: 1, skillStackMult: 0.75 } } },
+      { desc: "모든 작성위원의 고유 능력 — 액티브는 같은 적에게 쓰는 횟수 +2, 패시브는 스택 하나당 몫 +100%",
+        effect: { all: { skillUses: 2, skillStackMult: 1.0 } } }
+    ],
+    effect: { all: { skillUses: 1, skillStackMult: 0.5 } }
+  },
+  {
+    /* 「명경지수」(확률·배율)와 「길잃은 나침반」(critDmg)을 한 장으로 — 치명타 한 축.
+     * 기본 배율 1.3 → 1.8, 거기에 치명타 피해 ×1.3. */
+    star: 4, noGacha: true, name: "거울굴절철도 정기권",
+    flavor: "몇 번을 왕복해도 삯을 더 받지 않는다.",
+    desc: "크리티컬 확률 +15%p, 크리티컬 배율 +0.5 · 치명타로 주는 피해 30% 증가",
+    up: [
+      { desc: "크리티컬 확률 +18%p, 크리티컬 배율 +0.6 · 치명타로 주는 피해 40% 증가",
+        effect: { crit: 0.18, critMult: 0.6, critDmg: 0.40 } },
+      { desc: "크리티컬 확률 +20%p, 크리티컬 배율 +0.75 · 치명타로 주는 피해 50% 증가",
+        effect: { crit: 0.20, critMult: 0.75, critDmg: 0.50 } }
+    ],
+    effect: { crit: 0.15, critMult: 0.5, critDmg: 0.30 }
   }
 ];
 
@@ -381,6 +702,46 @@ const GIFT_RULE = {
   rate3: 0.20
   /* 중복 환급은 engine.js 의 RULE.dupRefund 표(성급별)를 씁니다 */
 };
+
+/* 기프트 강화 — 여기만 고치면 됩니다.
+ *  cost[성급] = [ + 에 드는 황금교본, ++ 에 드는 황금교본 ]
+ *  tiers 는 SLOT_RULE·SYNC_RULE 과 같은 모양 — 그 장을 마치면 그 단계까지 열립니다.
+ *  (사용자 지침 2026-09-17: 5장을 마치면 +, 7장을 마치면 ++) */
+const GIFT_UP_RULE = {
+  cost: { 1: [3, 6], 2: [6, 12], 3: [9, 18], 4: [12, 24] },
+  tiers: [
+    { lv: 1, needCleared: "ch5" },
+    { lv: 2, needCleared: "ch7" }
+  ]
+};
+
+/* ── E.G.O 기프트 합성 (사용자 지침 2026-09-17) ─────────────────
+ *  유리창 [강화] → [E.G.O 기프트 합성]. ★★★★ 는 여기서만 나옵니다.
+ *
+ *    result      만들어지는 기프트 이름 (GIFTS 에 있어야 합니다)
+ *    parts       재료 기프트 이름들 — 전부 지니고 있어야 하고, **합성하면 사라집니다**
+ *                (강화해 둔 단계도 함께. 되돌릴 수 없습니다 — 상점에서 다시 뽑는 수밖에)
+ *    codex       함께 드는 황금교본
+ *    syncModule  함께 드는 동기화 모듈 개수 (안 적으면 0)
+ *
+ *  합성 자체는 GIFT_FUSE_RULE.needCleared 의 장을 마쳐야 열립니다(7장 — 사용자 지침).
+ *
+ *  재료는 «그 ★★★★ 가 한 장으로 합치는 것들» 로 골랐습니다 — 만능 = 공·방·체 셋,
+ *  관리자 = 관리력·교정, 전원 시너지 = 시너지 배수 셋, 고유 능력 = 개인 물건 셋 +
+ *  동기화 모듈, 치명타 = 명경지수·나침반·야전삽. */
+const GIFT_FUSE_RULE = { needCleared: "ch7" };
+const GIFT_FUSES = [
+  { result: "황금교본 원본",
+    parts: ["달의 기억", "빛새우의 껍질", "구내식당 식권", "L사 기본 교본"], codex: 15 },
+  { result: "노란테의 결재 도장",
+    parts: ["L사 교육위원회 지짐", "닳아빠진 교정펜", "밤샘용 캔커피"], codex: 15 },
+  { result: "작성위원회 명부",
+    parts: ["L사의 기본 지침", "탱고 양념장", "남부협회 수산시장 광어"], codex: 15 },
+  { result: "동기화 모듈 원형",
+    parts: ["이소정의 아이패드", "이한범의 지질망치", "김준성이 쥐어준 벌레"], codex: 15, syncModule: 1 },
+  { result: "거울굴절철도 정기권",
+    parts: ["명경지수", "길잃은 나침반", "접이식 야전삽"], codex: 15 }
+];
 
 /* 보조 교육위원도 황금교본으로 뽑습니다. 1성은 없습니다. */
 const ADVISOR_RULE = {

@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.5.3";
+const VERSION = "2.6.0";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -28,7 +28,7 @@ const RULE = {
    * 여기 적은 값이 그대로 나갑니다 (아래 moneyGain 을 타지 않습니다).
    * 교육위원·E.G.O 기프트는 원고료로, 인격은 그 인격의 주인(작성위원) 파편으로
    * 이 표를 그대로 씁니다 — dupRefund() · addFrag() 참고. */
-  dupRefund:   { 1: 3, 2: 15, 3: 50 },
+  dupRefund:   { 1: 3, 2: 15, 3: 50, 4: 150 },   // 4성은 뽑기엔 없고, 우편 등으로 또 받았을 때만
   /* 원고료로 들어오는 수입에 곱하는 값.
    * 타지 않는 것 셋 — 황금교본 교환, 위 dupRefund, 거울 던전 완주 보상(고정값). */
   moneyGain:   0.35,
@@ -264,6 +264,8 @@ function vaultBody() {
     gifts:    Object.keys(S.giftsOwned || {}),
     gift:     giftOnList()[0] || null,
     giftOn:   (S.giftOn || []).filter(Boolean),
+    /* 기프트 강화 단계 — { 이름: 1|2 }. 0단계(안 적힘)는 담지 않습니다(sync 와 같은 결). */
+    giftLv:   S.giftLv || {},
     /* 저장해 둔 편성 3칸 */
     presets:  S.presets || null,
     supports: Object.keys(S.supportsOwned || {}),
@@ -343,6 +345,7 @@ function loadVault() {
     gifts:    toMap(v.gifts),
     gift:     v.gift || null,
     giftOn:   v.giftOn || (v.gift ? [v.gift] : []),
+    giftLv:   v.giftLv || {},       // 기프트 강화 단계 — 옛 보관함엔 없으니 빈 표
     presets:  v.presets || null,
     supports: toMap(v.supports),
     achieved: toMap(v.achieved),
@@ -959,6 +962,14 @@ function newState() {
   const giftsOwned = {};
   if (v && v.gifts) for (const k in v.gifts) if (giftById(k)) giftsOwned[k] = true;
   const gift = (v && v.gift && giftsOwned[v.gift]) ? v.gift : null;
+  /* 강화 단계 — 가진 기프트만, up 이 있는 만큼만 남깁니다. 옛 보관함엔 이 칸이
+   * 없으니 전부 0단계입니다. */
+  const giftLv = {};
+  if (v && v.giftLv) for (const k in v.giftLv) {
+    const g = giftById(k);
+    const n = Math.floor(+v.giftLv[k]) || 0;
+    if (g && giftsOwned[giftId(g)] && n > 0) giftLv[giftId(g)] = Math.min(n, (g.up || []).length);
+  }
 
   /* 세워 둔 것들 — 가진 것만 남기고, 같은 것이 두 번 들어가지 않게 걸러 냅니다.
    * 개명 대비로 advisorById 를 거쳐 지금 이름으로 옮겨 담습니다. */
@@ -1025,7 +1036,7 @@ function newState() {
     party,
     equip, owned,
     advisorsOwned, advisor, advisorOn,
-    giftsOwned, gift, giftOn,
+    giftsOwned, gift, giftOn, giftLv,
     presets: (v && v.presets) || [null, null, null],
     supportsOwned,
     achieved: achievedMap,
@@ -1404,13 +1415,68 @@ function giftById(id) {
   return GIFTS.find(g => g.name === id) || GIFTS.find(g => g.id === id) || null;
 }
 function giftId(g) { return g ? g.name : null; }
+/* 상점 뽑기·선택권·「보유 n / m」 셈이 보는 목록 — noGacha 가 붙은 것(★★★★)은 뺍니다.
+ * 그것들은 «이름으로 주는» 자리(우편·업적·이벤트 상점)로만 옵니다. */
+function giftGachaList() { return (typeof GIFTS !== "undefined" ? GIFTS : []).filter(g => !g.noGacha); }
 
 /* 지금 지니고 있는 기프트들. 칸이 줄어들면 뒤엣것부터 떨어져 나갑니다. */
 function giftOnList() {
   if (!S) return [];
   return (S.giftOn || []).filter(Boolean).slice(0, giftSlots());
 }
-function equippedGifts() { return giftOnList().map(giftById).filter(Boolean); }
+/* 지닌 기프트들 — 강화 단계가 반영된 사본(giftView)으로 돌려줍니다.
+ * 효과를 읽는 자리(giftBonusFor·activeSynergies·advisorEffect…)는 전부 이 문을
+ * 지나므로, 강화는 여기 한 곳에서만 갈아 끼웁니다. */
+function equippedGifts() { return giftOnList().map(giftById).filter(Boolean).map(giftView); }
+
+/* ── 기프트 강화 (data/gifts.js GIFT_UP_RULE · up) ──────────────────
+ *  S.giftLv = { 이름: 0|1|2 }. giftView(g) 가 그 단계의 desc·effect 를 얹은
+ *  사본을 돌려주고, 이름은 giftLabel() 로 「이름 +」·「이름 ++」 가 됩니다. */
+function giftLv(id) { return (S && S.giftLv && S.giftLv[id]) || 0; }
+function giftUpMax() {
+  let n = 0;
+  ((typeof GIFT_UP_RULE !== "undefined" && GIFT_UP_RULE.tiers) || []).forEach(r => {
+    if (!r.needCleared || (S && S.cleared && S.cleared[r.needCleared])) n = Math.max(n, r.lv);
+  });
+  return n;
+}
+function giftUpUnlocked() { return giftUpMax() > 0; }
+/* 합성이 열리는 장 — data/gifts.js GIFT_FUSE_RULE.needCleared */
+function giftFuseUnlocked() {
+  const r = (typeof GIFT_FUSE_RULE !== "undefined") ? GIFT_FUSE_RULE : {};
+  return !r.needCleared || !!(S && S.cleared && S.cleared[r.needCleared]);
+}
+function giftFuseChapter() {
+  const r = (typeof GIFT_FUSE_RULE !== "undefined") ? GIFT_FUSE_RULE : {};
+  if (!r.needCleared) return null;
+  const c = CHAPTERS.find(x => x.id === r.needCleared);
+  if (c) return c.no;
+  const m = String(r.needCleared).match(/^ch(\d+)(?:_(\d+))?$/);
+  return m ? (m[1] + (m[2] ? "." + m[2] : "") + "장") : r.needCleared;
+}
+/* 다음 단계가 몇 장을 마치면 열리는가 — nextSyncChapter() 와 같은 모양. 다 열렸으면 null. */
+function nextGiftUpChapter() {
+  const now = giftUpMax();
+  const r = (GIFT_UP_RULE.tiers || []).filter(x => x.lv > now).sort((a, b) => a.lv - b.lv)[0];
+  if (!r || !r.needCleared) return null;
+  const c = CHAPTERS.find(x => x.id === r.needCleared);
+  if (c) return c.no;
+  const m = String(r.needCleared).match(/^ch(\d+)(?:_(\d+))?$/);
+  return m ? (m[1] + (m[2] ? "." + m[2] : "") + "장") : r.needCleared;
+}
+/* 이 기프트를 lv 단계로 올리는 데 드는 황금교본 */
+function giftUpCost(g, lv) {
+  const row = GIFT_UP_RULE.cost[g.star] || [];
+  return row[lv - 1] || 0;
+}
+function giftLabel(g) { const n = giftLv(giftId(g)); return g.name + (n ? " " + "+".repeat(n) : ""); }
+function giftView(g) {
+  if (!g) return g;
+  const n = Math.min(giftLv(giftId(g)), (g.up || []).length);
+  if (!n) return g;
+  const u = g.up[n - 1];
+  return Object.assign({}, g, { effect: u.effect, desc: u.desc || g.desc, lv: n });
+}
 /* 하나만 필요한 자리에서 씁니다 — 첫째 칸입니다 */
 function equippedGift() { return equippedGifts()[0] || null; }
 function giftIsOn(id)   { return giftOnList().indexOf(id) >= 0; }
@@ -1770,8 +1836,7 @@ function pickTicketCands(kind) {
   if (kind === "advisor")
     return advisorOpenList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]) &&
                                      !pickupOnTitle(a.title));
-  return (typeof GIFTS !== "undefined" ? GIFTS : [])
-           .filter(g => !(S.giftsOwned && S.giftsOwned[giftId(g)]));
+  return giftGachaList().filter(g => !(S.giftsOwned && S.giftsOwned[giftId(g)]));
 }
 function pickTicketUsable(kind) {
   return pickTicketCount(kind) > 0 && pickTicketCands(kind).length > 0;
@@ -2060,7 +2125,7 @@ function eventGiveApply(g) {
   return got.join("　·　");
 }
 
-/* 동기화가 열리는 장 — 유리창의 [동기화] 손잡이와 장 종료 알림이 이것을 함께 봅니다.
+/* 동기화가 열리는 장 — 유리창의 [강화] 손잡이(openUpgrade)와 장 종료 알림이 이것을 함께 봅니다.
  * 이 장을 마치기 전에는 손잡이 자체가 유리창에 나오지 않습니다. */
 const SYNC_UNLOCK_CH = "ch3";
 function syncUnlocked() { return !!(S && S.cleared && S.cleared[SYNC_UNLOCK_CH]); }
@@ -3388,7 +3453,7 @@ function renderSynergy() {
   });
   equippedGifts().forEach(gf => {
     head += '<span class="gift"><span class="star">' + stars(gf.star) + '</span> ' +
-            gf.name + '</span>';
+            giftLabel(gf) + '</span>';
   });
 
   const list = activeSynergies();
@@ -5951,7 +6016,27 @@ function chapterEnd() {
   if (first && c.id === SYNC_UNLOCK_CH) {
     divider();
     sayBold("'동기화' 기능이 해금되었습니다!", "good");
-    say("유리창의 [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
+    say("유리창의 [강화] → [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
+  }
+  /* 기프트 강화 단계가 열리는 장(GIFT_UP_RULE.tiers)을 처음 마쳤을 때 — 같은 모양으로. */
+  if (first && typeof GIFT_UP_RULE !== "undefined") {
+    const r = (GIFT_UP_RULE.tiers || []).find(x => x.needCleared === c.id);
+    if (r) {
+      divider();
+      sayBold("'E.G.O 기프트 강화' " + (r.lv === 1 ? "기능이 해금되었습니다!" : "— " + "+".repeat(r.lv) + " 단계가 열렸습니다!"), "good");
+      say(r.lv === 1
+            ? "유리창의 [강화] → [E.G.O 기프트 강화] 에서 황금교본으로 지닌 기프트를 + 로 올릴 수 있습니다. 올려도 발동 조건은 그대로입니다."
+            : "이제 [강화] → [E.G.O 기프트 강화] 에서 기프트를 " + "+".repeat(r.lv) + " 까지 올릴 수 있습니다. 드는 황금교본은 성급이 높을수록, 단계가 오를수록 많습니다.",
+          "sys");
+    }
+  }
+  /* 기프트 합성이 열리는 장(GIFT_FUSE_RULE.needCleared)을 처음 마쳤을 때 — 같은 모양으로.
+   * 7장은 ++ 와 합성이 함께 열리므로, 강화 다음에 합성 순으로 섭니다. */
+  if (first && typeof GIFT_FUSE_RULE !== "undefined" && GIFT_FUSE_RULE.needCleared === c.id) {
+    divider();
+    sayBold("'E.G.O 기프트 합성' 기능이 해금되었습니다!", "good");
+    say("유리창의 [강화] → [E.G.O 기프트 합성] 에서 지닌 기프트 여럿과 황금교본을 들여 하나로 합치면 ★★★★ 기프트가 됩니다. " +
+        "★★★★ 는 상점 뽑기에는 나오지 않습니다 — 무엇이 무엇으로 되는지는 그 화면에 적혀 있습니다. 재료로 든 기프트는 사라지니 합성 전에 한 번 묻습니다.", "sys");
   }
 
   /* ── 장착 칸이 늘어나는 장을 마쳤을 때 ─────────────────────────────
@@ -6061,7 +6146,7 @@ function openParty(done) {
     for (let i = 0; i < gfCap; i++) {
       const gf = gfs[i];
       h += '<div class="slot' + (gf ? ' sel' : '') + '" data-gift="' + i + '">' +
-             (gf ? '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + gf.name +
+             (gf ? '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + giftLabel(gf) +
                      '</div>' + flavorHTML(gf) + '<div class="sub">' + gf.desc + '</div>'
                  : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
                      (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
@@ -7103,8 +7188,8 @@ function openShop(back) {
     });
     h += '</div>';
 
-    const gTotal = (typeof GIFTS !== "undefined") ? GIFTS.length : 0;
-    const gMine  = Object.keys(S.giftsOwned || {}).length;
+    const gTotal = giftGachaList().length;
+    const gMine  = giftGachaList().filter(g => S.giftsOwned && S.giftsOwned[giftId(g)]).length;
     /* 파편이 그 사람 몫으로 RULE.fragExchange 개를 넘고, 아직 못 가진(그리고 지금
      * 특정 배정 중이 아닌) 인격이 있는 사람이 하나라도 있으면 눌러 볼 수 있습니다 —
      * 구체적인 대상 고르기는 openExchange() 안에서. */
@@ -7556,9 +7641,10 @@ function pullGiftOnce() {
   const r = Math.random();
   const star = r < GIFT_RULE.rate3 ? 3
              : r < GIFT_RULE.rate3 + GIFT_RULE.rate2 ? 2 : 1;
-  let cand = GIFTS.filter(x => x.star === star && !(S.giftsOwned && S.giftsOwned[giftId(x)]));
-  if (!cand.length) cand = GIFTS.filter(x => x.star === star);
-  if (!cand.length) cand = GIFTS;
+  const pool = giftGachaList();
+  let cand = pool.filter(x => x.star === star && !(S.giftsOwned && S.giftsOwned[giftId(x)]));
+  if (!cand.length) cand = pool.filter(x => x.star === star);
+  if (!cand.length) cand = pool;
   const pick = cand[rnd(cand.length)];
   const isNew = !(S.giftsOwned && S.giftsOwned[giftId(pick)]);
   if (isNew) {
@@ -7596,8 +7682,9 @@ function openStockGacha(kind, done) {
   const pct    = x => (x * 100).toFixed(x * 100 % 1 ? 1 : 0) + "%";
 
   const draw = (result) => {
-    const total = isGift ? GIFTS.length : advisorOpenList().length;
-    const mine  = Object.keys((isGift ? S.giftsOwned : S.advisorsOwned) || {}).length;
+    const total = isGift ? giftGachaList().length : advisorOpenList().length;
+    const mine  = isGift ? giftGachaList().filter(g => S.giftsOwned && S.giftsOwned[giftId(g)]).length
+                         : Object.keys(S.advisorsOwned || {}).length;
 
     let h = '<h2>' + (isGift ? '기 프 트 배 정' : '교 육 위 원 파 견') + '</h2>' +
             '<div class="hint">1회 황금교본 ' + cost + '　·　보유 황금교본 ' + S.codex +
@@ -10988,19 +11075,22 @@ function openGiftPick(back) {
   let h = '<h2>E . G . O   기 프 트</h2>' +
           '<div class="hint"><b>' + cap + '개</b>까지 지닐 수 있습니다. 편성된 작성위원 전원에게 걸립니다.　' +
           '지닌 ' + nowOn.length + ' / ' + cap +
-          '　·　보유 ' + mine.length + ' / ' + (typeof GIFTS !== "undefined" ? GIFTS.length : 0) +
+          /* 분모는 뽑기 목록 + 가진 ★★★★ — 못 얻는 것을 «빈 칸» 으로 세지 않습니다 */
+          '　·　보유 ' + mine.length + ' / ' + (giftGachaList().length + mine.filter(g => g.noGacha).length) +
           (다음 ? '<br>' + 다음 + '을 마치면 하나 더 지닐 수 있습니다.' : '') +
           '</div><div class="grid">';
 
   h += '<div class="slot' + (!nowOn.length ? ' sel' : '') + '" data-pick="">' +
          '<div class="nm">모두 내려놓기</div><div class="sub">아무것도 지니지 않습니다</div></div>';
 
-  (typeof GIFTS !== "undefined" ? GIFTS : []).forEach(g => {
+  (typeof GIFTS !== "undefined" ? GIFTS : []).forEach(g0 => {
+    const g   = giftView(g0);            // 강화 단계의 이름·설명
     const has = !!(S.giftsOwned && S.giftsOwned[giftId(g)]);
+    if (g.noGacha && !has) return;       // 뽑기로 못 얻는 것은 가지기 전엔 보이지 않습니다
     const on  = giftIsOn(giftId(g));
     h += '<div class="slot' + (on ? ' sel' : '') + '"' + (has ? ' data-pick="' + giftId(g) + '"' : '') + '>' +
            '<div class="' + (has ? 'nm' : 'lock') + '">' +
-             '<span class="star">' + stars(g.star) + '</span> ' + g.name +
+             '<span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) +
              (on ? ' <span class="sub">· 지님</span>' : '') + '</div>' +
            (has ? flavorHTML(g) : '') +
            '<div class="sub">' + (has ? g.desc : '미보유') + '</div>' +
@@ -11127,6 +11217,206 @@ function openSync(back) {
   };
   draw(null);
   tutorOnce("sync");    /* 동기화에 처음 들어왔을 때 한 번 */
+}
+
+/* ── 강화 ────────────────────────────────────────────────────
+ *  「올리는 것」 들을 한데 모은 갈래 화면입니다(사용자 지침 2026-09-17) —
+ *  동기화(작성위원 · 인격 파편)와 E.G.O 기프트 강화(황금교본). 앞으로 또
+ *  무엇을 묶게 되면 아래 rows 에 줄 하나를 더 얹으면 됩니다.
+ *  각 줄은 열리기 전이면 흐리게 서서 «몇 장을 마치면» 을 말합니다. */
+function upgradeUnlocked() { return syncUnlocked() || giftUpUnlocked(); }
+function openUpgrade(back) {
+  $modal.classList.add("on");
+  const chNo = id => { const c = CHAPTERS.find(x => x.id === id); return c ? c.no : id; };
+  const rows = [
+    { tut: "up-sync", name: "동기화", sub: "인격 파편으로 작성위원의 동기화 단계를 올립니다.",
+      open: syncUnlocked(), lock: chNo(SYNC_UNLOCK_CH) + "을 마치면 열립니다.",
+      fn: () => openSync(() => openUpgrade(back)) },
+    { tut: "up-gift", name: "E.G.O 기프트 강화", sub: "황금교본으로 지닌 기프트를 + · ++ 로 올립니다.",
+      open: giftUpUnlocked(), lock: (nextGiftUpChapter() || "?") + "을 마치면 열립니다.",
+      fn: () => openGiftUp(() => openUpgrade(back)) },
+    { tut: "up-fuse", name: "E.G.O 기프트 합성", sub: "기프트 여럿을 하나로 합쳐 ★★★★ 를 만듭니다.",
+      open: giftFuseUnlocked(), lock: (giftFuseChapter() || "?") + "을 마치면 열립니다.",
+      fn: () => openGiftFuse(() => openUpgrade(back)) }
+  ];
+  let h = '<h2>강 화</h2>' +
+          '<div class="hint" data-tut="up-what">가진 것을 더 세게 만드는 자리들입니다.</div>';
+  rows.forEach((r, i) => {
+    h += '<div class="syncrow" data-tut="' + r.tut + '">' +
+           (r.open ? '<button data-up="' + i + '">열기</button>' : '<button disabled>잠김</button>') +
+           '<div class="body"><div class="' + (r.open ? 'nm' : 'lock') + '">' + r.name + '</div>' +
+             '<div class="sub">' + (r.open ? r.sub : r.lock) + '</div></div>' +
+         '</div>';
+  });
+  h += '<div class="modalfoot"><button id="upclose">닫기</button></div>';
+  $sheet.innerHTML = h;
+  $sheet.querySelectorAll("[data-up]").forEach(el => { el.onclick = () => rows[+el.dataset.up].fn(); });
+  document.getElementById("upclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  tutorOnce("upgrade");    /* 강화에 처음 들어왔을 때 한 번 */
+}
+
+/* ── E.G.O 기프트 강화 화면 ─────────────────────────────────
+ *  지닌 기프트를 성급순으로 늘어놓고, 다음 단계와 드는 황금교본을 보여 준다.
+ *  동기화 화면과 같은 규칙 — 손잡이는 교본이 모자라도 눌리고, 눌러야
+ *  «모자랍니다» 가 뜹니다. 값·해금은 data/gifts.js GIFT_UP_RULE. */
+function openGiftUp(back) {
+  $modal.classList.add("on");
+  const draw = (msg) => {
+    const cap  = giftUpMax();
+    const next = nextGiftUpChapter();
+    const mine = GIFTS.filter(g => S.giftsOwned && S.giftsOwned[giftId(g)])
+                      .slice().sort((a, b) => b.star - a.star);
+    let h = '<h2>E . G . O   기 프 트   강 화</h2>' +
+      '<div class="hint" data-tut="gup-what">황금교본으로 지닌 기프트를 올립니다. 두 단계(+ · ++)까지 있고, ' +
+      '올릴수록 효과가 커집니다. 발동 조건은 그대로입니다.<br>' +
+      '<span data-tut="gup-cap">지금은 <b>' + "+".repeat(cap) + '</b> 까지 올릴 수 있습니다.' +
+      (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</span>' +
+      '　·　황금교본 <b>' + (S.codex || 0) + '</b>권</div>';
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (!mine.length) h += '<div class="hint">아직 가진 기프트가 없습니다 — 상점에서 황금교본으로 뽑습니다.</div>';
+
+    let first = true;
+    mine.forEach(g0 => {
+      const g   = giftView(g0);
+      const lv  = giftLv(giftId(g));
+      const top = (g0.up || []).length;
+      const maxed = lv >= Math.min(cap, top);
+      const cost  = maxed ? 0 : giftUpCost(g0, lv + 1);
+      const nextDesc = (!maxed && g0.up[lv]) ? g0.up[lv].desc : null;
+      h += '<div class="syncrow"' + (first ? ' data-tut="gup-row"' : '') + '>' +
+             (maxed ? '<button disabled>' + (lv >= top ? '최대' : '상한 도달') + '</button>'
+                    : '<button data-gup="' + giftId(g) + '">강화　교본 ' + cost + '권</button>') +
+             '<div class="body">' +
+               '<div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) + '</div>' +
+               '<div class="sub">' + g.desc + '</div>' +
+               (nextDesc ? '<div class="sub" style="color:#d8b26a">다음 — ' + nextDesc + '</div>' : '') +
+             '</div>' +
+           '</div>';
+      first = false;
+    });
+    h += '<div class="modalfoot"><button id="guclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll("[data-gup]").forEach(el => {
+      el.onclick = () => {
+        const g0 = giftById(el.dataset.gup);
+        if (!g0) return;
+        const lv = giftLv(giftId(g0));
+        if (lv >= giftUpMax()) { draw(g0.name + " — 지금은 " + "+".repeat(giftUpMax()) + " 가 상한입니다."); return; }
+        if (lv >= (g0.up || []).length) { draw(g0.name + " — 더 올릴 단계가 없습니다."); return; }
+        const cost = giftUpCost(g0, lv + 1);
+        if ((S.codex || 0) < cost) { draw(g0.name + " — 황금교본이 모자랍니다.  (" + (S.codex || 0) + " / " + cost + ")"); return; }
+        S.codex -= cost;
+        if (!S.giftLv) S.giftLv = {};
+        S.giftLv[giftId(g0)] = lv + 1;
+        /* 체력 배수가 바뀌었을 수 있으니 편성의 현재 체력을 새 최대에 맞춥니다(기프트 고르기와 같은 결) */
+        S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+        saveVault(); render();
+        const g = giftView(g0);
+        flashFx(giftLabel(g), g.flavor && g.flavor !== "TODO" ? g.flavor : null,
+                () => draw(giftLabel(g) + " — " + g.desc), "red");
+      };
+    });
+    document.getElementById("guclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  };
+  draw(null);
+  tutorOnce("giftup");    /* 기프트 강화에 처음 들어왔을 때 한 번 */
+}
+
+/* ── E.G.O 기프트 합성 화면 ─────────────────────────────────
+ *  data/gifts.js GIFT_FUSES 를 줄로 늘어놓는다 — 결과 ★★★★ 와 재료들, 드는 것.
+ *  재료는 «지닌 것» 이어야 하고 합성하면 사라진다(강화 단계도 함께). 되돌릴 수
+ *  없으니 confirm() 으로 한 번 묻는다(선택권과 같은 결). 손잡이는 모자라도
+ *  눌리고, 눌러야 무엇이 모자란지 뜬다(동기화·강화 화면과 같은 규칙). */
+function openGiftFuse(back) {
+  if (!giftFuseUnlocked()) { if (back) back(); return; }   // 손잡이를 이미 잠갔지만, 만약을 대비해
+  $modal.classList.add("on");
+  const fuses = (typeof GIFT_FUSES !== "undefined") ? GIFT_FUSES : [];
+  const own = id => !!(S.giftsOwned && S.giftsOwned[id]);
+  /* 이 합성에 무엇이 모자란가 — 비어 있으면 지금 할 수 있다 */
+  const lacking = f => {
+    const out = [];
+    (f.parts || []).forEach(pn => { if (!own(pn)) out.push("「" + pn + "」"); });
+    if ((S.codex || 0) < (f.codex || 0)) out.push("황금교본 " + (S.codex || 0) + " / " + f.codex);
+    if (f.syncModule && syncModuleCount() < f.syncModule) out.push(SYNC_MODULE.name + " " + syncModuleCount() + " / " + f.syncModule);
+    return out;
+  };
+  const draw = (msg) => {
+    let h = '<h2>E . G . O   기 프 트   합 성</h2>' +
+      '<div class="hint" data-tut="fuse-what">기프트 여럿을 하나로 합쳐 <b>★★★★</b> 를 만듭니다. ' +
+      '재료로 든 기프트는 <b style="color:#d8b26a">사라집니다</b>(강화해 둔 단계도 함께) — 상점에서 다시 뽑을 수는 있습니다.' +
+      '　·　황금교본 <b>' + (S.codex || 0) + '</b>권' +
+      (fuses.some(f => f.syncModule) ? '　·　' + SYNC_MODULE.name + ' <b>' + syncModuleCount() + '</b>개' : '') +
+      '</div>';
+    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+
+    let first = true;
+    fuses.forEach((f, i) => {
+      const r = giftById(f.result);
+      if (!r) return;
+      const has  = own(giftId(r));
+      const lack = lacking(f);
+      const partsHTML = (f.parts || []).map(pn => {
+        const g = giftById(pn);
+        const ok = own(pn);
+        const lv = ok ? giftLv(pn) : 0;
+        return '<span style="color:' + (ok ? '#e8e4de' : '#8b8681') + '">' +
+                 (g ? stars(g.star) + ' ' : '') + pn + (lv ? ' ' + "+".repeat(lv) : '') +
+                 (ok ? '' : ' <span style="color:#8b8681">(없음)</span>') + '</span>';
+      }).join('　+　');
+      const costHTML = '황금교본 ' + (f.codex || 0) + '권' +
+                       (f.syncModule ? ' · ' + SYNC_MODULE.name + ' ' + f.syncModule + '개' : '');
+      h += '<div class="syncrow"' + (first ? ' data-tut="fuse-row"' : '') + '>' +
+             (has ? '<button disabled>이미 지님</button>'
+                  : '<button data-fuse="' + i + '"' + (lack.length ? ' class="ghost"' : '') + '>합성</button>') +
+             '<div class="body">' +
+               '<div class="nm"><span class="star">' + stars(r.star) + '</span> ' + r.name + '</div>' +
+               (r.flavor && r.flavor !== "TODO" ? '<div class="sub"><i>' + r.flavor + '</i></div>' : '') +
+               '<div class="sub">' + r.desc + '</div>' +
+               '<div class="sub"' + (first ? ' data-tut="fuse-parts"' : '') + '>재료 — ' + partsHTML + '</div>' +
+               '<div class="sub">드는 것 — ' + costHTML + '</div>' +
+             '</div>' +
+           '</div>';
+      first = false;
+    });
+    h += '<div class="modalfoot"><button id="gfuclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll("[data-fuse]").forEach(el => {
+      el.onclick = () => {
+        const f = fuses[+el.dataset.fuse];
+        const r = f && giftById(f.result);
+        if (!r) return;
+        if (own(giftId(r))) { draw(r.name + " — 이미 지니고 있습니다."); return; }
+        const lack = lacking(f);
+        if (lack.length) { draw(r.name + " — 모자랍니다: " + lack.join(", ")); return; }
+        const gone = f.parts.map(pn => pn + (giftLv(pn) ? " " + "+".repeat(giftLv(pn)) : ""));
+        if (!confirm(stars(r.star) + " " + r.name + "\n\n재료로 사라지는 것 — " + gone.join(", ") +
+                     "\n드는 것 — 황금교본 " + (f.codex || 0) + "권" +
+                     (f.syncModule ? ", " + SYNC_MODULE.name + " " + f.syncModule + "개" : "") +
+                     "\n\n합성하시겠습니까? 되돌릴 수 없습니다.")) return;
+        /* 재료를 걷어 냅니다 — 보유·강화 단계·지닌 칸 전부 */
+        f.parts.forEach(pn => {
+          delete S.giftsOwned[pn];
+          if (S.giftLv) delete S.giftLv[pn];
+        });
+        S.giftOn = giftOnList().filter(k => f.parts.indexOf(k) < 0);
+        S.gift   = S.giftOn[0] || null;
+        S.codex -= (f.codex || 0);
+        if (f.syncModule) S.syncModule = syncModuleCount() - f.syncModule;
+        /* 결과를 넣습니다 — 지닌 칸이 비었으면 바로 듭니다(뽑기와 같은 결) */
+        S.giftsOwned[giftId(r)] = true;
+        if (!giftOnList().length) { S.giftOn = [giftId(r)]; S.gift = giftId(r); }
+        S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+        saveVault(); render();
+        flashFx(stars(r.star) + ' ' + r.name, r.flavor && r.flavor !== "TODO" ? r.flavor : null,
+                () => draw(r.name + " — 합성했습니다. 편성의 [E.G.O 기프트] 에서 지닐 수 있습니다."), "red");
+      };
+    });
+    document.getElementById("gfuclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  };
+  draw(null);
+  tutorOnce("giftfuse");    /* 합성에 처음 들어왔을 때 한 번 */
 }
 
 /* ── 보관함 ──────────────────────────────────────────────── */
@@ -12170,8 +12460,8 @@ function glass() {
      * 두릅니다(button.mailon — index.html). 없으면 흐린 손잡이입니다. */
     { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
       cls: mailWaiting() ? "mailon" : "ghost", fn: () => openMail(() => glass()) },
-    /* 3장을 마치기 전에는 손잡이를 아예 내놓지 않습니다 */
-    syncUnlocked() ? { label: "동기화", fn: () => openSync(() => glass()) } : null,
+    /* 동기화(3장)·기프트 강화(5장) 어느 하나라도 열리기 전에는 손잡이를 아예 내놓지 않습니다 */
+    upgradeUnlocked() ? { label: "강화", fn: () => openUpgrade(() => glass()) } : null,
     { label: "보관함", fn: () => openVault(() => glass()) },
     /* 유리창 배경 · 화면 글꼴 — openSettings */
     { label: "설정", cls: "ghost", fn: () => openSettings(() => glass()) },
