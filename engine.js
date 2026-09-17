@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.6.0";
+const VERSION = "2.6.1";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -11135,58 +11135,87 @@ function grantAdvisor(s) {
 }
 
 /* ── 동기화 화면 ─────────────────────────────────────────────
- *  작성위원 12명을 줄로 늘어놓고, 각자의 동기화 단계·파편 보유량과
- *  다음 단계로 올리는 손잡이를 보여 준다.
+ *  작성위원 12명을 4×3 칸(이름 · 굵은 로마자 단계 · 파편)으로 늘어놓고, 칸을
+ *  고르면 아래 한 칸에 그 사람의 설명(단계·파편·고유 능력)과 동기화 손잡이를
+ *  보여 준다(사용자 지침 2026-09-17 — 열두 줄이 한 줄씩 서니 너무 길었다).
  *
  *  손잡이는 파편이 모자라도 눌립니다 — 눌러야 «부족합니다» 안내가 뜹니다.
  *  (상점처럼 아예 못 누르게 막지 않은 것은, 얼마나 모자란지 그 자리에서
  *  바로 알려 주고 싶어서입니다.) */
+/* 동기화 단계는 굵은 로마자로 — 0단계는 «–» (사용자 지침 2026-09-17) */
+function romanLevel(n) {
+  if (!n || n < 1) return "–";
+  const t = [[10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  let out = "";
+  t.forEach(([v, r]) => { while (n >= v) { out += r; n -= v; } });
+  return out;
+}
+let SYNC_PICK = null;       // 마지막으로 고른 작성위원 — 창을 닫았다 열어도 그대로
 function openSync(back) {
   $modal.classList.add("on");
 
   const draw = (msg) => {
     const cap = syncMax();
     const next = nextSyncChapter();
+    const whos = Object.keys(SINNERS);
+    if (!SYNC_PICK || !SINNERS[SYNC_PICK]) SYNC_PICK = whos[0];
     let h = '<h2>동 기 화</h2>' +
       '<div class="hint" data-tut="sync-what">인격 파편으로 작성위원의 동기화 단계를 올립니다. ' +
       '단계 1당 그 작성위원의 공격·방어·체력이 모두 ' + Math.round(SYNC_RULE.statPct * 100) +
       '%씩 강해집니다. 지원 작성위원은 자기 단계가 없어, 함께 편성된 두 작성위원 중 ' +
-      '낮은 쪽의 단계를 빌려 씁니다.<br>' +
+      '낮은 쪽의 단계를 빌려 씁니다. 칸을 누르면 아래에 그 사람의 설명과 손잡이가 뜹니다.<br>' +
       '<span data-tut="sync-cap">지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
       (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</span></div>';
 
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
 
-    let first = true;
-    Object.keys(SINNERS).forEach(who => {
-      const s = SINNERS[who];
+    /* 4×3 칸 — 이름과 단계만. 고른 칸은 금빛 테두리 */
+    h += '<div class="syncgrid" data-tut="sync-row">';
+    whos.forEach(who => {
+      const s  = SINNERS[who];
+      const lv = syncLevel(who);
+      h += '<div class="slot' + (who === SYNC_PICK ? ' sel' : '') + (lv >= cap ? ' max' : '') +
+             '" data-pick="' + who + '">' +
+             '<div class="nm">' + s.name + '</div>' +
+             '<div class="lv' + (lv ? '' : ' zero') + '">' + romanLevel(lv) + '</div>' +
+             '<div class="fr">파편 ' + fragCount(who) + '</div>' +
+           '</div>';
+    });
+    h += '</div>';
+
+    /* 고른 사람 — 설명과 동기화 손잡이 */
+    {
+      const who = SYNC_PICK, s = SINNERS[who];
       const lv = syncLevel(who);
       const maxed = lv >= cap;
       const cost = syncCost(lv);
       const skill = UNIQUE_SKILLS[who];
-      const skillHTML = (skill && lv >= 1)
-        ? '　·　<span class="uskill"><b>' + skill.name + '</b> ' +
-            skill.desc(skillTierValue(skill, lv)) + '</span>'
-        : '';
-      h += '<div class="syncrow"' + (first ? ' data-tut="sync-row"' : '') + '>' +
-             (maxed ? '<button disabled>상한 도달</button>'
-                    : '<button data-sync="' + who + '">동기화　' + cost + '</button>') +
-             '<div class="body">' +
-               '<div class="nm">' + s.name + '</div>' +
-               '<div class="sub">' +
-                 (lv > 0 ? '동기화 ' + lv + '단계' : '아직 동기화되지 않음') +
-                 (maxed ? ' (상한)' : '') +
-                 '　·　파편 ' + fragCount(who) + '개' +
-                 skillHTML +
-               '</div>' +
+      h += '<div class="syncpick">' +
+             '<div class="nm">' + s.name + '<span class="lv">' + romanLevel(lv) + '</span>' +
+               '<span class="sub" style="margin-left:8px">' +
+                 (lv > 0 ? '동기화 ' + lv + '단계' : '아직 동기화되지 않음') + (maxed ? ' (상한)' : '') +
+               '</span></div>' +
+             '<div class="sub">파편 <b>' + fragCount(who) + '</b>개' +
+               (maxed ? '' : '　·　다음 단계에 <b>' + cost + '</b>개') + '</div>' +
+             (skill
+               ? '<div class="sub"><span class="uskill"><b>' + skill.name + '</b> ' +
+                   (lv >= 1 ? skill.desc(skillTierValue(skill, lv))
+                            : '<span style="color:#55524e">동기화 1단계에서 열립니다.</span>') +
+                 '</span></div>'
+               : '') +
+             '<div class="act">' +
+               (maxed ? '<button disabled>상한 도달</button>'
+                      : '<button class="primary" data-sync="' + who + '">동기화　' + cost + '</button>') +
              '</div>' +
            '</div>';
-      first = false;
-    });
+    }
 
     h += '<div class="modalfoot"><button id="syclose">닫기</button></div>';
     $sheet.innerHTML = h;
 
+    $sheet.querySelectorAll(".syncgrid .slot[data-pick]").forEach(el => {
+      el.onclick = () => { SYNC_PICK = el.dataset.pick; draw(null); };
+    });
     $sheet.querySelectorAll("[data-sync]").forEach(el => {
       el.onclick = () => {
         const who = el.dataset.sync;
@@ -11259,6 +11288,10 @@ function openUpgrade(back) {
  *  지닌 기프트를 성급순으로 늘어놓고, 다음 단계와 드는 황금교본을 보여 준다.
  *  동기화 화면과 같은 규칙 — 손잡이는 교본이 모자라도 눌리고, 눌러야
  *  «모자랍니다» 가 뜹니다. 값·해금은 data/gifts.js GIFT_UP_RULE. */
+/* 성급별로 접어 둡니다 — 기프트가 마흔 남짓이라 한 줄로 늘어놓으면 너무 길었습니다
+ * (사용자 지침 2026-09-17). 편성의 [인격 장착](EQUIP_OPEN)과 같은 모양 — 머리를 누르면
+ * 펴지고, 창을 닫았다 열어도 펴 둔 것은 그대로입니다(판을 다시 켜면 다 접힙니다). */
+let GIFTUP_OPEN = {};       // star -> 펴 두었나
 function openGiftUp(back) {
   $modal.classList.add("on");
   const draw = (msg) => {
@@ -11266,6 +11299,11 @@ function openGiftUp(back) {
     const next = nextGiftUpChapter();
     const mine = GIFTS.filter(g => S.giftsOwned && S.giftsOwned[giftId(g)])
                       .slice().sort((a, b) => b.star - a.star);
+    /* 한 줄의 «지금 올릴 수 있나» — 머리의 셈과 줄의 손잡이가 같은 답을 봅니다 */
+    const canUp = g0 => {
+      const lv = giftLv(giftId(g0));
+      return lv < Math.min(cap, (g0.up || []).length) && (S.codex || 0) >= giftUpCost(g0, lv + 1);
+    };
     let h = '<h2>E . G . O   기 프 트   강 화</h2>' +
       '<div class="hint" data-tut="gup-what">황금교본으로 지닌 기프트를 올립니다. 두 단계(+ · ++)까지 있고, ' +
       '올릴수록 효과가 커집니다. 발동 조건은 그대로입니다.<br>' +
@@ -11274,9 +11312,28 @@ function openGiftUp(back) {
       '　·　황금교본 <b>' + (S.codex || 0) + '</b>권</div>';
     if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
     if (!mine.length) h += '<div class="hint">아직 가진 기프트가 없습니다 — 상점에서 황금교본으로 뽑습니다.</div>';
+    else h += '<div class="eqbar">' +
+                '<button id="guall" class="ghost">모두 펴기</button>' +
+                '<button id="gunone" class="ghost">모두 접기</button>' +
+              '</div>';
 
-    let first = true;
+    /* 성급 머리 — 그 성급의 개수와 «지금 올릴 수 있는» 개수. 접혀 있으면 줄은 안 그립니다. */
+    let first = true, lastStar = null;
     mine.forEach(g0 => {
+      if (g0.star !== lastStar) {
+        lastStar = g0.star;
+        const grp  = mine.filter(x => x.star === g0.star);
+        const ups  = grp.filter(canUp).length;
+        const open = !!GIFTUP_OPEN[g0.star];
+        h += '<div class="eqhead' + (open ? ' open' : '') + '" data-open="' + g0.star + '">' +
+               '<span class="arrow">' + (open ? '▾' : '▸') + '</span>' +
+               '<b><span class="star">' + stars(g0.star) + '</span></b>' +
+               '<span class="wearing">' + grp.length + '개' +
+                 (ups ? '　·　<span style="color:#d8b26a">지금 올릴 수 있는 것 ' + ups + '</span>' : '') +
+               '</span>' +
+             '</div>';
+      }
+      if (!GIFTUP_OPEN[g0.star]) return;
       const g   = giftView(g0);
       const lv  = giftLv(giftId(g));
       const top = (g0.up || []).length;
@@ -11296,6 +11353,13 @@ function openGiftUp(back) {
     });
     h += '<div class="modalfoot"><button id="guclose">닫기</button></div>';
     $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".eqhead[data-open]").forEach(el => {
+      el.onclick = () => { const k = el.dataset.open; GIFTUP_OPEN[k] = !GIFTUP_OPEN[k]; draw(null); };
+    });
+    const 모두 = document.getElementById("guall"), 없음 = document.getElementById("gunone");
+    if (모두) 모두.onclick = () => { mine.forEach(g => GIFTUP_OPEN[g.star] = true); draw(null); };
+    if (없음) 없음.onclick = () => { GIFTUP_OPEN = {}; draw(null); };
 
     $sheet.querySelectorAll("[data-gup]").forEach(el => {
       el.onclick = () => {

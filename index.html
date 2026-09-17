@@ -379,6 +379,20 @@
   .eqbody{margin-top:6px;}
 
   /* ── 동기화 — 작성위원마다 한 줄 ─────────── */
+  /* 동기화 — 작성위원 12명을 4×3 칸으로. 칸엔 이름과 단계(굵은 로마자)만 */
+  .syncgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;}
+  .syncgrid .slot{display:flex;flex-direction:column;align-items:center;gap:4px;padding:11px 6px;text-align:center;}
+  .syncgrid .slot .lv{font-size:22px;font-weight:800;color:#d8b26a;letter-spacing:.04em;line-height:1;}
+  .syncgrid .slot .lv.zero{color:#55524e;font-weight:400;}
+  .syncgrid .slot.max .lv{color:#f0d79c;}
+  .syncgrid .slot .fr{color:#6e6a66;font-size:11px;}
+  @media (max-width:640px){ .syncgrid{gap:6px;} .syncgrid .slot{padding:9px 4px;font-size:12px;} .syncgrid .slot .lv{font-size:18px;} }
+  /* 고른 사람의 설명 칸 — 칸 아래에 하나만 */
+  .syncpick{border:1px solid #4a3a20;background:#17150f;padding:12px 14px;margin-top:10px;}
+  .syncpick .nm{color:#e8e4de;font-weight:700;font-size:15px;}
+  .syncpick .nm .lv{color:#d8b26a;font-weight:800;margin-left:8px;}
+  .syncpick .sub{color:#8b8681;font-size:12px;margin-top:4px;line-height:1.6;}
+  .syncpick .act{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .syncrow{
     display:flex;align-items:center;gap:12px;
     border:1px solid #2a2a30;background:#131318;padding:9px 11px;margin-top:8px;
@@ -1025,23 +1039,23 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.6.0"></script>
-<script src="data/vault.js?v=2.6.0"></script>
-<script src="data/characters.js?v=2.6.0"></script>
-<script src="data/skills.js?v=2.6.0"></script>
-<script src="data/allies.js?v=2.6.0"></script>
-<script src="data/gifts.js?v=2.6.0"></script>
-<script src="data/pickup.js?v=2.6.0"></script>
-<script src="data/achievements.js?v=2.6.0"></script>
-<script src="data/mail.js?v=2.6.0"></script>
-<script src="data/notice.js?v=2.6.0"></script>
-<script src="data/patch.js?v=2.6.0"></script>
-<script src="data/event.js?v=2.6.0"></script>
-<script src="data/tutorial.js?v=2.6.0"></script>
-<script src="data/foes.js?v=2.6.0"></script>
-<script src="data/story.js?v=2.6.0"></script>
-<script src="data/mirrorpacks.js?v=2.6.0"></script>
-<script src="engine.js?v=2.6.0"></script>
+<script src="data/access.js?v=2.6.1"></script>
+<script src="data/vault.js?v=2.6.1"></script>
+<script src="data/characters.js?v=2.6.1"></script>
+<script src="data/skills.js?v=2.6.1"></script>
+<script src="data/allies.js?v=2.6.1"></script>
+<script src="data/gifts.js?v=2.6.1"></script>
+<script src="data/pickup.js?v=2.6.1"></script>
+<script src="data/achievements.js?v=2.6.1"></script>
+<script src="data/mail.js?v=2.6.1"></script>
+<script src="data/notice.js?v=2.6.1"></script>
+<script src="data/patch.js?v=2.6.1"></script>
+<script src="data/event.js?v=2.6.1"></script>
+<script src="data/tutorial.js?v=2.6.1"></script>
+<script src="data/foes.js?v=2.6.1"></script>
+<script src="data/story.js?v=2.6.1"></script>
+<script src="data/mirrorpacks.js?v=2.6.1"></script>
+<script src="engine.js?v=2.6.1"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
