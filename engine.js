@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.6.1";
+const VERSION = "2.6.2";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -6488,6 +6488,18 @@ function tutorTarget(at) {
   return el;
 }
 
+/* 노트에서 «다시 보기» 를 눌렀을 때 먼저 열어 둘 화면 — 안내 id → 여는 함수.
+ * 유리창·전투처럼 «그 자리에 가야만 있는» 화면은 안 적습니다(유리창 위에 뜹니다).
+ * 새 안내를 얹으면 여기에 한 줄 더 — 안 적어도 유리창 위에 가운데로 뜹니다. */
+const TUTOR_SCREENS = {
+  shop:     () => openShop(() => glass()),
+  party:    () => openParty(() => glass()),
+  upgrade:  () => { if (upgradeUnlocked()) openUpgrade(() => glass()); },
+  giftup:   () => { if (giftUpUnlocked()) openGiftUp(() => openUpgrade(() => glass())); },
+  giftfuse: () => { if (giftFuseUnlocked()) openGiftFuse(() => openUpgrade(() => glass())); },
+  sync:     () => { if (syncUnlocked()) openSync(() => openUpgrade(() => glass())); }
+};
+
 /* 아직 안 봤으면 한 번 보여 줍니다. 이미 봤으면 아무 일도 하지 않습니다. */
 function tutorOnce(id, after) {
   if (tutorSaw(id)) { if (after) after(); return false; }
@@ -6829,7 +6841,11 @@ function openNote(back, focus) {
         const id = el.dataset.tutPlay;
         closeModal(); render();
         if (back) back();
-        /* 유리창을 다 그린 뒤에 덮습니다 */
+        /* 그 안내가 사는 화면을 먼저 엽니다(TUTOR_SCREENS) — 그래야 화살표가 갈 곳이
+         * 있습니다. 아직 안 열린 화면(3장 전의 [강화] 등)이면 유리창 위에 그냥 띄웁니다.
+         * 화면을 다 그린 뒤에 덮습니다. */
+        const opener = TUTOR_SCREENS[id];
+        if (opener) opener();
         setTimeout(() => tutorPlay(id), 0);
       };
     });
