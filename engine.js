@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.6.2";
+const VERSION = "2.7.0";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2413,17 +2413,41 @@ function effStats(who) {
   const pv = passiveSkillBonus(who, hp);
   /* 깎는 기프트가 있어 배수가 0 아래로 갈 수 있습니다. 바닥을 둡니다 —
    * 공격과 체력은 1, 방어는 0 까지. */
-  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy + pv.atk + rl.atk)));
+  /* 「기세」— 인격 줄에 vary 가 적힌 사람(박수오 「동탄 어둠의 왕」)은 전투 중
+   * 차례마다 공격·방어가 그 폭 안에서 무작위로 흔들립니다. varyMult() 참고 —
+   * 전투 밖이면 1 이라 편성 화면에는 제 수치 그대로 보입니다. 체력에는 안 겁니다
+   * (curHp 가 따라 흔들리면 안 되므로). */
+  const vm = varyMult(who);
+  const atk = Math.max(1, Math.round(s.atk * (1 + b.atk + a.atk + gf.atk + af.atk + sy + pv.atk + rl.atk) * vm));
   /* 제1발톱 「지령」— 이번 차례에 방어를 골랐고, 그게 턴 머리에서 무작위로
    * 내려온 지령 그대로였다면 방어력을 그 자리에서 더 올려 준다.
    * claw1SynergyBonus() 참고. 전투 밖(S.battle 없음)이면 그냥 1이다. */
   const claw1Def = (S.battle && S.battle.cmds && S.battle.cmds[who] === "guard" &&
                     S.battle.mods && S.battle.mods[who + "_claw1Order"] === "guard")
                    ? (1.5 + claw1SynergyBonus()) : 1;
-  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def) * claw1Def) + pv.def);
+  const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def) * claw1Def * vm) + pv.def);
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   return { atk: atk + Math.round(def * conv), def: def, hp: hp };
+}
+
+/* 「기세」— 인격 줄에 vary: 0.15 처럼 적으면(data/characters.js 박수오 「동탄
+ * 어둠의 왕」), 전투 중 이 사람의 공격·방어에 1−vary ~ 1+vary 사이의 배수가
+ * 걸립니다. 한 턴에 한 번만 굴립니다 — b.mods 는 beginTurn() 마다 비므로,
+ * 처음 묻는 자리에서 굴려 두고 그 턴 동안은 그대로입니다(제1발톱 지령과 같은
+ * 짜임). 전투 밖이거나 vary 가 없으면 1 입니다. 굴린 값은 renderParty() 가
+ * 카드에 「기세 +n%」로 보여 줍니다. */
+function varyMult(who) {
+  const b = S.battle;
+  if (!b || !b.mods) return 1;
+  if (isAlly(who) || isSupport(who)) return 1;
+  const id = idByKey(S.equip[who]);
+  const v = id && id.vary;
+  if (!v) return 1;
+  const key = who + "_vary";
+  if (b.mods[key] == null)
+    b.mods[key] = Math.round((1 - v + Math.random() * 2 * v) * 100) / 100;
+  return b.mods[key];
 }
 
 /* 제1발톱 시너지가 지금 발동 중이면 claw1Bonus 를 돌려준다 — 그 시너지는
@@ -3277,6 +3301,12 @@ function renderParty() {
       if (b && b.mods) {
         if (b.mods[who + "_guard"]) mark += ' <span class="corrtag">교정</span>';
         if (b.mods[who + "_push"])  mark += ' <span class="pushtag">독촉</span>';
+        /* 「기세」(varyMult) — 위 effStats(who) 가 이미 이 턴 몫을 굴려 두었습니다 */
+        const vm = b.mods[who + "_vary"];
+        if (vm != null) {
+          const p = Math.round((vm - 1) * 100);
+          mark += ' <span class="stacktag">기세 ' + (p < 0 ? "−" : "+") + Math.abs(p) + '%</span>';
+        }
       }
     }
     const stack = passiveStackCount(who);
