@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.7.0";
+const VERSION = "2.8.0";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -746,11 +746,257 @@ function importVaultFile(file) {
      * 여기서 새로 찍어 주면 손댄 자국을 이쪽이 지워 주는 꼴이 됩니다. */
     if (!어긋남) merged.sig = vaultSig(merged);
 
-    Store.set(VAULT_KEY, JSON.stringify(merged));
+    const raw = JSON.stringify(merged);
+    Store.set(VAULT_KEY, raw);
+    /* 콘첸트라트에 연결돼 있으면 «가져온 파일이 원장» 입니다 — 먼저 올린 뒤 새로고침합니다.
+     * 그냥 새로고침하면 boot() 의 autoPull 이 「구름이 더 새롭다」며 방금 고른 파일 위에
+     * 구름 것을 얹어 버립니다. 올리지 못하면 맞춘 때를 지워 두어 다음 켤 때도 끌어오지 않게 하고,
+     * [기록] 에서 [올리기] 를 누르라고 알립니다 (사용자 지침 2026-09-18). */
+    if (Cloud.on()) {
+      Cloud.push(raw)
+        .catch(e => { Store.del(KZ_AT_KEY); alert("파일은 들어왔지만 콘첸트라트에 올리지 못했습니다 — " + ((e && e.message) || "") + "\n[기록] 에서 [올리기] 를 눌러 주십시오."); })
+        .then(() => location.reload());
+      return;
+    }
     location.reload();
   };
   reader.onerror = () => alert("파일을 읽지 못했습니다.");
   reader.readAsText(file, "utf-8");
+}
+
+/* ── 콘첸트라트 클라우드 보관함 ───────────────────────────────
+ *  라거슈타트 업무 관리 앱 콘첸트라트(wetherilli/konzentrat)의 서버(Apps Script)에
+ *  보관함을 맡기고 찾아옵니다. 기기를 옮길 때 vault.js 를 손으로 나르던 것을 대신합니다.
+ *  (사용자 지침 2026-09-18)
+ *
+ *  ■ 원장은 구름입니다
+ *    · 켤 때   구름 것이 이 기기가 마지막으로 맞춘 것보다 새로우면 끌어와 «합치고» 새로고침합니다
+ *    · 올리기  장을 마칠 때·거울을 마칠 때·[기록] 의 [올리기]. 장면마다는 올리지 않습니다 —
+ *              콘첸트라트 서버는 쓰기마다 전역 잠금을 잡아, 자주 올리면 업무 앱이 느려집니다
+ *    · 가져오기(vault.js 파일)는 연결 중이어도 그대로 됩니다. 가져온 파일을 먼저 올리고
+ *              새로고침하므로 그 파일이 원장이 됩니다 (importVaultFile 참고)
+ *
+ *  ■ 합치기는 vaultMergeOnce 를 탑니다
+ *    이미 받은 우편·업적·이야기 인격·기념 배정은 구름 것과 이 기기 것을 합쳐, 어느 쪽에서
+ *    이미 받았으면 다시 받히지 않습니다. 나머지는 구름 것이 이깁니다.
+ *
+ *  ■ 로그인은 콘첸트라트 것을 그대로 씁니다 — 접속 코드 → 이름 → PIN.
+ *    토큰은 120일짜리라 그 뒤엔 다시 연결하라고 합니다. 이름만으로 들어오는 계정(PIN 없음)은
+ *    서버가 올리기를 거절합니다 — 접속 코드를 아는 누구나 남의 보관함을 덮을 수 있어서요.
+ *
+ *  ■ 실패하면 게임은 그대로 갑니다. 오프라인·서버 혼잡(busy)이면 조용히 넘어가고,
+ *    [기록] 화면에 마지막으로 맞춘 때만 보여 줍니다.
+ */
+const KZ_API       = "https://script.google.com/macros/s/AKfycbx31dJJkQYDuh2zFt9MjkEWApB5DkDdbTMsR-pEHnBVYS9k7BDrqDKhYVhO04Ypm88/exec";
+const KZ_TOKEN_KEY = "rash_company_kz_token";   // 콘첸트라트 로그인 토큰
+const KZ_USER_KEY  = "rash_company_kz_user";    // 연결한 이름 (보여 주기용)
+const KZ_AT_KEY    = "rash_company_kz_at";      // 마지막으로 구름과 맞춘 때 — 서버가 준 updatedAt 그대로
+
+const Cloud = {
+  on()   { return !!Store.get(KZ_TOKEN_KEY); },
+  user() { return Store.get(KZ_USER_KEY) || ""; },
+  at()   { return Store.get(KZ_AT_KEY) || ""; },
+
+  /* 콘첸트라트 web/api.js 와 같은 규칙 — text/plain 이면 CORS 사전 요청 없이 바로 갑니다.
+   * busy(서버가 잠금을 못 얻어 아무것도 안 하고 돌려보낸 것)면 2~4초 뒤 한 번만 더 보냅니다. */
+  async call(action, params, retry) {
+    const body = Object.assign({ action }, params || {});
+    if (!body.token && this.on()) body.token = Store.get(KZ_TOKEN_KEY);
+    let res, json;
+    try {
+      res = await fetch(KZ_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+                                 body: JSON.stringify(body), redirect: "follow" });
+      json = await res.json();
+    } catch (e) { throw { code: "network", message: "콘첸트라트에 닿지 못했습니다. 인터넷 연결을 확인하십시오." }; }
+    if (!json || !json.ok) {
+      const err = (json && json.error) || { code: "server", message: "서버 응답이 이상합니다." };
+      if (err.code === "busy" && !retry) {
+        await new Promise(r => setTimeout(r, 2000 + Math.floor(Math.random() * 2000)));
+        return this.call(action, params, true);
+      }
+      /* 토큰이 죽었으면(만료·PIN 초기화) 연결을 풀어 두어, 켤 때마다 헛되이 묻지 않게 */
+      if (err.code === "auth") this.disconnect();
+      throw err;
+    }
+    return json.data && json.data.result;
+  },
+
+  /* 지금 보관함(또는 raw 로 준 것)을 올립니다. 성공하면 맞춘 때를 적어 둡니다.
+   * 잠긴 보관함(뒤에서 온 판)은 올리지 않습니다 — 이 판이 모르는 것을 지워 올리게 되니까요. */
+  async push(raw) {
+    if (!this.on()) return false;
+    if (!raw && (vaultLocked() || !S)) return false;
+    const r = await this.call("gameSavePut", { raw: raw || JSON.stringify(vaultToObject()), ver: VERSION });
+    Store.set(KZ_AT_KEY, r.updatedAt || "");
+    return true;
+  },
+
+  /* 구름 것을 끌어와 합치고 새로고침합니다. 구름에 없으면 false. */
+  async pull() {
+    const row = await this.call("gameSaveGet");
+    if (!row || !row.raw) return false;
+    this.adopt(row);
+    return true;
+  },
+  adopt(row) {
+    let seed = null;
+    try { seed = JSON.parse(row.raw); } catch (e) { seed = null; }
+    if (!seed || typeof seed !== "object") throw { code: "bad", message: "구름의 보관함을 읽지 못했습니다." };
+    /* importVaultFile 과 같은 순서 — 들어온 것이 «이미» 어긋나 있었는지 먼저 보고, 합친 뒤 요약값을 다시 찍습니다 */
+    const 어긋남 = vaultTouched(seed);
+    const merged = vaultMergeOnce(seed);
+    if (!어긋남) merged.sig = vaultSig(merged);
+    Store.set(VAULT_KEY, JSON.stringify(merged));
+    /* 이어하기 자리(SAVE_KEY)는 그대로 둡니다 — 파일 가져오기와 같은 결입니다. 읽던 자리는 이 기기 것입니다 */
+    Store.set(KZ_AT_KEY, row.updatedAt || "");
+    location.reload();
+  },
+
+  /* 켤 때 — 구름이 더 새로우면 끌어옵니다. 조용히, 실패해도 조용히. */
+  async autoPull() {
+    if (!this.on()) return;
+    try {
+      const row = await this.call("gameSaveGet");
+      if (row && row.raw && row.updatedAt && row.updatedAt > this.at()) this.adopt(row);
+    } catch (e) { /* 오프라인·혼잡 — 다음에 */ }
+  },
+
+  disconnect() { Store.del(KZ_TOKEN_KEY); Store.del(KZ_USER_KEY); Store.del(KZ_AT_KEY); }
+};
+
+/* 서버 시각(ISO)을 이 기기 시간대의 사람 말로. 안 주면 마지막으로 맞춘 때 */
+function cloudAtText(iso) {
+  const at = iso === undefined ? Cloud.at() : iso;
+  if (!at) return "아직 맞춘 적 없음";
+  const d = new Date(at);
+  if (isNaN(d)) return at;
+  const p = n => (n < 10 ? "0" : "") + n;
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+
+/* ── 연결 화면 (기록 → 콘첸트라트 → 연결) ─────────────────────
+ *  접속 코드 → 이름 → PIN(또는 처음이면 PIN 정하기 · 어드민은 비밀번호) 세 걸음.
+ *  마지막에 구름에 이미 보관함이 있으면 어느 쪽을 원장으로 삼을지 묻습니다.
+ */
+function openCloudConnect(back) {
+  $modal.classList.add("on");
+  let code = "", people = [], who = null;
+
+  const frame = (title, hint, body, foot) => {
+    $sheet.innerHTML =
+      '<h2>' + title + '</h2>' +
+      (hint ? '<div class="hint">' + hint + '</div>' : '') +
+      body +
+      '<div class="modalfoot">' + foot + '<button id="kzback">돌아가기</button></div>';
+    document.getElementById("kzback").onclick = () => { closeModal(); if (back) back(); };
+  };
+  const fail = (e, again) => {
+    alert((e && e.message) || "실패했습니다.");
+    again();
+  };
+  const busy = (btn, on) => { if (btn) { btn.disabled = on; btn.textContent = on ? "…" : btn.dataset.t; } };
+
+  const stepCode = () => {
+    frame("콘첸트라트 연결", "콘첸트라트 <b>접속 코드</b>를 넣으십시오. 단톡방에 공유된 그 코드입니다.",
+      '<div style="display:flex;gap:8px;justify-content:center;margin:14px 0">' +
+        '<input id="kzcode" class="codein" autocomplete="off" spellcheck="false" placeholder="접속 코드" value="' + code.replace(/"/g, "&quot;") + '"></div>',
+      '<button id="kzgo" class="primary" data-t="다음">다음</button>');
+    const inp = document.getElementById("kzcode"), go = document.getElementById("kzgo");
+    const run = async () => {
+      code = inp.value.trim(); if (!code) return;
+      busy(go, true);
+      try {
+        const r = await Cloud.call("roster", { code });
+        people = (r && r.people) || [];
+        stepWho();
+      } catch (e) { busy(go, false); fail(e, stepCode); }
+    };
+    go.onclick = run;
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") run(); });
+    inp.focus();
+  };
+
+  const stepWho = () => {
+    const list = people.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    frame("누구십니까", "콘첸트라트에 등록된 이름을 고르십시오. PIN 없이 이름만으로 들어오는 계정은 보관함을 올릴 수 없습니다.",
+      '<div class="grid">' +
+        list.map((u, i) =>
+          '<div class="slot" data-kzwho="' + i + '">' +
+            '<div class="nm">' + u.name + '</div>' +
+            '<div class="sub">' + ({ writer: "작성위원", edu: "교육위원", admin: "어드민", design: "디자인부원", designLead: "디자인부장" }[u.role] || u.role) +
+              (u.secret === "none" ? " · PIN 없음" : u.secret === "setPin" ? " · 처음 — PIN 정하기" : "") + '</div>' +
+          '</div>').join("") +
+      '</div>',
+      '<button id="kzprev" class="ghost">코드 다시</button>');
+    document.getElementById("kzprev").onclick = stepCode;
+    $sheet.querySelectorAll(".slot[data-kzwho]").forEach(el => {
+      el.onclick = () => { who = list[+el.dataset.kzwho]; stepSecret(); };
+    });
+  };
+
+  const stepSecret = () => {
+    const kind = who.secret;   // password · pin · setPin · none
+    const label = kind === "password" ? "어드민 비밀번호" : kind === "setPin" ? "새 PIN (숫자 4~6자리)" : "PIN";
+    frame(who.name,
+      kind === "none"
+        ? "이 계정은 PIN 없이 들어오는 계정입니다. 연결은 되지만 보관함을 <b>올릴 수는 없습니다</b>. 콘첸트라트 어드민에게 PIN 사용을 켜 달라고 하십시오."
+        : kind === "setPin" ? "콘첸트라트에 처음 들어오는 계정입니다. 여기서 정한 PIN 이 콘첸트라트 앱에서도 쓰입니다."
+        : "콘첸트라트에서 쓰는 " + label + " 을 넣으십시오.",
+      kind === "none" ? "" :
+      '<div style="display:flex;gap:8px;justify-content:center;margin:14px 0">' +
+        '<input id="kzpin" class="codein" type="password" autocomplete="off" inputmode="' + (kind === "password" ? "text" : "numeric") + '" placeholder="' + label + '"></div>',
+      '<button id="kzprev" class="ghost">이름 다시</button><button id="kzgo" class="primary" data-t="연결">연결</button>');
+    document.getElementById("kzprev").onclick = stepWho;
+    const inp = document.getElementById("kzpin"), go = document.getElementById("kzgo");
+    const run = async () => {
+      const v = inp ? inp.value : "";
+      if (kind !== "none" && !v) return;
+      const p = { code, userId: who.id };
+      if (kind === "password") p.password = v; else if (kind === "setPin") p.newPin = v; else if (kind === "pin") p.pin = v;
+      busy(go, true);
+      try {
+        const r = await Cloud.call("login", p);
+        Store.set(KZ_TOKEN_KEY, r.token);
+        Store.set(KZ_USER_KEY, who.name);
+        Store.del(KZ_AT_KEY);
+        stepFirst();
+      } catch (e) { busy(go, false); fail(e, stepSecret); }
+    };
+    go.onclick = run;
+    if (inp) { inp.addEventListener("keydown", e => { if (e.key === "Enter") run(); }); inp.focus(); }
+  };
+
+  /* 연결 직후 — 구름에 이미 있으면 어느 쪽을 남길지 묻고, 없으면 지금 것을 올립니다 */
+  const stepFirst = async () => {
+    frame("연결됐습니다", "구름을 확인하는 중…", "", "");
+    let row = null;
+    try { row = await Cloud.call("gameSaveGet"); } catch (e) { row = null; }
+    if (!row || !row.raw) {
+      try { await Cloud.push(); } catch (e) { /* [기록] 에서 다시 올릴 수 있습니다 */ }
+      closeModal(); if (back) back();
+      return;
+    }
+    let cloudTotal = "?";
+    try { cloudTotal = (JSON.parse(row.raw).ids || []).length; } catch (e) {}
+    const mine = Object.keys(S.owned || {}).length;
+    frame("구름에 보관함이 있습니다",
+      "콘첸트라트에 <b>" + who.name + "</b> 의 보관함이 이미 있습니다. 어느 쪽을 원장으로 삼을까요?",
+      '<div class="grid">' +
+        '<div class="slot" id="kzusecloud"><div class="nm">구름 것을 내려받기</div>' +
+          '<div class="sub">인격 ' + cloudTotal + '종 · ' + (row.ver ? "v" + row.ver + " · " : "") + cloudAtText(row.updatedAt) +
+          '<br>이미 받은 우편·업적은 이 기기 것과 합쳐집니다. 새로고침합니다.</div></div>' +
+        '<div class="slot" id="kzusemine"><div class="nm">이 기기 것을 올리기</div>' +
+          '<div class="sub">인격 ' + mine + '종 · 지금 이 브라우저의 보관함<br>구름 것은 덮어써집니다.</div></div>' +
+      '</div>', "");
+    document.getElementById("kzusecloud").onclick = () => { try { Cloud.adopt(row); } catch (e) { fail(e, stepFirst); } };
+    document.getElementById("kzusemine").onclick = async () => {
+      if (!confirm("구름의 보관함을 이 기기 것으로 덮어씁니다. 계속할까요?")) return;
+      try { await Cloud.push(); closeModal(); if (back) back(); }
+      catch (e) { fail(e, stepFirst); }
+    };
+  };
+
+  stepCode();
 }
 
 /* ── 엔케팔린 계산 ─────────────────────────────────────────────
@@ -6037,6 +6283,7 @@ function chapterEnd() {
   gainEvent(eventStoryGain(c, first));
   saveVault();
   save();
+  Cloud.push().catch(() => {});   // 장을 마쳤으니 구름에도 — 못 올리면 다음 기회에
   const hasNext = S.ch + 1 < CHAPTERS.length;
 
   /* 첫 장을 처음 마쳤을 때만 — 다음에 무엇을 하면 되는지 일러 둡니다.
@@ -10394,6 +10641,7 @@ function mirrorClear() {
     ? mirrorRecordBuild(rule, clearedPackIds) : null;
   if (record) pushMirrorRecord(record);
   saveVault();
+  Cloud.push().catch(() => {});   // 거울을 마쳤으니 구름에도
   S.mirror = false;
   S.mirrorTier = null;
   S.mirrorHard = false;
@@ -10547,6 +10795,18 @@ function openRecord(back) {
         ).join('') +
         '</div>'
       : '') +
+    '<h3 style="margin:18px 0 4px">콘첸트라트</h3>' +
+    (Cloud.on()
+      ? '<div class="hint"><b>' + Cloud.user() + '</b> 으로 연결돼 있습니다 · 마지막으로 맞춘 때 ' + cloudAtText() + '<br>' +
+          '<span class="dim">장을 마칠 때·거울을 마칠 때 저절로 올라갑니다. 다른 기기에서 켜면 구름 것이 더 새로울 때 끌어옵니다.</span></div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">' +
+          '<button id="kzpush" class="ghost">지금 올리기</button>' +
+          '<button id="kzpull" class="ghost">구름 것 내려받기</button>' +
+          '<button id="kzoff" class="ghost">연결 끊기</button>' +
+        '</div>'
+      : '<div class="hint">콘첸트라트 계정에 보관함을 맡겨 두면 다른 기기에서도 이어서 할 수 있습니다. ' +
+          '<span class="dim">라거슈타트 위원만 — 접속 코드와 PIN 이 필요합니다.</span></div>' +
+        '<div style="margin-bottom:14px"><button id="kzon" class="ghost">콘첸트라트 연결</button></div>') +
     '<div class="hint" style="margin-top:16px">' +
       '<b>내보내기</b> 를 누르면 <code>vault.js</code> 파일이 ' +
       '브라우저가 쓰는 <b>내려받기 폴더</b>에 떨어집니다 (보통 «다운로드»).' +
@@ -10568,6 +10828,7 @@ function openRecord(back) {
       '<b>가져오기</b> 는 다른 곳(오프라인 완전판 등)에서 내보낸 <code>vault.js</code> 를 ' +
       '파일 그대로 골라 <b>이 브라우저</b>에 바로 옮겨 담습니다 — data 폴더를 만질 필요가 없습니다. ' +
       '지금 이 브라우저에 있던 보관함은 그 자리에서 덮어써집니다.' +
+      (Cloud.on() ? ' 콘첸트라트에도 그 파일이 올라갑니다.' : '') +
     '</div>' +
     '<div class="modalfoot">' +
       '<a id="vdl" class="dl" download="vault.js">내보내기</a>' +
@@ -10582,6 +10843,27 @@ function openRecord(back) {
     const vw = document.getElementById("recview" + i);
     if (vw) vw.onclick = () => openMirrorResult(r);
   });
+
+  const kzon = document.getElementById("kzon");
+  if (kzon) kzon.onclick = () => openCloudConnect(() => openRecord(back));
+  const kzpush = document.getElementById("kzpush");
+  if (kzpush) kzpush.onclick = async () => {
+    kzpush.disabled = true; kzpush.textContent = "올리는 중…";
+    try { await Cloud.push(); openRecord(back); }
+    catch (e) { alert("올리지 못했습니다 — " + ((e && e.message) || "")); openRecord(back); }
+  };
+  const kzpull = document.getElementById("kzpull");
+  if (kzpull) kzpull.onclick = async () => {
+    if (!confirm("구름의 보관함을 끌어와 이 기기 것과 합칩니다.\n이미 받은 우편·업적은 남고, 나머지는 구름 것이 됩니다. 새로고침합니다.\n\n계속할까요?")) return;
+    kzpull.disabled = true; kzpull.textContent = "내려받는 중…";
+    try { if (!(await Cloud.pull())) { alert("구름에 보관함이 없습니다. 먼저 [지금 올리기] 를 하십시오."); openRecord(back); } }
+    catch (e) { alert("내려받지 못했습니다 — " + ((e && e.message) || "")); openRecord(back); }
+  };
+  const kzoff = document.getElementById("kzoff");
+  if (kzoff) kzoff.onclick = () => {
+    if (!confirm("콘첸트라트 연결을 끊습니다. 구름에 올린 보관함은 그대로 남고, 이 기기 것도 그대로입니다.")) return;
+    Cloud.disconnect(); openRecord(back);
+  };
 
   const a = document.getElementById("vdl");
   a.href = "data:text/javascript;charset=utf-8," + encodeURIComponent(vaultExportText());
@@ -12642,7 +12924,13 @@ function gate(msg) {
 }
 
 /* 글꼴을 가장 먼저 입힙니다 — 출입 코드 화면부터 고른 글꼴로 보이도록 */
-function boot() { applyFont((loadVault() || {}).font); if (gateOpen()) glass(); else gate(); }
+function boot() {
+  applyFont((loadVault() || {}).font);
+  if (gateOpen()) glass(); else gate();
+  /* 콘첸트라트에 연결돼 있으면 뒤에서 구름을 봅니다 — 더 새로우면 합치고 새로고침합니다.
+   * 기다리게 하지 않습니다: 오프라인이면 그냥 지금 것으로 갑니다. */
+  Cloud.autoPull();
+}
 
 /* ── wip 확장 자리 ────────────────────────────────────────────
  *  특정 장·전투만을 위해 엔진을 손봐야 할 때, 매번 여기 engine.js 를
