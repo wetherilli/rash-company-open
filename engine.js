@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.8.0";
+const VERSION = "2.8.1";
 const VERSION_NAME = "거울굴절철도 3호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -857,12 +857,26 @@ const Cloud = {
     if (!this.on()) return;
     try {
       const row = await this.call("gameSaveGet");
-      if (row && row.raw && row.updatedAt && row.updatedAt > this.at()) this.adopt(row);
-    } catch (e) { /* 오프라인·혼잡 — 다음에 */ }
+      if (row && row.raw && row.updatedAt && row.updatedAt > this.at()) return this.adopt(row);
+    } catch (e) { return; /* 오프라인·혼잡 — 다음에 */ }
+    /* 구름과 맞춘 것을 확인한 뒤에야 연결 업적을 줍니다 — 그 전에 주면, 끌어와 합칠 때
+     * «받았다» 표시만 남고 선택권은 구름 것에 덮여 사라집니다(vaultMergeOnce 는 achieved 만 합칩니다).
+     * 출입 코드를 넘은 뒤에만 — 알림은 싸움 중 업적처럼 지금 기록에 뜹니다. */
+    if (gateOpen() && cloudLinkAchieve())
+      this.push().catch(() => {});
   },
 
   disconnect() { Store.del(KZ_TOKEN_KEY); Store.del(KZ_USER_KEY); Store.del(KZ_AT_KEY); }
 };
+
+/* 업적 「더 넓은 세상으로」 — 연결돼 있으면 clear:"konzentrat" 로 업적을 살핍니다.
+ * 새로 받은 것이 있으면 true (부른 쪽이 구름에 올립니다). */
+function cloudLinkAchieve() {
+  if (!Cloud.on() || !S || vaultLocked()) return false;
+  const before = Object.keys(S.achieved || {}).length;
+  checkAchievements(null, "konzentrat");
+  return Object.keys(S.achieved || {}).length > before;
+}
 
 /* 서버 시각(ISO)을 이 기기 시간대의 사람 말로. 안 주면 마지막으로 맞춘 때 */
 function cloudAtText(iso) {
@@ -972,6 +986,7 @@ function openCloudConnect(back) {
     let row = null;
     try { row = await Cloud.call("gameSaveGet"); } catch (e) { row = null; }
     if (!row || !row.raw) {
+      cloudLinkAchieve();   // 구름이 비었으니 이 기기 것이 원장 — 받은 선택권째 올립니다
       try { await Cloud.push(); } catch (e) { /* [기록] 에서 다시 올릴 수 있습니다 */ }
       closeModal(); if (back) back();
       return;
@@ -991,6 +1006,7 @@ function openCloudConnect(back) {
     document.getElementById("kzusecloud").onclick = () => { try { Cloud.adopt(row); } catch (e) { fail(e, stepFirst); } };
     document.getElementById("kzusemine").onclick = async () => {
       if (!confirm("구름의 보관함을 이 기기 것으로 덮어씁니다. 계속할까요?")) return;
+      cloudLinkAchieve();
       try { await Cloud.push(); closeModal(); if (back) back(); }
       catch (e) { fail(e, stepFirst); }
     };

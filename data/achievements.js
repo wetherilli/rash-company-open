@@ -22,6 +22,8 @@
  *                  where 처럼 여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
  *                  clear: ["mirrorHard", "mirrorExtreme"]
  *                  적을 쓰러뜨리는 것과는 다른 사건이라, kill 과 같이 적지 마십시오.
+ *                  "konzentrat" 는 던전이 아니라 «콘첸트라트 연결» 이라는 사건입니다
+ *                  (engine.js 의 cloudLinkAchieve).
  *      where       "story" 본편 · "mirror" 거울 던전(하드·익스트림 포함)
  *                  · "mirrorHard" 하드만 · "mirrorExtreme" 익스트림만
  *                  여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
@@ -199,5 +201,16 @@ const ACHIEVEMENTS = [
     reward: "보조 교육위원 선택권 1개",
     when: { clear: "railLine3:k60" },
     give: { advisorTicket: 1 }
+  },
+  {
+    /* 사용자 지침(2026-09-19). 싸움이 아니라 «연결» 이라는 사건이라 clear 자리에
+     * "konzentrat" 를 적습니다 — engine.js 의 cloudLinkAchieve 가 그 말로
+     * checkAchievements 를 부릅니다. 구름을 확인한 뒤에만 부르니(구름 것을 끌어와
+     * 합칠 때 선택권이 사라지지 않게), 이미 연결해 둔 판도 다음에 켤 때 받습니다. */
+    name: "더 넓은 세상으로",
+    desc: "라슈 컴퍼니 계정을 콘첸트라트와 연동한다.",
+    reward: "E.G.O 기프트 선택권 1개",
+    when: { clear: "konzentrat" },
+    give: { giftTicket: 1 }
   }
 ];
