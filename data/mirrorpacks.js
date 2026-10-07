@@ -125,5 +125,7 @@ const MIRROR_PACKS = [
     foes: ["geugya_remnant", "deathleaper", "rail3_locust"] },
   { id: "rail3pack2", name: "감은 눈", railOnly: true, tier: "railLine3",
     bg: "assets/scene/거울굴절철도3호선종착역.jpg",
-    foes: ["hwangjeo_phantasm", "tanaconda", "rail3_therizino"] }
+    foes: ["hwangjeo_phantasm", "tanaconda", "rail3_therizino"] },
+  { id: "pack15", name: "숨겨둔 로단", bg: "assets/scene/공격받은 메카고질라.jpg",
+    foes: ["olympiad_rival", "gimhuijae", "rodan_toy"] }
 ];

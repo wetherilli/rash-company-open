@@ -212,5 +212,43 @@ const ACHIEVEMENTS = [
     reward: "E.G.O 기프트 선택권 1개",
     when: { clear: "konzentrat" },
     give: { giftTicket: 1 }
+  },
+  {
+    name: "꺾여버린 날개",
+    desc: "하드 또는 익스트림 거울 던전에서 로단을 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ N사 E.G.O :: 불꽃날개 윤지호",
+    when: { kill: "로단", where: ["mirrorHard", "mirrorExtreme"] },
+    give: { support: "N사 E.G.O :: 불꽃날개|윤지호" }
+  },
+  {
+    name: "도시의 별까지",
+    desc: "제1발톱 대행자 김하주를 편성한 채로, 하드 또는 익스트림 거울 던전을 완주한다.",
+    reward: "지원 작성위원 ★★★ 제1발톱 수행자 장원준",
+    when: { clear: ["mirrorHard", "mirrorExtreme"], party: "kim_haju", titleHas: "제1발톱" },
+    give: { support: "제1발톱 수행자|장원준" }
+  },
+  /* ── 숨은 업적 (사용자 지침 2026-09-23) ────────────────────────
+   *  7.5장 본편의 로단은 «버티기만 하면» 넘어가는 전투이고, 화면에도
+   *  「쓰러뜨릴 수 없다」고만 적힙니다. 그런데도 21턴을 기다리지 않고
+   *  20%까지 눌러 물러나게 만든 사람에게만 주는 몫입니다.
+   *  kill 로는 못 잡습니다 — 쓰러뜨린 것이 아니라 물러나게 만든 것이라
+   *  victory() 가 아니라 scriptedEnd() 를 지나갑니다. 그래서 그 전투
+   *  장면의 scriptedAchieve 가 실어 보내는 말을 clear 로 받습니다
+   *  (engine.js 의 scriptedEnd · achieveMatches 참고).
+   *
+   *  where 는 적지 않아도 됩니다 — 이 말은 그 전투 장면 하나만 보냅니다.
+   *  거울 던전의 로단은 scriptedAchieve 가 없는 평범한 전투라, 거기서
+   *  쓰러뜨려도 이 업적은 걸리지 않습니다(그쪽은 「꺾여버린 날개」 몫).
+   *
+   *  보상은 «숨은 인격» 입니다 (사용자 지침 2026-09-23) — 이한범의
+   *  ★★★ 3.4성급 「L사 E.G.O :: 로단」. 위 SINNERS 쪽에 hidden: true 로
+   *  적어 두었으므로, 이 업적을 따기 전에는 노트에도 장착 화면에도
+   *  그런 인격이 있다는 낌새조차 없습니다. */
+  {
+    name: "눌러버린 날개",
+    desc: "7.5장에서, 버티는 대신 로단을 끝까지 밀어붙여 물러나게 만든다.",
+    reward: "인격 ★★★ L사 E.G.O :: 로단 (이한범)",
+    when: { clear: "rodan_pressed" },
+    give: { id: { who: "lee_hanbeom", star: 3, title: "L사 E.G.O :: 로단" } }
   }
 ];

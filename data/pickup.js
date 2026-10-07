@@ -25,6 +25,16 @@ const PICKUP_MAX = 2;
 const PICKUPS = [
   {
     on:   true,
+    name: "L사 특정 배정",
+    tag:  "L사",
+    rate: 0.60,
+    cost: 30,
+    line:   "신입사원의 빈자리",
+    banner: "assets/scene/메카고질라 갑판 낮.jpg",
+    desc: "이름에 「L사」가 든 인격과 교육위원이 자주 나옵니다."
+  },
+  {
+    on:   true,
     name: "신해수랜드 특정 배정",
     tag:  "신해수랜드",
     rate: 0.60,
@@ -32,22 +42,22 @@ const PICKUPS = [
     line:   "피를 머금을 시간이다.",
     banner: "assets/scene/신해수랜드 대치중.jpg",
     desc: "이름에 「신해수랜드」가 든 인격과 교육위원이 자주 나옵니다."
-  },
-  {
-    on:   true,
-    name: "G사 특정 배정",
-    tag:  "G사",
-    rate: 0.60,
-    cost: 30,
-    line:   "카메라가 돌아가고 있습니다.",
-    banner: "assets/scene/G사 골목.jpg",
-    desc: "이름에 「G사」가 든 인격과 교육위원이 자주 나옵니다."
   }
 ];
 
 /* 내려간 배정 — 기록용입니다. 게임에는 쓰이지 않습니다.
  * 다시 세우려면 그대로 베껴 PICKUPS 로 옮기면 됩니다. */
 const PICKUP_PAST = [
+  {
+    name: "G사 특정 배정",
+    tag:  "G사",
+    rate: 0.60,
+    cost: 30,
+    line:   "카메라가 돌아가고 있습니다.",
+    banner: "assets/scene/G사 골목.jpg",
+    desc: "이름에 「G사」가 든 인격과 교육위원이 자주 나옵니다.",
+    ver: "1.5.0 ~ 2.8.1"
+  },
   {
     name: "남부협회 특정 배정",
     tag:  "남부협회",

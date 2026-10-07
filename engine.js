@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.8.1";
-const VERSION_NAME = "거울굴절철도 3호선";
+const VERSION = "2.9.0";
+const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -3136,6 +3136,7 @@ let CUR_BG   = null;    // 지금 깔려 있는 배경 그림
 let CUR_NAME = null;    // 칸 아래에 적을 지명
 let CUR_FOE  = null;    // { src, tag, scale } — 가운데에 선 적. showFoe() 가 다룹니다
 let CUR_SPEAKER = null; // { src, tag } — 왼쪽에 선 말하는 사람의 초상. showSpeaker() 가 다룹니다
+let CUR_CUT  = null;    // { src, tag } — 칸을 통째로 덮은 컷신. showCut() 가 다룹니다
 
 /* 배경은 새 그림을 줄 때만 갈립니다.
  * 그림 없는 장면(img:null)이 와도 깔려 있던 배경을 지우지 않습니다 —
@@ -3145,6 +3146,9 @@ function setBackdrop(src, placeName) {
   if (src) CUR_BG = src;
   else if (src === false) CUR_BG = null;
   if (placeName !== undefined) CUR_NAME = placeName || null;
+  /* 장소가 갈리면 덮여 있던 컷신은 저절로 걷힙니다 — 컷신이 다음 장면까지
+   * 따라가 붙어 있는 일이 없도록 (showCut 참고). */
+  CUR_CUT = null;
   drawStage(null, null, null);
 }
 
@@ -3201,6 +3205,14 @@ function renderStage() {
               'onerror="this.style.display=\'none\'"></div>';
   /* 지명은 칸 안쪽 아래에 얹습니다 — 밖에 두면 있고 없고에 따라 높이가 흔들립니다 */
   if (CUR_NAME) html += '<div class="placename">' + CUR_NAME + '</div>';
+  /* 컷신은 맨 나중에, 맨 위에 얹습니다 — 배경·적·초상·지명을 «지우지 않고»
+   * 통째로 가립니다(showCut 참고). 그림이 투명한 선화라 바탕을 불투명한
+   * 종이색으로 깔아야 아래가 비쳐 보이지 않습니다 — 그 몫이 .cutwrap 입니다. */
+  if (CUR_CUT)
+    html += '<div class="cutwrap">' +
+              '<img src="' + assetURL(CUR_CUT.src) + '" alt="' + (CUR_CUT.tag || "") + '" ' +
+              'onerror="this.style.display=\'none\'">' +
+            '</div>';
   html += '</div>';
   $stage.innerHTML = html;
 }
@@ -3208,7 +3220,28 @@ function renderStage() {
 /* 무대를 아예 접는다 — 지금은 출입 코드 화면에서만 씁니다 */
 function hideStage() {
   $stage.className = ""; $stage.innerHTML = "";
-  CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null;
+  CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null; CUR_CUT = null;
+}
+
+/* ── 컷신 ──────────────────────────────────────────────────────
+ *  무대 칸을 통째로 덮는 한 장짜리 그림입니다. 덮는 «겹» 이라, 아래에 깔려
+ *  있던 배경·적·초상은 지워지지 않고 그대로 있습니다 — 컷신을 걷으면 그
+ *  무대가 손대지 않은 채로 도로 나옵니다(사용자 지침 2026-09-22).
+ *
+ *  걷히는 때는 셋입니다 —
+ *    ① { t:"cut" } 또는 { t:"cut", img:false } 로 손수 걷을 때
+ *    ② 장소가 갈릴 때 (setBackdrop — t:"place" 가 부릅니다)
+ *    ③ 전투가 열릴 때 (startBattleFight) — 컷신이 전투로 새지 않게
+ *  그 밖에는 몇 줄이 지나가든 덮인 채로 있습니다. 컷신 한 장이 대사 여러
+ *  줄을 받게 하려는 것입니다.                                             */
+function showCut(src, tag) {
+  CUR_CUT = src ? { src: src, tag: tag || null } : null;
+  renderStage();
+}
+function clearCut() {
+  if (!CUR_CUT) return;
+  CUR_CUT = null;
+  renderStage();
 }
 
 /* 대사하는 사람을 왼쪽에 세운다 — 적(CUR_FOE)은 그대로 둔다 */
@@ -4055,6 +4088,22 @@ function play(s) {
       if (s.text) say(s.text, s.cls || "n");
       return cont();
 
+    /* ── 컷신 ────────────────────────────────────────────────
+     *  { t:"cut", img: <assets/cut 의 그림> }  덮는다
+     *  { t:"cut", img:false }                걷는다 (img 를 아예 안 적어도 같습니다)
+     *
+     *  덮는 동안 배경·적·초상은 «지워지지 않고» 가려지기만 합니다 — 걷으면
+     *  그 무대가 그대로 도로 나옵니다(showCut 참고). 한 번 덮으면 손수 걷거나
+     *  장소가 갈리거나 전투가 열릴 때까지 그대로라, 컷신 한 장이 대사 여러
+     *  줄을 받습니다.
+     *
+     *  text 를 적으면 그 줄도 함께 찍습니다(평소 t:"n" 과 같은 결). shake 는
+     *  어느 장면에나 붙는 것이라 여기서도 그대로 듣습니다. */
+    case "cut":
+      showCut(s.img || null, s.name || null);
+      if (s.text) say(s.text, s.cls || "n");
+      return cont();
+
     case "place":
       showCard(s.img || (curChapter() || {}).img, s.name, s.name);
       say("▶ " + s.name, "place");
@@ -4668,10 +4717,24 @@ function startBattle(scene) {
 
 function startBattleFight(scene, f) {
   S.waiting = true;
+  /* 덮여 있던 컷신은 전투를 열면서 걷습니다 — 컷신이 싸움판 위에 얹힌 채로
+   * 남으면 적도 체력도 안 보입니다 (showCut 참고). */
+  CUR_CUT = null;
   S.battle = {
     id: scene.foe, name: f.name, def: f.def, atk: f.atk,
     hp: f.hp, maxhp: f.hp, boss: !!f.boss,
     loseOk: scene.lose === "story",
+    /* storyFrom — «버티는» 각본 전투를 만드는 자리 (사용자 지침 2026-09-23).
+     *
+     * lose:"story" 는 본래 «전멸해도 언제든 그냥 넘어간다» 였습니다. 그래서
+     * 첫 턴에 몰살당해도 이야기가 그대로 이어져, 버티는 맛이 없었습니다.
+     * storyFrom 에 턴을 적으면 그 «넘어감»이 그 턴부터만 듣습니다 —
+     *   · 그 턴까지 버텼다  → 각본대로 쓸려 나가고 이야기가 이어진다
+     *   · 그 전에 쓰러졌다  → 진짜 패배. 중간 저장 자리로 돌아간다
+     * 적을 scriptedOut(20%)까지 깎아 끝내는 갈래는 그대로 둡니다.
+     * 7.5장 권모술수의 로단(21턴 · firstAoeFlat 500)이 그 첫 자리입니다.
+     * defeat() 가 이 값을 봅니다. */
+    storyFrom: scene.storyFrom || 0,
     /* 길잡이가 다녀간 뒤라면 관리력을 가득 채우고 엽니다 (t:"rest" 참고) */
     manage: S.restManage ? manageCap()
                          : RULE.manageStart + advisorEffect().manage,
@@ -4701,7 +4764,7 @@ function startBattleFight(scene, f) {
    "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
    "evadeEvery", "evadeFrom", "evadeLine", "evadeWarn",
    "firstEvery", "firstFrom", "firstLine", "firstWarn",
-   "firstAoeEvery", "firstAoeFrom", "firstAoeLine", "firstAoeWarn"].forEach(k => {
+   "firstAoeEvery", "firstAoeFrom", "firstAoeFlat", "firstAoeLine", "firstAoeWarn"].forEach(k => {
     if (scene[k] != null) S.battle[k] = scene[k];
   });
   if (scene.hp != null) S.battle.maxhp = scene.hp;
@@ -4726,7 +4789,16 @@ function startBattleFight(scene, f) {
   showFoe(f.img || null, f.name, f.imgScale || null);   // 적은 배경 가운데에 선다
   S.battle.shown = f.img || null;          // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
   say("▶ " + withJosa(f.name, "이") + " 나타났다!", "bad");
-  say("체력 " + f.hp + "　공격 " + f.atk + "　방어 " + f.def, "sys");
+  /* FOES 원본이 아니라 «이 전투의» 값을 적습니다 — 장면에서 hp·atk·def 를
+   * 덮어쓴 전투(위 «이 전투 하나만 다르게» 자리)는 둘이 다릅니다.
+   * 여태 원본을 적고 있어서, 7.5장 로단처럼 덮어쓴 전투는 실제로 1150/50/19
+   * 인데 안내에는 780/36/15(거울 던전 몫)라고 떴습니다 — 2026-09-23 확인. */
+  say("체력 " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
+  /* hint — 이 전투가 평범한 전투가 아닐 때, 무엇을 해야 하는지 한 줄
+   * (사용자 지침 2026-09-23). 버티는 전투(storyFrom)·설득 전투처럼
+   * 「적을 눕히는 것」이 목표가 아닌 자리에 답니다. 전투 장면에 적습니다.
+   *     { t:"battle", foe:"…", hint:"… 버텨야 한다." } */
+  if (scene.hint) say(scene.hint, "recall");
 
   if (!S.party.some(alive)) S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
 
@@ -5909,8 +5981,19 @@ function resolveTurn() {
        * 깎지 못합니다. 각본상 «반드시 전멸해야 하는» 자리에만 씁니다
        * (7장 3층 차민준 각본 전투의 9턴째 — 사용자 지침 2026-09-11).
        * 책임(추민수)만은 그대로 대신 받습니다 — 그래도 합이 훨씬 크므로
-       * 혼자 버텨 내지는 못합니다. */
-      const flatAoe = b.aoeFlat || (FOES[b.id] || {}).aoeFlat || 0;
+       * 혼자 버텨 내지는 못합니다.
+       *
+       * firstAoeFlat — 같은 것을 «광역 선공» 턴에만 겁니다 (2026-09-22).
+       * 한 적에게 «평범한 광역» 과 «반드시 전멸하는 한 방» 을 함께 달려면
+       * 둘을 갈라 놓아야 합니다 — aoeFlat 은 광역인 턴에 모두 걸리므로,
+       * aoeEvery 로 평범한 광역을 돌리면서 aoeFlat 을 함께 적으면 첫 광역
+       * 턴에 그대로 전멸해 버립니다. 7.5장 로단이 그 자리입니다:
+       * 9턴마다 평범한 광역(aoeEvery) + 21턴에 확정 전멸(firstAoeEvery ·
+       * firstAoeFlat). 선공 광역은 aoeEvery 가 걸리지 않는 턴에만 서므로
+       * (beginTurn 의 선공광역 조건) 둘이 겹칠 일도 없습니다. */
+      const fdef = FOES[b.id] || {};
+      const flatAoe = (b.foeFirst ? (b.firstAoeFlat || fdef.firstAoeFlat) : 0) ||
+                      b.aoeFlat || fdef.aoeFlat || 0;
       const hitOne = t => {
         if (flatAoe) return flatAoe;
         const st = effStats(t);
@@ -6123,6 +6206,13 @@ function scriptedEnd() {
   const b = S.battle;
   divider();
   say(b.scene.endText || (withJosa(b.name, "은") + " 더 상대하지 않고 물러난다."), "sys");
+  /* scriptedAchieve — 이 각본 결말에 닿은 것 자체를 업적 조건으로 쓰는 자리
+   * (사용자 지침 2026-09-23). 적을 쓰러뜨린 것이 아니라 «물러나게 만든» 것이라
+   * kill 로는 못 잡습니다. 거울 갈래가 쓰는 「갈래열쇠:무엇」과 같은 길로,
+   * 적어 둔 말을 cleared 자리에 실어 한 번 더 부릅니다 (achieveMatches 참고).
+   * 버티기만 해도 되는 전투를 «굳이 눌러서» 끝냈을 때의 숨은 보상 —
+   * 7.5장 권모술수의 로단이 그 첫 자리입니다. */
+  if (b.scene.scriptedAchieve) checkAchievements(b.name, b.scene.scriptedAchieve);
   healParty(RULE.winHeal, null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
@@ -6170,7 +6260,11 @@ function defeat() {
   const b = S.battle;
   divider();
   say("작성위원 전원이 쓰러졌다.", "bad");
-  if (b.loseOk) {
+  /* 각본 전투라도 storyFrom 이 적혀 있으면, 그 턴까지 버텼을 때만
+   * 이야기가 이어집니다 — 그 전에 쓰러진 것은 진짜 패배라 아래 평범한
+   * 패배 갈래로 내려갑니다 (사용자 지침 2026-09-23).
+   * 적을 20%까지 깎아 끝내는 각본 결말(scriptedEnd)은 그대로 삽니다. */
+  if (b.loseOk && b.turn >= b.storyFrom) {
     say("…하지만 이야기는 멈추지 않는다.", "sys");
     S.party.forEach(w => { if (w) S.hp[w] = Math.max(1, Math.floor(maxHp(w) * 0.3)); });
     if (b.scene.party) { forcePartyPop(); S.battleForced = false; }

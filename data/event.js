@@ -64,7 +64,7 @@ const EVENT_RULE = {
    * 만큼 더 받습니다. 교환소 맨 위 알림에 이 수가 그대로 적힙니다. */
   bonusPct: 20,
   /* 스토리 장을 마칠 때 들어오는 몫.
-   *   latest — «가장 마지막 장»(지금은 7장 호감이 끝나는) 을 마쳤을 때
+   *   latest — «가장 마지막 장»(지금은 7.5장 권모술수가 난무하는) 을 마쳤을 때
    *   story  — 그 밖의 장을 마쳤을 때
    *   first  — 그 장을 처음 마쳤을 때 / again — 다회차로 다시 마쳤을 때
    * 거울 던전 쪽 몫은 engine.js 의 MIRROR_TIERS 각 갈래에 event 로 적혀 있습니다. */
@@ -180,6 +180,42 @@ const EVENTS = [
       { id: "bee_id_hamin",   name: "송하민 — P사 익룡무리 과장",
         cost: 300, limit: 1,
         give: { id: { who: "song_hamin", star: 3, title: "P사 익룡무리 과장" } } }
+    ]
+  },
+
+  /* v2.9.0(2026-10-07)에 7.5장 「권모술수가 난무하는」이 CHAPTERS 맨 끝에 서면서
+   * 열린 기간입니다. 재화 이름 「모스라」와 기간(다음 주 금요일 10-16 까지,
+   * 10-17 0시에 닫힘)은 사용자 지침(2026-10-07)입니다. */
+  {
+    id:      "mothra",             /* 보관함에 남는 열쇠 — 바꾸지 마십시오 */
+    /* 7.5장은 title 칸에 장 이름이 그대로 들어 있습니다(주인공 이름이 아닙니다) */
+    chapter: "권모술수가 난무하는",
+    cur:     "모스라",
+    desc:    "날개에서 떨어진 빛나는 비늘가루.",
+    line:    "꺾인 날개 위로, 또 다른 날개가 내려앉는다.",
+    banner:  "assets/scene/공격받은 메카고질라.jpg",
+    from:    "2026-10-07",
+    days:    10,
+    goods: [
+      { id: "mothra_box_select", name: "인격 파편 상자 (선택) 10개",
+        cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
+      { id: "mothra_box_random", name: "인격 파편 상자 (무작위) 5개",
+        cost: 10, limit: 30, give: { fragBoxRandom: 5 } },
+      { id: "mothra_cap",        name: "엔케팔린 캡슐 1개",
+        cost: 10, limit: 6,  give: { enkCap: 1 } },
+      { id: "mothra_codex",      name: "황금교본 5권",
+        cost: 10, limit: 5,  give: { codex: 5 } },
+      { id: "mothra_money",      name: "원고료 5",
+        cost: 1,  limit: 0,  give: { money: 5 } },
+      /* 인격 — 한 번씩만입니다. 이번에는 «기존 인격» 을 겁니다(사용자 지침
+       * 2026-10-07). 새로 선 교육위원 강호영·이형우가 E.G.O 인격을 키우므로
+       * E.G.O 둘로 맞췄습니다. 값은 지난 기간들과 같은 200·300 입니다. */
+      { id: "mothra_id_hanbeom",   name: "이한범 — LST E.G.O :: 워커리",
+        cost: 200, limit: 1,
+        give: { id: { who: "lee_hanbeom", star: 3, title: "LST E.G.O :: 워커리" } } },
+      { id: "mothra_id_gyeongwon", name: "이경원 — LST E.G.O :: 악어괴인",
+        cost: 300, limit: 1,
+        give: { id: { who: "lee_gyeongwon", star: 3, title: "LST E.G.O :: 악어괴인" } } }
     ]
   }
 ];

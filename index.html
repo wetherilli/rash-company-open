@@ -177,6 +177,35 @@
     72%{opacity:.35;transform:scale(var(--imgscale,1)) translateY(16px);}
     100%{opacity:0;transform:scale(var(--imgscale,1)) translateY(30px);}
   }
+  /* 컷신 — 칸을 통째로 덮는 한 장짜리 그림 (engine.js 의 showCut 참고).
+   * 배경·적·초상은 아래에 «그대로 있고» 이 겹이 위를 가릴 뿐이라, 걷으면
+   * 그 무대가 손대지 않은 채로 도로 나옵니다.
+   * 그림이 투명한 선화라 바탕을 불투명하게 깔아야 아래가 비치지 않습니다.
+   * ⚠ 흰색(#fff)입니다 — 예전에는 .scenebox.paper 와 같은 종이색(#f2efe9)
+   * 이었는데, 「기가노토사우루스 사망」처럼 **흰 바탕이 그려져 들어 있는**
+   * 그림을 넣으니 그 흰 네모가 종이색 띠 위에 그대로 도드라졌습니다
+   * (사용자 지침 2026-10-04 — "그대로 넣고 배경을 흰색으로"). 흰색으로
+   * 깔면 그런 그림이 이어져 보이고, 투명한 선화 쪽도 종이색 대신 흰
+   * 바탕에 앉을 뿐이라 탈이 없습니다.
+   * z-index 6 — 참격(3)·전투자막(4)·피해숫자(5) 보다 위입니다. */
+  .scenebox .cutwrap{
+    position:absolute;inset:0;z-index:6;background:#fff;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+    animation:cutIn .22s ease-out;
+  }
+  /* 컷신은 «세로를 먼저» 맞춥니다 — 세로는 무슨 일이 있어도 안 자르고,
+   * 넘치는 가로만 좌우로 고르게 잘라냅니다 (사용자 지침 2026-09-23).
+   * object-fit:cover 로는 안 됩니다. cover 는 짧은 쪽을 채우느라 칸이
+   * 그림보다 세로로 길면 위아래를 깎아, 「로단 제압」의 위쪽 타격 표시와
+   * 날아가는 머리가 잘려 나갔습니다.
+   * height:100% + width:auto 면 세로는 늘 딱 맞고, 가로는 제 비율대로
+   * 자랐다가 칸을 넘는 만큼만 잘립니다(가운데 정렬이라 좌우 똑같이).
+   * 칸이 그림보다 가로로 길면 좌우에 바탕색(흰색)이 남는데, 선화의
+   * 바탕이 같은 색이라 이어져 보입니다. */
+  .scenebox .cutwrap img{
+    display:block;height:100%;width:auto;max-width:none;flex:none;
+  }
+  @keyframes cutIn{ from{opacity:0;} to{opacity:1;} }
   /* 지명은 칸 안쪽 아래에 얹습니다 — 칸 높이는 늘 --stageh 그대로 */
   .scenebox .placename{
     position:absolute;left:0;right:0;bottom:0;
@@ -1039,23 +1068,23 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.8.1"></script>
-<script src="data/vault.js?v=2.8.1"></script>
-<script src="data/characters.js?v=2.8.1"></script>
-<script src="data/skills.js?v=2.8.1"></script>
-<script src="data/allies.js?v=2.8.1"></script>
-<script src="data/gifts.js?v=2.8.1"></script>
-<script src="data/pickup.js?v=2.8.1"></script>
-<script src="data/achievements.js?v=2.8.1"></script>
-<script src="data/mail.js?v=2.8.1"></script>
-<script src="data/notice.js?v=2.8.1"></script>
-<script src="data/patch.js?v=2.8.1"></script>
-<script src="data/event.js?v=2.8.1"></script>
-<script src="data/tutorial.js?v=2.8.1"></script>
-<script src="data/foes.js?v=2.8.1"></script>
-<script src="data/story.js?v=2.8.1"></script>
-<script src="data/mirrorpacks.js?v=2.8.1"></script>
-<script src="engine.js?v=2.8.1"></script>
+<script src="data/access.js?v=2.9.0"></script>
+<script src="data/vault.js?v=2.9.0"></script>
+<script src="data/characters.js?v=2.9.0"></script>
+<script src="data/skills.js?v=2.9.0"></script>
+<script src="data/allies.js?v=2.9.0"></script>
+<script src="data/gifts.js?v=2.9.0"></script>
+<script src="data/pickup.js?v=2.9.0"></script>
+<script src="data/achievements.js?v=2.9.0"></script>
+<script src="data/mail.js?v=2.9.0"></script>
+<script src="data/notice.js?v=2.9.0"></script>
+<script src="data/patch.js?v=2.9.0"></script>
+<script src="data/event.js?v=2.9.0"></script>
+<script src="data/tutorial.js?v=2.9.0"></script>
+<script src="data/foes.js?v=2.9.0"></script>
+<script src="data/story.js?v=2.9.0"></script>
+<script src="data/mirrorpacks.js?v=2.9.0"></script>
+<script src="engine.js?v=2.9.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

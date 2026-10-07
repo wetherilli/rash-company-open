@@ -340,7 +340,13 @@ const SINNERS = {
       { star: 3, tier: 3.1, title: "N사 큰망치",             atk: 35, def: 9,  hp: 93,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, tier: 3.2, title: "I사 지원2팀 변신로봇", atk: 30, def: 19, hp: 116, note: "트랜스포머 오타쿠의 꿈을 이룸" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 워커리",    atk: 30, def: 16, hp: 122, note: "워커리라는 이름에 부끄럽지 않은" },
-      { star: 2, tier: 2.0, title: "아라온호 기관장",        atk: 19, def: 11, hp: 78, note: "엔진은, 제가 봅니다." }
+      { star: 2, tier: 2.0, title: "아라온호 기관장",        atk: 19, def: 11, hp: 78, note: "엔진은, 제가 봅니다." },
+      /* 3.4성급 — 실효 예산 80.96(1.4017). 업적 「눌러버린 날개」로만 오는
+       * «숨은 인격» 입니다 (사용자 지침 2026-09-23). 인격으로는 첫 3.4성급 —
+       * 21턴을 기다리지 않고 로단을 눌러야만 오는 자리라 그만한 값을 매겼습니다.
+       * 「워커리」(버티는 결)와 갈라 공격 쪽으로 기울였습니다. */
+      { star: 3, tier: 3.4, title: "L사 E.G.O :: 로단", atk: 40, def: 16, hp: 128, hidden: true,
+        note: "눌러 놓은 날개가, 이제 내 등에서 펴진다." }
     ]
   },
 
@@ -447,7 +453,9 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "L사 에프터팀",          atk: 16, def: 11, hp: 80, note: "길을 치우는 일"  },
       { star: 2, tier: 2.0, title: "S사 콘테스트 참가자",   atk: 17, def: 8,  hp: 74, note: "다음에는 꼭."  },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 악어괴인", atk: 34, def: 12, hp: 114, note: "괴인이라는 말도" },
-      { star: 3, tier: 3.3, title: "모나크 백룡야행",              atk: 35, def: 16, hp: 125, note: "다 찢어놓은 거야."  }
+      { star: 3, tier: 3.3, title: "모나크 백룡야행",              atk: 35, def: 16, hp: 125, note: "다 찢어놓은 거야."  },
+      /* 3.2성급 — 6장에서 만난 케빈의 힘을 담은 E.G.O (7.5장, 사용자 지침 2026-08-31 ⑤) */
+      { star: 3, tier: 3.2, title: "L사 E.G.O :: 케빈", atk: 31, def: 14, hp: 122, note: "번개를 두른 손님." }
 
     ]
   },
@@ -523,7 +531,11 @@ const SINNERS = {
       /* 공격·방어 위주로 재분배 — 3성 평균(26/12/100) 대비 atk +31%·def +33%,
        * hp 는 평균 그대로 — 사용자 지침 */
       { star: 3, tier: 3.1, title: "살수 아티스트",      atk: 32, def: 15, hp: 94, note: "트위터 60만 좋아요"  },
-      { star: 3, tier: 3.2, title: "영덕의 요리사",      atk: 21, def: 25, hp: 140, note: "담는 게 반이에요, 반."  }
+      { star: 3, tier: 3.2, title: "영덕의 요리사",      atk: 21, def: 25, hp: 140, note: "담는 게 반이에요, 반."  },
+      /* 3.2성급 — 제1발톱 지령의 첫 인격 (7.5장, 사용자 지침 2026-08-31 ⑤).
+       * claw1Line — 지령을 따라 공격이 강화될 때 하는 한마디(engine.js 의 claw1LineFor). */
+      { star: 3, tier: 3.2, title: "제1발톱 대행자", atk: 31, def: 14, hp: 122, note: "무엇이 나올지는, 나도 모른다.",
+        claw1Line: "지령의 뜻은 이번에도 똑같군." }
     ]
   },
 
@@ -545,7 +557,9 @@ const SINNERS = {
       /* 3.1성급 — 실효 예산 63.5 (머리말 「잣대」 참고). 표준형 29/13/109 */
       { star: 3, tier: 3.1, title: "G사 4등급 가면라이더", atk: 29, def: 13, hp: 109, note: "이번 생은 조연도 나쁘지 않다." },
       /* 3.0성급 — 성급 평균 그대로 26/12/100 */
-      { star: 3, tier: 3.0, title: "신해수랜드 기록관", atk: 26, def: 12, hp: 100, note: "기록은, 지워지지 않는다." }
+      { star: 3, tier: 3.0, title: "신해수랜드 기록관", atk: 26, def: 12, hp: 100, note: "기록은, 지워지지 않는다." },
+      /* 3.2성급 — 6.5장에서 만난 타나콘다의 힘을 담은 E.G.O (7.5장, 사용자 지침 2026-08-31 ⑤) */
+      { star: 3, tier: 3.2, title: "L사 E.G.O :: 타나콘다", atk: 31, def: 14, hp: 122, note: "배수로의 그림자가, 이제는 내 안에." }
     ]
   }
 };
@@ -893,7 +907,15 @@ const ADVISORS = [
     hidden: true,        // 업적 「메뚜기의 재앙」으로만 옵니다 — 배정에 안 나옵니다
     effect: { tag: "아라온호", critMult: 0.5, manage: 2, manageMax: 2, gain: 1 },
     flavor: "선장 자리에 제가 앉았습니다.",
-    desc: "「아라온호」 인격의 치명타 배율 +0.5, 시작 관리력 +2·최대 +2, 턴당 +1." }
+    desc: "「아라온호」 인격의 치명타 배율 +0.5, 시작 관리력 +2·최대 +2, 턴당 +1." },
+  { name: "강호영", title: "N사 E.G.O :: 조율자", star: 3, portrait: null,
+    effect: { tag: "E.G.O", atk: 0.15, def: 0.15, manage: 2, manageMax: 2 },
+    flavor: "E.G.O를 다루는 법을 안다.",
+    desc: "E.G.O 인격 공격·방어 +15%, 시작 관리력 +2·최대 +2." },
+  { name: "이형우", title: "N사 E.G.O :: 아트로키", star: 2, portrait: null,
+    effect: { tag: "E.G.O", atk: 0.25, hp: -0.10 },
+    flavor: "한계까지 밀어붙인다.",
+    desc: "E.G.O 인격 공격 +25%, 체력 -10%." }
 ];
 
 /* ── 유리창 한마디 ───────────────────────────────
@@ -1108,7 +1130,16 @@ const SUPPORTS = [
   { name: "이재호", title: "C사 미군 특수부대", star: 3, tier: 3.4,
     atk: 44, def: 15, hp: 115,
     portrait: null,
-    note: "먼저 쏘고, 먼저 빠진다." }
+    note: "먼저 쏘고, 먼저 빠진다." },
+  { name: "윤지호", title: "N사 E.G.O :: 불꽃날개", star: 3, tier: 3.0,
+    atk: 26, def: 12, hp: 100,
+    portrait: null,
+    note: "꺾여도, 다시 편다." },
+  { name: "장원준", title: "제1발톱 수행자", star: 3, tier: 3.0,
+    atk: 26, def: 12, hp: 100,
+    portrait: null,
+    note: "별까지는, 아직 멀다.",
+    claw1Line: "지령을 수행했습니다." }
 ];
 
 /* 지원 작성위원 규칙 */
