@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.10.0";
+const VERSION = "2.10.1";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3231,7 +3231,8 @@ function renderStage() {
    * 그 밖의 그림은 검은 바탕에 잘리지 않게 담습니다. */
   const wide  = !!CUR_BG && CUR_BG.indexOf("assets/scene") === 0;
   const paper = !!CUR_BG && CUR_BG.indexOf("assets/logo") === 0;
-  let html = '<div class="scenebox' + (paper ? ' paper' : '') + '">';
+  const white = CUR_BG === GATE_LOGO;   // 출입 코드 화면 — 로고와 같은 흰색으로 칸을 채웁니다
+  let html = '<div class="scenebox' + (paper ? ' paper' : '') + (white ? ' white' : '') + '">';
   if (CUR_BG)
     html += '<img class="scene' + (wide ? '' : ' fit') + '" src="' + assetURL(CUR_BG) + '" alt="" ' +
             'onerror="this.style.display=\'none\'">';
@@ -13204,6 +13205,7 @@ function title() { glass(); }
  *  한 번 통과하면 그 브라우저에 기억해 둡니다.
  */
 const UNLOCK_KEY = "rash_company_unlocked_v1";
+const GATE_LOGO  = "assets/portrait/logo.png";   // 출입 코드 화면에 거는 로고 (renderStage 가 칸을 흰색으로 채웁니다)
 
 function codeHash(s) {
   let h = 2166136261;
@@ -13220,7 +13222,8 @@ function lockAgain() { Store.del(UNLOCK_KEY); gate(); }
 function gate(msg) {
   S = newState();
   clearLog();
-  showCard("assets/portrait/logo.png", "라슈 컴퍼니");
+  showCard(GATE_LOGO, "라슈 컴퍼니");
+  showEnkBar(false);                    // 눈금은 유리창 것 — 유리창에서 잠겨 돌아왔을 때(lockAgain) 남아 있지 않게
   say(ACCESS.title || "출 입 코 드", "place");
   say(ACCESS.line || "", "n");
   divider();
