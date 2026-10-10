@@ -34,14 +34,14 @@ const SHOP_NOTICE = {
   sub:    "7.5장 · L사 특정 배정 · 모스라 교환소 · 제1발톱 지령",
   groups: [
     { head: "이벤트 교환소 — 「모스라」", showEventCountdown: true, lines: [
-      "새 이벤트 재화 <b style=\"color:#d8b26a\">「모스라」</b>입니다. 교환소는 <b style=\"color:#d8b26a\">10월 16일(금)까지</b> 열립니다.",
-      "L사 인격을 편성에 세우면 한 명당 <b style=\"color:#d8b26a\">20%</b>씩 더 받습니다."
+      "새 이벤트 재화 <b style=\"color:var(--gold)\">「모스라」</b>입니다. 교환소는 <b style=\"color:var(--gold)\">10월 16일(금)까지</b> 열립니다.",
+      "L사 인격을 편성에 세우면 한 명당 <b style=\"color:var(--gold)\">20%</b>씩 더 받습니다."
     ] },
     { head: "새로 뽑을 수 있는 것", lines: [
-      "특정 배정 <b style=\"color:#d8b26a\">「L사」</b>가 새로 섭니다. 「신해수랜드」는 그대로이고 「G사」는 내려갑니다.",
-      "새 인격 — <b style=\"color:#d8b26a\">★★★ 이경원 「L사 E.G.O :: 케빈」</b>, <b style=\"color:#d8b26a\">★★★ 김두현 「L사 E.G.O :: 타나콘다」</b>, <b style=\"color:#d8b26a\">★★★ 김하주 「제1발톱 대행자」</b>.",
-      "김하주 「제1발톱 대행자」는 차례마다 공격·방어 가운데 하나를 짚어 주는 <b style=\"color:#d8b26a\">「제1발톱 지령」</b>을 씁니다. 짚은 대로 따르면 1.5배입니다.",
-      "새 보조 교육위원 — <b style=\"color:#d8b26a\">★★★ 강호영 「N사 E.G.O :: 조율자」</b>, <b style=\"color:#d8b26a\">★★ 이형우 「N사 E.G.O :: 아트로키」</b>. 둘 다 이름에 「E.G.O」가 든 인격을 키웁니다."
+      "특정 배정 <b style=\"color:var(--gold)\">「L사」</b>가 새로 섭니다. 「신해수랜드」는 그대로이고 「G사」는 내려갑니다.",
+      "새 인격 — <b style=\"color:var(--gold)\">★★★ 이경원 「L사 E.G.O :: 케빈」</b>, <b style=\"color:var(--gold)\">★★★ 김두현 「L사 E.G.O :: 타나콘다」</b>, <b style=\"color:var(--gold)\">★★★ 김하주 「제1발톱 대행자」</b>.",
+      "김하주 「제1발톱 대행자」는 차례마다 공격·방어 가운데 하나를 짚어 주는 <b style=\"color:var(--gold)\">「제1발톱 지령」</b>을 씁니다. 짚은 대로 따르면 1.5배입니다.",
+      "새 보조 교육위원 — <b style=\"color:var(--gold)\">★★★ 강호영 「N사 E.G.O :: 조율자」</b>, <b style=\"color:var(--gold)\">★★ 이형우 「N사 E.G.O :: 아트로키」</b>. 둘 다 이름에 「E.G.O」가 든 인격을 키웁니다."
     ] },
     { head: "업적", lines: [
       "새 업적 셋이 생겼습니다. 업적으로만 오는 지원 작성위원도 있습니다 — 업적 화면에서 확인하십시오."

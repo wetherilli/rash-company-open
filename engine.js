@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.9.0";
+const VERSION = "2.9.1";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1222,8 +1222,10 @@ function newState() {
   const advisor  = (advSaved && advisorsOwned[advisorId(advSaved)]) ? advisorId(advSaved) : null;
 
   const giftsOwned = {};
-  if (v && v.gifts) for (const k in v.gifts) if (giftById(k)) giftsOwned[k] = true;
-  const gift = (v && v.gift && giftsOwned[v.gift]) ? v.gift : null;
+  /* 옛 이름으로 적힌 것도 지금 이름으로 옮겨 담습니다 (기프트 줄의 was) */
+  if (v && v.gifts) for (const k in v.gifts) { const g = giftById(k); if (g) giftsOwned[giftId(g)] = true; }
+  const giftSaved = (v && v.gift) ? giftById(v.gift) : null;
+  const gift = (giftSaved && giftsOwned[giftId(giftSaved)]) ? giftId(giftSaved) : null;
   /* 강화 단계 — 가진 기프트만, up 이 있는 만큼만 남깁니다. 옛 보관함엔 이 칸이
    * 없으니 전부 0단계입니다. */
   const giftLv = {};
@@ -1409,7 +1411,7 @@ function openPatch(back) {
           '<div class="hint">지금 판은 <b>v' + VERSION + ' «' + VERSION_NAME + '»</b> 입니다.' +
           (LAST_VER
             ? (news.length
-                ? '　지난번에 보신 <b>v' + LAST_VER + '</b> 뒤로 <b style="color:#d8b26a">' +
+                ? '　지난번에 보신 <b>v' + LAST_VER + '</b> 뒤로 <b style="color:var(--gold)">' +
                   news.length + '개</b>가 새로 나왔습니다. 그것만 펼쳐 두었습니다.'
                 : '　지난번 <b>v' + LAST_VER + '</b> 뒤로 새로 나온 것은 없습니다.')
             : '　머리를 누르면 접었다 펼 수 있습니다.') +
@@ -1674,7 +1676,10 @@ function nextSlotChapter(kind) {
 /* 기프트는 이름이 곧 구분입니다 (예전 영문 id 도 받아 줍니다) */
 function giftById(id) {
   if (typeof GIFTS === "undefined" || !id) return null;
-  return GIFTS.find(g => g.name === id) || GIFTS.find(g => g.id === id) || null;
+  /* 지금 이름을 먼저 봅니다. 못 찾으면 옛 이름(was) — 이름을 고친 기프트를
+   * 옛 보관함이 잃지 않게 하는 몫입니다(보조 교육위원의 was 와 같은 결). */
+  return GIFTS.find(g => g.name === id) || GIFTS.find(g => g.id === id) ||
+         GIFTS.find(g => [].concat(g.was || []).indexOf(id) >= 0) || null;
 }
 function giftId(g) { return g ? g.name : null; }
 /* 상점 뽑기·선택권·「보유 n / m」 셈이 보는 목록 — noGacha 가 붙은 것(★★★★)은 뺍니다.
@@ -2834,6 +2839,50 @@ function flavorHTML(x) {
   const f = x && x.flavor;
   return (f && f !== "TODO") ? '<div class="notequote">' + f + '</div>' : '';
 }
+/* ── 도트 아이콘 (사용자 지침 2026-10-11) ─────────────────────────
+ *  보관함의 물건과 E.G.O 기프트는 assets/icon/<이름>.png 를 한 장씩 가집니다.
+ *  그림은 tools/아이콘-도안.js 에 글자 격자로 적혀 있고 tools/아이콘-굽기.js 가 굽습니다
+ *  — 새 물건·새 기프트를 지으면 거기에 «같은 이름으로» 한 장 더 그립니다.
+ *  빠진 것은 node tools/check.js 가 짚습니다.
+ *
+ *    iconHTML(이름)                아이콘 칸 하나
+ *    iconHTML(이름, { star: 3 })   테두리를 성급 색으로 (기프트)
+ *    iconHTML(이름, { dim: true }) 없는 것 — 그림자로
+ *
+ *  그림을 못 받아 오면 칸만 남습니다(onerror 가 그림을 감춥니다) — 깨진 그림 표시가
+ *  뜨지 않게 하는 몫입니다. 18×18 을 2배(36px)로 키워 씁니다(.ic img — index.html). */
+function iconSrc(name) { return "assets/icon/" + encodeURIComponent(name) + ".png"; }
+function iconHTML(name, o) {
+  o = o || {};
+  return '<span class="ic' + (o.star ? ' s' + o.star : '') + (o.dim ? ' dim' : '') + '">' +
+           '<img src="' + iconSrc(name) + '" alt="" onerror="this.style.display=\'none\'">' +
+         '</span>';
+}
+/* 글줄 안에 끼우는 작은 아이콘(18px, 테두리 없음) — 「보유 원고료 400」 같은 자리 */
+function iconMini(name) {
+  return '<img class="icmini" src="' + iconSrc(name) + '" alt="" onerror="this.style.display=\'none\'">';
+}
+/* 주는 것(give) 한 덩이를 대표하는 아이콘 이름 — 우편·이벤트 교환소가 쓰는 give 와 같은 꼴.
+ * 인격·교육위원처럼 아이콘이 없는 것은 null (그 칸은 아이콘 없이 섭니다).
+ * give 에 새 칸이 생기면 여기에도 한 줄 얹습니다. */
+function giveIcon(g) {
+  g = g || {};
+  if (g.gift) { const gf = giftById(g.gift); return gf ? gf.name : null; }
+  if (g.id || g.advisor || g.support) return null;
+  if (g.fragBoxSelect) return "인격 파편 상자 (선택)";
+  if (g.fragBoxRandom) return "인격 파편 상자 (무작위)";
+  if (g.advisorTicket) return "보조 교육위원 선택권";
+  if (g.giftTicket)    return "E.G.O 기프트 선택권";
+  if (g.syncModule)    return "동기화 모듈";
+  if (g.enkCap)        return "엔케팔린 캡슐";
+  if (g.codex)         return "황금교본";
+  if (g.enk)           return "엔케팔린";
+  if (g.event)         return curEvent() ? eventCurName() : null;
+  if (g.money)         return "원고료";
+  return null;
+}
+/* 기프트 한 장의 아이콘 — 강화 사본(giftView)을 넘겨도 이름은 같습니다 */
+function giftIconHTML(g, dim) { return iconHTML(g.name, { star: g.star, dim: !!dim }); }
 function rnd(n) { return Math.floor(Math.random() * n); }
 
 /* ── 지원 작성위원 ────────────────────────────────────────────
@@ -3517,11 +3566,16 @@ function showCard(src, tag, placeName, placeDesc) {
 
 function renderHeader() {
   const c = curChapter();
-  $chap.textContent = (c ? (c.no + "  " + c.title + (c.subtitle ? "  ─  " + c.subtitle : "")) : "")
-                      + "   v" + VERSION;
+  /* 이야기를 타고 있지 않을 때(유리창 — SCENES 가 비어 있습니다)는 장 이름을 걸지 않고
+   * 판 번호와 판 이름만 겁니다 (사용자 지침 2026-10-11). 전에는 S.ch 의 처음 값 때문에
+   * 유리창에서 늘 「0장 돌아갈 수 없는」이 떠 있었습니다. */
+  const idle = !(SCENES && SCENES.length) && !S.battle;
+  $chap.textContent = idle
+    ? "v" + VERSION + (VERSION_NAME ? "  «" + VERSION_NAME + "»" : "")
+    : (c ? (c.no + "  " + c.title + (c.subtitle ? "  ─  " + c.subtitle : "")) : "") + "   v" + VERSION;
   let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") +
-              CURRENCY + " <b>" + S.money + "</b>";
-  if (S.codex) right += "   황금교본 <b>" + S.codex + "</b>";
+              iconMini("원고료") + CURRENCY + " <b>" + S.money + "</b>";
+  if (S.codex) right += "　" + iconMini("황금교본") + "황금교본 <b>" + S.codex + "</b>";
   /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
   /* 관리력은 머리에 숫자로 적지 않고, 아래쪽 눈금으로 보여 줍니다 (renderManage) */
   $wallet.innerHTML = right;
@@ -3587,7 +3641,7 @@ function renderParty() {
                     (aimed  ? " aimed"  : "") +
                     (ready ? (cmd === "guard" ? " cmd-guard" : " cmd-attack") : "");
     let mark = "";
-    if (hp <= 0)      mark = ' <span style="color:#c8403a">쓰러짐</span>';
+    if (hp <= 0)      mark = ' <span style="color:var(--red)">쓰러짐</span>';
     else {
       if (acting) mark += ' <span class="turntag">차례</span>';
       if (aimed)  mark += ' <span class="aimtag">노려짐' + (b.heavy ? '·강타' : '') + '</span>';
@@ -6526,7 +6580,7 @@ function openParty(done) {
     const gfCap = giftSlots();
     const gfNext = nextSlotChapter("gift");
     const gfCount = Object.keys(S.giftsOwned || {}).length;
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">E.G.O 기프트</div>' +
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">E.G.O 기프트</div>' +
          '<div class="hint"><b>' + gfCap + '개</b>까지 지닐 수 있습니다. 상점에서 황금교본으로 뽑습니다.' +
          (gfNext ? '　' + gfNext + '을 마치면 하나 더.' : '') + '</div>' +
          '<div class="grid">';
@@ -6541,7 +6595,7 @@ function openParty(done) {
     }
     h += '</div>';
 
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">작성위원</div>' +
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">작성위원</div>' +
          '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다.</div>' +
          '<div class="grid" data-tut="party-sinners">';
     Object.keys(SINNERS).forEach(who => {
@@ -6724,7 +6778,7 @@ function openEquip(back) {
   let h = '<h2>인 격 장 착</h2>' +
           '<div class="hint">사람 이름을 누르면 그 사람의 인격이 펴집니다. ' +
           '장착 중인 인격은 이름줄에 함께 적힙니다.</div>' +
-          (forced ? '<div class="hint" style="color:#d8b26a">' +
+          (forced ? '<div class="hint" style="color:var(--gold)">' +
             '지금은 <b>' + forcedNames + '</b> 으로만 전투에 나갑니다. ' +
             '인격만 골라 두면, 편성 자체는 이미 짜여 있습니다.</div>' : '') +
           '<div class="eqbar">' +
@@ -6880,6 +6934,7 @@ function tutorTarget(at) {
  * 새 안내를 얹으면 여기에 한 줄 더 — 안 적어도 유리창 위에 가운데로 뜹니다. */
 const TUTOR_SCREENS = {
   shop:     () => openShop(() => glass()),
+  vault:    () => openVault(() => glass()),
   party:    () => openParty(() => glass()),
   upgrade:  () => { if (upgradeUnlocked()) openUpgrade(() => glass()); },
   giftup:   () => { if (giftUpUnlocked()) openGiftUp(() => openUpgrade(() => glass())); },
@@ -7131,6 +7186,12 @@ function noteTag(t) { return '<span class="tag2">' + t + '</span>'; }
  * 도는 동안만 기억합니다(운전석의 CS_OPEN과는 다른 자리 — 화면마다 따로 둡니다). */
 let NOTE_SYN_OPEN = {};
 let NOTE_SYN_DETAIL = null;
+/* 노트의 교육위원 목록 — 정렬과 「보유한 것만」 (사용자 지침 2026-10-11).
+ * 편성의 보조 교육위원 창(ADV_SORT·ADV_OWNED_ONLY)과 같은 손잡이인데, 값은 따로 둡니다 —
+ * 노트는 «도감» 이라 처음에는 전부 보이는 편이 맞고, 편성은 보유한 것만이 기본이기 때문입니다.
+ * 접힘은 시너지 무리와 같은 표(NOTE_SYN_OPEN 의 "adv" 칸)에 적습니다 — 처음에는 접혀 있습니다. */
+let NOTE_ADV_SORT = "added";
+let NOTE_ADV_OWNED_ONLY = false;
 
 function openNote(back, focus) {
   $modal.classList.add("on");
@@ -7248,7 +7309,7 @@ function openNote(back, focus) {
 
     /* 게임 구조 안내 — 처음 그 화면에 들어섰을 때 저절로 한 번 나오고,
      * 여기서 언제든 다시 볼 수 있습니다. */
-    h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">' +
+    h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">' +
            tutorRule().name + '</div>' +
          '<div class="grid one"><div class="slot" data-tut-open="1">' +
            '<div class="nm">' + tutorRule().name + ' 다시 보기</div>' +
@@ -7256,7 +7317,7 @@ function openNote(back, focus) {
              tutorSawCount() + ' / ' + tutorList().length + ' 봄　—　눌러서 목록으로</div>' +
          '</div></div>';
 
-    h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">작성위원</div><div class="grid">';
+    h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">작성위원</div><div class="grid four">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
       h += '<div class="slot" data-who="' + who + '">' +
@@ -7267,7 +7328,7 @@ function openNote(back, focus) {
     });
     h += '</div>';
 
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">승무원</div><div class="grid">';
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">승무원</div><div class="grid four">';
     Object.keys(CREW).forEach(k => {
       const c = CREW[k];
       h += '<div class="slot">' +
@@ -7280,8 +7341,27 @@ function openNote(back, focus) {
 
     const advAll = advisorOpenList();
     if (advAll.length) {
-      h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">교육위원</div><div class="grid">';
-      advAll.forEach(a => {
+      const advHas = a => !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
+      let advShow = advAll.slice();
+      if (NOTE_ADV_SORT === "name")
+        advShow.sort((a, b) => a.name.localeCompare(b.name, "ko") || a.title.localeCompare(b.title, "ko"));
+      else if (NOTE_ADV_SORT === "synergy")
+        advShow.sort((a, b) => advisorSynergyRank(a) - advisorSynergyRank(b) || a.name.localeCompare(b.name, "ko"));
+      if (NOTE_ADV_OWNED_ONLY) advShow = advShow.filter(advHas);
+      const sortBtn = (key, label) =>
+        '<button data-nadvsort="' + key + '" class="' + (NOTE_ADV_SORT === key ? "" : "ghost") + '">' + label + '</button>';
+      h += '<div class="csec' + (NOTE_SYN_OPEN.adv ? ' on' : '') + '" data-sec="adv">' +
+             '<div class="csechead"><b>교육위원</b><span>보유 ' + advAll.filter(advHas).length +
+               ' / ' + advAll.length + '명</span><i></i></div>' +
+             '<div class="csecbody">' +
+               '<div class="eqbar">' +
+                 '<label class="eqchk"><input type="checkbox" id="nadvowned"' +
+                   (NOTE_ADV_OWNED_ONLY ? ' checked' : '') + '> 보유한 것만 보기</label>' +
+                 sortBtn("added", "추가순") + sortBtn("name", "이름순") + sortBtn("synergy", "시너지순") +
+               '</div><div class="grid">';
+      if (!advShow.length)
+        h += '<div class="slot ro"><div class="sub">아직 보유한 교육위원이 없습니다 — 「보유한 것만 보기」를 꺼 보십시오.</div></div>';
+      advShow.forEach(a => {
         const has = !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
         /* 효과는 함께하게 된 뒤에야 읽을 수 있습니다 */
         h += '<div class="slot">' +
@@ -7291,7 +7371,7 @@ function openNote(back, focus) {
                '<div class="sub">' + (has ? a.desc : '미보유　— 효과는 함께한 뒤에 열립니다') + '</div>' +
              '</div>';
       });
-      h += '</div>';
+      h += '</div></div></div>';
     }
 
     /* ── 편성 시너지 한눈에 ──
@@ -7301,7 +7381,7 @@ function openNote(back, focus) {
     const syAll = (typeof SYNERGIES !== "undefined" && SYNERGIES) ? SYNERGIES : [];
     if (syAll.length) {
       const nowTitles = synergyNames();
-      h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">편성 시너지 ' +
+      h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">편성 시너지 ' +
            '<span class="sub" style="font-weight:400">모두 ' + syAll.length + '가지</span></div>' +
            '<div class="hint">파티 셋이 <b>장착한 인격</b>이나 <b>세워 둔 교육위원</b>의 제목에 같은 말이 ' +
            '들어가면 발동합니다(간혹 인격 없이 교육위원끼리만 걸리는 시너지도 있습니다). ' +
@@ -7343,7 +7423,7 @@ function openNote(back, focus) {
                  '<div class="nm">' + sy.name +
                    (on ? ' <span class="synon">발동 중 ' + now + '명</span>' : '') + '</div>' +
                  '<div class="sub">찾는 말 「' + tags.join("」 「") + '」　·　' + sy.need + '명부터</div>' +
-                 '<div class="sub" style="color:#d8b26a">' + eff.join("　") + '</div>' +
+                 '<div class="sub" style="color:var(--gold)">' + eff.join("　") + '</div>' +
                  (sy.desc ? '<div class="sub">' + sy.desc + '</div>' : '') +
                  '<div class="sub">걸리는 인격·교육위원 ' + ownedN + ' / ' + totalN + ' 보유' +
                    (totalN < sy.need ? '　— 모자라 발동할 수 없습니다' : '') + '</div>' +
@@ -7369,6 +7449,12 @@ function openNote(back, focus) {
         NOTE_SYN_OPEN[id] = !NOTE_SYN_OPEN[id];
         index();
       };
+    });
+    /* 교육위원 목록의 정렬·「보유한 것만」 — 접힌 채로는 손잡이가 안 보이니 편 채로 다시 그립니다 */
+    const nadvOwned = document.getElementById("nadvowned");
+    if (nadvOwned) nadvOwned.onchange = (e) => { NOTE_ADV_OWNED_ONLY = e.target.checked; index(); };
+    $sheet.querySelectorAll("[data-nadvsort]").forEach(el => {
+      el.onclick = () => { NOTE_ADV_SORT = el.dataset.nadvsort; index(); };
     });
     /* 시너지 한 줄을 누르면 거기 걸리는 사람이 펼쳐집니다 — 다시 누르면 접힙니다 */
     $sheet.querySelectorAll(".slot[data-syn]").forEach(el => {
@@ -7419,7 +7505,7 @@ const CODEX_ENK   = { codex: 5, enk: 2 };   // 교본 5권 → 엔케팔린 2
 
 const SHOP_TRADES = [
   {
-    id: "codex_to_money",
+    id: "codex_to_money", icon: "원고료",
     name: "황금교본 되팔기",
     desc: "황금교본 1권을 " + CODEX_PRICE + " 원고료로 바꾼다.",
     can:  () => S.codex >= 1,
@@ -7428,7 +7514,7 @@ const SHOP_TRADES = [
                   return "황금교본 1권을 넘기고 원고료 " + CODEX_PRICE + "을 받았다."; }
   },
   {
-    id: "codex_to_enk",
+    id: "codex_to_enk", icon: "엔케팔린",
     name: ENK_RULE.name + " 보충",
     desc: "황금교본 " + CODEX_ENK.codex + "권으로 " + ENK_RULE.name + " " + CODEX_ENK.enk + "를 채운다.",
     can:  () => S.codex >= CODEX_ENK.codex && enkCount() < ENK_RULE.max,
@@ -7495,12 +7581,12 @@ function openNotice(then) {
             const until = new Date(eventUntil(ev));
             const untilText = until.getMonth() + 1 + "월 " + until.getDate() + "일";
             return '<div class="slot"><div class="sub">' +
-              '<b style="color:#d8b26a;font-size:14px">' + ev.cur + ' — ' + eventLeftText(ev) + '</b>　' +
+              '<b style="color:var(--gold);font-size:14px">' + ev.cur + ' — ' + eventLeftText(ev) + '</b>　' +
               '(' + untilText + '까지)' +
             '</div></div>';
           })()
         : "";
-      return (g.head ? '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + g.head + '</div>' : "") +
+      return (g.head ? '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + g.head + '</div>' : "") +
       '<div class="grid one">' +
         (g.lines || []).map(x => '<div class="slot"><div class="sub">' + x + '</div></div>').join("") +
         countdownLine +
@@ -7521,12 +7607,12 @@ function openShop(back) {
 
   const draw = (msg) => {
     let h = '<h2>상 점</h2>' +
-            '<div class="hint">보유 ' + CURRENCY + ' <b>' + S.money + '</b>' +
-            '　·　황금교본 <b>' + S.codex + '</b>' +
-            (curEvent() ? '　·　' + eventCurName() + ' <b>' + eventCount() + '</b>' : '') +
+            '<div class="hint">보유 ' + iconMini("원고료") + CURRENCY + ' <b>' + S.money + '</b>' +
+            '　·　' + iconMini("황금교본") + '황금교본 <b>' + S.codex + '</b>' +
+            (curEvent() ? '　·　' + iconMini(eventCurName()) + eventCurName() + ' <b>' + eventCount() + '</b>' : '') +
             '</div>';
 
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     /* ── 맨 위 한 자리 — 가로로 통째 ─────────────────────────────
      *  두 가지가 이 자리를 «번갈아» 씁니다. 겹쳐 서지 않게 한 번에 하나만입니다.
@@ -7541,12 +7627,12 @@ function openShop(back) {
                '<div class="pkline pic" style="background-image:url(\'' +
                  assetURL(NEWBIE_RULE.banner) + '\')"><span>' + NEWBIE_RULE.line + '</span></div>' +
                '<div class="' + (canBuy ? 'nm' : 'lock') + '">' + NEWBIE_RULE.name + '</div>' +
-               '<div class="sub" style="color:#d8b26a">' +
+               '<div class="sub" style="color:var(--gold)">' +
                  NEWBIE_RULE.pulls + '회 묶음에 ' + NEWBIE_RULE.cost + ' ' + CURRENCY +
                  '　·　낱개로 사면 ' + (RULE.pullCost * NEWBIE_RULE.pulls) + '</div>' +
                '<div class="sub">' + NEWBIE_RULE.desc +
                  '　남은 횟수 <b>' + newbieLeft() + '</b> / ' + NEWBIE_RULE.limit + '</div>' +
-               (canBuy ? '' : '<div class="sub" style="color:#c8403a">' + CURRENCY + '가 모자랍니다</div>') +
+               (canBuy ? '' : '<div class="sub" style="color:var(--red)">' + CURRENCY + '가 모자랍니다</div>') +
              '</div>' +
            '</div>';
     } else {
@@ -7562,17 +7648,17 @@ function openShop(back) {
                        '<span>' + ev.line + '</span></div>'
                    : "") +
                  '<div class="nm">' + eventRule().shop + '</div>' +
-                 '<div class="sub" style="color:#d8b26a">' +
+                 '<div class="sub" style="color:var(--gold)">' +
                    "'" + cur + "'" + josa(cur, "을") +
                    ' 다양한 보상과 교환해보세요!</div>' +
-                 '<div class="sub">보유 ' + cur + ' <b>' + eventCount() + '</b>' +
+                 '<div class="sub">보유 ' + iconMini(cur) + cur + ' <b>' + eventCount() + '</b>' +
                    '　·　' + eventLeftText(ev) + '</div>' +
                '</div>' +
              '</div>';
       }
     }
 
-    h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">인격 배정</div>' +
+    h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">인격 배정</div>' +
          '<div class="grid">' +
            '<div class="slot" data-gacha="1" data-tut="shop-gacha">' +
              stripHTML(GACHA_STRIP) +
@@ -7586,7 +7672,7 @@ function openShop(back) {
              stripHTML(p.banner, p.line) +
              '<div class="nm">' + p.name + '</div>' +
              '<div class="sub">1회 ' + pickupCost(p) + ' ' + CURRENCY + '</div>' +
-             '<div class="sub" style="color:#d8b26a">' + p.desc + '</div>' +
+             '<div class="sub" style="color:var(--gold)">' + p.desc + '</div>' +
            '</div>';
     });
     h += '</div>';
@@ -7606,12 +7692,12 @@ function openShop(back) {
      *  셋 다 «한 칸짜리» 덩이라, 저마다 제목을 이고 한 줄씩 내려가면
      *  상점이 쓸데없이 길어집니다. 제목 하나 아래로 모아 나란히 세웁니다.
      *  .grid.three 가 셋을 붙들어 줍니다 — 좁은 화면에서는 다시 한 줄씩입니다. */
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">' +
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">' +
            'E.G.O 기프트　·　인격 교환　·　보조 교육위원</div>' +
          '<div class="grid three">' +
            '<div class="slot"' + (S.codex >= GIFT_RULE.cost ? ' data-gift="1"' : '') + '>' +
              '<div class="' + (S.codex >= GIFT_RULE.cost ? 'nm' : 'lock') + '">기프트 배정소</div>' +
-             '<div class="sub">1회 황금교본 ' + GIFT_RULE.cost + '　·　보유 ' + gMine + ' / ' + gTotal + '</div>' +
+             '<div class="sub">1회 ' + iconMini("황금교본") + '황금교본 ' + GIFT_RULE.cost + '　·　보유 ' + gMine + ' / ' + gTotal + '</div>' +
              '<div class="sub">★ ' + Math.round(GIFT_RULE.rate1 * 100) + '%　★★ ' +
                Math.round(GIFT_RULE.rate2 * 100) + '%　★★★ ' + Math.round(GIFT_RULE.rate3 * 100) + '%</div>' +
              '<div class="sub">' + (S.codex >= GIFT_RULE.cost
@@ -7620,14 +7706,14 @@ function openShop(back) {
            '</div>' +
            '<div class="slot"' + (exCan ? ' data-exchange="1"' : '') + '>' +
              '<div class="' + (exCan ? 'nm' : 'lock') + '">인격 교환</div>' +
-             '<div class="sub">그 사람 몫 파편 ' + RULE.fragExchange + '개로 미보유 인격 하나를 정가로 바꿉니다</div>' +
+             '<div class="sub">' + iconMini("인격 파편") + '그 사람 몫 파편 ' + RULE.fragExchange + '개로 미보유 인격 하나를 정가로 바꿉니다</div>' +
              '<div class="sub">' + (exCan
                ? '뽑기와 달리 무엇을 얻을지 직접 고릅니다'
                : '파편이 모자라거나, 이미 전부 지녔습니다') + '</div>' +
            '</div>' +
            '<div class="slot"' + (S.codex >= ADVISOR_RULE.cost ? ' data-adv="1"' : '') + '>' +
              '<div class="' + (S.codex >= ADVISOR_RULE.cost ? 'nm' : 'lock') + '">교육위원 파견 요청</div>' +
-             '<div class="sub">1회 황금교본 ' + ADVISOR_RULE.cost + '　·　보유 ' + aMine + ' / ' + aTotal + '</div>' +
+             '<div class="sub">1회 ' + iconMini("황금교본") + '황금교본 ' + ADVISOR_RULE.cost + '　·　보유 ' + aMine + ' / ' + aTotal + '</div>' +
              '<div class="sub">★★ ' + Math.round(ADVISOR_RULE.rate2 * 100) + '%　★★★ ' +
                Math.round(ADVISOR_RULE.rate3 * 100) + '%</div>' +
              '<div class="sub">' + (S.codex >= ADVISOR_RULE.cost
@@ -7636,17 +7722,19 @@ function openShop(back) {
            '</div>' +
          '</div>';
 
-    h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">교환</div>' +
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">교환</div>' +
          '<div class="grid">';
     SHOP_TRADES.forEach(t => {
       const ok = t.can();
-      h += '<div class="slot"' + (ok ? ' data-trade="' + t.id + '"' : '') + '>' +
-             '<div class="' + (ok ? 'nm' : 'lock') + '">' + t.name + '</div>' +
+      /* 아이콘은 «받는 것» — SHOP_TRADES 의 icon. 안 적은 줄은 아이콘 없이 섭니다 */
+      h += '<div class="slot' + (t.icon ? ' hasic' : '') + '"' + (ok ? ' data-trade="' + t.id + '"' : '') + '>' +
+             (t.icon ? iconHTML(t.icon, { dim: !ok }) : '') +
+             '<div><div class="' + (ok ? 'nm' : 'lock') + '">' + t.name + '</div>' +
              '<div class="sub">' + t.desc + '</div>' +
              /* 못 누르는 까닭은 need() 가 스스로 말합니다 —
               * 「가진 것이 모자랍니다」로 뭉뚱그리면 이미 가득 찬 경우에 거짓말이 됩니다. */
-             '<div class="sub"' + (ok ? '' : ' style="color:#c8403a"') + '>' +
-               '필요: ' + t.need() + '</div>' +
+             '<div class="sub"' + (ok ? '' : ' style="color:var(--red)"') + '>' +
+               '필요: ' + t.need() + '</div></div>' +
            '</div>';
     });
     h += '</div>';
@@ -7715,35 +7803,46 @@ function openEventShop(back) {
       '<div class="hint">이곳에서는 오직 <b>' + cur + '</b>' +
       josa(cur, "로") + '만 바꿉니다. ' +
       CURRENCY + '도 황금교본도 쓰이지 않습니다.<br>' +
-      '보유 ' + cur + ' <b>' + eventCount() + '</b>　·　' + eventLeftText(ev) + '</div>';
-    if (ev.desc) h += '<div class="hint" style="color:#d8b26a">' + ev.desc + '</div>';
+      '보유 ' + iconMini(cur) + cur + ' <b>' + eventCount() + '</b>　·　' + eventLeftText(ev) + '</div>';
+    if (ev.desc) h += '<div class="hint" style="color:var(--gold)">' + ev.desc + '</div>';
     if (msg)     h += '<div class="mailnote ok">' + msg + '</div>';
 
     const goods = eventGoods();
     if (!goods.length) {
       h += '<div class="hint">아직 내놓은 물건이 없습니다.</div>';
     } else {
-      h += '<div class="grid">';
+      /* 한 줄에 하나씩 — 목록형 (사용자 지침 2026-10-11). 칸 셋이 나란히 서던 때는
+       * 설명이 좁은 칸에서 여러 줄로 꺾여 PC 에서도 길었습니다. 왼쪽에 아이콘·이름·설명,
+       * 오른쪽에 값과 남은 횟수. 「받는 것 —」 줄은 이름이 이미 말하고 있어 뺐습니다. */
+      h += '<div class="achlist">';
       goods.forEach(g => {
         const left = eventLeft(g);
         const out  = left <= 0;                    // 이 기간에 살 만큼 다 샀다
         const poor = eventCount() < g.cost;        // 재화가 모자라다
         const ok   = !out && !poor;
-        h += '<div class="slot"' + (ok ? ' data-goods="' + g.id + '"' : '') + '>' +
-               '<div class="' + (ok ? 'nm' : 'lock') + '">' + g.name + '</div>' +
-               '<div class="sub">' + cur + ' <b>' + g.cost + '</b>' +
-                 (g.limit ? '　·　남은 횟수 ' + left + ' / ' + g.limit
-                          : '　·　횟수 제한 없음') + '</div>' +
-               '<div class="sub">받는 것 — ' + eventGiveText(g.give) + '</div>' +
-               (g.desc ? '<div class="sub" style="color:#d8b26a">' + g.desc + '</div>' : '') +
-               /* 보관함과 똑같은 설명 — 파편 상자처럼 «쓰는 법이 따로 있는» 것에 붙습니다 */
-               (eventGoodsNote(g.give)
-                 ? '<div class="sub">' + eventGoodsNote(g.give) + '</div>' : '') +
-               /* 못 누르는 까닭은 스스로 말합니다 — 「모자랍니다」로 뭉뚱그리면
-                * 이미 다 바꾼 경우에 거짓말이 됩니다. */
-               (out  ? '<div class="sub" style="color:#c8403a">이 기간에 바꿀 만큼 다 바꿨습니다</div>'
-                : poor ? '<div class="sub" style="color:#c8403a">' +
-                           cur + josa(cur, "이") + " 모자랍니다</div>" : "") +
+        /* 아이콘은 «받는 것» (giveIcon). 인격처럼 아이콘이 없는 물건도 빈 칸을 세워
+         * 줄을 맞춥니다 — 그 칸에는 성급 별을 적습니다. */
+        const gi  = giveIcon(g.give);
+        const gid = eventGiveId(g.give);
+        const note = eventGoodsNote(g.give);
+        h += '<div class="achrow evrow' + (ok ? ' can' : '') + '"' + (ok ? ' data-goods="' + g.id + '"' : '') + '>' +
+               (gi ? iconHTML(gi, { dim: out })
+                   : '<span class="ic txt' + (out ? ' dim' : '') + '">' + (gid ? stars(gid.id.star) : '') + '</span>') +
+               '<div class="body">' +
+                 '<div class="' + (ok ? 'nm' : 'lock') + '">' + g.name + '</div>' +
+                 (g.desc ? '<div class="sub" style="color:var(--gold)">' + g.desc + '</div>' : '') +
+                 /* 보관함과 똑같은 설명 — 파편 상자처럼 «쓰는 법이 따로 있는» 것에 붙습니다 */
+                 (note ? '<div class="sub">' + note + '</div>' : '') +
+               '</div>' +
+               '<div class="rw">' +
+                 '<div class="cost">' + iconMini(cur) + '<b>' + g.cost + '</b></div>' +
+                 /* 못 누르는 까닭은 스스로 말합니다 — 「모자랍니다」로 뭉뚱그리면
+                  * 이미 다 바꾼 경우에 거짓말이 됩니다. */
+                 '<div' + (out || poor ? ' style="color:var(--red)"' : '') + '>' +
+                   (out  ? '다 바꿨습니다'
+                    : poor ? cur + josa(cur, "이") + ' 모자랍니다'
+                    : g.limit ? '남은 횟수 ' + left + ' / ' + g.limit : '횟수 제한 없음') + '</div>' +
+               '</div>' +
              '</div>';
       });
       h += '</div>';
@@ -7752,7 +7851,7 @@ function openEventShop(back) {
     h += '<div class="modalfoot"><button id="evclose">닫기</button></div>';
     $sheet.innerHTML = h;
 
-    $sheet.querySelectorAll(".slot[data-goods]").forEach(el => {
+    $sheet.querySelectorAll("[data-goods]").forEach(el => {
       el.onclick = () => {
         const g = eventGoods().find(x => x.id === el.dataset.goods);
         if (!g) return;
@@ -7896,12 +7995,12 @@ function openGacha(done, pk, deal) {
     if (deal) {
       h += '<div class="pkline pic" style="background-image:url(\'' +
              assetURL(deal.banner) + '\')"><span>' + deal.line + '</span></div>' +
-           '<div class="hint" style="color:#d8b26a">' + deal.name + '　·　' + deal.desc + '</div>';
+           '<div class="hint" style="color:var(--gold)">' + deal.name + '　·　' + deal.desc + '</div>';
     }
     if (pickup) {
       /* 이 판의 광고 문구 — data/pickup.js 의 line·banner 에서 갈아 끼웁니다 */
       if (pickup.line) h += pkBannerHTML(pickup);
-      h += '<div class="hint" style="color:#d8b26a">' + pickup.name +
+      h += '<div class="hint" style="color:var(--gold)">' + pickup.name +
            '　·　' + pickup.desc + '<br>' +
            '같은 성급 안에서 ' + pct(rate) + ' 확률로 대상이 먼저 나옵니다. ' +
            '성급 확률은 일반 배정과 같습니다.</div>';
@@ -8090,7 +8189,7 @@ function openStockGacha(kind, done) {
                          : Object.keys(S.advisorsOwned || {}).length;
 
     let h = '<h2>' + (isGift ? '기 프 트 배 정' : '교 육 위 원 파 견') + '</h2>' +
-            '<div class="hint">1회 황금교본 ' + cost + '　·　보유 황금교본 ' + S.codex +
+            '<div class="hint">1회 ' + iconMini("황금교본") + '황금교본 ' + cost + '　·　보유 황금교본 ' + S.codex +
               '　·　보유 ' + mine + ' / ' + total + '<br>' +
             (isGift
               ? '★ ' + pct(rule.rate1) + '　★★ ' + pct(rule.rate2) + '　★★★ ' + pct(rule.rate3)
@@ -8100,9 +8199,10 @@ function openStockGacha(kind, done) {
     if (result) {
       h += '<div class="grid">';
       result.forEach(r => {
-        h += '<div class="slot' + (r.isNew ? ' sel' : '') + '">' +
-               '<div class="nm"><span class="star">' + stars(r.star) + '</span> ' + r.name + '</div>' +
-               '<div class="sub">' + (r.isNew ? '신규 — ' + r.desc : '중복') + '</div>' +
+        h += '<div class="slot ro' + (isGift ? ' hasic' : '') + (r.isNew ? ' sel' : '') + '">' +
+               (isGift ? giftIconHTML(r) : '') +
+               '<div><div class="nm"><span class="star">' + stars(r.star) + '</span> ' + r.name + '</div>' +
+               '<div class="sub">' + (r.isNew ? '신규 — ' + r.desc : '중복') + '</div></div>' +
              '</div>';
       });
       h += '</div>';
@@ -8162,12 +8262,13 @@ function openExchange(back) {
     const missing = s.ids.filter(id => !S.owned[idKey(who, id)] && !id.hidden);
     const exchangeable = missing.filter(id => !pickupOnTitle(id.title));
     const can = have >= RULE.fragExchange && exchangeable.length > 0;
-    h += '<div class="slot"' + (can ? ' data-who="' + who + '"' : '') + '>' +
-           '<div class="' + (can ? 'nm' : 'lock') + '">' + s.name + '</div>' +
+    h += '<div class="slot hasic"' + (can ? ' data-who="' + who + '"' : '') + '>' +
+           iconHTML("인격 파편 - " + s.name, { dim: !have }) +
+           '<div><div class="' + (can ? 'nm' : 'lock') + '">' + s.name + '</div>' +
            '<div class="sub">보유 파편 <b>' + have + '</b> / ' + RULE.fragExchange + '</div>' +
            '<div class="sub">' + (exchangeable.length ? '교환 가능한 인격 ' + exchangeable.length + '개'
                                   : missing.length ? '미보유 인격이 지금 전부 특정 배정 중입니다'
-                                  : '모든 인격을 이미 지녔습니다') + '</div>' +
+                                  : '모든 인격을 이미 지녔습니다') + '</div></div>' +
          '</div>';
   });
 
@@ -8188,7 +8289,7 @@ function openExchangePick(who, back) {
     const have = fragCount(who);
     let h = '<h2>' + s.name + ' — 인 격 교 환</h2>' +
             '<div class="hint">보유 파편 <b>' + have + '</b>　·　1회 ' + RULE.fragExchange + '개</div>';
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     const missing = s.ids.filter(id => !S.owned[idKey(who, id)] && !id.hidden);
     if (!missing.length) {
@@ -8203,8 +8304,8 @@ function openExchangePick(who, back) {
                '<div class="' + (can ? 'nm' : 'lock') + '">' +
                  '<span class="star">' + stars(id.star) + '</span> ' + id.title + '</div>' +
                (id.note ? '<div class="sub">' + id.note + '</div>' : '') +
-               (pickedUp ? '<div class="sub" style="color:#d8b26a">지금 특정 배정 중인 인격입니다 — 정가로는 못 바꿉니다</div>'
-                : can ? '' : '<div class="sub" style="color:#c8403a">파편이 모자랍니다</div>') +
+               (pickedUp ? '<div class="sub" style="color:var(--gold)">지금 특정 배정 중인 인격입니다 — 정가로는 못 바꿉니다</div>'
+                : can ? '' : '<div class="sub" style="color:var(--red)">파편이 모자랍니다</div>') +
              '</div>';
       });
       h += '</div>';
@@ -8467,7 +8568,7 @@ function openChapterSelect(back) {
                : '') +
              (c.note ? '<div class="sub">' + c.note + '</div>' : '') +
              (needs.length
-               ? '<div class="sub"' + (miss.length ? ' style="color:#c8403a"' : '') + '>' +
+               ? '<div class="sub"' + (miss.length ? ' style="color:var(--red)"' : '') + '>' +
                    nameList(needs) + ' 편성 필요' +
                    (miss.length ? '　— 지금은 빠져 있습니다' : '　— 확인됨') + '</div>'
                : '') +
@@ -9273,7 +9374,7 @@ function openRail3Lost(rule, k) {
       '받을 수 있고, 높은 배수로 끝내면 <b>아직 안 받아 둔 아래 몫도 함께</b> 나옵니다.</div>' +
       '<div class="hint">이번 운행 <b>' + railScaleText(k) + '</b>　·　지나친 역 ' +
       ((S.rail3 && S.rail3.skipped) || 0) + '곳</div>';
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     RAIL3_PRIZES.forEach(p => {
       const 받음 = rail3PrizeTaken(p);
@@ -9732,25 +9833,25 @@ function openMirrorGate(tier, back) {
         '　·　<b>완주 보상</b> ' + f.보상 + (f.첫몫 ? '　(' + f.첫몫 + ')' : '') + '</div>';
 
     if (saved)
-      h += '<div class="hint" style="color:#d8b26a">저장해 둔 자리가 있습니다. ' +
+      h += '<div class="hint" style="color:var(--gold)">저장해 둔 자리가 있습니다. ' +
            '<b>이어하기</b>를 누르면 엔케팔린 없이 그 자리부터, <b>입장</b>을 누르면 ' +
            '처음부터 다시 시작합니다 — 이때 저장해 둔 자리는 사라집니다.</div>';
 
     /* 갈래에 warn 을 적어 두었으면 여기, 관측(적 관측)보다 먼저 보이는 자리에 붉게 띄웁니다. */
     if (rule.warn)
-      h += '<div class="hint" style="color:#c8403a;font-weight:700">' + rule.warn + '</div>';
+      h += '<div class="hint" style="color:var(--red);font-weight:700">' + rule.warn + '</div>';
 
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     if (MIRROR_PREP_ACTIONS.length) {
-      h += '<div style="margin:10px 0 6px;color:#e8e4de;font-weight:700">할 수 있는 일</div>' +
+      h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">할 수 있는 일</div>' +
            '<div class="grid">';
       MIRROR_PREP_ACTIONS.forEach(a => {
         const ok = a.can(rule);
         h += '<div class="slot"' + (ok ? ' data-act="' + a.id + '"' : '') + '>' +
                '<div class="' + (ok ? 'nm' : 'lock') + '">' + a.name + '</div>' +
                '<div class="sub">' + a.desc + '</div>' +
-               '<div class="sub"' + (ok ? '' : ' style="color:#c8403a"') + '>' + a.need(rule) + '</div>' +
+               '<div class="sub"' + (ok ? '' : ' style="color:var(--red)"') + '>' + a.need(rule) + '</div>' +
              '</div>';
       });
       h += '</div>';
@@ -9759,7 +9860,7 @@ function openMirrorGate(tier, back) {
     if (scouted) {
       /* 누구인지는 알려 주지 않습니다 — 이름·수치 대신 «새어나오는 소리»(intro) 만 들려줍니다.
        * intro 가 없는 잡졸은 그만큼 낌새도 흐릿하다는 뜻으로 둡니다. */
-      h += '<div style="margin:18px 0 6px;color:#e8e4de;font-weight:700">새어나오는 소리</div>' +
+      h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">새어나오는 소리</div>' +
            '<div class="grid one">' +
            scouted.map((id, i) => {
              const f = FOES[id];
@@ -11141,7 +11242,7 @@ function openMail(back, note) {
     (note ? '<div class="mailnote' + (note.ok ? ' ok' : ' no') + '">' + note.msg + '</div>' : '') +
           '<div class="hint">불편을 끼쳤을 때 얹어 드리는 자리입니다. ' +
           '하나에 한 번씩만 받습니다.' +
-          (기다림 ? '　<b style="color:#d8b26a">받지 않은 우편 ' + 기다림 + '통</b>' : '') +
+          (기다림 ? '　<b style="color:var(--gold)">받지 않은 우편 ' + 기다림 + '통</b>' : '') +
           '</div>';
 
   /* 기간이 지나면 받았든 안 받았든 화면에서 뺀다 — 지난 우편을 언제까지고
@@ -11160,7 +11261,7 @@ function openMail(back, note) {
            (m.body ? '<div class="sub">' + m.body + '</div>' : '') +
            '<div class="sub"><span class="star">보상</span> ' + mailGiveText(m) + '</div>' +
            /* 남은 날과 받는 손잡이는 오른쪽으로 몰아 둡니다 — 눈이 가는 자리라 */
-           '<div class="sub mailfoot"' + (open ? ' style="color:#d8b26a"' : '') + '>' +
+           '<div class="sub mailfoot"' + (open ? ' style="color:var(--gold)"' : '') + '>' +
              (got ? '받았습니다'
                   : open ? mailLeftText(m) + '　·　<b>눌러서 받기</b>'
                          : '기간이 지났습니다') + '</div>' +
@@ -11200,14 +11301,18 @@ function openAchieve(back) {
 
   if (!all.length) h += '<div class="box dim">아직 업적이 없습니다.</div>';
 
-  h += '<div class="grid">';
+  /* 한 줄에 하나씩 — 목록형 (사용자 지침 2026-10-11). 왼쪽에 이름과 조건,
+   * 오른쪽에 보상. 좁은 화면에서는 보상이 아랫줄로 내려갑니다(.achrow — index.html). */
+  h += '<div class="achlist">';
   all.forEach(a => {
     const got = achieved(a);
-    h += '<div class="slot' + (got ? ' sel' : '') + '">' +
-           '<div class="' + (got ? 'nm' : 'lock') + '">' +
-             (got ? '✓ ' : '') + a.name + '</div>' +
-           '<div class="sub">' + (a.desc || '') + '</div>' +
-           '<div class="sub"><span class="star">보상</span> ' +
+    h += '<div class="achrow' + (got ? ' got' : '') + '">' +
+           '<div class="mark">' + (got ? '✓' : '') + '</div>' +
+           '<div class="body">' +
+             '<div class="' + (got ? 'nm' : 'lock') + '">' + a.name + '</div>' +
+             '<div class="sub">' + (a.desc || '') + '</div>' +
+           '</div>' +
+           '<div class="rw"><span class="star">보상</span> ' +
              (got ? (a.reward || '') : '？？？') + '</div>' +
          '</div>';
   });
@@ -11325,7 +11430,7 @@ function presetClear(i) {
 /* 편성 화면 맨 위에 서는 세 칸 */
 function presetBarHTML() {
   const ps = presetList();
-  let h = '<div style="margin:2px 0 6px;color:#e8e4de;font-weight:700">저장해 둔 편성</div>' +
+  let h = '<div style="margin:2px 0 6px;color:var(--text);font-weight:700">저장해 둔 편성</div>' +
           '<div class="hint">눌러서 그대로 갈아 끼웁니다. 아래 [편성 저장] 으로 담아 둡니다.</div>' +
           '<div class="grid">';
   ps.forEach((p, i) => {
@@ -11343,7 +11448,7 @@ function presetBarHTML() {
              (이름 || '시너지 없음') + '</div>' +
            '<div class="sub">' + names + '</div>' +
            '<div class="sub">' +
-             (깨짐 ? '<span style="color:#c8403a">지금 쓸 수 없습니다 — ' + 깨짐.join(", ") + '</span>'
+             (깨짐 ? '<span style="color:var(--red)">지금 쓸 수 없습니다 — ' + 깨짐.join(", ") + '</span>'
                    : '기프트 ' + (p.giftOn || []).length + '　·　교육위원 ' + (p.advisorOn || []).length) +
            '</div>' +
          '</div>';
@@ -11372,7 +11477,7 @@ function openPresetSave(back) {
            '<div class="sub">' + (p ? (p.party || []).filter(Boolean).map(memberName).join("　")
                                     : '여기에 담습니다') + '</div>' +
            '<div class="sub mailfoot">' + (p ? '<b>덮어쓰기</b>' : '<b>담기</b>') +
-             (p ? '　·　<span data-wipe="' + i + '" style="color:#c8403a;cursor:pointer">비우기</span>' : '') +
+             (p ? '　·　<span data-wipe="' + i + '" style="color:var(--red);cursor:pointer">비우기</span>' : '') +
            '</div>' +
          '</div>';
   });
@@ -11462,9 +11567,9 @@ function openAdvisor(back) {
              (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
            (has ? flavorHTML(a) : '') +
            '<div class="sub">' + (has ? a.desc : '미보유') + '</div>' +
-           (겹침 ? '<div class="sub" style="color:#c8403a">' + withJosa(a.name, "을") +
+           (겹침 ? '<div class="sub" style="color:var(--red)">' + withJosa(a.name, "을") +
                    ' 이미 세웠습니다. 한 사람은 한 번만 설 수 있습니다.</div>' : '') +
-           (지원겹침 ? '<div class="sub" style="color:#c8403a">' +
+           (지원겹침 ? '<div class="sub" style="color:var(--red)">' +
                    withJosa(지원겹침, "이") + ' 지원 작성위원으로 편성에 있어 세울 수 없습니다.</div>' : '') +
            (has && a.note ? '<div class="sub">' + a.note + '</div>' : '') +
          '</div>';
@@ -11526,12 +11631,13 @@ function openGiftPick(back) {
     const has = !!(S.giftsOwned && S.giftsOwned[giftId(g)]);
     if (g.noGacha && !has) return;       // 뽑기로 못 얻는 것은 가지기 전엔 보이지 않습니다
     const on  = giftIsOn(giftId(g));
-    h += '<div class="slot' + (on ? ' sel' : '') + '"' + (has ? ' data-pick="' + giftId(g) + '"' : '') + '>' +
-           '<div class="' + (has ? 'nm' : 'lock') + '">' +
+    h += '<div class="slot hasic' + (on ? ' sel' : '') + '"' + (has ? ' data-pick="' + giftId(g) + '"' : '') + '>' +
+           giftIconHTML(g, !has) +
+           '<div><div class="' + (has ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) +
              (on ? ' <span class="sub">· 지님</span>' : '') + '</div>' +
            (has ? flavorHTML(g) : '') +
-           '<div class="sub">' + (has ? g.desc : '미보유') + '</div>' +
+           '<div class="sub">' + (has ? g.desc : '미보유') + '</div></div>' +
          '</div>';
   });
   h += '</div><div class="modalfoot"><button id="gfclose">돌아가기</button></div>';
@@ -11605,7 +11711,7 @@ function openSync(back) {
       '<span data-tut="sync-cap">지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
       (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</span></div>';
 
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     /* 4×3 칸 — 이름과 단계만. 고른 칸은 금빛 테두리 */
     h += '<div class="syncgrid" data-tut="sync-row">';
@@ -11638,7 +11744,7 @@ function openSync(back) {
              (skill
                ? '<div class="sub"><span class="uskill"><b>' + skill.name + '</b> ' +
                    (lv >= 1 ? skill.desc(skillTierValue(skill, lv))
-                            : '<span style="color:#55524e">동기화 1단계에서 열립니다.</span>') +
+                            : '<span style="color:var(--off)">동기화 1단계에서 열립니다.</span>') +
                  '</span></div>'
                : '') +
              '<div class="act">' +
@@ -11748,7 +11854,7 @@ function openGiftUp(back) {
       '<span data-tut="gup-cap">지금은 <b>' + "+".repeat(cap) + '</b> 까지 올릴 수 있습니다.' +
       (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</span>' +
       '　·　황금교본 <b>' + (S.codex || 0) + '</b>권</div>';
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
     if (!mine.length) h += '<div class="hint">아직 가진 기프트가 없습니다 — 상점에서 황금교본으로 뽑습니다.</div>';
     else h += '<div class="eqbar">' +
                 '<button id="guall" class="ghost">모두 펴기</button>' +
@@ -11767,7 +11873,7 @@ function openGiftUp(back) {
                '<span class="arrow">' + (open ? '▾' : '▸') + '</span>' +
                '<b><span class="star">' + stars(g0.star) + '</span></b>' +
                '<span class="wearing">' + grp.length + '개' +
-                 (ups ? '　·　<span style="color:#d8b26a">지금 올릴 수 있는 것 ' + ups + '</span>' : '') +
+                 (ups ? '　·　<span style="color:var(--gold)">지금 올릴 수 있는 것 ' + ups + '</span>' : '') +
                '</span>' +
              '</div>';
       }
@@ -11778,13 +11884,13 @@ function openGiftUp(back) {
       const maxed = lv >= Math.min(cap, top);
       const cost  = maxed ? 0 : giftUpCost(g0, lv + 1);
       const nextDesc = (!maxed && g0.up[lv]) ? g0.up[lv].desc : null;
-      h += '<div class="syncrow"' + (first ? ' data-tut="gup-row"' : '') + '>' +
+      h += '<div class="syncrow"' + (first ? ' data-tut="gup-row"' : '') + '>' + giftIconHTML(g) +
              (maxed ? '<button disabled>' + (lv >= top ? '최대' : '상한 도달') + '</button>'
                     : '<button data-gup="' + giftId(g) + '">강화　교본 ' + cost + '권</button>') +
              '<div class="body">' +
                '<div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) + '</div>' +
                '<div class="sub">' + g.desc + '</div>' +
-               (nextDesc ? '<div class="sub" style="color:#d8b26a">다음 — ' + nextDesc + '</div>' : '') +
+               (nextDesc ? '<div class="sub" style="color:var(--gold)">다음 — ' + nextDesc + '</div>' : '') +
              '</div>' +
            '</div>';
       first = false;
@@ -11846,11 +11952,11 @@ function openGiftFuse(back) {
   const draw = (msg) => {
     let h = '<h2>E . G . O   기 프 트   합 성</h2>' +
       '<div class="hint" data-tut="fuse-what">기프트 여럿을 하나로 합쳐 <b>★★★★</b> 를 만듭니다. ' +
-      '재료로 든 기프트는 <b style="color:#d8b26a">사라집니다</b>(강화해 둔 단계도 함께) — 상점에서 다시 뽑을 수는 있습니다.' +
+      '재료로 든 기프트는 <b style="color:var(--gold)">사라집니다</b>(강화해 둔 단계도 함께) — 상점에서 다시 뽑을 수는 있습니다.' +
       '　·　황금교본 <b>' + (S.codex || 0) + '</b>권' +
       (fuses.some(f => f.syncModule) ? '　·　' + SYNC_MODULE.name + ' <b>' + syncModuleCount() + '</b>개' : '') +
       '</div>';
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     let first = true;
     fuses.forEach((f, i) => {
@@ -11862,13 +11968,13 @@ function openGiftFuse(back) {
         const g = giftById(pn);
         const ok = own(pn);
         const lv = ok ? giftLv(pn) : 0;
-        return '<span style="color:' + (ok ? '#e8e4de' : '#8b8681') + '">' +
+        return '<span style="color:' + (ok ? 'var(--text)' : 'var(--muted)') + '">' +
                  (g ? stars(g.star) + ' ' : '') + pn + (lv ? ' ' + "+".repeat(lv) : '') +
-                 (ok ? '' : ' <span style="color:#8b8681">(없음)</span>') + '</span>';
+                 (ok ? '' : ' <span style="color:var(--muted)">(없음)</span>') + '</span>';
       }).join('　+　');
       const costHTML = '황금교본 ' + (f.codex || 0) + '권' +
                        (f.syncModule ? ' · ' + SYNC_MODULE.name + ' ' + f.syncModule + '개' : '');
-      h += '<div class="syncrow"' + (first ? ' data-tut="fuse-row"' : '') + '>' +
+      h += '<div class="syncrow"' + (first ? ' data-tut="fuse-row"' : '') + '>' + giftIconHTML(r) +
              (has ? '<button disabled>이미 지님</button>'
                   : '<button data-fuse="' + i + '"' + (lack.length ? ' class="ghost"' : '') + '>합성</button>') +
              '<div class="body">' +
@@ -11937,12 +12043,24 @@ function vaultStats() {
  * 여기 한 칸 더 얹으면 됩니다 — openVault() 는 손대지 않아도 됩니다.
  * (쿠폰 · 이벤트 상품 등은 실제 상태값이 생기면 그때 추가) */
 function vaultItemCategories() {
+  /* 재화 — 이벤트 재화는 그 이벤트가 서 있을 때만 칸을 냅니다. 아이콘 이름은
+   * 재화 이름(data/event.js 의 cur) 그대로입니다. */
+  const cur = [
+    { name: "원고료",        icon: "원고료",        sub: String(S.money || 0) },
+    { name: "황금교본",      icon: "황금교본",      sub: (S.codex || 0) + "권" },
+    { name: ENK_RULE.name,  icon: "엔케팔린",      sub: enkCount() + " / " + ENK_RULE.max }
+  ];
+  if (curEvent()) cur.push({ name: eventCurName(), icon: eventCurName(), sub: String(eventCount()) });
   return [
+    { label: "재화", cls: "vcur", tut: "vault-cur", items: cur },
     {
       label: "인격 파편",
       note: "뽑기에서 중복이 나오면 작성위원마다 따로 쌓입니다.",
+      cls: "vfrag", tut: "vault-frag",
       items: Object.keys(SINNERS).map(who => ({
         name: SINNERS[who].name,
+        icon: "인격 파편 - " + SINNERS[who].name,
+        dim:  !fragCount(who),
         sub:  fragCount(who) + "개"
       }))
     }
@@ -12009,6 +12127,74 @@ function fontChoiceName(kind, key) {
   return c ? c.name : "";
 }
 
+/* ── 색 테마 (사용자 지침 2026-10-11) ───────────────────────────
+ *  콘첸트라트의 색 테마와 같은 얼개입니다 — 화면의 뼈대 색을 index.html 의 :root 변수로
+ *  모아 두고, <html data-palette="…"> 로 그 값을 갈아 끼웁니다. 값은 index.html 맨 아래
+ *  «색 테마들» 덩이에 있고, 여기는 이름·견본·여는 조건만 적습니다.
+ *
+ *  ■ 어디에 남는가 — 이 «기기» 입니다 (브라우저 저장소 PALETTE_KEY). 보관함이 아닙니다.
+ *    콘첸트라트와 같은 결이고, 보관함에 넣으면 손댐 검사·내보내기에 얽힙니다.
+ *    보관함을 비워도 남습니다. 대신 기기를 옮기면 다시 골라야 합니다.
+ *
+ *  ■ need — 그 장을 마쳐야 열립니다 (콘첸트라트가 같은 장으로 테마를 엽니다).
+ *    안 적으면 처음부터 열려 있습니다. 고른 테마가 (보관함을 비워) 도로 잠기면 기본으로 물러납니다.
+ *
+ *  ■ 테마를 더하려면 — index.html «색 테마들» 에 한 덩이, 여기에 한 줄.
+ *    sw 는 고르는 칸에 뜨는 견본 색 넷(바탕 · 칸 · 강조 · 글씨)입니다. */
+const PALETTE_KEY = "rash_company_palette_v1";
+const PALETTES = [
+  { key: "ink",     name: "먹",   sub: "기본 — 검은 바탕에 금",        sw: ["#0a0a0c", "#16161b", "#d8b26a", "#e8e4de"] },
+  { key: "chalk",   name: "백악", sub: "밝은 바탕에 먹글씨",            sw: ["#e9e7e1", "#ffffff", "#8a6412", "#1c1b19"] },
+  { key: "sea",     name: "심해", sub: "짙은 청색에 하늘빛",            sw: ["#0a121d", "#192739", "#6db8f2", "#e4edf8"], need: "ch3" },
+  { key: "blossom", name: "분홍", sub: "어두운 자줏빛에 분홍",          sw: ["#170b11", "#321a27", "#ff8db5", "#fce9f1"], need: "ch5" },
+  { key: "amber",   name: "호박", sub: "짙은 갈색에 금",                sw: ["#110d09", "#2a2018", "#dbb45e", "#f4e9d8"], need: "ch7" }
+];
+function paletteBy(key) { return PALETTES.find(p => p.key === key) || null; }
+function paletteOpen(p) { return !p.need || !!(S && S.cleared && S.cleared[p.need]); }
+function paletteNow() {
+  const p = paletteBy(Store.get(PALETTE_KEY));
+  return p ? p.key : "ink";
+}
+function applyPalette(key) {
+  const p = paletteBy(key) || PALETTES[0];
+  if (p.key === "ink") document.documentElement.removeAttribute("data-palette");
+  else document.documentElement.setAttribute("data-palette", p.key);
+}
+/* 유리창에 들어올 때마다 한 번 — 잠긴 테마가 걸려 있으면 기본으로 물립니다 */
+function paletteCheck() {
+  const p = paletteBy(paletteNow());
+  if (p && !paletteOpen(p)) { Store.del(PALETTE_KEY); applyPalette("ink"); }
+  else applyPalette(paletteNow());
+}
+function openPalettePick(back) {
+  $modal.classList.add("on");
+  const now = paletteNow();
+  let h = '<h2>색 테 마</h2>' +
+          '<div class="hint">누르는 대로 곧바로 바뀝니다. 이 기기에만 남습니다 — 보관함을 비워도 그대로이고, ' +
+          '기기를 옮기면 다시 고릅니다. 전투 화면의 붉은빛은 어느 테마에서나 같습니다.</div><div class="grid">';
+  PALETTES.forEach(p => {
+    const open = paletteOpen(p);
+    const c = p.need ? CHAPTERS.find(x => x.id === p.need) : null;
+    h += '<div class="slot' + (now === p.key ? ' sel' : '') + (open ? '' : ' ro') + '"' +
+           (open ? ' data-pal="' + p.key + '"' : '') + '>' +
+           '<div class="palsw"' + (open ? '' : ' style="opacity:.35"') + '>' +
+             p.sw.map(x => '<i style="background:' + x + '"></i>').join("") + '</div>' +
+           '<div class="' + (open ? 'nm' : 'lock') + '">' + p.name + (now === p.key ? ' <span class="sub">· 지금</span>' : '') + '</div>' +
+           '<div class="sub">' + (open ? p.sub : (c ? c.no : p.need) + '을 마치면 열립니다') + '</div>' +
+         '</div>';
+  });
+  h += '</div><div class="modalfoot"><button id="palclose">닫기</button></div>';
+  $sheet.innerHTML = h;
+  $sheet.querySelectorAll("[data-pal]").forEach(el => {
+    el.onclick = () => {
+      if (el.dataset.pal === "ink") Store.del(PALETTE_KEY); else Store.set(PALETTE_KEY, el.dataset.pal);
+      applyPalette(el.dataset.pal);
+      openPalettePick(back);
+    };
+  });
+  document.getElementById("palclose").onclick = () => { if (back) back(); else { closeModal(); render(); } };
+}
+
 /* 고르는 창 — 누르는 대로 곧바로 입히고 저장합니다. 맛보기 줄은 로그와 같은
  * 규칙(.fontsample)을 써서, 보이는 그대로가 실제 화면입니다.
  * 맛보기 대사는 어느 장의 것도 아닙니다 — 아직 안 읽은 장이 새지 않도록. */
@@ -12017,7 +12203,7 @@ function openFontPick(back) {
   const f = fontClean(S.font);
 
   const block = (kind, title, note) => {
-    let h = '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + title + '</div>' +
+    let h = '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + title + '</div>' +
             (note ? '<div class="hint">' + note + '</div>' : '') +
             '<div class="grid">';
     FONT_CHOICES[kind].forEach(c => {
@@ -12268,10 +12454,10 @@ function openSettings(back, draft0) {
     let h = '<h2>설 정</h2>' +
             '<div class="hint">유리창 배경은 [확정] 을 눌러야 보관함에 남습니다. ' +
             '아래 [화면 글꼴] 은 고르는 대로 곧바로 저장됩니다.</div>' +
-            '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">유리창 배경</div>' +
+            '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">유리창 배경</div>' +
             '<div class="hint">마친 장의 배경만 나옵니다. 묶음을 고르면 그 장의 배경이 ' +
             '유리창에 들어올 때마다 한 장씩 돌아갑니다.</div>' +
-            '<div class="hint" style="color:#d8b26a">' + (바뀜 ? '고르는 중 — ' : '지금 걸린 것 — ') +
+            '<div class="hint" style="color:var(--gold)">' + (바뀜 ? '고르는 중 — ' : '지금 걸린 것 — ') +
               '<b>' + (nowIt ? nowIt.name : "작성위원 단체 그림") + '</b>' +
               (nowIt ? '　·　배경 ' + nowIt.imgs.length + '장' : '') +
               (고름 ? '' : '　·　기본값(마지막으로 마친 장)') + '</div>' +
@@ -12308,8 +12494,12 @@ function openSettings(back, draft0) {
            '</div>';
     });
 
-    h += '<div style="margin:16px 0 6px;color:#e8e4de;font-weight:700">다른 설정</div>' +
+    h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
          '<div class="grid">' +
+           '<div class="slot" data-go="pal">' +
+             '<div class="nm">색 테마</div>' +
+             '<div class="sub">화면의 바탕과 강조색을 고릅니다 — 지금 「' + paletteBy(paletteNow()).name +
+             '」. 누르는 대로 곧바로 바뀝니다.</div></div>' +
            '<div class="slot" data-go="font">' +
              '<div class="nm">화면 글꼴</div>' +
              '<div class="sub">기본 글꼴 · 대사 글꼴 · 대사 크기를 고릅니다. ' +
@@ -12321,7 +12511,7 @@ function openSettings(back, draft0) {
          '</div>';
 
     if (바뀜)
-      h += '<div class="hint" style="color:#c8403a;margin-top:14px">' +
+      h += '<div class="hint" style="color:var(--red);margin-top:14px">' +
            '고른 배경이 아직 저장되지 않았습니다 — [확정] 을 눌러야 남습니다.</div>';
 
     h += '<div class="modalfoot">' +
@@ -12346,6 +12536,7 @@ function openSettings(back, draft0) {
 
     /* 들렀다 오는 길에도 고르던 것을 들고 다닙니다 */
     const go = k => $sheet.querySelector('[data-go="' + k + '"]');
+    go("pal").onclick  = () => openPalettePick(() => openSettings(back, draft));
     go("font").onclick = () => openFontPick(() => openSettings(back, draft));
     go("rec").onclick  = () => openRecord(() => openSettings(back, draft));
 
@@ -12379,16 +12570,18 @@ function openSettings(back, draft0) {
 function openVault(back) {
   $modal.classList.add("on");
   let h = '<h2>보 관 함</h2>' +
-          '<div class="hint">여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. ' +
-          '무엇을 가졌는지·장착은 편성 화면의 [인격 장착]에서 봅니다.</div>';
+          '<div class="hint" data-tut="vault-what">여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. ' +
+          '인격은 편성 화면의 [인격 장착]에서 봅니다.</div>';
 
   vaultItemCategories().forEach(cat => {
-    h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + cat.label + '</div>';
+    h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + cat.label + '</div>';
     if (cat.note) h += '<div class="hint">' + cat.note + '</div>';
-    h += '<div class="grid">';
+    h += '<div class="grid ' + (cat.cls || '') + '"' + (cat.tut ? ' data-tut="' + cat.tut + '"' : '') + '>';
     cat.items.forEach(it => {
-      h += '<div class="slot"><div class="nm">' + it.name + '</div>' +
-             '<div class="sub">' + it.sub + '</div></div>';
+      h += '<div class="slot ro hasic' + (it.dim ? ' none' : '') + '">' +
+             iconHTML(it.icon, { dim: it.dim }) +
+             '<div><div class="nm">' + it.name + '</div>' +
+             '<div class="sub">' + it.sub + '</div></div></div>';
     });
     h += '</div>';
   });
@@ -12396,12 +12589,12 @@ function openVault(back) {
   /* 인격 파편 상자 — 보관함에서 바로 «사용» 하는 자리라 syncrow 로,
    * 오른쪽 끝에 사용 손잡이를 둔다. 이런 손잡이가 필요 없는 항목은
    * vaultItemCategories() 에 얹으면 되고, 여기는 손댈 것 없다. */
-  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">인격 파편 상자</div>' +
+  h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">인격 파편 상자</div>' +
        '<div class="hint">' + FRAGBOX_RULE.desc + '</div>' +
        '<div class="hint">' + FRAGBOX_RULE.desc2 + '</div>';
-  FRAGBOX_KINDS.forEach(k => {
+  FRAGBOX_KINDS.forEach((k, i) => {
     const cnt = fragBoxCount(k.key);
-    h += '<div class="syncrow">' +
+    h += '<div class="syncrow"' + (i === 0 ? ' data-tut="vault-use"' : '') + '>' + iconHTML(k.name, { dim: !cnt }) +
            '<button' + (cnt > 0 ? ' data-box="' + k.key + '"' : ' disabled') + '>사용</button>' +
            '<div class="body">' +
              '<div class="nm">' + k.name + '</div>' +
@@ -12412,20 +12605,20 @@ function openVault(back) {
 
   /* 선택권 둘 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
    * 없거나(0개) 고를 것이 하나도 안 남았으면 손잡이를 잠급니다. */
-  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">선택권</div>' +
+  h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">선택권</div>' +
        '<div class="hint">운에 기대지 않고, 아직 못 가진 것 중 하나를 직접 골라 받습니다.</div>';
   PICK_TICKETS.forEach(t => {
     const cnt  = pickTicketCount(t.key);
     const left = pickTicketCands(t.key).length;
     const can  = cnt > 0 && left > 0;
-    h += '<div class="syncrow">' +
+    h += '<div class="syncrow">' + iconHTML(t.name, { dim: !cnt }) +
            '<button' + (can ? ' data-ticket="' + t.key + '"' : ' disabled') + '>사용</button>' +
            '<div class="body">' +
              '<div class="nm">' + t.name + '</div>' +
              '<div class="sub">보유 ' + cnt + '개　·　고를 수 있는 것 ' + left + '가지</div>' +
              '<div class="sub">' + t.desc + '</div>' +
              (cnt > 0 && left === 0
-               ? '<div class="sub" style="color:#d8b26a">' +
+               ? '<div class="sub" style="color:var(--gold)">' +
                  (t.key === "advisor"
                    ? '더 고를 사람이 없습니다 — 이미 다 함께하고 있거나, 남은 사람이 전부 특정 배정 중입니다.'
                    : '더 고를 기프트가 없습니다 — 이미 전부 지니고 있습니다.') + '</div>'
@@ -12438,9 +12631,9 @@ function openVault(back) {
    * 없거나(0개) 엔케팔린이 이미 가득이면 손잡이를 잠급니다. */
   const capCnt  = enkCapCount();
   const capFull = enkCount() >= ENK_RULE.max;
-  h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + ENK_CAPSULE.name + '</div>' +
+  h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + ENK_CAPSULE.name + '</div>' +
        '<div class="hint">' + ENK_CAPSULE.desc + '</div>' +
-       '<div class="syncrow">' +
+       '<div class="syncrow">' + iconHTML(ENK_CAPSULE.name, { dim: !capCnt }) +
          '<button' + (capCnt > 0 && !capFull ? ' id="vcap"' : ' disabled') + '>사용</button>' +
          '<div class="body">' +
            '<div class="nm">' + ENK_CAPSULE.name + '</div>' +
@@ -12455,23 +12648,48 @@ function openVault(back) {
   if (syncUnlocked() || syncModuleCount() > 0) {
     const modCnt  = syncModuleCount();
     const modLeft = syncModuleCands().length;
-    h += '<div style="margin:14px 0 6px;color:#e8e4de;font-weight:700">' + SYNC_MODULE.name + '</div>' +
+    h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + SYNC_MODULE.name + '</div>' +
          '<div class="hint">' + SYNC_MODULE.desc + '</div>' +
-         '<div class="syncrow">' +
+         '<div class="syncrow">' + iconHTML(SYNC_MODULE.name, { dim: !modCnt }) +
            '<button' + (syncModuleUsable() ? ' id="vsyncmod"' : ' disabled') + '>사용</button>' +
            '<div class="body">' +
              '<div class="nm">' + SYNC_MODULE.name + '</div>' +
              '<div class="sub">보유 ' + modCnt + '개　·　지금 상한 ' + syncMax() + '단계' +
                '　·　올릴 수 있는 작성위원 ' + modLeft + '명</div>' +
              (modCnt > 0 && !syncUnlocked()
-               ? '<div class="sub" style="color:#d8b26a">동기화가 아직 열리지 않았습니다.</div>'
+               ? '<div class="sub" style="color:var(--gold)">동기화가 아직 열리지 않았습니다.</div>'
                : modCnt > 0 && modLeft === 0
-               ? '<div class="sub" style="color:#d8b26a">열둘이 모두 지금 상한에 닿아 있습니다 — ' +
+               ? '<div class="sub" style="color:var(--gold)">열둘이 모두 지금 상한에 닿아 있습니다 — ' +
                  (nextSyncChapter() ? nextSyncChapter() + '을 마치면 상한이 오릅니다.' : '더 오를 곳이 없습니다.') +
                  '</div>'
                : '') +
            '</div>' +
          '</div>';
+  }
+
+  /* E.G.O 기프트 — 지닌 것만, 높은 성급부터. 여기서는 «보기만» 합니다 —
+   * 지니고 내려놓는 것은 편성의 기프트 고르기에서, 올리는 것은 [강화] 에서 합니다. */
+  const vGifts = (typeof GIFTS !== "undefined" ? GIFTS : [])
+    .filter(g => S.giftsOwned && S.giftsOwned[giftId(g)])
+    .slice().sort((a, b) => b.star - a.star);
+  const vGiftAll = giftGachaList().length + vGifts.filter(g => g.noGacha).length;
+  h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">E.G.O 기프트</div>' +
+       '<div class="hint" data-tut="vault-gift">보유 ' + vGifts.length + ' / ' + vGiftAll +
+       '　·　지니고 내려놓는 것은 편성 화면에서, 올리는 것은 [강화] 에서 합니다.</div>';
+  if (!vGifts.length) h += '<div class="hint">아직 가진 기프트가 없습니다 — 상점에서 황금교본으로 뽑습니다.</div>';
+  else {
+    h += '<div class="grid">';
+    vGifts.forEach(g0 => {
+      const g  = giftView(g0);
+      const on = giftIsOn(giftId(g));
+      h += '<div class="slot ro hasic' + (on ? ' sel' : '') + '">' + giftIconHTML(g) +
+             '<div><div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) +
+               (on ? ' <span class="sub">· 지님</span>' : '') + '</div>' +
+             flavorHTML(g) +
+             '<div class="sub">' + g.desc + '</div></div>' +
+           '</div>';
+    });
+    h += '</div>';
   }
 
   /* 화면 글꼴 칸은 여기 없습니다 — [설정] 으로 옮겼습니다(2026-09-12 사용자 지침).
@@ -12504,6 +12722,7 @@ function openVault(back) {
   });
   const vmod = document.getElementById("vsyncmod");
   if (vmod) vmod.onclick = () => openSyncModuleUse(back);
+  tutorOnce("vault");   /* 보관함에 처음 들어왔을 때 한 번 */
 }
 
 /* ── 동기화 모듈 사용 ─────────────────────────────────────────
@@ -12525,7 +12744,7 @@ function openSyncModuleUse(back) {
       '<div class="hint">' + SYNC_MODULE.desc + '　지금 <b>' + syncModuleCount() +
       '개</b>를 가지고 있습니다.<br>지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
       (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</div>';
-    if (msg) h += '<div class="hint" style="color:#d8b26a">' + msg + '</div>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
@@ -12619,10 +12838,10 @@ function openPickTicketUse(kind, back) {
                (x.note ? '<div class="sub">' + x.note + '</div>' : '') +
              '</div>';
       } else {
-        h += '<div class="slot" data-pick="' + i + '">' +
-               '<div class="nm"><span class="star">' + stars(x.star) + '</span> ' + x.name + '</div>' +
+        h += '<div class="slot hasic" data-pick="' + i + '">' + giftIconHTML(x) +
+               '<div><div class="nm"><span class="star">' + stars(x.star) + '</span> ' + x.name + '</div>' +
                flavorHTML(x) +
-               '<div class="sub">' + x.desc + '</div>' +
+               '<div class="sub">' + x.desc + '</div></div>' +
              '</div>';
       }
     });
@@ -12674,9 +12893,9 @@ function openFragBoxUse(kind, back) {
 
   let h = '<h2>' + meta.name + '</h2>' +
     '<div class="hint">' + FRAGBOX_RULE.desc + ' 사용할 개수를 고르십시오.  (보유 ' + owned + '개)</div>' +
-    '<div class="hint" id="bxamt" style="color:#e8e4de;font-weight:700;font-size:15px">1개 사용</div>' +
+    '<div class="hint" id="bxamt" style="color:var(--text);font-weight:700;font-size:15px">1개 사용</div>' +
     '<input type="range" id="bxrange" min="1" max="' + owned + '" value="1" ' +
-      'style="width:100%;accent-color:#c8403a">' +
+      'style="width:100%;accent-color:var(--red)">' +
     '<div class="modalfoot">' +
       '<button id="bxcancel" class="ghost">그만두기</button>' +
       '<button id="bxnext" class="primary">다음</button>' +
@@ -12780,7 +12999,7 @@ function openReset(back) {
 
   const draw = (sure) => {
     let h = '<h2>보 관 함 비 우 기</h2>' +
-            '<div class="hint" style="color:#c8403a">' +
+            '<div class="hint" style="color:var(--red)">' +
               '<b>되돌릴 수 없습니다.</b> 아래 것이 모두 사라지고 맨 처음으로 돌아갑니다.</div>' +
             '<div class="grid">' +
               row("인격", ids + "종") +
@@ -12807,7 +13026,7 @@ function openReset(back) {
              '<button id="rexport">먼저 내보내기</button>' +
              '<button id="rnext" class="ghost">비우겠습니다</button></div>';
     } else {
-      h += '<div class="hint" style="color:#c8403a">' +
+      h += '<div class="hint" style="color:var(--red)">' +
              '<b>정말 비울까요?</b> 이 손잡이를 누르면 그대로 사라집니다.</div>' +
            '<div class="modalfoot">' +
              '<button id="rcancel" class="primary">아니오, 그만두겠습니다</button>' +
@@ -12891,6 +13110,7 @@ function glass() {
   SCENES = [];
   if (vaultLocked()) return vaultLockScreen();
   clearLog();
+  paletteCheck();          // 고른 색 테마를 입힙니다 (잠긴 것이면 기본으로)
   /* 유리창 그림 — 고른 묶음(기본은 마지막으로 마친 장)에서 한 장. 아래 glassBgPick 참고 */
   showCard(glassBgPick(), "라슈 컴퍼니");
   say("유 리 창", "place");

@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>라슈 컴퍼니</title>
+<!-- 탭 아이콘 — 단체 로고를 도트로 옮긴 것 (tools/아이콘-도안.js 「라슈 컴퍼니」) -->
+<!-- 고른 색 테마를 «그리기 전에» 붙입니다 — engine.js 를 기다리면 기본 색이 잠깐 번쩍입니다.
+     열쇠·이름은 engine.js 의 PALETTE_KEY · PALETTES 와 같아야 합니다. -->
+<script>
+  try { var p = localStorage.getItem("rash_company_palette_v1");
+        if (p && /^[a-z]+$/.test(p) && p !== "ink") document.documentElement.setAttribute("data-palette", p); } catch (e) {}
+</script>
+<link rel="icon" type="image/png" href="assets/icon/라슈 컴퍼니-큰.png">
 <!-- 글꼴 (사용자 지침 2026-09-11) — 화면 전체는 Pretendard, 이야기 대사는 고운바탕.
      보관함 [화면 글꼴] 에서 Noto Serif KR·기기 고딕으로도 바꿀 수 있습니다(engine.js FONT_CHOICES).
      모두 SIL OFL 이라 그대로 써도 됩니다. 판 번호를 박아 두었으니 올릴 때만 고칩니다.
@@ -14,6 +22,44 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;700&display=swap">
 <style>
+  /* ── 색 테마 ───────────────────────────────────────────────────
+   *  화면의 뼈대 색은 전부 여기 변수로 모여 있습니다(2026-10-11). 아래가 기본 「먹」이고,
+   *  <html data-palette="…"> 가 붙으면 그 테마의 값으로 갈립니다 — 맨 아래 «색 테마들» 덩이.
+   *  고르는 곳은 유리창의 [설정] → [색 테마] (engine.js PALETTES · applyPalette).
+   *
+   *    --bg · --sheet · --panel · --panel-2   바탕 → 창 → 칸 → 손잡이, 뒤에서 앞으로
+   *    --line · --line-2                      테두리(여린 것 · 또렷한 것)
+   *    --text · --text-2 · --text-3           글씨(제목 · 본문 · 곁말)
+   *    --muted · --dim · --off                흐린 글씨(설명 · 안내 · 잠긴 것)
+   *    --gold 무리                            강조색 — 기본은 금. 테마마다 이 자리가 그 테마의 색입니다
+   *    --red                                  제목·가리킴·경고
+   *    --hi                                   가리켰을 때 가장 밝게 뜨는 글씨
+   *
+   *  새 규칙을 쓸 때는 색을 직접 적지 말고 이 변수를 씁니다 — 직접 적은 색은 테마를 따라가지 않습니다.
+   *  전투 화면(body.battling)과 번쩍임 연출(.flashfx)은 일부러 변수 밖에 두었습니다 —
+   *  어느 테마에서든 같은 붉은 화면이어야 하기 때문입니다. */
+  :root{
+    --bg:#0a0a0c;
+    --sheet:#0e0e12;
+    --panel:#121218;
+    --panel-2:#16161b;
+    --line:#2a2a30;
+    --line-2:#34343c;
+    --text:#e8e4de;
+    --text-2:#d6d3ce;
+    --text-3:#a9a49e;
+    --muted:#8b8681;
+    --dim:#6e6a66;
+    --off:#55524e;
+    --gold:#d8b26a;
+    --gold-hi:#f0d79c;
+    --gold-mid:#8a7440;
+    --gold-bg:#17150f;
+    --gold-line:#4a3a20;
+    --gold-line-2:#7a5c22;
+    --red:#c8403a;
+    --hi:#ffffff;
+  }
   *{box-sizing:border-box;}
   /* 글꼴 두 벌 — 위 <link> 에서 받아 옵니다.
    *   --font-ui   화면 전체
@@ -29,7 +75,7 @@
     --dlg-plus:1px;
   }
   html,body{
-    margin:0;padding:0;background:#0a0a0c;color:#d6d3ce;
+    margin:0;padding:0;background:var(--bg);color:var(--text-2);
     font-family:var(--font-ui);
     font-size:15px;line-height:1.75;
   }
@@ -40,10 +86,11 @@
     display:flex;align-items:baseline;gap:14px;
     border-bottom:1px solid #3a2226;padding-bottom:8px;margin-bottom:12px;
   }
-  header .brand{color:#c8403a;font-weight:800;letter-spacing:.22em;font-size:17px;}
-  header .chap{color:#7d7a76;font-size:12.5px;letter-spacing:.08em;}
-  header .right{margin-left:auto;color:#8b8681;font-size:12.5px;}
-  header .right b{color:#d8b26a;font-weight:600;}
+  header .brand{color:var(--gold);font-weight:800;letter-spacing:.22em;font-size:17px;}
+  header .brand .icmini{width:36px;height:36px;vertical-align:-12px;margin:-6px 6px -6px 0;}  /* 18px 그림의 2배 — 줄 높이는 그대로 */
+  header .chap{color:var(--dim);font-size:12.5px;letter-spacing:.08em;}
+  header .right{margin-left:auto;color:var(--muted);font-size:12.5px;}
+  header .right b{color:var(--gold);font-weight:600;}
 
   /* ── 무대(이미지) ───────────────────────
    *  그림칸의 세로 폭은 --stageh 로 고정됩니다.
@@ -52,24 +99,24 @@
    *  높이를 바꾸고 싶으면 아래 --stageh 한 줄만 고치세요.
    */
   :root{ --stageh:300px; }
-  #stage{display:none;border:1px solid #2a2a30;background:#0b0b0f;margin-bottom:10px;overflow:hidden;}
+  #stage{display:none;border:1px solid var(--line);background:var(--bg);margin-bottom:10px;overflow:hidden;}
   #stage.on{display:block;}
   /* 적이 나타났을 때만 뜨는 체력바 — 이름은 왼쪽 아래, 공·방은 오른쪽 아래 */
   #foehp{display:none;margin-bottom:8px;}
   #foehp.on{display:block;}
   #foehp .row{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;}
-  #foehp .nm{color:#c9c5c0;font-weight:700;font-size:12.5px;}
-  #foehp .stat{color:#8b8681;font-size:11.5px;}
+  #foehp .nm{color:var(--text-2);font-weight:700;font-size:12.5px;}
+  #foehp .stat{color:var(--muted);font-size:11.5px;}
   body.battling #foehp .nm{color:#dcd0ce;}
   /* 거울굴절철도 2호선 — 지금이 몇 순환의 몇 번째인가. 다른 갈래에서는 뜨지 않습니다. */
   #foehp .railtag{
     display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;
-    border:1px solid #6b5a34;background:#241f14;color:#d8b26a;
+    border:1px solid #6b5a34;background:#241f14;color:var(--gold);
     font-style:normal;font-weight:700;font-size:10.5px;letter-spacing:.02em;
     vertical-align:1px;white-space:nowrap;
   }
   /* 배경 한 겹, 그 위에 사람 한 겹 */
-  .scenebox{position:relative;height:var(--stageh);overflow:hidden;background:#08080b;}
+  .scenebox{position:relative;height:var(--stageh);overflow:hidden;background:var(--bg);}
   .scenebox img.scene{
     position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.9;
   }
@@ -80,9 +127,9 @@
   .scenebox.blackout{background:#000;animation:blackoutFlicker 1s steps(1,end);}
   @keyframes blackoutFlicker{
     0%,55%  {background:#000;}
-    62%     {background:#141416;}
+    62%     {background:var(--panel);}
     68%,80% {background:#000;}
-    86%     {background:#0e0e11;}
+    86%     {background:var(--sheet);}
     100%    {background:#000;}
   }
   .scenebox.paper .placename{
@@ -130,7 +177,7 @@
   .scenebox .dmgfx{
     position:absolute;z-index:5;pointer-events:none;white-space:nowrap;text-align:center;
     font-family:var(--font-ui);font-weight:900;font-size:48px;line-height:1;letter-spacing:-.01em;
-    color:#fff;
+    color:var(--hi);
     text-shadow:-2px -2px 0 #4a0f0d, 2px -2px 0 #4a0f0d, -2px 2px 0 #4a0f0d, 2px 2px 0 #4a0f0d,
                 0 5px 0 #2a0706, 0 0 20px rgba(200,64,58,.85);
     transform:translate(-50%,-50%);
@@ -181,7 +228,7 @@
    * 배경·적·초상은 아래에 «그대로 있고» 이 겹이 위를 가릴 뿐이라, 걷으면
    * 그 무대가 손대지 않은 채로 도로 나옵니다.
    * 그림이 투명한 선화라 바탕을 불투명하게 깔아야 아래가 비치지 않습니다.
-   * ⚠ 흰색(#fff)입니다 — 예전에는 .scenebox.paper 와 같은 종이색(#f2efe9)
+   * ⚠ 흰색(#fff)입니다 — 예전에는 .scenebox.paper 와 같은 종이색(var(--text))
    * 이었는데, 「기가노토사우루스 사망」처럼 **흰 바탕이 그려져 들어 있는**
    * 그림을 넣으니 그 흰 네모가 종이색 띠 위에 그대로 도드라졌습니다
    * (사용자 지침 2026-10-04 — "그대로 넣고 배경을 흰색으로"). 흰색으로
@@ -209,7 +256,7 @@
   /* 지명은 칸 안쪽 아래에 얹습니다 — 칸 높이는 늘 --stageh 그대로 */
   .scenebox .placename{
     position:absolute;left:0;right:0;bottom:0;
-    color:#d8b26a;letter-spacing:.16em;font-size:12.5px;padding:7px 12px;
+    color:var(--gold);letter-spacing:.16em;font-size:12.5px;padding:7px 12px;
     background:linear-gradient(to top, rgba(6,6,9,.92), rgba(6,6,9,0));
   }
   /* 전투 중 대사를 적이 선 자리(가운데)에 큰 글씨로 얹습니다 — battleSay 전용
@@ -218,7 +265,7 @@
     position:absolute;left:6%;right:6%;top:10%;
     /* 대사와 같은 고운바탕. 고운바탕은 400·700 두 굵기뿐이라 800 대신 700 */
     text-align:center;font-size:21px;font-weight:700;line-height:1.4;font-family:var(--font-dlg);
-    color:#fff;text-shadow:0 2px 5px rgba(0,0,0,.85), 0 0 16px rgba(0,0,0,.6);
+    color:var(--hi);text-shadow:0 2px 5px rgba(0,0,0,.85), 0 0 16px rgba(0,0,0,.6);
     pointer-events:none;z-index:4;
     animation:battlecapIn .28s ease-out;
   }
@@ -236,31 +283,31 @@
 
   /* ── 로그 ─────────────────────────────── */
   #log{
-    border:1px solid #2a2a30;background:#0e0e12;height:330px;overflow-y:auto;
+    border:1px solid var(--line);background:var(--sheet);height:330px;overflow-y:auto;
     padding:16px 18px;
   }
   /* 보관함 [화면 글꼴] 창의 맛보기(.fontsample)도 로그와 같은 규칙을 씁니다 —
    * 따로 적어 두면 한쪽만 고쳐져 맛보기와 실제 화면이 어긋납니다. */
-  .fontsample{border:1px solid #2a2a30;background:#0e0e12;padding:12px 16px;margin:4px 0 2px;}
+  .fontsample{border:1px solid var(--line);background:var(--sheet);padding:12px 16px;margin:4px 0 2px;}
   #log p, .fontsample p{margin:0 0 9px;}
-  #log .n,   .fontsample .n  {color:#c2bfba;}
-  #log .who, .fontsample .who{color:#c8403a;font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:1px;}
+  #log .n,   .fontsample .n  {color:var(--text-2);}
+  #log .who, .fontsample .who{color:var(--red);font-weight:700;font-size:13px;letter-spacing:.06em;margin-bottom:1px;}
   /* 대사는 고운바탕 — 같은 크기면 Pretendard 보다 작아 보여 --dlg-plus(처음 1px)만큼 키웁니다
    * (좁은 화면에서 #log 가 14px 로 줄면 대사도 따라 줄어듭니다). */
-  #log .d,   .fontsample .d  {color:#e8e4de;padding-left:2px;font-family:var(--font-dlg);font-size:calc(1em + var(--dlg-plus));}
-  #log .sys   {color:#6e6a66;font-size:13px;}
+  #log .d,   .fontsample .d  {color:var(--text);padding-left:2px;font-family:var(--font-dlg);font-size:calc(1em + var(--dlg-plus));}
+  #log .sys   {color:var(--dim);font-size:13px;}
   #log .good  {color:#7fa86a;}
-  #log .bad   {color:#c8403a;}
-  #log .hit   {color:#ddd8d2;font-size:14px;}
-  #log .gain  {color:#d8b26a;}
-  #log .place {color:#d8b26a;letter-spacing:.18em;font-size:13px;margin:14px 0 8px;}
-  #log .todo  {color:#55524e;font-style:italic;font-size:13px;border-left:2px solid #333;padding-left:10px;}
+  #log .bad   {color:var(--red);}
+  #log .hit   {color:var(--text-2);font-size:14px;}
+  #log .gain  {color:var(--gold);}
+  #log .place {color:var(--gold);letter-spacing:.18em;font-size:13px;margin:14px 0 8px;}
+  #log .todo  {color:var(--off);font-style:italic;font-size:13px;border-left:2px solid #333;padding-left:10px;}
   #log .recall{color:#8a7fa8;}
   #log.recalling{background:#0d0b12;}
-  #log .divider{border-top:1px solid #26262c;margin:12px 0;}
+  #log .divider{border-top:1px solid var(--line);margin:12px 0;}
   /* 거울굴절철도 결과 카드 — 자랑할 만한 한 덩이라 눈에 띄게 테두리를 두릅니다 */
   #log pre.resultcard, pre.resultcard{
-    font-family:inherit;color:#d8b26a;background:#17140d;border:1px solid #4a3f28;
+    font-family:inherit;color:var(--gold);background:#17140d;border:1px solid #4a3f28;
     padding:10px 12px;margin:0 0 9px;white-space:pre-wrap;font-size:13px;line-height:1.6;
   }
 
@@ -271,8 +318,8 @@
   /* 왼쪽 띠는 «누구인가» 를 말합니다 — 작성위원은 파랑, 지원은 연두.
      테두리 색은 «지금 무엇을 하는가» 를 말합니다. 둘은 겹치지 않습니다. */
   .pcard{
-    position:relative;border:1px solid #2a2a30;border-left:4px solid #4a6d92;
-    background:#101014;padding:9px 10px;font-size:13px;
+    position:relative;border:1px solid var(--line);border-left:4px solid #4a6d92;
+    background:var(--sheet);padding:9px 10px;font-size:13px;
   }
   .pcard.down{opacity:.4;}
   /* 지금 명령을 고르는 사람 — 초록 */
@@ -284,7 +331,7 @@
   /* 적이 노리는 사람 — 붉은 점선. 테두리와 겹쳐도 보이도록 바깥에 두른다 */
   .pcard.aimed{background:#170e10;}
   .pcard.aimed::after{
-    content:"";position:absolute;inset:-3px;border:2px dashed #c8403a;pointer-events:none;
+    content:"";position:absolute;inset:-3px;border:2px dashed var(--red);pointer-events:none;
   }
   /* 지원 작성위원 — 연두 */
   .pcard.sup{background:#101a10;border-left-color:#9ccc65;}
@@ -296,9 +343,9 @@
   .pcard .nm .allyname{font-weight:700;}
   /* 고유 능력 패시브 스택 — 광신 n, 격노 n 같은 것. 다른 태그와 안 겹치는 보라 */
   .pcard .stacktag{color:#b48ce0;font-size:11px;letter-spacing:.06em;}
-  .pcard .aimtag  {color:#c8403a;font-size:11px;letter-spacing:.06em;}
+  .pcard .aimtag  {color:var(--red);font-size:11px;letter-spacing:.06em;}
   .pcard .turntag {color:#5ec26a;font-size:11px;letter-spacing:.1em;}
-  .pcard .readytag{color:#b9b4ae;font-size:11px;letter-spacing:.06em;}
+  .pcard .readytag{color:var(--text-3);font-size:11px;letter-spacing:.06em;}
   .pcard.cmd-attack .readytag{color:#e07aa8;}
   .pcard.cmd-guard  .readytag{color:#5aa8e0;}
   /* 관리자 능력이 이번 턴에 걸려 있다는 자국 — 교정은 막는 쪽이라 파랑,
@@ -383,73 +430,73 @@
     74%{transform:translate(4px,-2px) rotate(.15deg);}
     88%{transform:translate(-2px,1px) rotate(0);}
   }
-  .slot .synon{color:#d8b26a;font-size:11px;letter-spacing:.06em;font-weight:400;}
+  .slot .synon{color:var(--gold);font-size:11px;letter-spacing:.06em;font-weight:400;}
 
   /* ── 인격 장착 — 접었다 폈다 ──────────── */
   .eqbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;}
-  .eqchk{display:inline-flex;align-items:center;gap:6px;color:#c9c5c0;font-size:13px;cursor:pointer;}
-  .eqchk input{accent-color:#c8403a;width:15px;height:15px;cursor:pointer;}
+  .eqchk{display:inline-flex;align-items:center;gap:6px;color:var(--text-2);font-size:13px;cursor:pointer;}
+  .eqchk input{accent-color:var(--red);width:15px;height:15px;cursor:pointer;}
   .eqhead{
     display:flex;align-items:baseline;gap:9px;cursor:pointer;
-    border:1px solid #2a2a30;background:#131318;padding:8px 11px;margin-top:8px;
+    border:1px solid var(--line);background:var(--panel);padding:8px 11px;margin-top:8px;
   }
-  .eqhead:hover{border-color:#c8403a;}
-  .eqhead.open{border-color:#4a3a20;background:#17150f;}
+  .eqhead:hover{border-color:var(--red);}
+  .eqhead.open{border-color:var(--gold-line);background:var(--gold-bg);}
   /* 강제 편성 중일 때, 지금 편성에 든 사람만 금테로 눈에 띄게 합니다 */
-  .eqhead.inparty{border-color:#d8b26a;background:#1a160d;}
-  .eqhead .arrow{color:#d8b26a;font-size:12px;width:12px;}
-  .eqhead b{color:#e8e4de;}
+  .eqhead.inparty{border-color:var(--gold);background:#1a160d;}
+  .eqhead .arrow{color:var(--gold);font-size:12px;width:12px;}
+  .eqhead b{color:var(--text);}
   .eqhead .partytag{
-    color:#0e0c09;background:#d8b26a;font-size:10.5px;font-weight:700;
+    color:#0e0c09;background:var(--gold);font-size:10.5px;font-weight:700;
     letter-spacing:.03em;padding:1px 7px;border-radius:3px;
   }
-  .eqhead .wearing{color:#8b8681;font-size:12px;}
-  .eqhead .cnt{margin-left:auto;color:#6e6a66;font-size:11.5px;}
+  .eqhead .wearing{color:var(--muted);font-size:12px;}
+  .eqhead .cnt{margin-left:auto;color:var(--dim);font-size:11.5px;}
   .eqbody{margin-top:6px;}
 
   /* ── 동기화 — 작성위원마다 한 줄 ─────────── */
   /* 동기화 — 작성위원 12명을 4×3 칸으로. 칸엔 이름과 단계(굵은 로마자)만 */
   .syncgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;}
   .syncgrid .slot{display:flex;flex-direction:column;align-items:center;gap:4px;padding:11px 6px;text-align:center;}
-  .syncgrid .slot .lv{font-size:22px;font-weight:800;color:#d8b26a;letter-spacing:.04em;line-height:1;}
-  .syncgrid .slot .lv.zero{color:#55524e;font-weight:400;}
-  .syncgrid .slot.max .lv{color:#f0d79c;}
-  .syncgrid .slot .fr{color:#6e6a66;font-size:11px;}
+  .syncgrid .slot .lv{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:.04em;line-height:1;}
+  .syncgrid .slot .lv.zero{color:var(--off);font-weight:400;}
+  .syncgrid .slot.max .lv{color:var(--gold-hi);}
+  .syncgrid .slot .fr{color:var(--dim);font-size:11px;}
   @media (max-width:640px){ .syncgrid{gap:6px;} .syncgrid .slot{padding:9px 4px;font-size:12px;} .syncgrid .slot .lv{font-size:18px;} }
   /* 고른 사람의 설명 칸 — 칸 아래에 하나만 */
-  .syncpick{border:1px solid #4a3a20;background:#17150f;padding:12px 14px;margin-top:10px;}
-  .syncpick .nm{color:#e8e4de;font-weight:700;font-size:15px;}
-  .syncpick .nm .lv{color:#d8b26a;font-weight:800;margin-left:8px;}
-  .syncpick .sub{color:#8b8681;font-size:12px;margin-top:4px;line-height:1.6;}
+  .syncpick{border:1px solid var(--gold-line);background:var(--gold-bg);padding:12px 14px;margin-top:10px;}
+  .syncpick .nm{color:var(--text);font-weight:700;font-size:15px;}
+  .syncpick .nm .lv{color:var(--gold);font-weight:800;margin-left:8px;}
+  .syncpick .sub{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.6;}
   .syncpick .act{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .syncrow{
     display:flex;align-items:center;gap:12px;
-    border:1px solid #2a2a30;background:#131318;padding:9px 11px;margin-top:8px;
+    border:1px solid var(--line);background:var(--panel);padding:9px 11px;margin-top:8px;
   }
   .syncrow button{flex:none;white-space:nowrap;order:2;}
   .syncrow .body{flex:1;min-width:0;order:1;}
-  .syncrow .nm{color:#e8e4de;font-weight:700;}
-  .syncrow .sub{color:#8b8681;font-size:11.5px;margin-top:2px;}
+  .syncrow .nm{color:var(--text);font-weight:700;}
+  .syncrow .sub{color:var(--muted);font-size:11.5px;margin-top:2px;}
 
-  .pcard .nm{color:#e8e4de;font-weight:700;}
-  .pcard .id{color:#8b8681;font-size:11.5px;margin:1px 0 5px;}
-  .pcard .st{color:#7d7a76;font-size:11.5px;}
-  .pcard .cmd{color:#d8b26a;font-size:11.5px;}
+  .pcard .nm{color:var(--text);font-weight:700;}
+  .pcard .id{color:var(--muted);font-size:11.5px;margin:1px 0 5px;}
+  .pcard .st{color:var(--dim);font-size:11.5px;}
+  .pcard .cmd{color:var(--gold);font-size:11.5px;}
   .pcard.cmd-attack .cmd{color:#e07aa8;}
   .pcard.cmd-guard  .cmd{color:#5aa8e0;}
   .hpbar{height:7px;background:#241a1c;border:1px solid #3a2226;margin:3px 0;}
   .hpbar i{display:block;height:100%;background:#8d3b36;}
-  .star{color:#d8b26a;letter-spacing:-1px;}
+  .star{color:var(--gold);letter-spacing:-1px;}
 
   /* ── 시너지 ───────────────────────────── */
   #synergy{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
-  #synergy .none{color:#4e4b47;font-size:11.5px;letter-spacing:.05em;}
+  #synergy .none{color:var(--off);font-size:11.5px;letter-spacing:.05em;}
   .syn{
-    border:1px solid #4a3a20;background:#171208;color:#d8b26a;
+    border:1px solid var(--gold-line);background:var(--gold-bg);color:var(--gold);
     font-size:11.5px;padding:3px 9px;display:inline-flex;gap:7px;align-items:center;
   }
   .syn b{font-weight:700;}
-  .syn .cnt{color:#8a7440;}
+  .syn .cnt{color:var(--gold-mid);}
   .syn .eff{color:#b9945a;}
   .adv{
     border:1px solid #3a3550;background:#14121c;color:#a99ad0;
@@ -462,7 +509,7 @@
   #log .crit{color:#f0c46a;font-weight:700;}
   #log .heavy{color:#f05a50;font-weight:700;font-size:14.5px;}
   body.battling #log .heavy{color:#ff6a5e;}
-  .syn.full{border-color:#7a5c22;background:#1e1608;box-shadow:0 0 0 1px #3a2a10 inset;}
+  .syn.full{border-color:var(--gold-line-2);background:#1e1608;box-shadow:0 0 0 1px #3a2a10 inset;}
 
   /* ── 버튼 ─────────────────────────────── */
   /* ── 엔케팔린 눈금 ────────────────────── */
@@ -470,7 +517,7 @@
   #enk:empty{margin-top:0;}
   .enkwrap{
     display:flex;align-items:center;gap:9px;flex-wrap:wrap;
-    border:1px solid #2a2a30;background:#101014;padding:7px 11px;font-size:12px;
+    border:1px solid var(--line);background:var(--sheet);padding:7px 11px;font-size:12px;
   }
   .enkwrap .enknm{color:#6f8fa8;letter-spacing:.14em;font-weight:700;}
   .enkwrap .enkpips{display:flex;gap:3px;}
@@ -479,7 +526,7 @@
   }
   .enkwrap .enkpips i.on{background:#4f7f9c;border-color:#6f9fbb;}
   .enkwrap .enknum{color:#cfe0ea;font-weight:700;}
-  .enkwrap .enksub{color:#6e6a66;margin-left:auto;}
+  .enkwrap .enksub{color:var(--dim);margin-left:auto;}
 
   /* ── 관리력 눈금 ──────────────────────── */
   #manage{margin-top:10px;}
@@ -488,42 +535,42 @@
     display:flex;align-items:center;gap:9px;flex-wrap:wrap;
     border:1px solid #5a3a1c;background:#171008;padding:7px 11px;font-size:12px;
   }
-  .mgwrap .mgnm{color:#d8b26a;letter-spacing:.16em;font-weight:700;}
+  .mgwrap .mgnm{color:var(--gold);letter-spacing:.16em;font-weight:700;}
   .mgwrap .mgpips{display:flex;gap:4px;}
   .mgwrap .mgpips i{
-    display:block;width:17px;height:11px;background:#1d1810;border:1px solid #4a3a20;
+    display:block;width:17px;height:11px;background:#1d1810;border:1px solid var(--gold-line);
   }
-  .mgwrap .mgpips i.on{background:#d8b26a;border-color:#f0d094;}
-  .mgwrap .mgnum{color:#f0d79c;font-weight:700;}
-  .mgwrap .mgsub{color:#8a7440;margin-left:auto;}
+  .mgwrap .mgpips i.on{background:var(--gold);border-color:#f0d094;}
+  .mgwrap .mgnum{color:var(--gold-hi);font-weight:700;}
+  .mgwrap .mgsub{color:var(--gold-mid);margin-left:auto;}
   .mgskills{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
   .mgsk{
     border:1px solid #3a2f1a;background:#12100a;color:#a89468;
     font-size:11.5px;padding:2px 9px;display:inline-flex;gap:7px;align-items:baseline;
   }
   .mgsk b{color:#e8c98a;font-weight:700;}
-  .mgsk i{color:#8a7440;font-style:normal;font-size:11px;}
+  .mgsk i{color:var(--gold-mid);font-style:normal;font-size:11px;}
   .mgsk.off{opacity:.42;}
 
   /* 작성위원 고유 능력 설명 — 관리력 칸(탠·금색)과 색으로 갈리게 회색·흰색 */
   .uskill{
-    border:1px solid #4a4a54;background:#3a3a42;color:#f2f2f2;
+    border:1px solid var(--line-2);background:var(--line-2);color:#f2f2f2;
     font-size:11.5px;padding:2px 9px;display:inline-flex;gap:7px;align-items:baseline;
   }
   .uskill b{color:#ffffff;font-weight:700;}
   /* 손잡이(#actions)보다도 아래, 화면 맨 아래 자리 */
   .uskillbox{margin-top:10px;}
-  .uskillbox:not(:empty){border-top:1px dashed #2a2a30;padding-top:8px;}
+  .uskillbox:not(:empty){border-top:1px dashed var(--line);padding-top:8px;}
 
   #actions{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;}
   button{
-    background:#16161b;border:1px solid #34343c;color:#c9c5c0;
+    background:var(--panel-2);border:1px solid var(--line-2);color:var(--text-2);
     font-family:inherit;font-size:13.5px;padding:7px 15px;cursor:pointer;
   }
-  button:hover:not(:disabled){background:#1e1e25;border-color:#c8403a;color:#fff;}
+  button:hover:not(:disabled){background:var(--panel-2);border-color:var(--red);color:var(--hi);}
   button:disabled{opacity:.35;cursor:default;}
   button.primary{border-color:#7a2b28;color:#e6b0ac;}
-  button.ghost{border-color:#2a2a30;color:#7d7a76;}
+  button.ghost{border-color:var(--line);color:var(--dim);}
   /* 작성위원 고유 능력 손잡이 — 보라색으로 따로 갈린다 */
   button.skill{border-color:#6f4a91;color:#c9a8e6;}
   body.battling button.skill{border-color:#7d55a8;color:#d3b6ef;}
@@ -533,49 +580,49 @@
   body.battling button.claw1{border-color:#a8d876;color:#d0e8a8;}
   /* 우편함 — 받지 않은 우편이 있을 때만 금빛으로 짚어 준다 (유리창 · 2026-09-12).
      로그에 「우편이 n통 있습니다」 한 줄을 적던 것을 이 테두리로 옮겼다. */
-  button.mailon{border-color:#d8b26a;color:#e6cf9a;}
-  button.mailon:hover:not(:disabled){border-color:#f0d79a;color:#fff;}
+  button.mailon{border-color:var(--gold);color:#e6cf9a;}
+  button.mailon:hover:not(:disabled){border-color:var(--gold-hi);color:var(--hi);}
   .codein{
-    background:#0b0b0f;border:1px solid #34343c;color:#e8e4de;
+    background:var(--bg);border:1px solid var(--line-2);color:var(--text);
     font-family:inherit;font-size:14px;padding:7px 12px;min-width:180px;outline:none;
     letter-spacing:.1em;
   }
-  .codein:focus{border-color:#c8403a;}
+  .codein:focus{border-color:var(--red);}
   /* 출입 코드 화면 — 칸과 손잡이를 가운데로 */
   #actions.mid{justify-content:center;}
   #actions.mid .codein{text-align:center;letter-spacing:.24em;}
 
   /* ── 패치 노트 ──────────────────────────── */
-  .patch{border:1px solid #2a2a30;background:#101014;padding:11px 14px;margin:10px 0;}
-  .patch.now{border-color:#7a5c22;background:#17150f;}
-  .patch .pv{color:#d8b26a;font-weight:700;letter-spacing:.08em;font-size:13.5px;}
-  .patch .pv .pd{color:#6e6a66;font-weight:400;font-size:11.5px;margin-left:10px;letter-spacing:0;}
-  .patch .pl{margin:7px 0 0;padding-left:18px;color:#c2bfba;font-size:13px;line-height:1.75;}
+  .patch{border:1px solid var(--line);background:var(--sheet);padding:11px 14px;margin:10px 0;}
+  .patch.now{border-color:var(--gold-line-2);background:var(--gold-bg);}
+  .patch .pv{color:var(--gold);font-weight:700;letter-spacing:.08em;font-size:13.5px;}
+  .patch .pv .pd{color:var(--dim);font-weight:400;font-size:11.5px;margin-left:10px;letter-spacing:0;}
+  .patch .pl{margin:7px 0 0;padding-left:18px;color:var(--text-2);font-size:13px;line-height:1.75;}
   .patch .pl li{margin:0 0 3px;}
   /* 접기 — 머리는 누를 수 있는 자리이므로 손 모양을 줍니다 */
   .patch .pv{cursor:pointer;user-select:none;}
-  .patch .pv:hover{color:#f0d79c;}
-  .patch .pv .pfold{display:inline-block;width:14px;color:#8b8681;font-weight:400;}
+  .patch .pv:hover{color:var(--gold-hi);}
+  .patch .pv .pfold{display:inline-block;width:14px;color:var(--muted);font-weight:400;}
   .patch.folded .pl{display:none;}
   .patch.folded{padding:8px 14px;}
   /* 한참 지난 판들 — <details> 로 접어 두고, 기본은 닫힌 채입니다 */
   .patchold{margin-top:8px;}
   .patchold > summary{
-    cursor:pointer;color:#8b8681;font-size:12.5px;padding:6px 2px;user-select:none;
+    cursor:pointer;color:var(--muted);font-size:12.5px;padding:6px 2px;user-select:none;
   }
-  .patchold > summary:hover{color:#c2bfba;}
+  .patchold > summary:hover{color:var(--text-2);}
   /* 창 오른쪽 위에 늘 떠 있는 닫기 — 패치 노트가 길어져도 스크롤 없이 바로 닫습니다.
    * #modal 의 형제라 위치가 뷰포트 기준으로 고정됩니다(#app 의 흔들림과 무관). */
   .modaltopclose{
     position:fixed;top:16px;right:16px;z-index:21;
     width:32px;height:32px;line-height:30px;text-align:center;padding:0;
-    background:#16161b;border:1px solid #3a3a42;color:#c9c5c0;
+    background:var(--panel-2);border:1px solid var(--line-2);color:var(--text-2);
     font-size:18px;font-family:inherit;cursor:pointer;
   }
-  .modaltopclose:hover{border-color:#c8403a;color:#f0d79c;}
+  .modaltopclose:hover{border-color:var(--red);color:var(--gold-hi);}
   /* 지난번 접속 뒤에 새로 나온 덩이 */
   .patch .pv .pnew{
-    color:#0a0a0c;background:#d8b26a;font-size:10px;font-weight:700;
+    color:var(--bg);background:var(--gold);font-size:10px;font-weight:700;
     letter-spacing:.08em;padding:1px 5px;margin-left:8px;vertical-align:1px;
   }
 
@@ -583,8 +630,8 @@
    *  문구 자체는 data/pickup.js 의 line 에서 갈아 끼웁니다. */
   .pkline{
     position:relative;overflow:hidden;
-    border:1px solid #7a5c22;background:linear-gradient(90deg,#241a08,#1a1408 60%,#241a08);
-    color:#f0d79c;font-size:22px;font-weight:700;letter-spacing:.1em;
+    border:1px solid var(--gold-line-2);background:linear-gradient(90deg,#241a08,#1a1408 60%,#241a08);
+    color:var(--gold-hi);font-size:22px;font-weight:700;letter-spacing:.1em;
     padding:0 14px;margin:2px 0 12px;text-align:center;
     height:124px;display:flex;align-items:center;justify-content:center;
   }
@@ -603,7 +650,7 @@
   /* 상점 칸 머리의 작은 띠 — 글씨 없이 그림만. 칸 크기를 서로 맞추는 몫입니다. */
   .pkline.small{
     height:56px;margin:0 0 8px;padding:0;letter-spacing:0;
-    border-color:#3a3a44;
+    border-color:var(--line-2);
   }
   .pkline.small::before{background:rgba(8,6,4,.45);}
   /* 띠 안에 이름을 얹을 때 — 큰 띠보다 작게, 자간도 좁게 */
@@ -613,14 +660,14 @@
   }
   /* 잠긴 칸 — 그림 없이 빈 띠만. 칸 높이를 맞추는 몫입니다. */
   .pkline.small.blank{
-    background:repeating-linear-gradient(135deg,#141419,#141419 6px,#101015 6px,#101015 12px);
-    border-color:#26262e;
+    background:repeating-linear-gradient(135deg,var(--panel),var(--panel) 6px,var(--sheet) 6px,var(--sheet) 12px);
+    border-color:var(--line);
   }
   .pkline.small.blank::before{background:none;}
   /* 잠긴 칸의 이름은 죽여서 — 아직 못 가는 곳임을 색으로 알립니다 */
   .pkline.small.blank span{color:#6c6c78;text-shadow:none;}
-  .slot.pk .pkline.small{border-color:#7a5c22;}
-  .slot.pk{border-color:#7a5c22;background:#171208;}
+  .slot.pk .pkline.small{border-color:var(--gold-line-2);}
+  .slot.pk{border-color:var(--gold-line-2);background:var(--gold-bg);}
 
   /* ── 배정에서 ★★★ 이 나왔을 때 ──────────
    *  결과를 펼치기 전에 화면이 한 번 크게 빛납니다. */
@@ -667,7 +714,7 @@
   }
   .flashfx .ring{
     position:absolute;width:70px;height:70px;border-radius:50%;
-    border:2px solid #f0d79c;box-shadow:0 0 40px 12px rgba(240,215,156,.55);
+    border:2px solid var(--gold-hi);box-shadow:0 0 40px 12px rgba(240,215,156,.55);
     animation:flashring 900ms cubic-bezier(.15,.7,.3,1) forwards;
   }
   @keyframes flashring{
@@ -719,9 +766,9 @@
     overflow-y:auto;padding:26px 14px;
   }
   #modal.on{display:block;}
-  .sheet{max-width:900px;margin:0 auto;background:#0e0e12;border:1px solid #34343c;padding:18px 20px;}
-  .sheet h2{margin:0 0 4px;color:#c8403a;font-size:16px;letter-spacing:.14em;}
-  .sheet .hint{color:#6e6a66;font-size:12.5px;margin-bottom:14px;}
+  .sheet{max-width:900px;margin:0 auto;background:var(--sheet);border:1px solid var(--line-2);padding:18px 20px;}
+  .sheet h2{margin:0 0 4px;color:var(--red);font-size:16px;letter-spacing:.14em;}
+  .sheet .hint{color:var(--dim);font-size:12.5px;margin-bottom:14px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;}
   /* 글이 긴 칸은 창 너비를 다 씁니다 — 우편함처럼 줄글이 들어가는 곳 */
   .grid.one{grid-template-columns:1fr;}
@@ -733,141 +780,187 @@
   .slot .mailfoot{text-align:right;margin-top:4px;}
   /* 방금 받은 결과 / 못 받은 까닭 — 창 위에 붙습니다 */
   .mailnote{border-left:3px solid;padding:8px 12px;margin:8px 0 4px;font-size:13px;}
-  .mailnote.ok{border-color:#d8b26a;background:#17150f;color:#f0d79c;}
-  .mailnote.no{border-color:#c8403a;background:#170e10;color:#e0a09a;}
-  .slot{border:1px solid #2a2a30;background:#121218;padding:9px 11px;cursor:pointer;font-size:13px;}
-  .slot:hover{border-color:#c8403a;}
-  .slot.sel{border-color:#d8b26a;background:#17151a;}
+  .mailnote.ok{border-color:var(--gold);background:var(--gold-bg);color:var(--gold-hi);}
+  .mailnote.no{border-color:var(--red);background:#170e10;color:#e0a09a;}
+  .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
+  .slot:hover{border-color:var(--red);}
+  .slot.sel{border-color:var(--gold);background:var(--panel-2);}
   /* 가로로 통째를 차지하는 칸 — 상점 맨 위 기념 배정에 씁니다 */
   .slot.wide{grid-column:1 / -1;}
   .slot.wide .pkline{margin:-2px 0 8px;height:150px;}
-  .slot .nm{color:#e8e4de;font-weight:700;}
-  .slot .sub{color:#8b8681;font-size:11.5px;}
-  .slot .lock{color:#55524e;font-size:11.5px;}
+  .slot .nm{color:var(--text);font-weight:700;}
+  .slot .sub{color:var(--muted);font-size:11.5px;}
+  .slot .lock{color:var(--off);font-size:11.5px;}
   /* 캡처만 하고 누르지는 않는 칸 — 결과 카드 화면(.mrcard)이 씁니다 */
+  /* ── 업적 목록 — 한 줄에 하나씩 (engine.js openAchieve) ── */
+  .achrow{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:var(--panel);
+          padding:8px 11px;margin-top:6px;font-size:13px;}
+  .achrow.got{border-color:var(--gold);background:var(--panel-2);}
+  .achrow .mark{flex:none;width:16px;text-align:center;color:var(--gold);font-weight:800;}
+  .achrow .body{flex:1;min-width:0;}
+  .achrow .nm{color:var(--text);font-weight:700;}
+  .achrow .lock{color:var(--off);font-size:13px;font-weight:700;}
+  .achrow .sub{color:var(--muted);font-size:11.5px;}
+  .achrow .rw{flex:none;max-width:42%;text-align:right;color:var(--muted);font-size:11.5px;}
+  .achrow.got .rw{color:#cfc6b0;}
+  @media (max-width:640px){
+    .achrow{flex-wrap:wrap;gap:4px 10px;}
+    .achrow .rw{flex-basis:100%;max-width:none;text-align:left;padding-left:26px;}
+  }
+  /* 이벤트 교환소의 물건 줄 — 업적 줄과 같은 틀. 살 수 있는 줄만 손가락이 뜹니다 */
+  .evrow.can{cursor:pointer;}
+  .evrow.can:hover{border-color:var(--red);}
+  .evrow .rw .cost{color:var(--gold-hi);font-size:14px;}
+  /* ── 도트 아이콘 칸 (engine.js iconHTML) ──────────────────────
+   *  18×18 그림을 2배로 키워 씁니다 — pixelated 라 점이 번지지 않습니다.
+   *  테두리 색이 성급입니다(s1~s4). dim 은 «없는 것» — 그림자로만 남깁니다. */
+  .ic{flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+      background:var(--panel-2);border:1px solid var(--line);}
+  .ic img{width:36px;height:36px;image-rendering:pixelated;image-rendering:crisp-edges;display:block;}
+  .ic.s1{border-color:#4a4852;} .ic.s2{border-color:#3f6a52;} .ic.s3{border-color:#8a6c2e;}
+  .ic.s4{border-color:var(--red);background:#1c1214;box-shadow:inset 0 0 0 1px #5a1e22;}
+  .ic.dim img{filter:brightness(0) invert(.22);}
+  /* 아이콘이 없는 물건(인격 등)의 칸 — 그림 대신 성급 별을 적습니다 */
+  .ic.txt{color:var(--gold);font-size:10px;letter-spacing:-1px;}
+  .ic.txt.dim{color:var(--off);}
+  /* 글줄 안의 작은 아이콘 (engine.js iconMini) */
+  .icmini{width:18px;height:18px;image-rendering:pixelated;image-rendering:crisp-edges;
+          vertical-align:-4px;margin-right:3px;}
+  /* 아이콘을 왼쪽에 세우는 칸 — 글은 그 옆 한 덩이(div)에 담습니다 */
+  .slot.hasic{display:flex;gap:10px;align-items:flex-start;}
+  .slot.hasic > div{flex:1;min-width:0;}
+  .slot.hasic.none .nm{color:var(--off);}
+  .syncrow .ic{order:0;}
+  /* 보관함의 재화·인격 파편 — 한 줄에 넷씩 (사용자 지침 2026-10-11).
+   * 파편 열둘이 4×3 으로 서고, 그 위 재화 줄도 같은 네 칸 틀이라 세로줄이 맞습니다.
+   * 좁은 화면에서는 둘씩 — .grid 를 한 줄로 푸는 아래 미디어 규칙보다 이쪽이 이깁니다. */
+  .grid.vcur,.grid.vfrag,.grid.four{grid-template-columns:repeat(4,1fr);}
+  @media (max-width:640px){ .grid.vcur,.grid.vfrag,.grid.four{grid-template-columns:repeat(2,1fr);} }
+  /* .grid.four — 노트의 작성위원·승무원처럼 «넷씩» 세우는 칸에 씁니다 */
+  .grid.vcur .slot,.grid.vfrag .slot{align-items:center;}
   .slot.ro{cursor:default;}
-  .slot.ro:hover{border-color:#2a2a30;}
+  .slot.ro:hover{border-color:var(--line);}
 
   /* ── 결과 카드 화면 — 거울굴절철도를 완주하면 여는 별도 화면 ──────
    *  캡처해서 자랑하는 자리라, 상장·트로피에 가깝게 위쪽(무엇을 깼고
    *  몇 턴 걸렸는지)은 가운데로 몰아 크게 두고, 아래 상세는 구분선
    *  아래 조용히 깔아 둡니다. */
   .mrcard{
-    border:1px solid #6a5528;background:radial-gradient(ellipse at 50% 0%, #1c1810, #14110a 70%);
+    border:1px solid #6a5528;background:radial-gradient(ellipse at 50% 0%, #1c1810, var(--gold-bg) 70%);
     padding:26px 24px 22px;box-shadow:0 0 0 1px #000, 0 0 30px rgba(216,178,106,.06) inset;
   }
   .mrhead{text-align:center;padding-bottom:18px;border-bottom:1px solid #3a3020;}
-  .mreyebrow{color:#8a7440;font-size:11px;font-weight:700;letter-spacing:.32em;}
-  .mrclear{color:#f0d79c;font-weight:800;font-size:22px;letter-spacing:.03em;margin-top:6px;
+  .mreyebrow{color:var(--gold-mid);font-size:11px;font-weight:700;letter-spacing:.32em;}
+  .mrclear{color:var(--gold-hi);font-weight:800;font-size:22px;letter-spacing:.03em;margin-top:6px;
     text-shadow:0 0 18px rgba(216,178,106,.35);}
   .mrstats{margin-top:10px;display:flex;align-items:baseline;justify-content:center;gap:10px;}
-  .mrturn{color:#fff;font-weight:800;font-size:34px;letter-spacing:.01em;}
-  .mrcyc{color:#d8b26a;font-size:14px;font-weight:700;}
+  .mrturn{color:var(--hi);font-weight:800;font-size:34px;letter-spacing:.01em;}
+  .mrcyc{color:var(--gold);font-size:14px;font-weight:700;}
   .mrbody{margin-top:18px;}
-  .mrlabel{color:#8b8681;font-size:11.5px;letter-spacing:.1em;margin:16px 0 6px;}
+  .mrlabel{color:var(--muted);font-size:11.5px;letter-spacing:.1em;margin:16px 0 6px;}
   .mrbody .mrlabel:first-child{margin-top:0;}
-  .mrline{color:#e8e4de;font-size:13.5px;}
-  .mrver{color:#6e6a66;font-size:11.5px;margin-top:18px;text-align:right;}
+  .mrline{color:var(--text);font-size:13.5px;}
+  .mrver{color:var(--dim);font-size:11.5px;margin-top:18px;text-align:right;}
   /* 편성칸 — 이 카드의 진짜 주인공이라, 금테를 둘러 다른 칸과 갈립니다 */
   .mrparty .slot{position:relative;border-color:#5a4826;background:#1a1509;}
-  .mrparty .slot .nm{font-size:16px;font-weight:800;color:#f0d79c;}
+  .mrparty .slot .nm{font-size:16px;font-weight:800;color:var(--gold-hi);}
   /* 클리어 시점의 동기화 단계 — 칸 오른쪽 위 빈자리에 작게 얹습니다 */
   .mrparty .slot .mrsync{
-    position:absolute;top:8px;right:10px;color:#8a7440;font-size:10.5px;font-weight:700;
+    position:absolute;top:8px;right:10px;color:var(--gold-mid);font-size:10.5px;font-weight:700;
   }
 
   /* ── 운전석의 접히는 무리 ────────────────────────────────────
    *  갈래가 늘면서 운전석이 한 화면에 안 들어가게 됐습니다.
    *  무리는 접어 두고, 맨 위의 「다음으로 추천」만 펴 둡니다. */
-  .csec{border-top:1px solid #23232a;margin-top:14px;}
+  .csec{border-top:1px solid var(--line);margin-top:14px;}
   .csec .csechead{
     display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;
-    padding:11px 2px;color:#e8e4de;font-weight:700;font-size:13.5px;
+    padding:11px 2px;color:var(--text);font-weight:700;font-size:13.5px;
   }
-  .csec .csechead:hover{color:#d8b26a;}
+  .csec .csechead:hover{color:var(--gold);}
   .csec .csechead b{flex:none;}
   /* 무리마다 곁들이는 한 줄. 좁은 화면에서는 이름과 겹쳐 읽기 어려워 감춥니다. */
   .csec .csechead span{
-    color:#6e6a66;font-weight:400;font-size:11.5px;
+    color:var(--dim);font-weight:400;font-size:11.5px;
     min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
   @media (max-width:640px){ .csec .csechead span{display:none;} }
   .csec .csechead i{                       /* 접힘 표시 — 펴면 아래를 봅니다 */
     margin-left:auto;width:0;height:0;font-style:normal;
     border-left:4px solid transparent;border-right:4px solid transparent;
-    border-top:5px solid #6e6a66;transform:rotate(-90deg);transition:transform .12s;
+    border-top:5px solid var(--dim);transform:rotate(-90deg);transition:transform .12s;
   }
-  .csec.on .csechead i{transform:rotate(0deg);border-top-color:#d8b26a;}
+  .csec.on .csechead i{transform:rotate(0deg);border-top-color:var(--gold);}
   .csec .csecbody{display:none;padding-bottom:4px;}
   .csec.on .csecbody{display:block;}
 
   /* 노트의 시너지 한 줄을 누르면 펼쳐지는, 거기 걸리는 사람 목록.
    * 미보유 인격은 흐리게(.un) — 지원 작성위원은 애초에 미보유면 안 실립니다. */
-  .synmembers{margin-top:8px;padding-top:8px;border-top:1px dashed #2a2a30;}
+  .synmembers{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);}
   .synmem{font-size:12px;color:#c8c4bc;padding:2px 0;}
-  .synmem.un{color:#55524e;}
+  .synmem.un{color:var(--off);}
   .synmem i{font-style:normal;color:#9ccc65;font-size:10.5px;margin-left:4px;}
 
   /* 다음으로 추천 — 늘 펴져 있고, 금색 테로 한 번 묶습니다 */
-  .csrec{border:1px solid #4a3c1c;background:#14110a;padding:11px 12px;margin-top:16px;}
-  .csrec .csrechead{color:#d8b26a;font-weight:700;font-size:13.5px;margin-bottom:9px;letter-spacing:.04em;}
-  .csrec .csnone{color:#8b8681;font-size:12.5px;line-height:1.7;}
+  .csrec{border:1px solid #4a3c1c;background:var(--gold-bg);padding:11px 12px;margin-top:16px;}
+  .csrec .csrechead{color:var(--gold);font-weight:700;font-size:13.5px;margin-bottom:9px;letter-spacing:.04em;}
+  .csrec .csnone{color:var(--muted);font-size:12.5px;line-height:1.7;}
   /* 추천 자리의 이야기 칸에만 붙는 소개 세 줄 (data/story.js 의 pitch) */
   .csrec .slot .csum{margin-top:6px;}
-  .csrec .slot .csum span{display:block;color:#a9a49e;font-size:12px;line-height:1.55;}
+  .csrec .slot .csum span{display:block;color:var(--text-3);font-size:12px;line-height:1.55;}
   .csrec .slot .csum span + span{margin-top:2px;}
 
   /* ── 거울·거울굴절철도 칸 ────────────────────────────────────
    *  갈래마다 적을 말이 제각각이라 줄글이 길어지던 자리입니다.
    *  이제 «고를 때 필요한 것»만 눈금 셋으로 세우고, 풀어 쓴 말은
    *  들어가기 전 화면으로 넘겼습니다 (engine.js 의 mirrorFacts 참고). */
-  .mslot .msub{color:#a9a49e;font-size:11.5px;margin-bottom:7px;}
+  .mslot .msub{color:var(--text-3);font-size:11.5px;margin-bottom:7px;}
   .mslot .mstats{display:flex;gap:6px;margin-bottom:7px;}
   /* 칸 너비는 창에 따라 달라지므로(grid 가 210px 부터 늘립니다) 값에 nowrap 을 걸지
    * 않습니다 — 좁아지면 「엔케팔린 / 1」처럼 두 줄로 접히게 두는 편이,
    * 잘려서 「엔케팔…」이 되는 것보다 낫습니다. 셋의 높이는 flex 가 맞춰 줍니다. */
   .mslot .mstats b{
     flex:1;min-width:0;display:block;padding:4px 7px;
-    border:1px solid #2f2f37;background:#0e0e13;border-radius:3px;
-    color:#e8e4de;font-weight:700;font-size:12px;line-height:1.35;overflow:hidden;
+    border:1px solid var(--line);background:var(--sheet);border-radius:3px;
+    color:var(--text);font-weight:700;font-size:12px;line-height:1.35;overflow:hidden;
   }
   .mslot .mstats b i{
     display:block;font-style:normal;font-weight:400;
-    color:#6e6a66;font-size:10px;letter-spacing:.08em;margin-bottom:1px;
+    color:var(--dim);font-size:10px;letter-spacing:.08em;margin-bottom:1px;
   }
   .mslot .mstats b.bad{border-color:#5e2a28;color:#d9705f;}
-  .mslot .mrew{color:#8b8681;font-size:11px;line-height:1.5;}
-  .mslot .mrew em{display:block;font-style:normal;color:#d8b26a;}
-  .mslot .mrew em.done{color:#5f5b57;}   /* 처음 완주 몫을 이미 받은 갈래 */
-  .mslot .mwarn{color:#c8403a;font-size:11px;margin-top:5px;}
+  .mslot .mrew{color:var(--muted);font-size:11px;line-height:1.5;}
+  .mslot .mrew em{display:block;font-style:normal;color:var(--gold);}
+  .mslot .mrew em.done{color:var(--off);}   /* 처음 완주 몫을 이미 받은 갈래 */
+  .mslot .mwarn{color:var(--red);font-size:11px;margin-top:5px;}
   /* ── 노트 ─────────────────────────────── */
   .note{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
   .notepic{flex:0 0 auto;}
   .notebody{flex:1 1 320px;min-width:280px;}
-  .noteno{color:#7d7a76;font-size:11.5px;letter-spacing:.2em;}
-  .notename{color:#e8e4de;font-size:22px;font-weight:800;line-height:1.3;}
-  .noteego{color:#c8403a;font-size:12.5px;margin-bottom:10px;}
+  .noteno{color:var(--dim);font-size:11.5px;letter-spacing:.2em;}
+  .notename{color:var(--text);font-size:22px;font-weight:800;line-height:1.3;}
+  .noteego{color:var(--red);font-size:12.5px;margin-bottom:10px;}
   .notequote{
-    color:#b6b1aa;font-style:italic;border-left:2px solid #4a3a20;
+    color:var(--text-3);font-style:italic;border-left:2px solid var(--gold-line);
     padding:2px 0 2px 12px;margin:10px 0 14px;
   }
   .noterow{margin:10px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
-  .noterow .k{color:#6e6a66;font-size:11.5px;letter-spacing:.14em;margin-right:4px;}
+  .noterow .k{color:var(--dim);font-size:11.5px;letter-spacing:.14em;margin-right:4px;}
   .tag2{
     border:1px solid #5a2f2c;background:#1a1010;color:#d99a8f;
     font-size:11px;padding:2px 8px;
   }
   .notebrief{
-    color:#a8a49d;font-size:13px;line-height:1.8;background:#101014;
-    border:1px solid #2a2a30;padding:12px 14px;margin:12px 0 16px;
+    color:var(--text-3);font-size:13px;line-height:1.8;background:var(--sheet);
+    border:1px solid var(--line);padding:12px 14px;margin:12px 0 16px;
   }
 
   .modalfoot{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
   .dl{
-    display:inline-block;background:#16161b;border:1px solid #7a2b28;color:#e6b0ac;
+    display:inline-block;background:var(--panel-2);border:1px solid #7a2b28;color:#e6b0ac;
     font-family:inherit;font-size:13.5px;padding:7px 15px;text-decoration:none;cursor:pointer;
   }
-  .dl:hover{background:#1e1e25;color:#fff;}
+  .dl:hover{background:var(--panel-2);color:var(--hi);}
   /* ── 전투 중 ───────────────────────────────
    *  전투에 들어가면 <body> 에 battling 이 붙습니다 (engine.js 의 render).
    *  화면 전체가 붉게 가라앉아, 이야기 화면과 한눈에 구분됩니다.
@@ -933,18 +1026,18 @@
   #tut.plain{background:rgba(8,8,11,.78);}
   #tut > *{pointer-events:none;}
   #tut .tutring{
-    position:fixed;border:2px solid #d8b26a;border-radius:3px;
+    position:fixed;border:2px solid var(--gold);border-radius:3px;
     box-shadow:0 0 0 9999px rgba(8,8,11,.78), inset 0 0 14px rgba(216,178,106,.35);
     animation:tutring 1.6s ease-in-out infinite;
   }
   @keyframes tutring{
-    0%,100%{border-color:#d8b26a;}
+    0%,100%{border-color:var(--gold);}
     50%    {border-color:#f7e6bd;}
   }
   /* 회색 상자에 흰 글씨 */
   #tut .tutbox{
     position:fixed;max-width:340px;
-    background:#33333a;border:1px solid #55555f;
+    background:var(--line-2);border:1px solid var(--line-2);
     color:#ffffff;font-size:13.5px;line-height:1.7;
     padding:11px 14px 9px;
     box-shadow:0 8px 26px rgba(0,0,0,.6);
@@ -952,33 +1045,33 @@
   #tut .tutbox .tuttext{color:#ffffff;}
   #tut .tutbox .tutfoot{
     display:flex;align-items:baseline;gap:10px;
-    margin-top:7px;padding-top:6px;border-top:1px solid #4a4a54;
-    color:#b9b6b1;font-size:11px;letter-spacing:.04em;
+    margin-top:7px;padding-top:6px;border-top:1px solid var(--line-2);
+    color:var(--text-3);font-size:11px;letter-spacing:.04em;
   }
-  #tut .tutbox .tutnum{margin-left:auto;color:#d8b26a;font-weight:700;}
+  #tut .tutbox .tutnum{margin-left:auto;color:var(--gold);font-weight:700;}
   /* 상자에 붙는 화살촉 — 짚는 곳 쪽으로 뻗습니다 */
   #tut .tutbox .tutarrow{position:absolute;width:0;height:0;}
   #tut .tutbox.below .tutarrow{
     top:-9px;border-left:9px solid transparent;border-right:9px solid transparent;
-    border-bottom:9px solid #55555f;
+    border-bottom:9px solid var(--line-2);
   }
   #tut .tutbox.above .tutarrow{
     bottom:-9px;border-left:9px solid transparent;border-right:9px solid transparent;
-    border-top:9px solid #55555f;
+    border-top:9px solid var(--line-2);
   }
   /* 건너뛰기 — 여기만 누름을 따로 받습니다 */
   #tut .tutskip{
     position:fixed;right:12px;top:12px;pointer-events:auto;cursor:pointer;
-    background:#1a1a20;border:1px solid #4a4a54;color:#b9b6b1;
+    background:var(--panel-2);border:1px solid var(--line-2);color:var(--text-3);
     font-size:11.5px;letter-spacing:.08em;padding:5px 11px;
   }
-  #tut .tutskip:hover{border-color:#c8403a;color:#e8e4de;}
+  #tut .tutskip:hover{border-color:var(--red);color:var(--text);}
   /* 노트 안 튜토리얼 목록 — 한 줄에 하나씩 */
-  .tutrow{border-left:3px solid #4a4a54;}
-  .tutrow.done{border-left-color:#4a3a20;}
-  .tutrow .tutwhen{color:#6e6a66;font-size:11px;}
-  .tutrow .tutline{color:#a8a49d;font-size:12px;line-height:1.65;}
-  .tutrow .tutline b{color:#d8b26a;font-weight:700;}
+  .tutrow{border-left:3px solid var(--line-2);}
+  .tutrow.done{border-left-color:var(--gold-line);}
+  .tutrow .tutwhen{color:var(--dim);font-size:11px;}
+  .tutrow .tutline{color:var(--text-3);font-size:12px;line-height:1.65;}
+  .tutrow .tutline b{color:var(--gold);font-weight:700;}
 
   /* ── 좁은 화면 (휴대전화) ──────────────────
    *  전투 화면이 한 눈에 들어오도록, 보여 주는 것을 줄입니다.
@@ -1045,12 +1138,76 @@
     #tut .tutbox{max-width:none;width:calc(100vw - 24px);font-size:13px;padding:10px 12px 8px;}
     #tut .tutskip{right:10px;top:10px;font-size:11px;padding:4px 9px;}
   }
+
+  /* ── 색 테마들 ─────────────────────────────────────────────────
+   *  <html data-palette="…"> 에 맞춰 위(:root)의 변수를 갈아 끼웁니다. 기본 「먹」은 붙는 것이 없습니다.
+   *  값의 뿌리는 콘첸트라트의 색 테마(하늘·분홍·금 갈색)입니다 — 두 앱의 결을 맞췄습니다.
+   *  테마를 더하려면 여기에 한 덩이, engine.js 의 PALETTES 에 한 줄. */
+  :root[data-palette="sea"]{   /* 심해 */
+    --bg:#0a121d; --sheet:#0c1522; --panel:#121d2c; --panel-2:#192739; --line:#243449; --line-2:#33496a; 
+    --text:#e4edf8; --text-2:#cfdcec; --text-3:#a9bbd0; --muted:#93a5bb; --dim:#6f8299; --off:#4d5d73; 
+    --gold:#6db8f2; --gold-hi:#b9defc; --gold-mid:#4f8ec4; --gold-bg:#10243a; --gold-line:#1f4466; --gold-line-2:#2f679a; 
+    --red:#f08b82; --hi:#ffffff;
+  }
+  :root[data-palette="blossom"]{   /* 분홍 */
+    --bg:#170b11; --sheet:#1c0e15; --panel:#26131d; --panel-2:#321a27; --line:#442234; --line-2:#5e3048; 
+    --text:#fce9f1; --text-2:#efd3df; --text-3:#d9b3c3; --muted:#c99aad; --dim:#9a7385; --off:#6e4f5d; 
+    --gold:#ff8db5; --gold-hi:#ffd0e1; --gold-mid:#c4658c; --gold-bg:#3a1628; --gold-line:#5e2643; --gold-line-2:#8f3a66; 
+    --red:#ff6f8f; --hi:#ffffff;
+  }
+  :root[data-palette="amber"]{   /* 호박 */
+    --bg:#110d09; --sheet:#15100b; --panel:#1f1711; --panel-2:#2a2018; --line:#3b2e22; --line-2:#524030; 
+    --text:#f4e9d8; --text-2:#e3d5bf; --text-3:#c9b79c; --muted:#b8a389; --dim:#8c7a64; --off:#635545; 
+    --gold:#dbb45e; --gold-hi:#eed7a6; --gold-mid:#96793a; --gold-bg:#2a2012; --gold-line:#4f3d1c; --gold-line-2:#7a5c22; 
+    --red:#d9705f; --hi:#ffffff;
+  }
+  :root[data-palette="chalk"]{   /* 백악 */
+    --bg:#e9e7e1; --sheet:#f6f5f1; --panel:#ffffff; --panel-2:#efede8; --line:#d8d5cd; --line-2:#bdb9af; 
+    --text:#1c1b19; --text-2:#33312e; --text-3:#55524e; --muted:#5c5954; --dim:#6f6b65; --off:#8f8b84; 
+    --gold:#8a6412; --gold-hi:#6b4c08; --gold-mid:#8a6c22; --gold-bg:#f6edd6; --gold-line:#dcc48c; --gold-line-2:#b9953f; 
+    --red:#b3372f; --hi:#000000;
+  }
+  /* 백악(밝은 테마)에서 따로 손볼 것 — 변수만으로는 안 뒤집히는 자리들 */
+  :root[data-palette="chalk"]{ color-scheme:light; }
+  :root[data-palette="chalk"] #modal{ background:#00000070; }
+  :root[data-palette="chalk"] .ic{ background:#e4e1da; }
+  :root[data-palette="chalk"] .ic.dim img{ filter:brightness(0) opacity(.22); }
+  :root[data-palette="chalk"] .ic .cnt{ color:#fff; }
+  :root[data-palette="chalk"] button.primary{ color:#9c3a34; }
+  :root[data-palette="chalk"] .dl{ color:#9c3a34; }
+  :root[data-palette="chalk"] .mrcard{ background:var(--gold-bg); }
+  :root[data-palette="chalk"] .pkline:not(.pic){ background:#e9dcb8; }
+  :root[data-palette="chalk"] .hpbar{ background:#e3ddd6; border-color:#cdbfb8; }
+  :root[data-palette="chalk"] .syn.full{ background:#f3e3b4; box-shadow:0 0 0 1px #dcc48c inset; }
+  :root[data-palette="chalk"] .syn .eff{ color:#7a5a1c; }
+  :root[data-palette="chalk"] .uskill{ background:#55524e; border-color:#55524e; }
+  :root[data-palette="chalk"] .uskill span{ color:#e4e1da !important; }
+  :root[data-palette="chalk"] .tag2{ background:#f6e4e0; border-color:#d9a79f; color:#8d3b36; }
+  :root[data-palette="chalk"] #log .heavy{ color:#c0281e; }
+  :root[data-palette="chalk"] #log .todo{ border-left-color:#bdb9af; }
+  :root[data-palette="chalk"] .enkwrap .enknm{ color:#3f6a8a; }
+  :root[data-palette="chalk"] button.mailon{ color:var(--gold); }
+  :root[data-palette="chalk"] #log .good{ color:#3f7a2c; }
+  :root[data-palette="chalk"] #log .crit{ color:#8a6000; }
+  :root[data-palette="chalk"] #log .recall{ color:#6a5a9a; }
+  :root[data-palette="chalk"] #log.recalling{ background:#ece8f4; }
+  :root[data-palette="chalk"] .enkwrap .enknum{ color:#2f5f7c; }
+  :root[data-palette="chalk"] .pcard.sup{ background:#eef6e8; }
+  :root[data-palette="chalk"] .pcard .suptag{ color:#4f8a1c; }
+  /* 전투 중에는 어느 테마든 «먹» 의 값으로 되돌립니다 — 전투 화면(body.battling)의 붉은 바탕과
+   * 그 위의 밝은 글씨가 먹 테마를 딛고 짜여 있어서, 밝은 테마의 검은 글씨가 섞이면 안 읽힙니다.
+   * 위 :root 의 기본값과 «같은 값» 이어야 합니다 — 기본값을 고치면 여기도 고칩니다. */
+  :root[data-palette]:has(body.battling){ background:#0d0708; }
+  :root[data-palette] body.battling{--bg:#0a0a0c; --sheet:#0e0e12; --panel:#121218; --panel-2:#16161b; --line:#2a2a30; --line-2:#34343c; --text:#e8e4de; --text-2:#d6d3ce; --text-3:#a9a49e; --muted:#8b8681; --dim:#6e6a66; --off:#55524e; --gold:#d8b26a; --gold-hi:#f0d79c; --gold-mid:#8a7440; --gold-bg:#17150f; --gold-line:#4a3a20; --gold-line-2:#7a5c22; --red:#c8403a; --hi:#ffffff; }
+  /* 테마 고르는 칸의 색 견본 (engine.js openPalettePick) */
+  .palsw{display:flex;height:26px;border:1px solid var(--line-2);margin-bottom:8px;}
+  .palsw i{flex:1;}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <span class="brand">라슈 컴퍼니</span>
+    <span class="brand"><img class="icmini" src="assets/icon/라슈 컴퍼니.png" alt="">라슈 컴퍼니</span>
     <span class="chap" id="chaplabel"></span>
     <span class="right" id="wallet"></span>
   </header>
@@ -1068,23 +1225,23 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.9.0"></script>
-<script src="data/vault.js?v=2.9.0"></script>
-<script src="data/characters.js?v=2.9.0"></script>
-<script src="data/skills.js?v=2.9.0"></script>
-<script src="data/allies.js?v=2.9.0"></script>
-<script src="data/gifts.js?v=2.9.0"></script>
-<script src="data/pickup.js?v=2.9.0"></script>
-<script src="data/achievements.js?v=2.9.0"></script>
-<script src="data/mail.js?v=2.9.0"></script>
-<script src="data/notice.js?v=2.9.0"></script>
-<script src="data/patch.js?v=2.9.0"></script>
-<script src="data/event.js?v=2.9.0"></script>
-<script src="data/tutorial.js?v=2.9.0"></script>
-<script src="data/foes.js?v=2.9.0"></script>
-<script src="data/story.js?v=2.9.0"></script>
-<script src="data/mirrorpacks.js?v=2.9.0"></script>
-<script src="engine.js?v=2.9.0"></script>
+<script src="data/access.js?v=2.9.1"></script>
+<script src="data/vault.js?v=2.9.1"></script>
+<script src="data/characters.js?v=2.9.1"></script>
+<script src="data/skills.js?v=2.9.1"></script>
+<script src="data/allies.js?v=2.9.1"></script>
+<script src="data/gifts.js?v=2.9.1"></script>
+<script src="data/pickup.js?v=2.9.1"></script>
+<script src="data/achievements.js?v=2.9.1"></script>
+<script src="data/mail.js?v=2.9.1"></script>
+<script src="data/notice.js?v=2.9.1"></script>
+<script src="data/patch.js?v=2.9.1"></script>
+<script src="data/event.js?v=2.9.1"></script>
+<script src="data/tutorial.js?v=2.9.1"></script>
+<script src="data/foes.js?v=2.9.1"></script>
+<script src="data/story.js?v=2.9.1"></script>
+<script src="data/mirrorpacks.js?v=2.9.1"></script>
+<script src="engine.js?v=2.9.1"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
