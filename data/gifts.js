@@ -39,6 +39,10 @@
  *                                 횟수 +n (tag/who 로 대상 제한 — engine.js
  *                                 uniqueSkillBoostFor 참고. 아직 이 키를 쓰는
  *                                 기프트는 없습니다)
+ *    retribTag: "흑수", retribMult: 2   그 말이 든 인격을 낀 사람이 쓰러질 때, 유아인의
+ *                                 「보복」이 그 배수만큼 오른다 (engine.js retribGain)
+ *    reviveFirst: 0.5             한 전투에서 처음 쓰러진 사람을 최대 체력의 그 비율로
+ *                                 한 번 다시 세운다 (engine.js reviveFirstDown)
  *    skillStackMult: 0.5          그 작성위원 고유 능력(패시브)의 스택 하나당
  *                                 몫 +비율 (tag/who 로 대상 제한. 아직 이 키를
  *                                 쓰는 기프트는 없습니다)

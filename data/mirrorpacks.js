@@ -81,32 +81,51 @@
  *    각 장의 가장 센 잡졸·보스를 하나씩 붙여, 「지금까지 만난 것 중
  *    가장 센 것들 + 진짜 종점」이라는 느낌을 주려 했습니다. 마음에
  *    안 들면 foes 만 바꾸면 됩니다.
+ *
+ *  ■ perk — 테마팩 특전 (사용자 지침 2026-10-14)
+ *    그 팩을 다 깨면 얻고, «그 판이 끝날 때까지» 듣습니다(다음 갈림길의 팩들을 들고 치릅니다).
+ *    { name, desc, effect }. effect 에 쓸 수 있는 열쇠는 engine.js packPerks 머리말에 있습니다.
+ *    특전마다 아이콘을 한 장 그립니다 — tools/아이콘-도안.js 에 특전 이름 그대로
+ *    (node tools/check.js 가 빠진 것을 짚습니다). 팩을 새로 지으면 특전도 함께 짓습니다.
+ *    거울굴절철도 팩 넷은 익스트림 마지막 갈림길에만 서므로 그 특전을 쓸 전투가 없습니다 —
+ *    결과 카드에 남는 «기념» 에 가깝습니다. 수치는 전부 처음 잡아 본 값입니다.
  * ===================================================================== */
 "use strict";
 
 const MIRROR_PACKS = [
   { id: "pack01", name: "이름 없는 자들", bg: "assets/scene/구C사 지하실.jpg",
-    foes: ["csa_fraud", "unknown_squad", "kim_junseong"] },
+    foes: ["csa_fraud", "unknown_squad", "kim_junseong"],
+    perk: { name: "쥐어진 광신", desc: "김태성이 광신 3을 얻는다.", effect: { kills: 3 } } },
   { id: "pack02", name: "저녁을 방해하는 자들", bg: "assets/scene/K사 앞.jpg",
-    foes: ["csa_grunt", "ramen_twisted", "won_daehan"] },
+    foes: ["csa_grunt", "ramen_twisted", "won_daehan"],
+    perk: { name: "식지 않은 참깨라면", desc: "전투에 이겼을 때의 회복이 25%에서 40%로 는다.", effect: { winHeal: 0.40 } } },
   { id: "pack03", name: "축제를 망치는 자", bg: "assets/scene/공룡의날 광장.jpg",
-    foes: ["hwangjeo_phantasm", "viper_twisted", "hwangjeo"] },
+    foes: ["hwangjeo_phantasm", "viper_twisted", "hwangjeo"],
+    perk: { name: "축제의 여운", desc: "전원의 치명타 확률 +10%p.", effect: { crit: 0.10 } } },
   { id: "pack04", name: "우생회의 그림자", bg: "assets/scene/P사 우생회.jpg",
-    foes: ["creationist", "sim_seunghwi", "kim_junseong_crab"] },
+    foes: ["creationist", "sim_seunghwi", "kim_junseong_crab"],
+    perk: { name: "휘두를 때를 아는 것", desc: "독촉의 배수가 1.5에서 2.0으로 오른다.", effect: { push: 0.5 } } },
   { id: "pack05", name: "동심의 괴물들", bg: "assets/scene/F사 내부.jpg",
-    foes: ["geugya_remnant", "ropo_incomplete", "twisted_shrimp"] },
+    foes: ["geugya_remnant", "ropo_incomplete", "twisted_shrimp"],
+    perk: { name: "빛새우의 잔광", desc: "전원의 방어력 +15%.", effect: { all: { def: 0.15 } } } },
   { id: "pack06", name: "전원 입수다", bg: "assets/scene/대양 구 핀벤져스 지부.jpg",
-    foes: ["cartel_thug", "cartel_capo", "lee_seojin_shark"] },
+    foes: ["cartel_thug", "cartel_capo", "lee_seojin_shark"],
+    perk: { name: "입수 구호", desc: "매 전투 1턴에 전원의 공격력 +30%.", effect: { firstTurnAtk: 0.30 } } },
   { id: "pack07", name: "아라온호의 승선자", bg: "assets/scene/아라온호 조우.jpg",
-    foes: ["fused_yunhuijun", "fused_ihyeongwu", "twisted_mosasaur"] },
+    foes: ["fused_yunhuijun", "fused_ihyeongwu", "twisted_mosasaur"],
+    perk: { name: "닻을 올려라", desc: "전투 시작 관리력 +1, 최대 관리력 +1.", effect: { manage: 1, manageMax: 1 } } },
   { id: "pack08", name: "괴물사냥꾼들", bg: "assets/scene/G사 골목.jpg",
-    foes: ["nbga_gunner", "nbga_heavy", "deathleaper"] },
+    foes: ["nbga_gunner", "nbga_heavy", "deathleaper"],
+    perk: { name: "사냥꾼의 조준", desc: "보스에게 주는 치명타 피해 +30%.", effect: { bossCritDmg: 0.30 } } },
   { id: "pack09", name: "괴수 소동", bg: "assets/scene/모나크 저택.jpg",
-    foes: ["monarch_a", "garret", "kevin"] },
+    foes: ["monarch_a", "garret", "kevin"],
+    perk: { name: "집사의 예법", desc: "교정으로 줄이는 피해 +10%p.", effect: { correct: 0.10 } } },
   { id: "pack10", name: "하수로를 따라", bg: "assets/scene/배수로 내부.jpg",
-    foes: ["gsa_riders", "monarch_b", "tanaconda"] },
+    foes: ["gsa_riders", "monarch_b", "tanaconda"],
+    perk: { name: "합체 필살", desc: "전원의 고유 능력(액티브) 사용 횟수 +1.", effect: { skillUses: 1 } } },
   { id: "pack12", name: "곁가지의 밤", bg: "assets/scene/고속열차 내부 (전투).jpg",
-    foes: ["viper", "zombie_horde", "kim_yeonjun_busan"] },
+    foes: ["viper", "zombie_horde", "kim_yeonjun_busan"],
+    perk: { name: "실험은 계속된다", desc: "7턴마다 전원이 체력 10%를 회복한다.", effect: { healEvery: 7, healRatio: 0.10 } } },
 
   /* ── 거울굴절철도 팩 — 익스트림 세 번째 선택 전용 ──
    *  tier 에 그 팩이 딸린 갈래를 적습니다(2026-09-12에 더한 칸) — 그 갈래가
@@ -114,18 +133,24 @@ const MIRROR_PACKS = [
    *  안 고쳐도 되게 하려는 몫입니다(drawPackChoices 참고). */
   { id: "rail1pack", name: "익숙한 벨소리", railOnly: true, tier: "railLine1",
     bg: "assets/scene/거울굴절철도1호선.jpg",
-    foes: ["monarch_a", "tanaconda", "ju3pino"] },
+    foes: ["monarch_a", "tanaconda", "ju3pino"],
+    perk: { name: "정시 발차", desc: "매 전투를 관리력이 가득 찬 채로 시작한다.", effect: { manageFull: true } } },
   { id: "rail2pack", name: "괴악한 복원", railOnly: true, tier: "railLine2",
     bg: "assets/scene/거울굴절철도2호선.jpg",
-    foes: ["gsa_riders", "kevin", "david_peters"] },
+    foes: ["gsa_riders", "kevin", "david_peters"],
+    perk: { name: "잘못 맞춘 뼈", desc: "전원의 공격력 +25%, 방어력 -10%.", effect: { all: { atk: 0.25, def: -0.10 } } } },
   { id: "pack11", name: "신해수랜드의 소동", bg: "assets/scene/신해수랜드 대치중.jpg",
-    foes: ["hyeolgwi", "baksangwon", "shinhaesuland_gan"] },
+    foes: ["hyeolgwi", "baksangwon", "shinhaesuland_gan"],
+    perk: { name: "피의 축복", desc: "공격할 때마다 자기 최대 체력의 3%를 회복한다.", effect: { hitHeal: 0.03 } } },
   { id: "rail3pack1", name: "두 번 우는 것", railOnly: true, tier: "railLine3",
     bg: "assets/scene/거울굴절철도3호선중간역.jpg",
-    foes: ["geugya_remnant", "deathleaper", "rail3_locust"] },
+    foes: ["geugya_remnant", "deathleaper", "rail3_locust"],
+    perk: { name: "먼저 우는 쪽", desc: "적의 선공으로 받는 피해 -50%.", effect: { firstCut: 0.50 } } },
   { id: "rail3pack2", name: "감은 눈", railOnly: true, tier: "railLine3",
     bg: "assets/scene/거울굴절철도3호선종착역.jpg",
-    foes: ["hwangjeo_phantasm", "tanaconda", "rail3_therizino"] },
+    foes: ["hwangjeo_phantasm", "tanaconda", "rail3_therizino"],
+    perk: { name: "감은 눈으로 본 것", desc: "광역 공격에 방어를 고르면 그 피해를 절반 더 줄인다.", effect: { aoeGuardCut: 0.5 } } },
   { id: "pack15", name: "숨겨둔 로단", bg: "assets/scene/공격받은 메카고질라.jpg",
-    foes: ["olympiad_rival", "gimhuijae", "rodan_toy"] }
+    foes: ["olympiad_rival", "gimhuijae", "rodan_toy"],
+    perk: { name: "꺾이지 않는 날개", desc: "광역 공격으로 받는 피해 -30%.", effect: { aoeCut: 0.30 } } }
 ];

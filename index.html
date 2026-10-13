@@ -36,8 +36,17 @@
    *    --hi                                   가리켰을 때 가장 밝게 뜨는 글씨
    *
    *  새 규칙을 쓸 때는 색을 직접 적지 말고 이 변수를 씁니다 — 직접 적은 색은 테마를 따라가지 않습니다.
-   *  전투 화면(body.battling)과 번쩍임 연출(.flashfx)은 일부러 변수 밖에 두었습니다 —
-   *  어느 테마에서든 같은 붉은 화면이어야 하기 때문입니다. */
+   *  번쩍임 연출(.flashfx)은 일부러 변수 밖에 두었습니다 — 어느 테마에서든 같은 빛이어야 합니다.
+   *
+   *  ■ 전투 화면(body.battling)의 색은 아래 --b-* 무리입니다 (2026-10-13 — 전투에도 테마가 붙습니다).
+   *    여기 적힌 것은 기본 「먹」의 붉은 화면 그대로이고, 다른 테마는 맨 아래 «색 테마들» 덩이에서
+   *    제 뼈대 색에 제 --red 를 섞어 «그 테마가 붉게 가라앉은» 값을 저절로 얻습니다.
+   *      --b-bg · --b-stage · --b-scene · --b-log · --b-card · --b-aimed   바탕들
+   *      --b-btn · --b-btn-hi · --b-bar                                    손잡이 · 체력 막대 바탕
+   *      --b-line-soft · --b-line · --b-line-hi · --b-line-pri             테두리, 여린 것부터
+   *      --b-text · --b-text-2 · --b-text-3 · --b-text-pri                 글씨
+   *      --b-muted · --b-dim                                               흐린 글씨
+   *      --b-accent · --b-hp · --b-heavy                                   강조 · 체력 · 강타 */
   :root{
     --bg:#0a0a0c;
     --sheet:#0e0e12;
@@ -59,6 +68,12 @@
     --gold-line-2:#7a5c22;
     --red:#c8403a;
     --hi:#ffffff;
+    --b-bg:#0d0708; --b-stage:#140b0d; --b-scene:#100809; --b-log:#160c0e; --b-card:#1a1012; --b-aimed:#25100f;
+    --b-btn:#1e1214; --b-btn-hi:#2a1a1c; --b-bar:#2c191b;
+    --b-line-soft:#3d1f22; --b-line:#4a2226; --b-line-hi:#7a2b28; --b-line-pri:#9c3a34;
+    --b-text:#d8c8c4; --b-text-2:#cbbdb9; --b-text-3:#b09490; --b-text-pri:#f0b8b2;
+    --b-muted:#9c8480; --b-dim:#8a706c;
+    --b-accent:#e05048; --b-hp:#b04a42; --b-heavy:#ff6a5e;
   }
   *{box-sizing:border-box;}
   /* 글꼴 두 벌 — 위 <link> 에서 받아 옵니다.
@@ -107,7 +122,7 @@
   #foehp .row{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;}
   #foehp .nm{color:var(--text-2);font-weight:700;font-size:12.5px;}
   #foehp .stat{color:var(--muted);font-size:11.5px;}
-  body.battling #foehp .nm{color:#dcd0ce;}
+  body.battling #foehp .nm{color:var(--b-text);}
   /* 거울굴절철도 2호선 — 지금이 몇 순환의 몇 번째인가. 다른 갈래에서는 뜨지 않습니다. */
   #foehp .railtag{
     display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;
@@ -508,9 +523,27 @@
     border:1px solid #24503f;background:#0d1712;color:#7fc0a0;
     font-size:11.5px;padding:3px 9px;display:inline-flex;gap:6px;align-items:center;
   }
+  /* 테마팩 특전 딱지 — 거울 던전 안에서만 섭니다 (engine.js renderSynergy) */
+  .perk{
+    border:1px solid var(--line-2);background:var(--panel-2);color:var(--text-2);
+    font-size:11.5px;padding:2px 9px 2px 5px;display:inline-flex;gap:5px;align-items:center;
+  }
+  .perk .icmini{margin:0;}
+  /* 거울 던전 갈림길 — 세 갈래를 카드로 (engine.js drawPackGate) */
+  .packgate{margin:10px 0 4px;}
+  .mrcard .packgate{margin:0;}                 /* 결과 카드 안에서는 위아래 틈 없이 */
+  .packgate .pgheld{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;}
+  .packgate .pglabel{color:var(--muted);font-size:11.5px;letter-spacing:.1em;margin-right:2px;}
+  .packgate .pghint{color:var(--gold);font-size:12.5px;margin-bottom:8px;}
+  .packgate .pgcard{padding:11px 13px 12px;}
+  .packgate .pgpath{color:var(--gold);font-size:11px;letter-spacing:.14em;margin-bottom:3px;}
+  .packgate .pgcard .nm{font-size:15px;margin-bottom:9px;}
+  .packgate .pgperk{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding-top:9px;}
+  .packgate .pgname{color:var(--text-2);font-weight:700;font-size:12.5px;margin-bottom:2px;}
+  .packgate .pgperk .sub{font-size:12px;line-height:1.45;}
   #log .crit{color:#f0c46a;font-weight:700;}
   #log .heavy{color:#f05a50;font-weight:700;font-size:14.5px;}
-  body.battling #log .heavy{color:#ff6a5e;}
+  body.battling #log .heavy{color:var(--b-heavy);}
   .syn.full{border-color:var(--gold-line-2);background:#1e1608;box-shadow:0 0 0 1px #3a2a10 inset;}
 
   /* ── 버튼 ─────────────────────────────── */
@@ -535,22 +568,22 @@
   #manage:empty{margin-top:0;}
   .mgwrap{
     display:flex;align-items:center;gap:9px;flex-wrap:wrap;
-    border:1px solid #5a3a1c;background:#171008;padding:7px 11px;font-size:12px;
+    border:1px solid var(--gold-line);background:var(--gold-bg);padding:7px 11px;font-size:12px;
   }
   .mgwrap .mgnm{color:var(--gold);letter-spacing:.16em;font-weight:700;}
   .mgwrap .mgpips{display:flex;gap:4px;}
   .mgwrap .mgpips i{
-    display:block;width:17px;height:11px;background:#1d1810;border:1px solid var(--gold-line);
+    display:block;width:17px;height:11px;background:var(--panel-2);border:1px solid var(--gold-line);
   }
-  .mgwrap .mgpips i.on{background:var(--gold);border-color:#f0d094;}
+  .mgwrap .mgpips i.on{background:var(--gold);border-color:var(--gold-hi);}
   .mgwrap .mgnum{color:var(--gold-hi);font-weight:700;}
   .mgwrap .mgsub{color:var(--gold-mid);margin-left:auto;}
   .mgskills{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
   .mgsk{
-    border:1px solid #3a2f1a;background:#12100a;color:#a89468;
+    border:1px solid var(--gold-line);background:var(--gold-bg);color:color-mix(in srgb, var(--gold) 65%, var(--muted));
     font-size:11.5px;padding:2px 9px;display:inline-flex;gap:7px;align-items:baseline;
   }
-  .mgsk b{color:#e8c98a;font-weight:700;}
+  .mgsk b{color:var(--gold-hi);font-weight:700;}
   .mgsk i{color:var(--gold-mid);font-style:normal;font-size:11px;}
   .mgsk.off{opacity:.42;}
 
@@ -968,43 +1001,43 @@
    *  화면 전체가 붉게 가라앉아, 이야기 화면과 한눈에 구분됩니다.
    *  색만 바꾸는 것이라 아래 값만 고치면 분위기가 통째로 달라집니다.
    */
-  body.battling{background:#0d0708;}
+  body.battling{background:var(--b-bg);}
 
-  body.battling header{border-bottom-color:#7a2b28;}
-  body.battling header .brand{color:#e05048;}
-  body.battling header .chap{color:#9c8480;}
-  body.battling header .right{color:#b09490;}
+  body.battling header{border-bottom-color:var(--b-line-hi);}
+  body.battling header .brand{color:var(--b-accent);}
+  body.battling header .chap{color:var(--b-muted);}
+  body.battling header .right{color:var(--b-text-3);}
   .fighting{
-    border:1px solid #7a2b28;background:#2a1012;color:#f0a49c;
+    border:1px solid var(--b-line-hi);background:var(--b-aimed);color:var(--b-text-pri);
     font-size:11px;letter-spacing:.2em;font-weight:700;padding:1px 8px;margin-right:10px;
   }
 
-  body.battling #stage{border-color:#4a2226;background:#140b0d;}
-  body.battling #stage img.scene{background:#100809;}
-  body.battling #stage .placename{border-top-color:#4a2226;}
+  body.battling #stage{border-color:var(--b-line);background:var(--b-stage);}
+  body.battling #stage img.scene{background:var(--b-scene);}
+  body.battling #stage .placename{border-top-color:var(--b-line);}
 
-  body.battling #log{border-color:#6e2a2c;background:#160c0e;}
-  body.battling #log .divider{border-top-color:#3d1f22;}
-  body.battling #log .n  {color:#cbbdb9;}
-  body.battling #log .sys{color:#8a706c;}
+  body.battling #log{border-color:var(--b-line-hi);background:var(--b-log);}
+  body.battling #log .divider{border-top-color:var(--b-line-soft);}
+  body.battling #log .n  {color:var(--b-text-2);}
+  body.battling #log .sys{color:var(--b-dim);}
 
-  body.battling .pcard{border-color:#402326;background:#1a1012;}
+  body.battling .pcard{border-color:var(--b-line-soft);background:var(--b-card);}
   /* 전투 중에도 네 가지는 서로 다른 색을 지킵니다.
    * 예전에는 «차례»와 «노려짐»이 둘 다 붉게 덮여 구분이 되지 않았습니다. */
   body.battling .pcard.acting    {border-color:#5ec26a;box-shadow:inset 0 0 0 1px #24502a;}
   body.battling .pcard.cmd-attack{border-color:#e07aa8;box-shadow:inset 0 0 0 1px #5a2a3e;}
   body.battling .pcard.cmd-guard {border-color:#5aa8e0;box-shadow:inset 0 0 0 1px #234156;}
-  body.battling .pcard.aimed{background:#25100f;}
+  body.battling .pcard.aimed{background:var(--b-aimed);}
   body.battling .pcard.sup{border-left-color:#9ccc65;}
-  body.battling .pcard .id{color:#9c8480;}
-  body.battling .pcard .st{color:#9c8480;}
-  body.battling .hpbar{background:#2c191b;border-color:#4a2226;}
-  body.battling .hpbar i{background:#b04a42;}
+  body.battling .pcard .id{color:var(--b-muted);}
+  body.battling .pcard .st{color:var(--b-muted);}
+  body.battling .hpbar{background:var(--b-bar);border-color:var(--b-line);}
+  body.battling .hpbar i{background:var(--b-hp);}
 
-  body.battling button{background:#1e1214;border-color:#4e2c2e;color:#d8c8c4;}
-  body.battling button:hover:not(:disabled){background:#2a1a1c;border-color:#e05048;color:#fff;}
-  body.battling button.primary{border-color:#9c3a34;color:#f0b8b2;}
-  body.battling button.ghost{border-color:#3a2226;color:#96807c;}
+  body.battling button{background:var(--b-btn);border-color:var(--b-line);color:var(--b-text);}
+  body.battling button:hover:not(:disabled){background:var(--b-btn-hi);border-color:var(--b-accent);color:var(--hi);}
+  body.battling button.primary{border-color:var(--b-line-pri);color:var(--b-text-pri);}
+  body.battling button.ghost{border-color:var(--b-line-soft);color:var(--b-muted);}
 
   /* 그림칸 높이는 화면 크기에 따라서만 달라집니다. 그림 크기는 보지 않습니다. */
   @media (max-width:900px){
@@ -1196,11 +1229,42 @@
   :root[data-palette="chalk"] .enkwrap .enknum{ color:#2f5f7c; }
   :root[data-palette="chalk"] .pcard.sup{ background:#eef6e8; }
   :root[data-palette="chalk"] .pcard .suptag{ color:#4f8a1c; }
-  /* 전투 중에는 어느 테마든 «먹» 의 값으로 되돌립니다 — 전투 화면(body.battling)의 붉은 바탕과
-   * 그 위의 밝은 글씨가 먹 테마를 딛고 짜여 있어서, 밝은 테마의 검은 글씨가 섞이면 안 읽힙니다.
-   * 위 :root 의 기본값과 «같은 값» 이어야 합니다 — 기본값을 고치면 여기도 고칩니다. */
-  :root[data-palette]:has(body.battling){ background:#0d0708; }
-  :root[data-palette] body.battling{--bg:#0a0a0c; --sheet:#0e0e12; --panel:#121218; --panel-2:#16161b; --line:#2a2a30; --line-2:#34343c; --text:#e8e4de; --text-2:#d6d3ce; --text-3:#a9a49e; --muted:#8b8681; --dim:#6e6a66; --off:#55524e; --gold:#d8b26a; --gold-hi:#f0d79c; --gold-mid:#8a7440; --gold-bg:#17150f; --gold-line:#4a3a20; --gold-line-2:#7a5c22; --red:#c8403a; --hi:#ffffff; }
+  /* 전투 중 — 테마마다 «제 색이 붉게 가라앉은» 화면입니다 (2026-10-13).
+   * 예전에는 전투에 들어가면 어느 테마든 「먹」으로 되돌렸습니다. 이제는 그 테마의 뼈대 색에
+   * 그 테마의 --red 를 조금씩 섞어 --b-* 를 짓습니다 — 테마를 새로 더해도 따로 적을 것이 없습니다.
+   * 기본 「먹」은 섞지 않고 :root 에 적힌 값을 그대로 씁니다. */
+  :root[data-palette]{
+    --b-bg:color-mix(in srgb, var(--bg) 95%, var(--red));
+    --b-stage:color-mix(in srgb, var(--sheet) 93%, var(--red));
+    --b-scene:color-mix(in srgb, var(--bg) 94%, var(--red));
+    --b-log:color-mix(in srgb, var(--sheet) 92%, var(--red));
+    --b-card:color-mix(in srgb, var(--panel) 92%, var(--red));
+    --b-aimed:color-mix(in srgb, var(--panel) 80%, var(--red));
+    --b-btn:color-mix(in srgb, var(--panel-2) 92%, var(--red));
+    --b-btn-hi:color-mix(in srgb, var(--panel-2) 82%, var(--red));
+    --b-bar:color-mix(in srgb, var(--panel-2) 80%, var(--red));
+    --b-line-soft:color-mix(in srgb, var(--line) 82%, var(--red));
+    --b-line:color-mix(in srgb, var(--line) 70%, var(--red));
+    --b-line-hi:color-mix(in srgb, var(--line) 45%, var(--red));
+    --b-line-pri:color-mix(in srgb, var(--line) 25%, var(--red));
+    --b-text:color-mix(in srgb, var(--text-2) 92%, var(--red));
+    --b-text-2:color-mix(in srgb, var(--text-2) 86%, var(--red));
+    --b-text-3:color-mix(in srgb, var(--text-3) 85%, var(--red));
+    --b-text-pri:color-mix(in srgb, var(--text) 68%, var(--red));
+    --b-muted:color-mix(in srgb, var(--muted) 85%, var(--red));
+    --b-dim:color-mix(in srgb, var(--dim) 85%, var(--red));
+    --b-accent:color-mix(in srgb, var(--red) 88%, var(--hi));
+    --b-hp:color-mix(in srgb, var(--red) 86%, var(--bg));
+    --b-heavy:color-mix(in srgb, var(--red) 80%, var(--hi));
+  }
+  :root:has(body.battling){ background:var(--b-bg); }
+  /* 백악은 바탕이 밝아, 어두운 바탕을 딛고 짠 자리 몇을 따로 뒤집습니다 */
+  :root[data-palette="chalk"] body.battling .hpbar{ background:var(--b-bar); border-color:var(--b-line); }
+  :root[data-palette="chalk"] body.battling button.skill{ border-color:#7d55a8; color:#5f3a8c; }
+  :root[data-palette="chalk"] body.battling button.claw1{ border-color:#6c9a3a; color:#476e1c; }
+  :root[data-palette="chalk"] body.battling .pcard.acting    { box-shadow:inset 0 0 0 1px #b9e2bf; }
+  :root[data-palette="chalk"] body.battling .pcard.cmd-attack{ box-shadow:inset 0 0 0 1px #f0c3d6; }
+  :root[data-palette="chalk"] body.battling .pcard.cmd-guard { box-shadow:inset 0 0 0 1px #bcdcf2; }
   /* 테마 고르는 칸의 색 견본 (engine.js openPalettePick) */
   .palsw{display:flex;height:26px;border:1px solid var(--line-2);margin-bottom:8px;}
   .palsw i{flex:1;}
@@ -1227,23 +1291,23 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.10.1"></script>
-<script src="data/vault.js?v=2.10.1"></script>
-<script src="data/characters.js?v=2.10.1"></script>
-<script src="data/skills.js?v=2.10.1"></script>
-<script src="data/allies.js?v=2.10.1"></script>
-<script src="data/gifts.js?v=2.10.1"></script>
-<script src="data/pickup.js?v=2.10.1"></script>
-<script src="data/achievements.js?v=2.10.1"></script>
-<script src="data/mail.js?v=2.10.1"></script>
-<script src="data/notice.js?v=2.10.1"></script>
-<script src="data/patch.js?v=2.10.1"></script>
-<script src="data/event.js?v=2.10.1"></script>
-<script src="data/tutorial.js?v=2.10.1"></script>
-<script src="data/foes.js?v=2.10.1"></script>
-<script src="data/story.js?v=2.10.1"></script>
-<script src="data/mirrorpacks.js?v=2.10.1"></script>
-<script src="engine.js?v=2.10.1"></script>
+<script src="data/access.js?v=2.11.0"></script>
+<script src="data/vault.js?v=2.11.0"></script>
+<script src="data/characters.js?v=2.11.0"></script>
+<script src="data/skills.js?v=2.11.0"></script>
+<script src="data/allies.js?v=2.11.0"></script>
+<script src="data/gifts.js?v=2.11.0"></script>
+<script src="data/pickup.js?v=2.11.0"></script>
+<script src="data/achievements.js?v=2.11.0"></script>
+<script src="data/mail.js?v=2.11.0"></script>
+<script src="data/notice.js?v=2.11.0"></script>
+<script src="data/patch.js?v=2.11.0"></script>
+<script src="data/event.js?v=2.11.0"></script>
+<script src="data/tutorial.js?v=2.11.0"></script>
+<script src="data/foes.js?v=2.11.0"></script>
+<script src="data/story.js?v=2.11.0"></script>
+<script src="data/mirrorpacks.js?v=2.11.0"></script>
+<script src="engine.js?v=2.11.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
