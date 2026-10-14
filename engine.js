@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.11.0";
+const VERSION = "2.11.1";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3042,12 +3042,14 @@ function iconMini(name) {
   return '<img class="icmini" src="' + iconSrc(name) + '" alt="" onerror="this.style.display=\'none\'">';
 }
 /* 주는 것(give) 한 덩이를 대표하는 아이콘 이름 — 우편·이벤트 교환소가 쓰는 give 와 같은 꼴.
- * 인격·교육위원처럼 아이콘이 없는 것은 null (그 칸은 아이콘 없이 섭니다).
+ * 인격처럼 아이콘이 없는 것은 null (그 칸은 아이콘 없이 섭니다). 교육위원·지원은 성급 명찰·십자를 씁니다.
  * give 에 새 칸이 생기면 여기에도 한 줄 얹습니다. */
 function giveIcon(g) {
   g = g || {};
   if (g.gift) { const gf = giftById(g.gift); return gf ? gf.name : null; }
-  if (g.id || g.advisor || g.support) return null;
+  if (g.advisor) { const ad = advisorById(g.advisor); return ad ? advisorIconName(ad) : null; }
+  if (g.support) { const sp = supportBy(g.support); return sp ? supportIconName(sp) : null; }
+  if (g.id) return null;
   if (g.fragBoxSelect) return "인격 파편 상자 (선택)";
   if (g.fragBoxRandom) return "인격 파편 상자 (무작위)";
   if (g.advisorTicket) return "보조 교육위원 선택권";
@@ -3059,6 +3061,25 @@ function giveIcon(g) {
   if (g.event)         return curEvent() ? eventCurName() : null;
   if (g.money)         return "원고료";
   return null;
+}
+/* 작성위원 한 사람의 아이콘 — 파편과 같은 색으로 그린 그 사람의 표지(사용자 지침 2026-10-14).
+ * 노트·편성·인격 장착·동기화 화면이 씁니다. 도안은 tools/아이콘-도안.js 의 MEMBER. */
+function memberIconName(who) { return "작성위원 - " + SINNERS[who].name; }
+/* 지원 작성위원은 사람마다가 아니라 성급마다 한 장 — 2성 은빛 십자, 3성 금빛 십자 */
+function supportIconName(sp) { return "지원 작성위원 - " + (sp.star >= 3 ? 3 : 2) + "성"; }
+/* 보조 교육위원은 사람마다 한 장, 테두리만 성급마다 — 2성 은빛·3성 금빛 방패 명찰.
+ * 같은 사람의 여러 인격 카드가 함께 씁니다. 도안은 tools/아이콘-도안.js 의 ADVISOR. */
+function advisorIconName(a) { return "교육위원 - " + a.name + " - " + (a.star >= 3 ? 3 : 2) + "성"; }
+/* 조력자는 따로 그리지 않고, 같은 사람의 교육위원 명찰(금빛)을 빌려 씁니다.
+ * 베르렐리우스 = CREW.guide「배길수 / 이승찬」, 하축론 = CREW.driver「이정빈」 —
+ * CREW 의 본명 가운데 교육위원 이름과 맞는 것을 찾습니다. 못 찾으면 null(그림 없이 섭니다). */
+function allyIconName(ally) {
+  if (!ally) return null;
+  const real = [ally.name];
+  for (const k in CREW) if (CREW[k].codename === ally.name || CREW[k].name === ally.name)
+    real.push(...String(CREW[k].name).split("/").map(s => s.trim()));
+  const ad = advisorList().find(a => real.indexOf(a.name) >= 0);
+  return ad ? advisorIconName({ name: ad.name, star: 3 }) : null;
 }
 /* 기프트 한 장의 아이콘 — 강화 사본(giftView)을 넘겨도 이름은 같습니다 */
 function giftIconHTML(g, dim) { return iconHTML(g.name, { star: g.star, dim: !!dim }); }
@@ -3853,8 +3874,13 @@ function renderParty() {
       : '<span class="star">' +
           (sup ? stars(sup.star) : (id ? stars(id.star) : "")) + '</span> ' +
         (sup ? sup.title : (id ? id.title : "인격 없음"));
+    /* 작성위원 아이콘 — 지원은 성급 십자, 조력자는 같은 사람의 교육위원 명찰 */
+    const allyIc = ally ? allyIconName(ally) : null;
+    const icHTML = SINNERS[who] ? iconMini(memberIconName(who))
+                 : sup ? iconMini(supportIconName(sup))
+                 : allyIc ? iconMini(allyIc) : "";
     div.innerHTML =
-      '<div class="nm">' + nameHTML + mark + '</div>' +
+      '<div class="nm">' + icHTML + nameHTML + mark + '</div>' +
       '<div class="id">' + idHTML + '</div>' +
       /* 조력자는 수치를 감춥니다 — 실제로는 그대로 쓰이지만 화면에는 ??? 로.
        * 얼마나 센지 모르는 편이 «와 준 사람» 답습니다. */
@@ -4007,7 +4033,7 @@ function renderSynergy() {
   /* 세워둔 보조 교육위원과 지닌 기프트 — 별과 이름만 */
   let head = "";
   equippedAdvisors().forEach(a => {
-    head += '<span class="adv"><span class="star">' + stars(a.star) + '</span> ' +
+    head += '<span class="adv">' + iconMini(advisorIconName(a)) + '<span class="star">' + stars(a.star) + '</span> ' +
             a.title + ' ' + a.name + '</span>';
   });
   equippedGifts().forEach(gf => {
@@ -6791,9 +6817,9 @@ function loadoutSlotsHTML() {
   /* 칸 수만큼 나란히 세웁니다 — 한 칸에 쌓지 않습니다 */
   for (let i = 0; i < advCap; i++) {
     const a = advs[i];
-    h += '<div class="slot' + (a ? ' sel' : '') + '" data-adv="' + i + '">' +
-           (a ? '<div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
-                  a.title + ' ' + a.name + '</div>' + flavorHTML(a) + '<div class="sub">' + a.desc + '</div>'
+    h += '<div class="slot' + (a ? ' sel hasic' : '') + '" data-adv="' + i + '">' +
+           (a ? iconHTML(advisorIconName(a)) + '<div><div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
+                  a.title + ' ' + a.name + '</div>' + flavorHTML(a) + '<div class="sub">' + a.desc + '</div></div>'
               : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
                   (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
          '</div>';
@@ -6854,22 +6880,23 @@ function openParty(done) {
       /* 지금 편성할 수 없는 사람 — banParty 참고. 고를 수 없도록
        * data-who 를 아예 달지 않습니다(아래 클릭 손잡이가 못 찾습니다). */
       if (S.partyBan && S.partyBan.indexOf(who) >= 0) {
-        h += '<div class="slot">' +
-               '<div class="lock">' + s.name + '</div>' +
-               '<div class="sub">지금은 함께할 수 없습니다</div>' +
+        h += '<div class="slot hasic">' + iconHTML(memberIconName(who), { dim: true }) +
+               '<div><div class="lock">' + s.name + '</div>' +
+               '<div class="sub">지금은 함께할 수 없습니다</div></div>' +
              '</div>';
         return;
       }
       const sel = picking.indexOf(who);
       const id = idByKey(S.equip[who]);
-      h += '<div class="slot' + (sel >= 0 ? ' sel' : '') + '" data-who="' + who + '">' +
+      h += '<div class="slot hasic' + (sel >= 0 ? ' sel' : '') + '" data-who="' + who + '">' +
+             iconHTML(memberIconName(who)) + '<div>' +
              '<div class="nm">' + (sel >= 0 ? (sel + 1) + '. ' : '') + s.name +
                ' <span class="sub">No.' + s.no + '</span></div>' +
              '<div class="sub">' + s.ego + '</div>' +
              '<div class="sub"><span class="star">' + (id ? stars(id.star) : '') + '</span> ' +
                (id ? id.title : '인격 없음') + '</div>' +
              '<div class="sub">보유 인격 ' + ownedIds(who).length + '종</div>' +
-           '</div>';
+           '</div></div>';
     });
     h += '</div>';
 
@@ -6896,27 +6923,30 @@ function openParty(done) {
           const sel = picking.indexOf(id);
           /* 아직 얻지 못한 사람은 이름도 수치도 보이지 않습니다 */
           if (!has) {
-            h += '<div class="slot"><div class="lock">' + stars(sp.star) + ' ？？？</div>' +
-                 '<div class="sub">업적으로 얻습니다</div></div>';
+            h += '<div class="slot hasic">' + iconHTML(supportIconName(sp), { dim: true }) +
+                 '<div><div class="lock">' + stars(sp.star) + ' ？？？</div>' +
+                 '<div class="sub">업적으로 얻습니다</div></div></div>';
             return;
           }
           /* 이미 교육위원으로 서 있는 사람이면(예: 이정빈=하축론) 지원으로 못 세웁니다 */
           const advBlock = sel < 0 && supportBlockedByAdvisor(sp);
           if (advBlock) {
-            h += '<div class="slot"><div class="lock">' + sp.name + '</div>' +
+            h += '<div class="slot hasic">' + iconHTML(supportIconName(sp), { dim: true }) +
+                 '<div><div class="lock">' + sp.name + '</div>' +
                  '<div class="sub">' + withJosa(advBlock, "을") +
-                 ' 교육위원으로 세운 동안은 지원으로 함께할 수 없습니다.</div></div>';
+                 ' 교육위원으로 세운 동안은 지원으로 함께할 수 없습니다.</div></div></div>';
             return;
           }
           /* 별 위치는 작성위원 칸과 같게 — 이름줄이 아니라 인격줄 앞에 붙습니다 */
-          h += '<div class="slot' + (sel >= 0 ? ' sel' : '') + '" data-sup="' + id + '">' +
+          h += '<div class="slot hasic' + (sel >= 0 ? ' sel' : '') + '" data-sup="' + id + '">' +
+                 iconHTML(supportIconName(sp)) + '<div>' +
                  '<div class="nm">' + (sel >= 0 ? (sel + 1) + '. ' : '') + sp.name +
                    ' <span class="sub">지원</span></div>' +
                  (sp.note ? '<div class="sub">' + sp.note + '</div>' : '') +
                  '<div class="sub"><span class="star">' + stars(sp.star) + '</span> ' +
                    sp.title + '</div>' +
                  '<div class="sub">공 ' + sp.atk + '　방 ' + sp.def + '　체 ' + sp.hp + '</div>' +
-               '</div>';
+               '</div></div>';
         });
         h += '</div></div>';
       }
@@ -7050,6 +7080,7 @@ function openEquip(back) {
     h += '<div class="eqhead' + (open ? ' open' : '') + (inParty ? ' inparty' : '') +
          '" data-open="' + who + '">' +
            '<span class="arrow">' + (open ? '▾' : '▸') + '</span>' +
+           iconMini(memberIconName(who)) +
            '<b>' + s.name + '</b>' +
            (inParty ? '<span class="partytag">편성 중</span>' : '') +
            '<span class="wearing">' +
@@ -7467,7 +7498,7 @@ function openNote(back, focus) {
 
     h += '<div class="notebody">' +
            '<div class="noteno">No. ' + s.no + '</div>' +
-           '<div class="notename">' + s.name + '</div>' +
+           '<div class="notename">' + iconMini(memberIconName(who)) + s.name + '</div>' +
            '<div class="noteego">E.G.O :: ' + s.ego + '</div>';
 
     if (s.quote) h += '<div class="notequote">“' + s.quote + '”</div>';
@@ -7572,11 +7603,11 @@ function openNote(back, focus) {
     h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">작성위원</div><div class="grid four">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
-      h += '<div class="slot" data-who="' + who + '">' +
-             '<div class="nm">No.' + s.no + '　' + s.name + '</div>' +
+      h += '<div class="slot hasic" data-who="' + who + '">' + iconHTML(memberIconName(who)) +
+             '<div><div class="nm">No.' + s.no + '　' + s.name + '</div>' +
              '<div class="sub">' + s.ego + '</div>' +
              (s.caution ? '<div class="sub">' + s.caution.join(" · ") + '</div>' : '') +
-           '</div>';
+           '</div></div>';
     });
     h += '</div>';
 
@@ -7616,12 +7647,12 @@ function openNote(back, focus) {
       advShow.forEach(a => {
         const has = !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
         /* 효과는 함께하게 된 뒤에야 읽을 수 있습니다 */
-        h += '<div class="slot">' +
+        h += '<div class="slot hasic">' + iconHTML(advisorIconName(a), { dim: !has }) + '<div>' +
                '<div class="' + (has ? 'nm' : 'lock') + '">' +
                  '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name + '</div>' +
                (has ? flavorHTML(a) : '') +
                '<div class="sub">' + (has ? a.desc : '미보유　— 효과는 함께한 뒤에 열립니다') + '</div>' +
-             '</div>';
+             '</div></div>';
       });
       h += '</div></div></div>';
     }
@@ -8270,11 +8301,11 @@ function openGacha(done, pk, deal) {
       h += '<div class="grid">';
       result.forEach(r => {
         if (r.kind === "adv") {
-          h += '<div class="slot' + (r.isNew ? ' sel' : '') + '">' +
+          h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + '">' + iconHTML(advisorIconName(r.adv)) + '<div>' +
                  '<div class="nm"><span class="star">' + stars(r.adv.star) + '</span> ' +
                    r.adv.title + ' ' + r.adv.name + '</div>' +
                  '<div class="sub">보조 교육위원' + (r.isNew ? '　— 신규' : '　— 중복') + '</div>' +
-               '</div>';
+               '</div></div>';
         } else {
           h += '<div class="slot' + (r.isNew ? ' sel' : '') + '">' +
                  '<div class="nm"><span class="star">' + stars(r.id.star) + '</span> ' + r.id.title + '</div>' +
@@ -11841,8 +11872,9 @@ function openAdvisor(back) {
     /* 그 사람이 지금 지원 작성위원으로 편성에 있으면(예: 하축론=이정빈) 못 세웁니다 */
     const 지원겹침 = has && !on && !겹침 && advisorBlockedBySupport(k);
     const 고를수있나 = has && !겹침 && !지원겹침;
-    h += '<div class="slot' + (on ? ' sel' : '') + '"' +
+    h += '<div class="slot hasic' + (on ? ' sel' : '') + '"' +
            (고를수있나 ? ' data-pick="' + k + '"' : '') + '>' +
+           iconHTML(advisorIconName(a), { dim: !(고를수있나 || on) }) + '<div>' +
            '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
              '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name +
              (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
@@ -11853,7 +11885,7 @@ function openAdvisor(back) {
            (지원겹침 ? '<div class="sub" style="color:var(--red)">' +
                    withJosa(지원겹침, "이") + ' 지원 작성위원으로 편성에 있어 세울 수 없습니다.</div>' : '') +
            (has && a.note ? '<div class="sub">' + a.note + '</div>' : '') +
-         '</div>';
+         '</div></div>';
   });
   h += '</div><div class="modalfoot"><button id="aclose">돌아가기</button></div>';
   $sheet.innerHTML = h;
@@ -13040,6 +13072,7 @@ function openSyncModuleUse(back) {
       h += '<div class="syncrow">' +
              (up ? '<button data-mod="' + who + '">사용</button>'
                  : '<button disabled>상한 도달</button>') +
+             iconHTML(memberIconName(who)) +
              '<div class="body">' +
                '<div class="nm">' + s.name + '</div>' +
                '<div class="sub">' +
@@ -13111,13 +13144,13 @@ function openPickTicketUse(kind, back) {
             '<div class="grid">';
     cands.forEach((x, i) => {
       if (kind === "advisor") {
-        h += '<div class="slot" data-pick="' + i + '">' +
+        h += '<div class="slot hasic" data-pick="' + i + '">' + iconHTML(advisorIconName(x)) + '<div>' +
                '<div class="nm"><span class="star">' + stars(x.star) + '</span> ' +
                  x.title + ' ' + x.name + '</div>' +
                flavorHTML(x) +
                '<div class="sub">' + x.desc + '</div>' +
                (x.note ? '<div class="sub">' + x.note + '</div>' : '') +
-             '</div>';
+             '</div></div>';
       } else {
         h += '<div class="slot hasic" data-pick="' + i + '">' + giftIconHTML(x) +
                '<div><div class="nm"><span class="star">' + stars(x.star) + '</span> ' + x.name + '</div>' +

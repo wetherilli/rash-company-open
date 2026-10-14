@@ -861,6 +861,10 @@
   /* 글줄 안의 작은 아이콘 (engine.js iconMini) */
   .icmini{width:18px;height:18px;image-rendering:pixelated;image-rendering:crisp-edges;
           vertical-align:-4px;margin-right:3px;}
+  /* 작성위원 아이콘(engine.js memberIconName) — 인격 장착 머리줄·노트 이름·동기화 줄 */
+  .eqhead .icmini{align-self:center;margin-right:0;}
+  .notename .icmini{width:36px;height:36px;vertical-align:-7px;margin-right:8px;}
+  .syncrow .ic{order:0;}
   /* 아이콘을 왼쪽에 세우는 칸 — 글은 그 옆 한 덩이(div)에 담습니다 */
   .slot.hasic{display:flex;gap:10px;align-items:flex-start;}
   .slot.hasic > div{flex:1;min-width:0;}
@@ -1291,23 +1295,23 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.11.0"></script>
-<script src="data/vault.js?v=2.11.0"></script>
-<script src="data/characters.js?v=2.11.0"></script>
-<script src="data/skills.js?v=2.11.0"></script>
-<script src="data/allies.js?v=2.11.0"></script>
-<script src="data/gifts.js?v=2.11.0"></script>
-<script src="data/pickup.js?v=2.11.0"></script>
-<script src="data/achievements.js?v=2.11.0"></script>
-<script src="data/mail.js?v=2.11.0"></script>
-<script src="data/notice.js?v=2.11.0"></script>
-<script src="data/patch.js?v=2.11.0"></script>
-<script src="data/event.js?v=2.11.0"></script>
-<script src="data/tutorial.js?v=2.11.0"></script>
-<script src="data/foes.js?v=2.11.0"></script>
-<script src="data/story.js?v=2.11.0"></script>
-<script src="data/mirrorpacks.js?v=2.11.0"></script>
-<script src="engine.js?v=2.11.0"></script>
+<script src="data/access.js?v=2.11.1"></script>
+<script src="data/vault.js?v=2.11.1"></script>
+<script src="data/characters.js?v=2.11.1"></script>
+<script src="data/skills.js?v=2.11.1"></script>
+<script src="data/allies.js?v=2.11.1"></script>
+<script src="data/gifts.js?v=2.11.1"></script>
+<script src="data/pickup.js?v=2.11.1"></script>
+<script src="data/achievements.js?v=2.11.1"></script>
+<script src="data/mail.js?v=2.11.1"></script>
+<script src="data/notice.js?v=2.11.1"></script>
+<script src="data/patch.js?v=2.11.1"></script>
+<script src="data/event.js?v=2.11.1"></script>
+<script src="data/tutorial.js?v=2.11.1"></script>
+<script src="data/foes.js?v=2.11.1"></script>
+<script src="data/story.js?v=2.11.1"></script>
+<script src="data/mirrorpacks.js?v=2.11.1"></script>
+<script src="engine.js?v=2.11.1"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
