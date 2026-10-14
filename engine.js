@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.11.2";
+const VERSION = "2.11.3";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4047,7 +4047,7 @@ function renderSynergy() {
             a.title + ' ' + a.name + '</span>';
   });
   equippedGifts().forEach(gf => {
-    head += '<span class="gift"><span class="star">' + stars(gf.star) + '</span> ' +
+    head += '<span class="gift">' + iconMini(gf.name) + '<span class="star">' + stars(gf.star) + '</span> ' +
             giftLabel(gf) + '</span>';
   });
   /* 테마팩 특전 — 이번 거울에서 얻어 들고 있는 것 (거울 던전 밖에서는 없습니다) */
@@ -6847,9 +6847,9 @@ function loadoutSlotsHTML() {
        '<div class="grid">';
   for (let i = 0; i < gfCap; i++) {
     const gf = gfs[i];
-    h += '<div class="slot' + (gf ? ' sel' : '') + '" data-gift="' + i + '">' +
-           (gf ? '<div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + giftLabel(gf) +
-                   '</div>' + flavorHTML(gf) + '<div class="sub">' + gf.desc + '</div>'
+    h += '<div class="slot' + (gf ? ' sel hasic' : '') + '" data-gift="' + i + '">' +
+           (gf ? giftIconHTML(gf) + '<div><div class="nm"><span class="star">' + stars(gf.star) + '</span> ' + giftLabel(gf) +
+                   '</div>' + flavorHTML(gf) + '<div class="sub">' + gf.desc + '</div></div>'
                : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
                    (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
          '</div>';
