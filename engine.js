@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.11.1";
+const VERSION = "2.11.2";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3048,7 +3048,7 @@ function giveIcon(g) {
   g = g || {};
   if (g.gift) { const gf = giftById(g.gift); return gf ? gf.name : null; }
   if (g.advisor) { const ad = advisorById(g.advisor); return ad ? advisorIconName(ad) : null; }
-  if (g.support) { const sp = supportBy(g.support); return sp ? supportIconName(sp) : null; }
+  if (g.support) { const sp = supportBy(SUP_PREFIX + g.support); return sp ? supportIconName(sp) : null; }
   if (g.id) return null;
   if (g.fragBoxSelect) return "인격 파편 상자 (선택)";
   if (g.fragBoxRandom) return "인격 파편 상자 (무작위)";
@@ -3081,6 +3081,16 @@ function allyIconName(ally) {
   const ad = advisorList().find(a => real.indexOf(a.name) >= 0);
   return ad ? advisorIconName({ name: ad.name, star: 3 }) : null;
 }
+/* 편성 한 칸(S.party 의 열쇠)의 아이콘 — 작성위원·지원·조력자. 없으면 null */
+function partyIconName(w) {
+  if (!w) return null;
+  if (SINNERS[w])   return memberIconName(w);
+  if (isSupport(w)) { const sp = supportBy(w); return sp ? supportIconName(sp) : null; }
+  if (isAlly(w))    return allyIconName(allyBy(w));
+  return null;
+}
+/* 글자 앞에 작은 아이콘 — 이름이 null 이면 아무것도 붙이지 않습니다 */
+function iconMiniOr(name) { return name ? iconMini(name) : ""; }
 /* 기프트 한 장의 아이콘 — 강화 사본(giftView)을 넘겨도 이름은 같습니다 */
 function giftIconHTML(g, dim) { return iconHTML(g.name, { star: g.star, dim: !!dim }); }
 function rnd(n) { return Math.floor(Math.random() * n); }
@@ -7426,7 +7436,8 @@ function synergyMembers(sy) {
   for (const w in SINNERS) {
     SINNERS[w].ids.forEach(id => {
       if (id.todo || idHidden(w, id) || !match(id.title)) return;
-      out.push({ sup: false, owned: !!S.owned[idKey(w, id)], who: SINNERS[w].name, star: id.star, title: id.title });
+      out.push({ sup: false, owned: !!S.owned[idKey(w, id)], who: SINNERS[w].name, star: id.star, title: id.title,
+                 ic: memberIconName(w) });
     });
   }
   /* 교육위원도 봅니다 — 「Y사」·「대륵도」처럼 인격이 하나도 없이 교육위원
@@ -7438,11 +7449,11 @@ function synergyMembers(sy) {
   advisorOpenList().forEach(a => {
     if (!match(a.title)) return;
     out.push({ sup: false, adv: true, owned: !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]),
-               who: a.name, star: a.star, title: a.title });
+               who: a.name, star: a.star, title: a.title, ic: advisorIconName(a) });
   });
   (typeof SUPPORTS !== "undefined" ? SUPPORTS : []).forEach(sp => {
     if (!match(sp.title) || !supportOwned(sp)) return;   // 미보유 지원 작성위원은 표시하지 않는다
-    out.push({ sup: true, owned: true, who: sp.name, star: sp.star, title: sp.title });
+    out.push({ sup: true, owned: true, who: sp.name, star: sp.star, title: sp.title, ic: supportIconName(sp) });
   });
   out.sort((a, b) => (b.owned - a.owned) || (b.star - a.star));
   return out;
@@ -7452,6 +7463,8 @@ function synergyMembersHTML(sy) {
   if (!list.length) return '<div class="synmembers"><div class="sub">아직 걸리는 사람이 없습니다</div></div>';
   return '<div class="synmembers">' + list.map(m =>
     '<div class="synmem' + (m.owned ? '' : ' un') + '">' +
+      /* 아이콘은 보유한 줄에만 — 미보유 줄은 이름을 가리므로 그림도 가립니다 */
+      (m.owned ? iconMiniOr(m.ic) : '') +
       '<span class="star">' + stars(m.star) + '</span> ' +
       (m.owned ? (m.who + ' · ' + m.title) : m.title) +
       (m.sup ? ' <i>지원</i>' : '') +
@@ -7614,11 +7627,13 @@ function openNote(back, focus) {
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">승무원</div><div class="grid four">';
     Object.keys(CREW).forEach(k => {
       const c = CREW[k];
-      h += '<div class="slot">' +
+      /* 조력자로 서는 승무원은 같은 사람의 교육위원 명찰을 씁니다(allyIconName) */
+      const ic = allyIconName({ name: c.codename || c.name });
+      h += '<div class="slot' + (ic ? ' hasic' : '') + '">' + (ic ? iconHTML(ic) + '<div>' : '') +
              '<div class="nm">' + c.role + '　' + c.name + '</div>' +
              (c.codename ? '<div class="sub">' + c.codename + '</div>' : '') +
              '<div class="sub">' + (c.desc === "TODO" ? '(설정 미작성)' : c.desc) + '</div>' +
-           '</div>';
+           (ic ? '</div>' : '') + '</div>';
     });
     h += '</div>';
 
@@ -8307,10 +8322,10 @@ function openGacha(done, pk, deal) {
                  '<div class="sub">보조 교육위원' + (r.isNew ? '　— 신규' : '　— 중복') + '</div>' +
                '</div></div>';
         } else {
-          h += '<div class="slot' + (r.isNew ? ' sel' : '') + '">' +
+          h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + '">' + iconHTML(memberIconName(r.who)) + '<div>' +
                  '<div class="nm"><span class="star">' + stars(r.id.star) + '</span> ' + r.id.title + '</div>' +
                  '<div class="sub">' + SINNERS[r.who].name + (r.isNew ? '　— 신규' : '　— 중복') + '</div>' +
-               '</div>';
+               '</div></div>';
         }
       });
       h += '</div>';
@@ -8455,7 +8470,8 @@ function pullAdvisorOnce() {
     S.advisorsOwned[key] = true;
     if (!advisorOnList().length) { S.advisorOn = [key]; S.advisor = key; }
   } else S.money += dupRefund(pick.star);
-  return { star: pick.star, name: pick.title + " " + pick.name, desc: pick.note || pick.desc, isNew };
+  return { star: pick.star, name: pick.title + " " + pick.name, desc: pick.note || pick.desc, isNew,
+           ic: advisorIconName(pick) };
 }
 
 function openStockGacha(kind, done) {
@@ -8482,8 +8498,8 @@ function openStockGacha(kind, done) {
     if (result) {
       h += '<div class="grid">';
       result.forEach(r => {
-        h += '<div class="slot ro' + (isGift ? ' hasic' : '') + (r.isNew ? ' sel' : '') + '">' +
-               (isGift ? giftIconHTML(r) : '') +
+        h += '<div class="slot ro' + (isGift || r.ic ? ' hasic' : '') + (r.isNew ? ' sel' : '') + '">' +
+               (isGift ? giftIconHTML(r) : r.ic ? iconHTML(r.ic) : '') +
                '<div><div class="nm"><span class="star">' + stars(r.star) + '</span> ' + r.name + '</div>' +
                '<div class="sub">' + (r.isNew ? '신규 — ' + r.desc : '중복') + '</div></div>' +
              '</div>';
@@ -10886,10 +10902,11 @@ function mirrorRecordBuild(rule, packIds) {
   const party = S.party.map(w => {
     if (!w) return null;
     const id = idByKey(S.equip[w]);
-    return { name: nameOf(w), title: id ? id.title : "", star: id ? id.star : null, sync: syncLevel(w) };
+    return { name: nameOf(w), title: id ? id.title : "", star: id ? id.star : null, sync: syncLevel(w),
+             ic: partyIconName(w) };
   });
   const advisors = advisorOnList().map(advisorById).filter(Boolean)
-    .map(a => ({ name: a.name, title: a.title }));
+    .map(a => ({ name: a.name, title: a.title, star: a.star }));
   const gifts = giftOnList().map(giftById).filter(Boolean)
     .map(g => ({ name: g.name, star: g.star }));   // star — 결과 카드의 아이콘 테두리 색
   /* 2호선 순환 보너스 — 같은 것을 거듭 고르면 더해지므로 몫을 셉니다 */
@@ -10989,15 +11006,31 @@ function openMirrorResult(rec) {
     return a;
   };
 
-  const partyHTML = rec.party.map(w => !w ? emptySlot :
-    '<div class="slot ro">' +
+  /* 아이콘 — 새 기록은 얼려 둔 ic, 옛 기록(2.11.1 전)은 이름으로 찾습니다 */
+  const partyIc = w => {
+    if (w.ic) return w.ic;
+    for (const k in SINNERS) if (SINNERS[k].name === w.name) return memberIconName(k);
+    const sp = supportList().find(s => s.name === w.name && (!w.title || s.title === w.title));
+    if (sp) return supportIconName(sp);
+    return allyIconName(allyByName(w.name));
+  };
+  const advIc = a => {
+    const ad = advisorList().find(x => x.name === a.name && x.title === a.title);
+    return ad ? advisorIconName(ad) : a.star ? advisorIconName(a) : null;
+  };
+  const partyHTML = rec.party.map(w => {
+    if (!w) return emptySlot;
+    const ic = partyIc(w);
+    return '<div class="slot ro' + (ic ? ' hasic' : '') + '">' +
       (w.sync ? '<div class="mrsync">+' + w.sync + '단계</div>' : '') +
+      (ic ? iconHTML(ic) + '<div>' : '') +
       '<div class="nm">' + w.name + '</div>' +
       '<div class="sub">' + (w.title
         ? '<span class="star">' + stars(w.star || 0) + '</span> ' + w.title
         : '인격 없음') + '</div>' +
-    '</div>'
-  ).join('');
+      (ic ? '</div>' : '') +
+    '</div>';
+  }).join('');
 
   /* 기프트는 아이콘과 함께 (사용자 지침 2026-10-14). 옛 기록에는 성급이 안 적혀 있어,
    * 지금 데이터에서 이름으로 찾아 봅니다 — 못 찾으면 테두리 색 없이 그림만 섭니다. */
@@ -11008,10 +11041,12 @@ function openMirrorResult(rec) {
              '<div><div class="nm">' + g.name + '</div></div></div>';
   }).join('');
 
-  const advHTML = pad(rec.advisors, 3).map(a => a
-    ? '<div class="slot ro"><div class="nm">' + a.title + ' ' + a.name + '</div></div>'
-    : emptySlot
-  ).join('');
+  const advHTML = pad(rec.advisors, 3).map(a => {
+    if (!a) return emptySlot;
+    const ic = advIc(a);
+    return ic ? '<div class="slot ro hasic">' + iconHTML(ic) + '<div><div class="nm">' + a.title + ' ' + a.name + '</div></div></div>'
+              : '<div class="slot ro"><div class="nm">' + a.title + ' ' + a.name + '</div></div>';
+  }).join('');
 
   const synText = (rec.synergies && rec.synergies.length) ? rec.synergies.join(' · ') : '없음';
   const pickText = mirrorPickText(rec) || '없음';
@@ -11293,7 +11328,7 @@ function openRecord(back) {
       '<div class="slot"><div class="nm">보유 인격</div><div class="sub">' + total + '종</div></div>' +
       '<div class="slot"><div class="nm">보조 교육위원</div><div class="sub">' + adv + '명</div></div>' +
       '<div class="slot"><div class="nm">클리어한 장</div><div class="sub">' + cl + '개</div></div>' +
-      '<div class="slot"><div class="nm">' + CURRENCY + '</div><div class="sub">' + S.money + '</div></div>' +
+      '<div class="slot"><div class="nm">' + iconMini("원고료") + CURRENCY + '</div><div class="sub">' + S.money + '</div></div>' +
     '</div>' +
     (touched
       ? '<div class="hint" style="color:#d9705f;margin-top:14px">' +
@@ -11436,21 +11471,23 @@ function mailLeftText(m) {
 /* 무엇을 주는지 한 줄로 */
 function mailGiveText(m) {
   const g = m.give || {}, out = [];
-  if (g.money) out.push(CURRENCY + " " + g.money);
-  if (g.codex) out.push("황금교본 " + g.codex);
-  if (g.event) out.push(eventCurName() + " " + g.event);
-  if (g.enk)   out.push(ENK_RULE.name + " " + g.enk);
-  if (g.fragBoxSelect) out.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개");
-  if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
-  if (g.enkCap) out.push(ENK_CAPSULE.name + " " + g.enkCap + "개");
-  if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
-  if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
-  if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
-  if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
-  if (g.gift)          { const gf = giftById(g.gift); out.push("E.G.O 기프트 " + (gf ? stars(gf.star) + " " + gf.name : g.gift)); }
+  /* 덩이마다 그 덩이만의 아이콘(giveIcon)을 앞에 붙입니다 */
+  const ic = k => iconMiniOr(giveIcon({ [k]: g[k] }));
+  if (g.money) out.push(ic("money") + CURRENCY + " " + g.money);
+  if (g.codex) out.push(ic("codex") + "황금교본 " + g.codex);
+  if (g.event) out.push(ic("event") + eventCurName() + " " + g.event);
+  if (g.enk)   out.push(ic("enk") + ENK_RULE.name + " " + g.enk);
+  if (g.fragBoxSelect) out.push(ic("fragBoxSelect") + "인격 파편 상자(선택) " + g.fragBoxSelect + "개");
+  if (g.fragBoxRandom) out.push(ic("fragBoxRandom") + "인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
+  if (g.enkCap) out.push(ic("enkCap") + ENK_CAPSULE.name + " " + g.enkCap + "개");
+  if (g.advisorTicket) out.push(ic("advisorTicket") + "보조 교육위원 선택권 " + g.advisorTicket + "개");
+  if (g.giftTicket)    out.push(ic("giftTicket") + "E.G.O 기프트 선택권 " + g.giftTicket + "개");
+  if (g.syncModule)    out.push(ic("syncModule") + SYNC_MODULE.name + " " + g.syncModule + "개");
+  if (g.advisor)       { const ad = advisorById(g.advisor); out.push(ic("advisor") + "보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
+  if (g.gift)          { const gf = giftById(g.gift); out.push(ic("gift") + "E.G.O 기프트 " + (gf ? stars(gf.star) + " " + gf.name : g.gift)); }
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
-    out.push("지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
+    out.push(ic("support") + "지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
                                    : g.support.replace("|", " ")));
   }
   return out.join("　·　") || "—";
@@ -11625,7 +11662,7 @@ function openAchieve(back) {
              '<div class="sub">' + (a.desc || '') + '</div>' +
            '</div>' +
            '<div class="rw"><span class="star">보상</span> ' +
-             (got ? (a.reward || '') : '？？？') + '</div>' +
+             (got ? iconMiniOr(a.give ? giveIcon(a.give) : null) + (a.reward || '') : '？？？') + '</div>' +
          '</div>';
   });
   h += '</div>';
@@ -11780,13 +11817,13 @@ function openPresetSave(back) {
           '<div class="hint">지금 편성을 어느 칸에 담을지 고르십시오. ' +
           '이미 담긴 칸을 고르면 덮어씁니다.<br>지금 편성 — <b>' +
           (지금이름 || '시너지 없음') + '</b>　' +
-          (지금.party || []).filter(Boolean).map(memberName).join("　") + '</div>' +
+          (지금.party || []).filter(Boolean).map(w => iconMiniOr(partyIconName(w)) + memberName(w)).join("　") + '</div>' +
           '<div class="grid one">';
   ps.forEach((p, i) => {
     const 이름 = p ? presetLabel(p) : null;
     h += '<div class="slot" data-save="' + i + '">' +
            '<div class="nm">' + (i + 1) + '　' + (p ? (이름 || '시너지 없음') : '비어 있음') + '</div>' +
-           '<div class="sub">' + (p ? (p.party || []).filter(Boolean).map(memberName).join("　")
+           '<div class="sub">' + (p ? (p.party || []).filter(Boolean).map(w => iconMiniOr(partyIconName(w)) + memberName(w)).join("　")
                                     : '여기에 담습니다') + '</div>' +
            '<div class="sub mailfoot">' + (p ? '<b>덮어쓰기</b>' : '<b>담기</b>') +
              (p ? '　·　<span data-wipe="' + i + '" style="color:var(--red);cursor:pointer">비우기</span>' : '') +
@@ -12033,6 +12070,7 @@ function openSync(back) {
       const lv = syncLevel(who);
       h += '<div class="slot' + (who === SYNC_PICK ? ' sel' : '') + (lv >= cap ? ' max' : '') +
              '" data-pick="' + who + '">' +
+             iconMini(memberIconName(who)) +
              '<div class="nm">' + s.name + '</div>' +
              '<div class="lv' + (lv ? '' : ' zero') + '">' + romanLevel(lv) + '</div>' +
              '<div class="fr">파편 ' + fragCount(who) + '</div>' +
@@ -13248,8 +13286,9 @@ function openFragBoxRandom(n, back) {
     '<div class="hint">상자 ' + n + '개를 열어 인격 파편 ' + total + '개를 얻었습니다.</div>' +
     '<div class="grid">' +
     Object.keys(got).sort((a, b) => got[b] - got[a]).map(w =>
-      '<div class="slot"><div class="nm">' + SINNERS[w].name + '</div>' +
-        '<div class="sub">+' + got[w] + '개　·　지금 ' + fragCount(w) + '개</div></div>'
+      '<div class="slot hasic">' + iconHTML("인격 파편 - " + SINNERS[w].name) +
+        '<div><div class="nm">' + SINNERS[w].name + '</div>' +
+        '<div class="sub">+' + got[w] + '개　·　지금 ' + fragCount(w) + '개</div></div></div>'
     ).join('') +
     '</div>' +
     '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
@@ -13265,8 +13304,9 @@ function openFragBoxPickWho(n, back) {
       '개를 받습니다. 어느 작성위원 몫으로 받겠습니까?</div>' +
     '<div class="grid">' +
     Object.keys(SINNERS).map(w =>
-      '<div class="slot" data-who="' + w + '"><div class="nm">' + SINNERS[w].name + '</div>' +
-        '<div class="sub">지금 ' + fragCount(w) + '개</div></div>'
+      '<div class="slot hasic" data-who="' + w + '">' + iconHTML("인격 파편 - " + SINNERS[w].name) +
+        '<div><div class="nm">' + SINNERS[w].name + '</div>' +
+        '<div class="sub">지금 ' + fragCount(w) + '개</div></div></div>'
     ).join('') +
     '</div>' +
     '<div class="modalfoot"><button id="bxback" class="ghost">되돌아가기</button></div>';
