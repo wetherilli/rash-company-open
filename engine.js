@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.14.0";
+const VERSION = "2.14.1";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1369,8 +1369,9 @@ function newState() {
 
 /* ── 패치 노트 ────────────────────────────────────────────────
  *  내용은 data/patch.js 의 PATCH_NOTES 에 적습니다.
- *  「다음부터 표시하지 않음」을 누르면 그 판에 한해 유리창의 손잡이가 사라지고,
- *  판이 새로 올라가면 다시 나타납니다.
+ *  [설정] → [패치 노트] 로 엽니다(사용자 지침 2026-10-16 — 전에는 유리창 손잡이였습니다).
+ *  이 판의 노트를 아직 안 열었으면 설정의 그 칸에 «새 판» 이 붙고, 한 번 열면 떨어집니다
+ *  (PATCH_SEEN_KEY 에 판 번호. 예전 «다음부터 표시하지 않음» 손잡이가 쓰던 열쇠를 그대로 씁니다).
  */
 const PATCH_SEEN_KEY = "rash_company_patch_seen";
 /* 판이 쌓일수록 목록이 계속 길어지므로, 최근 것만 바로 보여 주고
@@ -1407,6 +1408,7 @@ function patchEntryHtml(p, i, 새것) {
 
 function openPatch(back) {
   $modal.classList.add("on");
+  patchHide();             // 열어 봤으니 설정 칸의 «새 판» 을 뗍니다
   const list = patchList();
   const news = list.filter(patchIsNew);
   /* 최근 것(새로 나온 판 포함)은 바로 보여 주고, 그보다 오래된 것은
@@ -1440,7 +1442,6 @@ function openPatch(back) {
   h += '<div class="modalfoot">' +
          '<button id="ptclose">닫기</button>' +
          '<button id="ptall" class="ghost">모두 펼치기</button>' +
-         '<button id="pthide" class="ghost">다음부터 표시하지 않음</button>' +
        '</div>';
   $sheet.innerHTML = h;
 
@@ -1466,11 +1467,6 @@ function openPatch(back) {
 
   const doClose = () => { closeModal(); if (back) back(); };
   document.getElementById("ptclose").onclick = doClose;
-  document.getElementById("pthide").onclick = () => {
-    patchHide();
-    closeModal();
-    if (back) back();
-  };
 }
 
 /* 판이 올라간 것을 한 번 알리고, 보관함에 새 판 도장을 찍는다.
@@ -2537,7 +2533,7 @@ function eventGiveApply(g) {
   return got.join("　·　");
 }
 
-/* 동기화가 열리는 장 — 유리창의 [강화] 손잡이(openUpgrade)와 장 종료 알림이 이것을 함께 봅니다.
+/* 동기화가 열리는 장 — 편성 맨 위의 [동기화] 칸(openParty)과 장 종료 알림이 이것을 함께 봅니다.
  * 이 장을 마치기 전에는 손잡이 자체가 유리창에 나오지 않습니다. */
 const SYNC_UNLOCK_CH = "ch3";
 function syncUnlocked() { return !!(S && S.cleared && S.cleared[SYNC_UNLOCK_CH]); }
@@ -4125,7 +4121,7 @@ const WALLET_INFO = {
   money: () => ({ name: CURRENCY + " " + S.money,
                   desc: "상점에서 인격과 보조 교육위원을 배정할 때 씁니다. 장을 처음 마칠 때, 거울을 처음 완주할 때, 매일 출석으로 받습니다." }),
   codex: () => ({ name: "황금교본 " + S.codex,
-                  desc: "상점에서 E.G.O 기프트를 뽑고, [강화] 에서 기프트를 올릴 때 씁니다. 본편 장을 처음 마칠 때와 거울 던전 · 주간 보상으로 받습니다." })
+                  desc: "상점에서 E.G.O 기프트를 뽑고, 보관함에서 기프트를 강화 · 합성할 때 씁니다. 본편 장을 처음 마칠 때와 거울 던전 · 주간 보상으로 받습니다." })
 };
 
 /* 딱지(기프트 줄) · 재화(머리줄)를 누르면 이름 · 설명을 그 아래에 작은 창으로.
@@ -6834,7 +6830,7 @@ function chapterEnd() {
   if (first && c.id === SYNC_UNLOCK_CH) {
     divider();
     sayBold("'동기화' 기능이 해금되었습니다!", "good");
-    say("유리창의 [강화] → [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
+    say("[편성] 맨 위의 [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
   }
   /* 기프트 강화 단계가 열리는 장(GIFT_UP_RULE.tiers)을 처음 마쳤을 때 — 같은 모양으로. */
   if (first && typeof GIFT_UP_RULE !== "undefined") {
@@ -6843,8 +6839,8 @@ function chapterEnd() {
       divider();
       sayBold("'E.G.O 기프트 강화' " + (r.lv === 1 ? "기능이 해금되었습니다!" : "— " + "+".repeat(r.lv) + " 단계가 열렸습니다!"), "good");
       say(r.lv === 1
-            ? "유리창의 [강화] → [E.G.O 기프트 강화] 에서 황금교본으로 지닌 기프트를 + 로 올릴 수 있습니다. 올려도 발동 조건은 그대로입니다."
-            : "이제 [강화] → [E.G.O 기프트 강화] 에서 기프트를 " + "+".repeat(r.lv) + " 까지 올릴 수 있습니다. 드는 황금교본은 성급이 높을수록, 단계가 오를수록 많습니다.",
+            ? "[보관함] 의 E.G.O 기프트 칸 아래 [E.G.O 기프트 강화] 에서 황금교본으로 지닌 기프트를 + 로 올릴 수 있습니다. 올려도 발동 조건은 그대로입니다."
+            : "이제 [보관함] → [E.G.O 기프트 강화] 에서 기프트를 " + "+".repeat(r.lv) + " 까지 올릴 수 있습니다. 드는 황금교본은 성급이 높을수록, 단계가 오를수록 많습니다.",
           "sys");
     }
   }
@@ -6853,7 +6849,7 @@ function chapterEnd() {
   if (first && typeof GIFT_FUSE_RULE !== "undefined" && GIFT_FUSE_RULE.needCleared === c.id) {
     divider();
     sayBold("'E.G.O 기프트 합성' 기능이 해금되었습니다!", "good");
-    say("유리창의 [강화] → [E.G.O 기프트 합성] 에서 지닌 기프트 여럿과 황금교본을 들여 하나로 합치면 ★★★★ 기프트가 됩니다. " +
+    say("[보관함] 의 E.G.O 기프트 칸 아래 [E.G.O 기프트 합성] 에서 지닌 기프트 여럿과 황금교본을 들여 하나로 합치면 ★★★★ 기프트가 됩니다. " +
         "★★★★ 는 상점 뽑기에는 나오지 않습니다 — 무엇이 무엇으로 되는지는 그 화면에 적혀 있습니다. 재료로 든 기프트는 사라지니 합성 전에 한 번 묻습니다.", "sys");
   }
 
@@ -7033,7 +7029,7 @@ function openParty(done) {
       '<div class="slot' + (open ? '' : ' none') + '"' + (open ? ' id="' + id + '"' : '') + '>' +
         '<div class="' + (open ? 'nm' : 'lock') + '">' + name + '</div>' +
         '<div class="sub">' + (open ? sub : lock) + '</div></div>';
-    h += '<div class="grid partytools">' +
+    h += '<div class="grid partytools" data-tut="party-tools">' +
            tool("pids",  "인격 장착", "작성위원마다 낄 인격을 고릅니다.", true) +
            tool("psync", "동기화",   "인격 파편으로 작성위원의 동기화 단계를 올립니다.", syncUnlocked(), syncLockText()) +
            tool("psave", "편성 저장", "지금 편성을 세 칸 가운데 하나에 담아 둡니다.", true) +
@@ -7750,7 +7746,7 @@ function openNote(back, focus) {
         closeModal(); render();
         if (back) back();
         /* 그 안내가 사는 화면을 먼저 엽니다(TUTOR_SCREENS) — 그래야 화살표가 갈 곳이
-         * 있습니다. 아직 안 열린 화면(3장 전의 [강화] 등)이면 유리창 위에 그냥 띄웁니다.
+         * 있습니다. 아직 안 열린 화면(3장 전의 [동기화] 등)이면 유리창 위에 그냥 띄웁니다.
          * 화면을 다 그린 뒤에 덮습니다. */
         const opener = TUTOR_SCREENS[id];
         if (opener) opener();
@@ -12560,7 +12556,7 @@ function openSync(back) {
 
     /* 아래에 인격 파편 상자 줄 — 파편이 모자랄 때 여기서 바로 열어 채웁니다 (사용자 지침 2026-10-16).
      * 보관함의 그 줄과 같은 꼴이고, 다 쓰면 이 동기화 창으로 돌아옵니다 */
-    h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">인격 파편 상자</div>' +
+    h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700" data-tut="sync-box">인격 파편 상자</div>' +
          '<div class="hint">' + FRAGBOX_RULE.desc + '</div>';
     FRAGBOX_KINDS.forEach(k => {
       const cnt = fragBoxCount(k.key);
@@ -12612,41 +12608,8 @@ function openSync(back) {
   tutorOnce("sync");    /* 동기화에 처음 들어왔을 때 한 번 */
 }
 
-/* ── 강화 ────────────────────────────────────────────────────
- *  「올리는 것」 들을 한데 모은 갈래 화면입니다(사용자 지침 2026-09-17) —
- *  동기화(작성위원 · 인격 파편)와 E.G.O 기프트 강화(황금교본). 앞으로 또
- *  무엇을 묶게 되면 아래 rows 에 줄 하나를 더 얹으면 됩니다.
- *  각 줄은 열리기 전이면 흐리게 서서 «몇 장을 마치면» 을 말합니다. */
-function upgradeUnlocked() { return syncUnlocked() || giftUpUnlocked(); }
-function openUpgrade(back) {
-  $modal.classList.add("on");
-  const chNo = id => { const c = CHAPTERS.find(x => x.id === id); return c ? c.no : id; };
-  const rows = [
-    { tut: "up-sync", name: "동기화", sub: "인격 파편으로 작성위원의 동기화 단계를 올립니다.",
-      open: syncUnlocked(), lock: chNo(SYNC_UNLOCK_CH) + "을 마치면 열립니다.",
-      fn: () => openSync(() => openUpgrade(back)) },
-    { tut: "up-gift", name: "E.G.O 기프트 강화", sub: "황금교본으로 지닌 기프트를 + · ++ 로 올립니다.",
-      open: giftUpUnlocked(), lock: (nextGiftUpChapter() || "?") + "을 마치면 열립니다.",
-      fn: () => openGiftUp(() => openUpgrade(back)) },
-    { tut: "up-fuse", name: "E.G.O 기프트 합성", sub: "기프트 여럿을 하나로 합쳐 ★★★★ 를 만듭니다.",
-      open: giftFuseUnlocked(), lock: (giftFuseChapter() || "?") + "을 마치면 열립니다.",
-      fn: () => openGiftFuse(() => openUpgrade(back)) }
-  ];
-  let h = '<h2>강 화</h2>' +
-          '<div class="hint" data-tut="up-what">가진 것을 더 세게 만드는 자리들입니다.</div>';
-  rows.forEach((r, i) => {
-    h += '<div class="syncrow" data-tut="' + r.tut + '">' +
-           (r.open ? '<button data-up="' + i + '">열기</button>' : '<button disabled>잠김</button>') +
-           '<div class="body"><div class="' + (r.open ? 'nm' : 'lock') + '">' + r.name + '</div>' +
-             '<div class="sub">' + (r.open ? r.sub : r.lock) + '</div></div>' +
-         '</div>';
-  });
-  h += '<div class="modalfoot"><button id="upclose">닫기</button></div>';
-  $sheet.innerHTML = h;
-  $sheet.querySelectorAll("[data-up]").forEach(el => { el.onclick = () => rows[+el.dataset.up].fn(); });
-  document.getElementById("upclose").onclick = () => { closeModal(); render(); if (back) back(); };
-  tutorOnce("upgrade");    /* 강화에 처음 들어왔을 때 한 번 */
-}
+/* (유리창의 [강화] 창 openUpgrade 는 v2.14.0 에서 쪼개 없앴습니다 — 동기화는 편성 맨 위,
+ *  기프트 강화 · 합성은 보관함의 기프트 칸 아래(giftWorkHTML). 튜토리얼 「강화」 도 함께 뺐습니다.) */
 
 /* ── E.G.O 기프트 강화 화면 ─────────────────────────────────
  *  지닌 기프트를 성급순으로 늘어놓고, 다음 단계와 드는 황금교본을 보여 준다.
@@ -13276,6 +13239,8 @@ function openSettings(back) {
               slot("bg", "유리창 배경", "마친 장의 배경으로 갈아 끼웁니다 — 지금 「" +
                    (bgIt ? bgIt.name : "작성위원 단체 그림") + "」.") +
               slot("font", "화면 글꼴", "기본 글꼴 · 대사 글꼴 · 대사 크기를 고릅니다. 누르는 대로 곧바로 저장됩니다.") +
+              slot("patch", "패치 노트" + (patchHidden() ? "" : ' <span class="pnew">새 판</span>'),
+                   "v" + VERSION + (VERSION_NAME ? " «" + VERSION_NAME + "»" : "") + " — 판마다 무엇이 바뀌었는지 봅니다.") +
               slot("rec", "기록 · 내보내기", "보관함을 파일로 받아 두거나, 받아 둔 파일을 다시 읽습니다. 콘첸트라트 연결도 여기서 합니다.") +
               slot("app", appEnv().standalone ? "보관함 옮기기" : "앱으로 설치 · 보관함 옮기기",
                    appEnv().standalone ? "다른 브라우저·기기에서 복사해 온 보관함을 이 앱에 옮겨 담습니다."
@@ -13291,6 +13256,7 @@ function openSettings(back) {
     go("bg").onclick    = () => openGlassBgPick(here);
     go("font").onclick  = () => openFontPick(here);
     go("rec").onclick   = () => openRecord(here);
+    go("patch").onclick = () => openPatch(here);
     go("app").onclick   = () => openInstall(here);
     go("reset").onclick = () => openReset(here);
     document.getElementById("setclose").onclick = () => { closeModal(); render(); if (back) back(); };
@@ -13417,14 +13383,14 @@ function openGlassBgPick(back, draft0) {
  *  (편성에도 붙였다가 사용자 지침으로 뺐습니다). 아직 안 열렸으면 잠긴 손잡이와 «몇 장을 마치면» 을 적습니다.
  *  back — 강화 · 합성 창을 닫고 돌아올 자리. */
 function giftWorkHTML() {
-  /* 옛 [강화] 창(openUpgrade)의 줄과 같은 꼴 — 손잡이 · 이름 · 한 줄을 채우는 설명 (사용자 지침 2026-10-16) */
+  /* 옛 [강화] 창의 줄과 같은 꼴 — 손잡이 · 이름 · 한 줄을 채우는 설명 (사용자 지침 2026-10-16) */
   const rows = [
     { key: "up",   name: "E.G.O 기프트 강화", sub: "황금교본으로 지닌 기프트를 + · ++ 로 올립니다.",
       open: giftUpUnlocked(),   lock: (nextGiftUpChapter() || "?") + "을 마치면 열립니다." },
     { key: "fuse", name: "E.G.O 기프트 합성", sub: "기프트 여럿을 하나로 합쳐 ★★★★ 를 만듭니다.",
       open: giftFuseUnlocked(), lock: (giftFuseChapter() || "?") + "을 마치면 열립니다." }
   ];
-  return '<div class="giftwork">' + rows.map(x =>
+  return '<div class="giftwork" data-tut="vault-giftwork">' + rows.map(x =>
     '<div class="syncrow">' +
       (x.open ? '<button data-gw="' + x.key + '">열기</button>' : '<button disabled>잠김</button>') +
       '<div class="body"><div class="' + (x.open ? 'nm' : 'lock') + '">' + x.name + '</div>' +
@@ -13560,7 +13526,7 @@ function openVault(back) {
   cut("mod");
 
   /* E.G.O 기프트 — 지닌 것만, 높은 성급부터. 지니고 내려놓는 것은 편성의 기프트 고르기에서 하고,
-   * 올리고 합치는 것은 머리의 [기프트 강화] · [기프트 합성] 손잡이로 엽니다(giftWorkHTML — 유리창의 [강화] 를 쪼갠 것). */
+   * 올리고 합치는 것은 목록 아래 [E.G.O 기프트 강화] · [합성] 줄로 엽니다(giftWorkHTML — 유리창의 [강화] 를 쪼갠 것). */
   const vGifts = (typeof GIFTS !== "undefined" ? GIFTS : [])
     .filter(g => S.giftsOwned && S.giftsOwned[giftId(g)])
     .slice().sort((a, b) => b.star - a.star);
@@ -14099,9 +14065,7 @@ function glass() {
     { label: "보관함", fn: () => openVault(() => glass()) },
     /* 유리창 배경 · 화면 글꼴 — openSettings */
     { label: "설정", cls: "ghost", fn: () => openSettings(() => glass()) },
-    /* 「다음부터 표시하지 않음」을 누른 판에서는 이 손잡이가 사라집니다 */
-    patchHidden() ? null
-                  : { label: "패치 노트", cls: "ghost", fn: () => openPatch(() => glass()) }
+    /* [패치 노트] 는 [설정] 안으로 옮겼습니다 (사용자 지침 2026-10-16) */
   ]);
   showEnkBar(true);
   /* 처음 오신 분께 — 손잡이를 하나씩 짚어 드립니다. 한 번만 나옵니다. */
