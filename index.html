@@ -647,6 +647,12 @@
     cursor:pointer;color:var(--muted);font-size:12.5px;padding:6px 2px;user-select:none;
   }
   .patchold > summary:hover{color:var(--text-2);}
+  /* 보관함의 기프트 목록 — 길어서 접어 두고, 기본은 닫힌 채입니다 (engine.js openVault) */
+  .vfold > summary{
+    cursor:pointer;color:var(--muted);font-size:12.5px;padding:6px 2px;user-select:none;
+  }
+  .vfold > summary:hover{color:var(--text-2);}
+  .vfold[open] > summary{margin-bottom:6px;}
   /* 창 오른쪽 위에 늘 떠 있는 닫기 — 패치 노트가 길어져도 스크롤 없이 바로 닫습니다.
    * #modal 의 형제라 위치가 뷰포트 기준으로 고정됩니다(#app 의 흔들림과 무관). */
   .modaltopclose{
@@ -1308,24 +1314,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.12.0"></script>
-<script src="data/vault.js?v=2.12.0"></script>
-<script src="data/characters.js?v=2.12.0"></script>
-<script src="data/skills.js?v=2.12.0"></script>
-<script src="data/allies.js?v=2.12.0"></script>
-<script src="data/gifts.js?v=2.12.0"></script>
-<script src="data/pickup.js?v=2.12.0"></script>
-<script src="data/achievements.js?v=2.12.0"></script>
-<script src="data/mail.js?v=2.12.0"></script>
-<script src="data/notice.js?v=2.12.0"></script>
-<script src="data/patch.js?v=2.12.0"></script>
-<script src="data/event.js?v=2.12.0"></script>
-<script src="data/reward.js?v=2.12.0"></script>
-<script src="data/tutorial.js?v=2.12.0"></script>
-<script src="data/foes.js?v=2.12.0"></script>
-<script src="data/story.js?v=2.12.0"></script>
-<script src="data/mirrorpacks.js?v=2.12.0"></script>
-<script src="engine.js?v=2.12.0"></script>
+<script src="data/access.js?v=2.12.1"></script>
+<script src="data/vault.js?v=2.12.1"></script>
+<script src="data/characters.js?v=2.12.1"></script>
+<script src="data/skills.js?v=2.12.1"></script>
+<script src="data/allies.js?v=2.12.1"></script>
+<script src="data/gifts.js?v=2.12.1"></script>
+<script src="data/pickup.js?v=2.12.1"></script>
+<script src="data/achievements.js?v=2.12.1"></script>
+<script src="data/mail.js?v=2.12.1"></script>
+<script src="data/notice.js?v=2.12.1"></script>
+<script src="data/patch.js?v=2.12.1"></script>
+<script src="data/event.js?v=2.12.1"></script>
+<script src="data/reward.js?v=2.12.1"></script>
+<script src="data/tutorial.js?v=2.12.1"></script>
+<script src="data/foes.js?v=2.12.1"></script>
+<script src="data/story.js?v=2.12.1"></script>
+<script src="data/mirrorpacks.js?v=2.12.1"></script>
+<script src="engine.js?v=2.12.1"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

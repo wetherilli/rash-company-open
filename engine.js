@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.12.0";
+const VERSION = "2.12.1";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -13159,6 +13159,9 @@ function openSettings(back, draft0) {
   draw();
 }
 
+/* 보관함의 기프트 목록을 펼쳐 두었는가 — 보관함을 닫으면 다시 접힙니다 */
+let VAULT_GIFT_OPEN = false;
+
 function openVault(back) {
   $modal.classList.add("on");
   let h = '<h2>보 관 함</h2>' +
@@ -13270,6 +13273,10 @@ function openVault(back) {
        '　·　지니고 내려놓는 것은 편성 화면에서, 올리는 것은 [강화] 에서 합니다.</div>';
   if (!vGifts.length) h += '<div class="hint">아직 가진 기프트가 없습니다 — 상점에서 황금교본으로 뽑습니다.</div>';
   else {
+    /* 목록이 길어 <details> 로 접어 둡니다 — 기본은 닫힌 채(사용자 지침 2026-10-16).
+     * 캡슐을 쓰는 등 보관함을 다시 그릴 때는 펼쳐 둔 것을 이어 갑니다. */
+    h += '<details class="vfold" id="vgiftfold"' + (VAULT_GIFT_OPEN ? ' open' : '') + '>' +
+         '<summary>기프트 목록 (' + vGifts.length + '개)</summary>';
     h += '<div class="grid">';
     vGifts.forEach(g0 => {
       const g  = giftView(g0);
@@ -13281,7 +13288,7 @@ function openVault(back) {
              '<div class="sub">' + g.desc + '</div></div>' +
            '</div>';
     });
-    h += '</div>';
+    h += '</div></details>';
   }
 
   /* 화면 글꼴 칸은 여기 없습니다 — [설정] 으로 옮겼습니다(2026-09-12 사용자 지침).
@@ -13303,7 +13310,9 @@ function openVault(back) {
     openVault(back);   // 개수와 눈금이 바뀌었으니 다시 그립니다
   };
 
-  document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  const vgf = document.getElementById("vgiftfold");
+  if (vgf) vgf.ontoggle = () => { VAULT_GIFT_OPEN = vgf.open; };
+  document.getElementById("vclose").onclick = () => { VAULT_GIFT_OPEN = false; closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
   document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
   $sheet.querySelectorAll("[data-box]").forEach(el => {
