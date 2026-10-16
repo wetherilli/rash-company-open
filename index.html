@@ -550,6 +550,18 @@
   }
   #chipinfo .nm{color:var(--text);font-weight:700;margin-bottom:3px;}
   #chipinfo .sub{color:var(--muted);line-height:1.6;}
+  /* 머리줄 재화 — 아이콘과 양만, 누르면 #chipinfo (engine.js renderHeader · WALLET_INFO) */
+  #wallet .cur{cursor:pointer;display:inline-flex;align-items:center;margin-left:12px;}
+  #wallet .cur:hover b{color:var(--gold-hi);}
+  /* 유리창 머리줄의 [우편함] · [보상] 아이콘 손잡이 — 받을 것이 있으면 금빛 테두리 + 개수 딱지 */
+  #wallet .hdrbtns{display:inline-flex;gap:6px;margin-left:12px;vertical-align:middle;}
+  #wallet .hdrbtn{position:relative;padding:3px 5px;line-height:0;border-radius:6px;}
+  #wallet .hdrbtn .icmini{width:22px;height:22px;margin:0;}
+  #wallet .hdrbtn.on{border-color:var(--gold);}
+  #wallet .hdrbtn i{
+    position:absolute;top:-6px;right:-6px;min-width:15px;height:15px;padding:0 3px;box-sizing:border-box;
+    border-radius:8px;background:var(--gold);color:#1a1408;font-style:normal;font-size:10px;font-weight:700;line-height:15px;text-align:center;
+  }
   .rowlabel{font-size:11.5px;font-weight:700;letter-spacing:.04em;}
   .rowbar{color:var(--muted);font-size:12px;margin:0 2px;}
   #gifts .rowlabel{color:#7fc0a0;}
@@ -561,7 +573,6 @@
   #synergy > *{flex:0 0 auto;white-space:nowrap;}
   #synergy::-webkit-scrollbar{height:4px;}
   #synergy::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px;}
-  #synergy > .none{flex:1 1 auto;white-space:normal;}   /* «시너지 없음» 안내 글만은 줄을 넘겨도 됩니다 */
   #synergy .none{color:var(--off);font-size:11.5px;letter-spacing:.05em;}
   .syn{
     border:1px solid var(--gold-line);background:var(--gold-bg);color:var(--gold);
@@ -596,6 +607,7 @@
   .packgate .pgperk{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding-top:9px;}
   .packgate .pgname{color:var(--text-2);font-weight:700;font-size:12.5px;margin-bottom:2px;}
   .packgate .pgperk .sub{font-size:12px;line-height:1.45;}
+  .packgate .pgic{display:none;}             /* 좁은 화면에서만 — 아래 @media */
   #log .crit{color:#f0c46a;font-weight:700;}
   #log .heavy{color:#f05a50;font-weight:700;font-size:14.5px;}
   body.battling #log .heavy{color:var(--b-heavy);}
@@ -707,6 +719,12 @@
   }
   .vfold > summary:hover{color:var(--text-2);}
   .vfold[open] > summary{margin-bottom:6px;}
+  /* [기프트 강화] · [기프트 합성] 손잡이 줄 (engine.js giftWorkHTML) — 보관함 · 편성의 기프트 머리 */
+  .giftwork{margin:6px 0 4px;}
+  /* 편성 창 맨 위 — [인격 장착] · [동기화] · [편성 저장] 한 줄 (engine.js openParty) */
+  .grid.partytools{grid-template-columns:repeat(3,1fr);margin:4px 0 2px;}
+  .grid.partytools .slot{cursor:pointer;}
+  .grid.partytools .slot.none{cursor:default;}
   /* 창 오른쪽 위에 늘 떠 있는 닫기 — 패치 노트가 길어져도 스크롤 없이 바로 닫습니다.
    * #modal 의 형제라 위치가 뷰포트 기준으로 고정됩니다(#app 의 흔들림과 무관). */
   .modaltopclose{
@@ -1078,6 +1096,13 @@
   }
 
   .modalfoot{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  /* 맨 위로 올린 손잡이 줄 (engine.js liftSheetFoot) — 제목은 왼쪽, 손잡이는 오른쪽. 스크롤해도 위에 붙습니다 */
+  .sheettop{
+    position:sticky;top:-26px;z-index:6;   /* #modal 의 위 여백(26px)까지 덮어 위로 비치는 글이 없게 */display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+    margin:-18px -20px 10px;padding:12px 20px 10px;background:var(--sheet);border-bottom:1px solid var(--line);
+  }
+  .sheettop > h2{margin:0;flex:1 1 auto;}
+  .sheettop > .modalfoot.top{margin:0 0 0 auto;justify-content:flex-end;}
   .dl{
     display:inline-block;background:var(--panel-2);border:1px solid #7a2b28;color:#e6b0ac;
     font-family:inherit;font-size:13.5px;padding:7px 15px;text-decoration:none;cursor:pointer;
@@ -1259,6 +1284,18 @@
     .grid{grid-template-columns:1fr;}
     /* 셋을 나란히 세우는 규칙은 여기서 풀립니다 — 좁은 화면에서는 한 줄에 하나씩 */
     .grid.three{grid-template-columns:1fr;}
+    /* 거울 갈림길 세 칸 — 좁은 화면에서도 나란히, 아이콘 · 팩 이름만 가운데로 (engine.js drawPackGate).
+     * #log 안의 갈림길에만 — 거울 결과 카드(.mrcard)도 같은 꼴을 쓰지만 그쪽은 특전 글을 보여야 합니다 */
+    #log .packgate .grid.three{grid-template-columns:repeat(3,1fr);gap:6px;}
+    .grid.partytools{grid-template-columns:repeat(3,1fr);gap:6px;}   /* 편성 맨 위 세 칸 — 좁아도 나란히 */
+    .grid.partytools .slot{padding:8px 8px;}
+    .grid.partytools .sub{font-size:11px;line-height:1.4;}
+    #log .packgate .pgcard{padding:9px 5px 10px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+    #log .packgate .pgic{display:block;margin-bottom:5px;}
+    #log .packgate .pgpath,#log .packgate .pgperk{display:none;}
+    #log .packgate .pgcard > .sub{display:none;}     /* «특전 없음» */
+    #log .packgate .pgcard .nm{font-size:12.5px;margin:0;line-height:1.35;word-break:keep-all;}
+    #log .packgate .pgcard.heard{border-color:var(--gold);}   /* 「들어 봄」 글이 감춰지니 테두리로 */
     .grid.rwgrid{grid-template-columns:1fr;}
     /* 배정 광고 띠도 화면에 맞춰 낮춥니다 */
     .pkline{height:92px;font-size:16px;letter-spacing:.06em;padding:0 10px;}
@@ -1390,24 +1427,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.13.1"></script>
-<script src="data/vault.js?v=2.13.1"></script>
-<script src="data/characters.js?v=2.13.1"></script>
-<script src="data/skills.js?v=2.13.1"></script>
-<script src="data/allies.js?v=2.13.1"></script>
-<script src="data/gifts.js?v=2.13.1"></script>
-<script src="data/pickup.js?v=2.13.1"></script>
-<script src="data/achievements.js?v=2.13.1"></script>
-<script src="data/mail.js?v=2.13.1"></script>
-<script src="data/notice.js?v=2.13.1"></script>
-<script src="data/patch.js?v=2.13.1"></script>
-<script src="data/event.js?v=2.13.1"></script>
-<script src="data/reward.js?v=2.13.1"></script>
-<script src="data/tutorial.js?v=2.13.1"></script>
-<script src="data/foes.js?v=2.13.1"></script>
-<script src="data/story.js?v=2.13.1"></script>
-<script src="data/mirrorpacks.js?v=2.13.1"></script>
-<script src="engine.js?v=2.13.1"></script>
+<script src="data/access.js?v=2.14.0"></script>
+<script src="data/vault.js?v=2.14.0"></script>
+<script src="data/characters.js?v=2.14.0"></script>
+<script src="data/skills.js?v=2.14.0"></script>
+<script src="data/allies.js?v=2.14.0"></script>
+<script src="data/gifts.js?v=2.14.0"></script>
+<script src="data/pickup.js?v=2.14.0"></script>
+<script src="data/achievements.js?v=2.14.0"></script>
+<script src="data/mail.js?v=2.14.0"></script>
+<script src="data/notice.js?v=2.14.0"></script>
+<script src="data/patch.js?v=2.14.0"></script>
+<script src="data/event.js?v=2.14.0"></script>
+<script src="data/reward.js?v=2.14.0"></script>
+<script src="data/tutorial.js?v=2.14.0"></script>
+<script src="data/foes.js?v=2.14.0"></script>
+<script src="data/story.js?v=2.14.0"></script>
+<script src="data/mirrorpacks.js?v=2.14.0"></script>
+<script src="engine.js?v=2.14.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

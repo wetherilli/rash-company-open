@@ -146,7 +146,7 @@ const CREW = {
   driver: {
     name: "이정빈", codename: "하축론", role: "운전수",
     portrait: "assets/portrait/ha_chukron.png",
-    desc: "TODO"
+    desc: "메카고질라의 운전수. 스테고우로스의 E.G.O를 발현했다."
   },
   bus: {
     name: "메카고질라", codename: "메피스토펠레스", role: "변신 수송차량",

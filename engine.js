@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.13.1";
+const VERSION = "2.14.0";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -637,7 +637,7 @@ function vaultExportText() {
     " *    덮어쓴 뒤 index.html 을 새로고침하면 그 지점부터 이어집니다.\n" +
     " *\n" +
     " *    단, 브라우저에 저장된 것이 먼저입니다. 이 파일로 되돌리려면\n" +
-    " *    보관함 화면에서 [보관함 비우기] 를 한 번 하고 새로고침하십시오.\n" +
+    " *    유리창의 [설정] → [보관함 비우기] 를 한 번 하고 새로고침하십시오.\n" +
     " *    (기록 화면의 [가져오기] 를 쓰면 그 손질 없이 바로 옮겨 담습니다)\n" +
     " *\n" +
     " *  ■ 여기 담기는 것\n" +
@@ -1415,7 +1415,7 @@ function openPatch(back) {
   const recent = list.slice(0, cut);
   const older  = list.slice(cut);
 
-  let h = '<button id="pttopclose" class="modaltopclose" title="닫기">×</button>' +
+  let h = '' +
           '<h2>패 치 노 트</h2>' +
           '<div class="hint">지금 판은 <b>v' + VERSION + ' «' + VERSION_NAME + '»</b> 입니다.' +
           (LAST_VER
@@ -1466,7 +1466,6 @@ function openPatch(back) {
 
   const doClose = () => { closeModal(); if (back) back(); };
   document.getElementById("ptclose").onclick = doClose;
-  document.getElementById("pttopclose").onclick = doClose;
   document.getElementById("pthide").onclick = () => {
     patchHide();
     closeModal();
@@ -1539,7 +1538,7 @@ function storageNotice() {
     say("이 환경은 브라우저 저장이 막혀 있습니다.", "place");
     say("창을 닫으면 지금까지 한 것이 모두 사라집니다. " +
         "파일을 곧장 열지 마시고 http 로 시작하는 주소로 들어오시거나, " +
-        "[보관함 내보내기] 로 vault.js 를 받아 두십시오.", "bad");
+        "[설정] → [기록 · 내보내기] 로 vault.js 를 받아 두십시오.", "bad");
     divider();
     return;
   }
@@ -1550,7 +1549,7 @@ function storageNotice() {
   say("사파리로 열고 계십니다 — 한 가지만 일러 둡니다.", "place");
   say("사파리는 7일 넘게 이쪽에 들르지 않으면 저장해 둔 것을 통째로 지웁니다. " +
       "게임이 잘못된 것이 아니라 브라우저가 하는 일이라, 이쪽에서 막을 수가 없습니다.", "sys");
-  say("오래 쉬실 것 같으면 [보관함 내보내기] 로 vault.js 를 받아 두십시오. " +
+  say("오래 쉬실 것 같으면 [설정] → [기록 · 내보내기] 로 vault.js 를 받아 두십시오. " +
       "앱으로 깔아 두고 그쪽으로 여시면 지워지지 않습니다 — [설정] → [앱으로 설치 · 보관함 옮기기]. " +
       "아이폰은 깔기 «전에» 그 화면에서 [보관함 복사] 를 꼭 해 두십시오.", "good");
   divider();
@@ -2052,7 +2051,10 @@ function drawPackGate(shown, heardId, picking, onPick) {
   shown.forEach((p, i) => {
     if (!p) return;
     const k = p.perk;
-    h += '<div class="slot pgcard" data-pg="' + i + '">' +
+    /* 좁은 화면에서는 세 칸을 나란히 두고 아이콘 · 팩 이름만 가운데로 (사용자 지침 2026-10-16) —
+     * .pgic 은 그 자리에서만 보이는 큰 아이콘이고, 길 이름 · 특전 글은 감춥니다(index.html) */
+    h += '<div class="slot pgcard' + (heardId === p.id ? ' heard' : '') + '" data-pg="' + i + '"' + (k ? ' title="' + (k.name + " — " + k.desc).replace(/"/g, "&quot;") + '"' : '') + '>' +
+           (k ? '<div class="pgic">' + iconHTML(k.name) + '</div>' : '') +
            '<div class="pgpath">' + PACK_PATH_NAME[i] + (heardId === p.id ? '　· 들어 봄' : '') + '</div>' +
            '<div class="nm">' + p.name + '</div>' +
            (k ? '<div class="pgperk">' + iconHTML(k.name) +
@@ -2539,6 +2541,11 @@ function eventGiveApply(g) {
  * 이 장을 마치기 전에는 손잡이 자체가 유리창에 나오지 않습니다. */
 const SYNC_UNLOCK_CH = "ch3";
 function syncUnlocked() { return !!(S && S.cleared && S.cleared[SYNC_UNLOCK_CH]); }
+/* 잠긴 [동기화] 손잡이에 붙는 말 — «3장을 마치면 열립니다» */
+function syncLockText() {
+  const c = (typeof CHAPTERS !== "undefined") && CHAPTERS.find(x => x.id === SYNC_UNLOCK_CH);
+  return (c ? c.no : SYNC_UNLOCK_CH) + "을 마치면 열립니다.";
+}
 
 const SYNC_RULE = {
   base: 100,     // 0 → 1단계에 드는 파편
@@ -3380,7 +3387,10 @@ function divider() {
   d.className = "divider";
   $log.appendChild(d);
 }
-function clearLog() { $log.innerHTML = ""; }
+/* 유리창에 서 있는가 — 머리줄의 [우편함] · [보상] 아이콘은 유리창에서만 섭니다(renderHeader).
+ * glass() 가 켜고, 다른 화면으로 넘어갈 때 부르는 clearLog() 가 끕니다. */
+let AT_GLASS = false;
+function clearLog() { $log.innerHTML = ""; AT_GLASS = false; }
 
 /* ── 무대 ─────────────────────────────────────────────────── */
 /* 그림 경로 → 실제 주소.
@@ -3795,12 +3805,25 @@ function renderHeader() {
   $chap.textContent = idle
     ? "v" + VERSION + (VERSION_NAME ? "  «" + VERSION_NAME + "»" : "")
     : (c ? (c.no + "  " + c.title + (c.subtitle ? "  ─  " + c.subtitle : "")) : "") + "   v" + VERSION;
+  /* 재화는 아이콘과 양만 — 이름 · 설명은 누르면 작은 창으로 뜹니다(WALLET_INFO · #chipinfo, 사용자 지침 2026-10-16) */
   let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") +
-              iconMini("원고료") + CURRENCY + " <b>" + S.money + "</b>";
-  if (S.codex) right += "　" + iconMini("황금교본") + "황금교본 <b>" + S.codex + "</b>";
+              '<span class="cur" data-cur="money" title="' + CURRENCY + '">' + iconMini("원고료") + "<b>" + S.money + "</b></span>";
+  if (S.codex) right += '<span class="cur" data-cur="codex" title="황금교본">' + iconMini("황금교본") + "<b>" + S.codex + "</b></span>";
+  /* 유리창에서만 — [우편함] · [보상] 을 아이콘 손잡이로 (사용자 지침 2026-10-16).
+   * 예전에는 아래 손잡이 줄에 글자로 섰습니다. 받을 것이 있으면 금빛 테두리와 개수 딱지 */
+  if (AT_GLASS && !S.battle) {
+    const hb = (key, name, n) =>
+      '<button class="hdrbtn' + (n ? ' on' : '') + '" data-hdr="' + key + '" title="' + name + (n ? ' (' + n + ')' : '') + '">' +
+        iconMini(name) + (n ? '<i>' + n + '</i>' : '') + '</button>';
+    right += '<span class="hdrbtns">' + hb("mail", MAIL_RULE.name, mailWaiting()) +
+             (rewardOn() ? hb("reward", REWARD_RULE.name, rewardWaiting()) : "") + '</span>';
+  }
   /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
   /* 관리력은 머리에 숫자로 적지 않고, 아래쪽 눈금으로 보여 줍니다 (renderManage) */
   $wallet.innerHTML = right;
+  $wallet.querySelectorAll("[data-hdr]").forEach(el => {
+    el.onclick = () => el.dataset.hdr === "mail" ? openMail(() => glass()) : openReward(() => glass());
+  });
 }
 
 /* 적이 나타났을 때만 뜨는 체력바 — 이름은 왼쪽 아래, 공·방은 오른쪽 아래.
@@ -4097,19 +4120,30 @@ function giftRowFit() {
 }
 window.addEventListener("resize", () => giftRowFit());
 
-/* 딱지를 누르면 이름 · 설명을 그 아래에 작은 창으로. 같은 딱지를 다시 누르거나 다른 곳을 누르면 닫힙니다. */
+/* 머리줄 재화 — 누르면 뜨는 이름 · 설명 */
+const WALLET_INFO = {
+  money: () => ({ name: CURRENCY + " " + S.money,
+                  desc: "상점에서 인격과 보조 교육위원을 배정할 때 씁니다. 장을 처음 마칠 때, 거울을 처음 완주할 때, 매일 출석으로 받습니다." }),
+  codex: () => ({ name: "황금교본 " + S.codex,
+                  desc: "상점에서 E.G.O 기프트를 뽑고, [강화] 에서 기프트를 올릴 때 씁니다. 본편 장을 처음 마칠 때와 거울 던전 · 주간 보상으로 받습니다." })
+};
+
+/* 딱지(기프트 줄) · 재화(머리줄)를 누르면 이름 · 설명을 그 아래에 작은 창으로.
+ * 같은 것을 다시 누르거나 다른 곳을 누르면 닫힙니다. */
 document.addEventListener("click", e => {
   const tip = document.getElementById("chipinfo");
-  const chip = e.target.closest && e.target.closest("#gifts [data-ginfo]");
+  const chip = e.target.closest && e.target.closest("#gifts [data-ginfo], #wallet [data-cur]");
   if (!chip) { if (tip) tip.remove(); return; }
-  const same = tip && tip.dataset.for === chip.dataset.ginfo;
+  const key = chip.dataset.cur ? "cur:" + chip.dataset.cur : chip.dataset.ginfo;
+  const same = tip && tip.dataset.for === key;
   if (tip) tip.remove();
   if (same) return;
-  const info = GIFT_ROW_INFO[+chip.dataset.ginfo];
+  const info = chip.dataset.cur ? (WALLET_INFO[chip.dataset.cur] && WALLET_INFO[chip.dataset.cur]())
+                                : GIFT_ROW_INFO[+chip.dataset.ginfo];
   if (!info) return;
   const el = document.createElement("div");
   el.id = "chipinfo";
-  el.dataset.for = chip.dataset.ginfo;
+  el.dataset.for = key;
   el.innerHTML = '<div class="nm">' + info.name + '</div>' + (info.desc ? '<div class="sub">' + info.desc + '</div>' : '');
   document.body.appendChild(el);
   const b = chip.getBoundingClientRect(), w = Math.min(280, window.innerWidth - 16);
@@ -4128,7 +4162,8 @@ function renderSynergy() {
   const list = activeSynergies();
   if (!list.length) {
     box.innerHTML = head +
-      '<span class="none">발동 중인 시너지 없음 — 비슷한 이름의 인격을 함께 편성해 보십시오.</span>';
+      /* 머리에 «활성화된 시너지» 가 이미 있으니 «없음» 과 짧은 귀띔만 — 좁은 화면에서도 한 줄 */
+      '<span class="none">없음 — 비슷한 이름의 인격끼리 편성</span>';
     return;
   }
   box.innerHTML = head + list.map(s => {
@@ -6881,6 +6916,47 @@ function chapterEnd() {
  * ===================================================================== */
 function closeModal() { $modal.classList.remove("on"); }
 
+/* ── 창의 손잡이 줄은 맨 위 오른쪽에 (사용자 지침 2026-10-16) ─────────
+ *  창마다 바닥에 [닫기] · [확정] · [돌아가기] 줄(.modalfoot)이 있어, 긴 창은 끝까지 내려야 나갈 수 있었습니다.
+ *  창을 짓는 코드(마흔 군데 남짓)는 그대로 두고, $sheet 가 새로 그려질 때마다 «맨 끝의 .modalfoot» 을
+ *  제목(h2)과 한 줄로 묶어 맨 위로 올립니다(.sheettop — 스크롤해도 위에 붙어 있습니다).
+ *  손잡이는 그 자리에서 옮길 뿐이라 이미 묶어 둔 onclick 은 그대로 삽니다.
+ *  바닥에 남겨야 하는 줄이 생기면 class="modalfoot keep" 으로 적습니다. */
+function liftSheetFoot() {
+  if ($sheet.querySelector(":scope > .sheettop")) return;
+  const kids = Array.prototype.slice.call($sheet.children);
+  const foot = kids.filter(e => e.classList.contains("modalfoot") && !e.classList.contains("keep")).pop();
+  if (!foot) return;
+  const h2 = kids.find(e => e.tagName === "H2");
+  const bar = document.createElement("div");
+  bar.className = "sheettop";
+  $sheet.insertBefore(bar, h2 || $sheet.firstChild);
+  if (h2) bar.appendChild(h2);
+  foot.classList.add("top");
+  bar.appendChild(foot);
+}
+new MutationObserver(liftSheetFoot).observe($sheet, { childList: true });
+
+/* ── Esc 로 창 닫기 (사용자 지침 2026-10-16) ───────────────────────
+ *  창이 떠 있을 때 Esc 를 누르면 맨 위 손잡이 줄(.sheettop)에서 «나가는» 손잡이를 대신 누릅니다.
+ *  고르는 차례 — 닫기 · 돌아가기 · 뒤로 · 그만두기 · 저장하지 않고 나가기 · 아니오 처럼 «아무것도 안 하고 나가는» 것이 먼저.
+ *  그런 것이 없고 손잡이가 하나뿐이면(편성의 [확정], 결과의 [확인] 등) 그것을 누릅니다.
+ *  둘 이상인데 나가는 것이 없으면 아무것도 누르지 않습니다 — [예, 비웁니다] 같은 것을 잘못 누르지 않도록.
+ *  빛나는 연출(flashFx)이 떠 있거나 튜토리얼이 흐르는 중이면 그쪽이 Esc 를 먼저 받습니다. */
+const ESC_EXIT = /닫기|돌아가기|되돌아가기|뒤로|그만두기|그만두겠습니다|저장하지 않고|아니오/;
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  if (!$modal.classList.contains("on") || TUT_ON || $modal.querySelector(".flashfx")) return;
+  const tip = document.getElementById("chipinfo");
+  if (tip) { tip.remove(); return; }
+  const btns = Array.prototype.slice.call($sheet.querySelectorAll(".sheettop .modalfoot button"))
+    .filter(b => !b.disabled && b.offsetParent !== null);
+  const exit = btns.find(b => ESC_EXIT.test(b.textContent)) || (btns.length === 1 ? btns[0] : null);
+  if (!exit) return;
+  e.preventDefault();
+  exit.click();
+});
+
 /* 편성 창 맨 위의 교육위원 · E.G.O 기프트 칸 — openParty 와, 전투 강제 편성 때의 openEquip 이
  * 함께 씁니다. 칸을 누르면 고르는 창이 열리도록 묶는 것은 bindLoadoutSlots 입니다. */
 function loadoutSlotsHTML() {
@@ -6890,7 +6966,8 @@ function loadoutSlotsHTML() {
   const advCap = advisorSlots();
   const advNext = nextSlotChapter("advisor");
   const advCount = Object.keys(S.advisorsOwned || {}).length;
-  h += '<div class="hint">전투를 도와줄 보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다. ' +
+  h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">보조 교육위원</div>' +
+       '<div class="hint">전투를 도와줄 보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다. ' +
        '직접 싸우지는 않고, 작성위원 전원에게 상시 효과를 겁니다.' +
        (advNext ? '　' + advNext + '을 마치면 한 명 더.' : '') + '</div>' +
        '<div class="grid" data-tut="party-advisor">';
@@ -6947,10 +7024,20 @@ function openParty(done) {
   const draw = () => {
     let h = '<h2>편 성</h2>';
 
-    /* 맨 위 — 저장해 둔 편성 */
-    h += presetBarHTML();
-
-    h += loadoutSlotsHTML();
+    /* ── 늘어놓는 차례 (사용자 지침 2026-10-16) ──────────────────────
+     *  [인격 장착] · [동기화] · [편성 저장] 한 줄 → 작성위원 → 지원 작성위원 → 보조 교육위원
+     *  → E.G.O 기프트 → 저장해 둔 편성. 바닥에는 [확정] 만. 기프트 강화 · 합성은 보관함에만 둡니다.
+     *  [동기화] 는 유리창의 [강화] 를 쪼개 여기로 옮긴 것입니다. */
+    /* 세 칸은 이름 + 한 줄 설명. 잠긴 것은 설명 자리에 «몇 장을 마치면» (사용자 지침 2026-10-16) */
+    const tool = (id, name, sub, open, lock) =>
+      '<div class="slot' + (open ? '' : ' none') + '"' + (open ? ' id="' + id + '"' : '') + '>' +
+        '<div class="' + (open ? 'nm' : 'lock') + '">' + name + '</div>' +
+        '<div class="sub">' + (open ? sub : lock) + '</div></div>';
+    h += '<div class="grid partytools">' +
+           tool("pids",  "인격 장착", "작성위원마다 낄 인격을 고릅니다.", true) +
+           tool("psync", "동기화",   "인격 파편으로 작성위원의 동기화 단계를 올립니다.", syncUnlocked(), syncLockText()) +
+           tool("psave", "편성 저장", "지금 편성을 세 칸 가운데 하나에 담아 둡니다.", true) +
+         '</div>';
 
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">작성위원</div>' +
          '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다.</div>' +
@@ -7032,10 +7119,11 @@ function openParty(done) {
       }
     }
 
+    h += loadoutSlotsHTML();
+    h += presetBarHTML();
+
     h += '<div class="modalfoot">' +
          '<button id="pdone">확정</button>' +
-         '<button id="pids" class="ghost">인격 장착</button>' +
-         '<button id="psave" class="ghost">편성 저장</button>' +
          '</div>';
     $sheet.innerHTML = h;
 
@@ -7098,6 +7186,9 @@ function openParty(done) {
     };
     document.getElementById("pids").onclick = () => openEquip(() => draw());
     bindLoadoutSlots(() => draw());
+    /* 동기화 창은 닫을 때 창을 내리고 back 을 부릅니다 — 편성 창을 도로 띄웁니다 */
+    const psync = document.getElementById("psync");
+    if (psync) psync.onclick = () => openSync(() => { $modal.classList.add("on"); draw(); });
 
 
     document.getElementById("psave").onclick = () => openPresetSave(() => draw());
@@ -7299,10 +7390,9 @@ const TUTOR_SCREENS = {
   shop:     () => openShop(() => glass()),
   vault:    () => openVault(() => glass()),
   party:    () => openParty(() => glass()),
-  upgrade:  () => { if (upgradeUnlocked()) openUpgrade(() => glass()); },
-  giftup:   () => { if (giftUpUnlocked()) openGiftUp(() => openUpgrade(() => glass())); },
-  giftfuse: () => { if (giftFuseUnlocked()) openGiftFuse(() => openUpgrade(() => glass())); },
-  sync:     () => { if (syncUnlocked()) openSync(() => openUpgrade(() => glass())); }
+  giftup:   () => { if (giftUpUnlocked()) openGiftUp(() => openVault(() => glass())); },
+  giftfuse: () => { if (giftFuseUnlocked()) openGiftFuse(() => openVault(() => glass())); },
+  sync:     () => { if (syncUnlocked()) openSync(() => glass()); }
 };
 
 /* 아직 안 봤으면 한 번 보여 줍니다. 이미 봤으면 아무 일도 하지 않습니다. */
@@ -7476,9 +7566,11 @@ function tutorPlay(id, after) {
 const SYNERGY_GROUPS = [
   { id: "wings", name: "날개", names: [
       "N사 파견", "군 복무", "우주정복의 의지", "가상생물학자", "G사 프로덕션",
-      "Y사 연구실", "P사 저지선", "남부협회", "북부 총기 협회"
+      "Y사 연구실", "P사 저지선", "남부협회", "북부 총기 협회", "흑수들의 왕"
     ] },
-  { id: "lsync", name: "L사 및 LST", names: ["신생 L사", "LST 시절"] },
+  { id: "lsync", name: "L사 및 LST", names: ["신생 L사", "LST 시절", "비포팀", "에프터팀"] },
+  /* 발톱들 — 제1 ~ 제5발톱 (사용자 지침 2026-10-16, 전에는 «기타» 에 섞여 있었습니다) */
+  { id: "claws", name: "발톱들", names: ["제1발톱", "제2발톱", "제3발톱", "제4발톱", "제5발톱"] },
   { id: "event", name: "이벤트", names: ["공룡의 날", "영덕의 요리사"] },
   { id: "etc",   name: "기타", names: null }   // 위 어디에도 안 걸리면 여기로
 ];
@@ -7551,6 +7643,8 @@ function noteTag(t) { return '<span class="tag2">' + t + '</span>'; }
 /* 시너지 무리(csec)가 접혔는지, 어느 시너지 하나가 펴져 있는지 — 판이
  * 도는 동안만 기억합니다(운전석의 CS_OPEN과는 다른 자리 — 화면마다 따로 둡니다). */
 let NOTE_SYN_OPEN = {};
+/* 노트 「승무원」 칸의 제 아이콘 — CREW 열쇠 → 아이콘 이름(assets/icon) */
+const NOTE_CREW_ICON = { manager: "노란테", bus: "메카고질라" };
 let NOTE_SYN_DETAIL = null;
 /* 노트의 교육위원 목록 — 정렬과 「보유한 것만」 (사용자 지침 2026-10-11).
  * 편성의 보조 교육위원 창(ADV_SORT·ADV_OWNED_ONLY)과 같은 손잡이인데, 값은 따로 둡니다 —
@@ -7697,8 +7791,9 @@ function openNote(back, focus) {
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">승무원</div><div class="grid four">';
     Object.keys(CREW).forEach(k => {
       const c = CREW[k];
-      /* 조력자로 서는 승무원은 같은 사람의 교육위원 명찰을 씁니다(allyIconName) */
-      const ic = allyIconName({ name: c.codename || c.name });
+      /* 노란테 · 메카고질라는 제 아이콘(노란 방패 — 도안 CREW, 사용자 지침 2026-10-16),
+       * 조력자로 서는 승무원은 같은 사람의 교육위원 명찰을 씁니다(allyIconName) */
+      const ic = NOTE_CREW_ICON[k] || allyIconName({ name: c.codename || c.name });
       h += '<div class="slot' + (ic ? ' hasic' : '') + '">' + (ic ? iconHTML(ic) + '<div>' : '') +
              '<div class="nm">' + c.role + '　' + c.name + '</div>' +
              (c.codename ? '<div class="sub">' + c.codename + '</div>' : '') +
@@ -10357,8 +10452,11 @@ function buildMirrorRunScenes(rule, ids) {
  *    guaranteeRailPackOnFinalRound 가 있으면, 보여 주는 셋 중 하나는
  *    무조건 거울굴절철도 팩(1호선·2호선 중 무작위, 열려 있는 쪽만)입니다.
  */
-const MIRROR_SOUND_COST  = 1;   // 소리 듣기에 드는 황금교본
-const MIRROR_REROLL_COST = 2;   // 다른 길로에 드는 황금교본
+/* 소리 듣기 · 다른 길로 — 황금교본 값은 없애고 갈림길마다 횟수만 둡니다 (사용자 지침 2026-10-16).
+ * 쓴 횟수와 지금 보여 주는 세 갈래는 S.railSave.gate 에 실어 둡니다 — 유리창에 나갔다
+ * 이어하기로 돌아와도 횟수가 다시 차지 않고, 세 갈래도 새로 뽑히지 않습니다(공짜 다시 뽑기 구멍). */
+const MIRROR_SOUND_MAX  = 1;    // 한 갈림길에서 소리 듣기
+const MIRROR_REROLL_MAX = 3;    // 한 갈림길에서 다른 길로
 const PACK_PATH_NAME = ["왼쪽 길", "가운데 길", "오른쪽 길"];
 
 /* 팩 하나가 지금 뽑기 풀에 들어갈 수 있는가.
@@ -10479,29 +10577,41 @@ function openPackGate(rule, round, clearedPacks) {
   speak("이형우", "\"이번 거울에서는 길이 갈려있습니다.\"");
   speak("이형우", "\"어느 쪽으로 가시겠습니까?\"");
   render();
-  packGateChoices(rule, round, clearedPacks, drawPackChoices(rule, round, clearedPacks), null, false);
+  /* 이 라운드의 갈림길을 이미 열어 둔 적이 있으면(유리창에 나갔다 온 것) 그때의 세 갈래 · 쓴 횟수를 그대로 */
+  const rs = S.railSave;
+  let g = rs && rs.gate;
+  const back = g && g.round === round && (g.shown || []).map(id => MIRROR_PACKS.find(p => p.id === id));
+  if (!back || !back.length || back.some(p => !p)) {
+    g = { round: round, shown: drawPackChoices(rule, round, clearedPacks).map(p => p.id), heard: null, sound: 0, reroll: 0 };
+    if (rs) { rs.gate = g; saveVault(); }
+  }
+  packGateChoices(rule, round, clearedPacks, g.shown.map(id => MIRROR_PACKS.find(p => p.id === id)), g.heard, false, g);
 }
 
 /* shown — 지금 보여 주는 세 갈래. heardId — 이 셋에서 「소리 듣기」로 이미
  * 들어 본 팩 id(한 번만). picking — 「소리 듣기」를 누르고 어느 경로의
  * 소리를 들을지 고르는 중인가. 다른 길로/소리 듣기는 처음의 이형우 대사를
  * 다시 읊지 않고, 이 함수만 다시 불러 손잡이 줄만 새로 그립니다. */
-function packGateChoices(rule, round, clearedPacks, shown, heardId, picking) {
+function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) {
   S.waiting = true;
-  const canSound  = !picking && !heardId && S.codex >= MIRROR_SOUND_COST;
-  const canReroll = !picking && S.codex >= MIRROR_REROLL_COST;
+  g = g || { round: round, shown: shown.map(p => p.id), heard: heardId, sound: 0, reroll: 0 };
+  const soundLeft  = Math.max(0, MIRROR_SOUND_MAX - (g.sound || 0));
+  const rerollLeft = Math.max(0, MIRROR_REROLL_MAX - (g.reroll || 0));
+  const canSound  = !picking && !heardId && soundLeft > 0;
+  const canReroll = !picking && rerollLeft > 0;
 
   /* 길을 고르는 것은 로그의 카드입니다(drawPackGate). 아래 손잡이 줄에는 곁가지 셋만 남습니다. */
   drawPackGate(shown, heardId, picking, p => {
     if (picking) {
-      if (S.codex < MIRROR_SOUND_COST) return;
-      S.codex -= MIRROR_SOUND_COST;
+      if (soundLeft <= 0) return;
+      g.sound = (g.sound || 0) + 1;
+      g.heard = p.id;
       $log.querySelectorAll(".packgate").forEach(el => el.parentNode.removeChild(el));   // 소리 글이 카드 «위» 에 서도록
       say("→ " + p.name + "에서 새어 나오는 소리 —", "sys");
       p.foes.forEach(f => say((FOES[f] && FOES[f].intro) || "낌새가 흐릿하다.", "d"));
       saveVault();
       render();
-      packGateChoices(rule, round, clearedPacks, shown, p.id, false);
+      packGateChoices(rule, round, clearedPacks, shown, p.id, false, g);
       return;
     }
     S.waiting = false;
@@ -10511,19 +10621,22 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking) {
   });
 
   buttons(([
-    { label: "소리 듣기　(황금교본 " + MIRROR_SOUND_COST + ")", cls: "ghost", disabled: !canSound,
-      fn: () => { say("→ 소리 듣기.", "sys"); packGateChoices(rule, round, clearedPacks, shown, heardId, true); } },
-    { label: "다른 길로　(황금교본 " + MIRROR_REROLL_COST + ")", cls: "ghost", disabled: !canReroll,
+    { label: "소리 듣기 (" + soundLeft + "/" + MIRROR_SOUND_MAX + ")", cls: "ghost", disabled: !canSound,
+      fn: () => { say("→ 소리 듣기.", "sys"); packGateChoices(rule, round, clearedPacks, shown, heardId, true, g); } },
+    { label: "다른 길로 (" + rerollLeft + "/" + MIRROR_REROLL_MAX + ")", cls: "ghost", disabled: !canReroll,
       fn: () => {
-        S.codex -= MIRROR_REROLL_COST;
+        const fresh = drawPackChoices(rule, round, clearedPacks);
+        g.reroll = (g.reroll || 0) + 1;
+        g.shown = fresh.map(p => p.id);
+        g.heard = null;
         saveVault();
         say("→ 다른 길로.", "sys");
         render();
-        packGateChoices(rule, round, clearedPacks, drawPackChoices(rule, round, clearedPacks), null, false);
+        packGateChoices(rule, round, clearedPacks, fresh, null, false, g);
       } },
     { label: "유리창으로", cls: "ghost", fn: () => { S.waiting = false; glass(); } }
   ]).concat(picking ? [{ label: "그만두기", cls: "ghost",
-      fn: () => packGateChoices(rule, round, clearedPacks, shown, heardId, false) }] : []));
+      fn: () => packGateChoices(rule, round, clearedPacks, shown, heardId, false, g) }] : []));
 }
 
 function startMirror(tier, preIds) {
@@ -11447,7 +11560,7 @@ function openRecord(back) {
       '<b>다시 읽히려면</b> 그 파일을 게임 폴더의 <code>data/vault.js</code> 에 덮어쓰고 ' +
       '새로고침하십시오. <code>index.html</code> 이 있는 곳 아래의 <code>data</code> 폴더입니다.<br>' +
       '<span class="dim">브라우저에 저장된 것이 먼저 읽힙니다. 파일 쪽으로 되돌리려면 ' +
-      '[보관함 비우기] 를 한 번 하고 새로고침하세요.</span>' +
+      '[설정] → [보관함 비우기] 를 한 번 하고 새로고침하세요.</span>' +
     '</div>' +
     '<div class="hint">' +
       '<span class="dim">판이 바뀌기 <b>전</b>의 보관함도 이 파일에 함께 담깁니다. ' +
@@ -11722,7 +11835,7 @@ function openMail(back, note) {
 }
 
 /* ── 출석 · 주간 보상 ─────────────────────────────────────────
- *  유리창의 [보상] 으로 열립니다. 표는 data/reward.js 에 있습니다.
+ *  유리창 머리줄 오른쪽의 [보상] 아이콘으로 열립니다. 표는 data/reward.js 에 있습니다.
  *
  *  S.reward = {
  *    n:    매일 출석을 받은 횟수(통틀어) — 일곱 칸 가운데 어디인지는 n % 7
@@ -12115,11 +12228,12 @@ function presetClear(i) {
   saveVault();
 }
 
-/* 편성 화면 맨 위에 서는 세 칸 */
+/* 편성 화면 맨 아래에 서는 세 칸. 하나도 담아 둔 것이 없으면 칸째 감춥니다 (사용자 지침 2026-10-16) */
 function presetBarHTML() {
   const ps = presetList();
-  let h = '<div style="margin:2px 0 6px;color:var(--text);font-weight:700">저장해 둔 편성</div>' +
-          '<div class="hint">눌러서 그대로 갈아 끼웁니다. 아래 [편성 저장] 으로 담아 둡니다.</div>' +
+  if (!ps.some(Boolean)) return "";
+  let h = '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">저장해 둔 편성</div>' +
+          '<div class="hint">눌러서 그대로 갈아 끼웁니다. 맨 위 [편성 저장] 으로 담아 둡니다.</div>' +
           '<div class="grid">';
   ps.forEach((p, i) => {
     if (!p) {
@@ -12444,9 +12558,25 @@ function openSync(back) {
            '</div>';
     }
 
+    /* 아래에 인격 파편 상자 줄 — 파편이 모자랄 때 여기서 바로 열어 채웁니다 (사용자 지침 2026-10-16).
+     * 보관함의 그 줄과 같은 꼴이고, 다 쓰면 이 동기화 창으로 돌아옵니다 */
+    h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">인격 파편 상자</div>' +
+         '<div class="hint">' + FRAGBOX_RULE.desc + '</div>';
+    FRAGBOX_KINDS.forEach(k => {
+      const cnt = fragBoxCount(k.key);
+      h += '<div class="syncrow">' + iconHTML(k.name, { dim: !cnt }) +
+             '<button' + (cnt > 0 ? ' data-sbox="' + k.key + '"' : ' disabled') + '>사용</button>' +
+             '<div class="body"><div class="nm">' + k.name + '</div>' +
+               '<div class="sub">보유 ' + cnt + '개</div></div>' +
+           '</div>';
+    });
+
     h += '<div class="modalfoot"><button id="syclose">닫기</button></div>';
     $sheet.innerHTML = h;
 
+    $sheet.querySelectorAll("[data-sbox]").forEach(el => {
+      el.onclick = () => openFragBoxUse(el.dataset.sbox, null, () => openSync(back));
+    });
     $sheet.querySelectorAll(".syncgrid .slot[data-pick]").forEach(el => {
       el.onclick = () => { SYNC_PICK = el.dataset.pick; draw(null); };
     });
@@ -12856,12 +12986,11 @@ function paletteCheck() {
   if (p && !paletteOpen(p)) { Store.del(PALETTE_KEY); applyPalette("ink"); }
   else applyPalette(paletteNow());
 }
-function openPalettePick(back) {
-  $modal.classList.add("on");
+/* 색 테마 칸 — [설정] 화면에 바로 펼쳐 둡니다(사용자 지침 2026-10-16). openPalettePick 도 같은 것을 씁니다.
+ * 누르면 곧바로 입히고 저장한 뒤 redraw() 로 그 화면을 다시 그립니다. */
+function paletteGridHTML() {
   const now = paletteNow();
-  let h = '<h2>색 테 마</h2>' +
-          '<div class="hint">누르는 대로 곧바로 바뀝니다. 이 기기에만 남습니다 — 보관함을 비워도 그대로이고, ' +
-          '기기를 옮기면 다시 고릅니다. 전투 화면도 고른 테마를 따라 붉게 가라앉습니다.</div><div class="grid">';
+  let h = '<div class="grid">';
   PALETTES.forEach(p => {
     const open = paletteOpen(p);
     const c = p.need ? CHAPTERS.find(x => x.id === p.need) : null;
@@ -12873,15 +13002,24 @@ function openPalettePick(back) {
            '<div class="sub">' + (open ? p.sub : (c ? c.no : p.need) + '을 마치면 열립니다') + '</div>' +
          '</div>';
   });
-  h += '</div><div class="modalfoot"><button id="palclose">닫기</button></div>';
-  $sheet.innerHTML = h;
+  return h + '</div>';
+}
+function paletteBind(redraw) {
   $sheet.querySelectorAll("[data-pal]").forEach(el => {
     el.onclick = () => {
       if (el.dataset.pal === "ink") Store.del(PALETTE_KEY); else Store.set(PALETTE_KEY, el.dataset.pal);
       applyPalette(el.dataset.pal);
-      openPalettePick(back);
+      redraw();
     };
   });
+}
+const PALETTE_NOTE = "누르는 대로 곧바로 바뀝니다. 이 기기에만 남습니다 — 보관함을 비워도 그대로이고, " +
+                     "기기를 옮기면 다시 고릅니다. 전투 화면도 고른 테마를 따라 붉게 가라앉습니다.";
+function openPalettePick(back) {
+  $modal.classList.add("on");
+  $sheet.innerHTML = '<h2>색 테 마</h2><div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
+                     '<div class="modalfoot"><button id="palclose">닫기</button></div>';
+  paletteBind(() => openPalettePick(back));
   document.getElementById("palclose").onclick = () => { if (back) back(); else { closeModal(); render(); } };
 }
 
@@ -13097,7 +13235,8 @@ function glassLine(sp) {
 
 /* ── 설정 ──────────────────────────────────────────────────────
  *  유리창의 [설정] 로 열립니다. 들어 있는 것은 «유리창 배경» 과, 이미 있던
- *  [화면 글꼴] · [기록 · 내보내기] 로 가는 손잡이입니다(둘 다 보관함에서도 그대로 열립니다).
+ *  [화면 글꼴] · [기록 · 내보내기] 로 가는 손잡이입니다. [기록 · 내보내기] 는 이제 여기서만 열립니다
+ *  (보관함 바닥의 손잡이는 뺐습니다 — 사용자 지침 2026-10-16. 잠긴 보관함 화면의 비상구는 그대로).
  *
  *  배경은 띠(.pkline.small — 특정 배정이 쓰는 그 띠)로 작게 보여 줍니다.
  *  배경을 통째로 세우면 설정 화면이 배경 구경하는 곳이 되어 버려, «어느 묶음인지
@@ -13112,15 +13251,56 @@ function glassLine(sp) {
  *    씁니다. [저장하지 않고 나가기] 는 그래서 «되돌릴» 것이 없습니다 — 애초에
  *    아무것도 쓰지 않았으니까요.
  *
- *    화면 글꼴과 기록 화면을 들렀다 오는 길에는 고르던 것을 들고 다닙니다 —
- *    돌아올 때 openSettings(back, draft) 로 넘겨줍니다. 안 그러면 잠깐 글꼴을
- *    보고 온 사이에 고르던 것이 날아갑니다.
+ *    이 화면은 2026-10-16 부터 [설정] → [유리창 배경] 으로 따로 엽니다(openGlassBgPick).
+ *    글꼴 · 기록 화면은 설정 쪽 칸이 되어, 고르던 것을 들고 다닐 일이 없어졌습니다.
  */
 /* 편 무리 — 판이 도는 동안만 기억합니다(운전석의 CS_OPEN 과 같은 결).
  * 설정을 닫았다 다시 열어도 방금 펴 둔 자리가 그대로 있게 하려는 것입니다. */
 let SET_SEC_OPEN = {};
 
-function openSettings(back, draft0) {
+/* ── 설정 화면 (사용자 지침 2026-10-16) ──────────────────────────
+ *  맨 위에 색 테마를 바로 펼쳐 두고, 그 아래 «다른 설정» 칸들 — 유리창 배경 · 화면 글꼴 ·
+ *  기록 · 내보내기 · 앱으로 설치 · 보관함 비우기. 칸마다 제 화면을 열고, 닫으면 여기로 돌아옵니다. */
+function openSettings(back) {
+  $modal.classList.add("on");
+  const draw = () => {
+    const bgIt = glassBgItem((S.glassBg && glassBgItem(S.glassBg)) ? S.glassBg : glassBgDefaultKey());
+    const slot = (key, name, sub, red) =>
+      '<div class="slot" data-go="' + key + '"><div class="nm"' + (red ? ' style="color:var(--red)"' : '') + '>' + name + '</div>' +
+      '<div class="sub">' + sub + '</div></div>';
+    let h = '<h2>설 정</h2>' +
+            '<div style="margin:6px 0 6px;color:var(--text);font-weight:700">색 테마</div>' +
+            '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
+            '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
+            '<div class="grid">' +
+              slot("bg", "유리창 배경", "마친 장의 배경으로 갈아 끼웁니다 — 지금 「" +
+                   (bgIt ? bgIt.name : "작성위원 단체 그림") + "」.") +
+              slot("font", "화면 글꼴", "기본 글꼴 · 대사 글꼴 · 대사 크기를 고릅니다. 누르는 대로 곧바로 저장됩니다.") +
+              slot("rec", "기록 · 내보내기", "보관함을 파일로 받아 두거나, 받아 둔 파일을 다시 읽습니다. 콘첸트라트 연결도 여기서 합니다.") +
+              slot("app", appEnv().standalone ? "보관함 옮기기" : "앱으로 설치 · 보관함 옮기기",
+                   appEnv().standalone ? "다른 브라우저·기기에서 복사해 온 보관함을 이 앱에 옮겨 담습니다."
+                                       : "홈 화면에 앱으로 깔아 바로 엽니다. 아이폰은 설치하기 전에 보관함을 복사해 두어야 이어집니다.") +
+              /* 되돌릴 수 없는 자리라 맨 끝에, 붉은 글씨로 — 누르면 무엇이 사라지는지 세어 보여 주고 두 번 묻습니다(openReset) */
+              slot("reset", "보관함 비우기", "모은 것을 모두 지우고 맨 처음으로 돌아갑니다. 되돌릴 수 없으니 먼저 내보내 두십시오.", true) +
+            '</div>' +
+            '<div class="modalfoot"><button id="setclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+    paletteBind(draw);
+    const here = () => openSettings(back);
+    const go = k => $sheet.querySelector('[data-go="' + k + '"]');
+    go("bg").onclick    = () => openGlassBgPick(here);
+    go("font").onclick  = () => openFontPick(here);
+    go("rec").onclick   = () => openRecord(here);
+    go("app").onclick   = () => openInstall(here);
+    go("reset").onclick = () => openReset(here);
+    document.getElementById("setclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  };
+  draw();
+}
+
+/* 유리창 배경 고르기 — 예전에는 설정 화면 그 자체였는데, 따로 떼어 [설정] → [유리창 배경] 으로 엽니다
+ * (사용자 지침 2026-10-16). 나가면 back(설정 화면)으로 돌아갑니다. */
+function openGlassBgPick(back, draft0) {
   $modal.classList.add("on");
   /* 고르고 있는 묶음. undefined 로 들어오면(유리창에서 갓 열었을 때) 저장된 것부터 */
   let draft = (draft0 === undefined) ? (S.glassBg || null) : draft0;
@@ -13141,11 +13321,8 @@ function openSettings(back, draft0) {
       SET_SEC_OPEN[g.id] = true;
     }
 
-    let h = '<h2>설 정</h2>' +
-            '<div class="hint">유리창 배경은 [확정] 을 눌러야 보관함에 남습니다. ' +
-            '아래 [화면 글꼴] 은 고르는 대로 곧바로 저장됩니다.</div>' +
-            '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">유리창 배경</div>' +
-            '<div class="hint">마친 장의 배경만 나옵니다. 묶음을 고르면 그 장의 배경이 ' +
+    let h = '<h2>유 리 창 배 경</h2>' +
+            '<div class="hint">[확정] 을 눌러야 보관함에 남습니다. 마친 장의 배경만 나옵니다. 묶음을 고르면 그 장의 배경이 ' +
             '유리창에 들어올 때마다 한 장씩 돌아갑니다.</div>' +
             '<div class="hint" style="color:var(--gold)">' + (바뀜 ? '고르는 중 — ' : '지금 걸린 것 — ') +
               '<b>' + (nowIt ? nowIt.name : "작성위원 단체 그림") + '</b>' +
@@ -13184,28 +13361,6 @@ function openSettings(back, draft0) {
            '</div>';
     });
 
-    h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
-         '<div class="grid">' +
-           '<div class="slot" data-go="pal">' +
-             '<div class="nm">색 테마</div>' +
-             '<div class="sub">화면의 바탕과 강조색을 고릅니다 — 지금 「' + paletteBy(paletteNow()).name +
-             '」. 누르는 대로 곧바로 바뀝니다.</div></div>' +
-           '<div class="slot" data-go="font">' +
-             '<div class="nm">화면 글꼴</div>' +
-             '<div class="sub">기본 글꼴 · 대사 글꼴 · 대사 크기를 고릅니다. ' +
-             '누르는 대로 곧바로 저장됩니다.</div></div>' +
-           '<div class="slot" data-go="rec">' +
-             '<div class="nm">기록 · 내보내기</div>' +
-             '<div class="sub">보관함을 파일로 받아 두거나, 받아 둔 파일을 다시 읽습니다. ' +
-             '보관함에서도 같은 화면이 열립니다.</div></div>' +
-           '<div class="slot" data-go="app">' +
-             '<div class="nm">' + (appEnv().standalone ? '보관함 옮기기' : '앱으로 설치 · 보관함 옮기기') + '</div>' +
-             '<div class="sub">' + (appEnv().standalone
-               ? '다른 브라우저·기기에서 복사해 온 보관함을 이 앱에 옮겨 담습니다.'
-               : '홈 화면에 앱으로 깔아 바로 엽니다. 아이폰은 설치하기 전에 보관함을 복사해 두어야 이어집니다.') +
-             '</div></div>' +
-         '</div>';
-
     if (바뀜)
       h += '<div class="hint" style="color:var(--red);margin-top:14px">' +
            '고른 배경이 아직 저장되지 않았습니다 — [확정] 을 눌러야 남습니다.</div>';
@@ -13229,13 +13384,6 @@ function openSettings(back, draft0) {
       el.onclick = () => { draft = el.dataset.bgk; draw(); };
     });
     document.getElementById("sdefault").onclick = () => { draft = null; draw(); };
-
-    /* 들렀다 오는 길에도 고르던 것을 들고 다닙니다 */
-    const go = k => $sheet.querySelector('[data-go="' + k + '"]');
-    go("pal").onclick  = () => openPalettePick(() => openSettings(back, draft));
-    go("font").onclick = () => openFontPick(() => openSettings(back, draft));
-    go("rec").onclick  = () => openRecord(() => openSettings(back, draft));
-    go("app").onclick  = () => openInstall(() => openSettings(back, draft));
 
     /* ── 나가는 길은 반드시 창을 먼저 닫습니다 ────────────────────
      *  이 창은 «유리창에서 바로» 열립니다 — 다른 창 위에 얹히는 창이 아닙니다.
@@ -13264,6 +13412,32 @@ function openSettings(back, draft0) {
   draw();
 }
 
+/* ── [기프트 강화] · [기프트 합성] 손잡이 한 줄 ──────────────────
+ *  유리창의 [강화] 를 쪼개(사용자 지침 2026-10-16) 기프트 쪽 둘은 보관함의 E.G.O 기프트 칸 아래에 답니다
+ *  (편성에도 붙였다가 사용자 지침으로 뺐습니다). 아직 안 열렸으면 잠긴 손잡이와 «몇 장을 마치면» 을 적습니다.
+ *  back — 강화 · 합성 창을 닫고 돌아올 자리. */
+function giftWorkHTML() {
+  /* 옛 [강화] 창(openUpgrade)의 줄과 같은 꼴 — 손잡이 · 이름 · 한 줄을 채우는 설명 (사용자 지침 2026-10-16) */
+  const rows = [
+    { key: "up",   name: "E.G.O 기프트 강화", sub: "황금교본으로 지닌 기프트를 + · ++ 로 올립니다.",
+      open: giftUpUnlocked(),   lock: (nextGiftUpChapter() || "?") + "을 마치면 열립니다." },
+    { key: "fuse", name: "E.G.O 기프트 합성", sub: "기프트 여럿을 하나로 합쳐 ★★★★ 를 만듭니다.",
+      open: giftFuseUnlocked(), lock: (giftFuseChapter() || "?") + "을 마치면 열립니다." }
+  ];
+  return '<div class="giftwork">' + rows.map(x =>
+    '<div class="syncrow">' +
+      (x.open ? '<button data-gw="' + x.key + '">열기</button>' : '<button disabled>잠김</button>') +
+      '<div class="body"><div class="' + (x.open ? 'nm' : 'lock') + '">' + x.name + '</div>' +
+        '<div class="sub">' + (x.open ? x.sub : x.lock) + '</div></div>' +
+    '</div>').join("") + '</div>';
+}
+function giftWorkBind(root, back) {
+  root.querySelectorAll("[data-gw]").forEach(el => {
+    if (el.disabled) return;
+    el.onclick = () => el.dataset.gw === "up" ? openGiftUp(back) : openGiftFuse(back);
+  });
+}
+
 /* 보관함의 기프트 목록을 펼쳐 두었는가 — 보관함을 닫으면 다시 접힙니다 */
 let VAULT_GIFT_OPEN = false;
 
@@ -13273,18 +13447,28 @@ function openVault(back) {
           '<div class="hint" data-tut="vault-what">여기 담긴 것은 회차를 새로 시작해도 사라지지 않습니다. ' +
           '인격은 편성 화면의 [인격 장착]에서 봅니다.</div>';
 
-  vaultItemCategories().forEach(cat => {
-    h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + cat.label + '</div>';
-    if (cat.note) h += '<div class="hint">' + cat.note + '</div>';
-    h += '<div class="grid ' + (cat.cls || '') + '"' + (cat.tut ? ' data-tut="' + cat.tut + '"' : '') + '>';
+  /* ── 늘어놓는 차례 (사용자 지침 2026-10-16) ──────────────────────
+   *  재화 → E.G.O 기프트(접힘) → [기프트 강화] · [기프트 합성] 한 줄 → 엔케팔린 캡슐 → 동기화 모듈
+   *  → 인격 파편 → 인격 파편 상자 → 선택권.
+   *  칸마다 h 에 따로 쌓은 뒤(sec) 맨 끝에서 이 차례로 잇습니다 — 칸을 짓는 코드는 예전 차례 그대로입니다. */
+  const head = h, sec = {};
+  const cut = k => { sec[k] = h; h = ""; };
+  const catHTML = cat => {
+    let x = '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + cat.label + '</div>';
+    if (cat.note) x += '<div class="hint">' + cat.note + '</div>';
+    x += '<div class="grid ' + (cat.cls || '') + '"' + (cat.tut ? ' data-tut="' + cat.tut + '"' : '') + '>';
     cat.items.forEach(it => {
-      h += '<div class="slot ro hasic' + (it.dim ? ' none' : '') + '">' +
+      x += '<div class="slot ro hasic' + (it.dim ? ' none' : '') + '">' +
              iconHTML(it.icon, { dim: it.dim }) +
              '<div><div class="nm">' + it.name + '</div>' +
              '<div class="sub">' + it.sub + '</div></div></div>';
     });
-    h += '</div>';
-  });
+    return x + '</div>';
+  };
+  const cats = vaultItemCategories();
+  sec.cur  = catHTML(cats[0]);                       // 재화
+  sec.frag = cats.slice(1).map(catHTML).join("");    // 인격 파편 (그 뒤에 칸이 더 생기면 함께)
+  h = "";
 
   /* 인격 파편 상자 — 보관함에서 바로 «사용» 하는 자리라 syncrow 로,
    * 오른쪽 끝에 사용 손잡이를 둔다. 이런 손잡이가 필요 없는 항목은
@@ -13302,6 +13486,8 @@ function openVault(back) {
            '</div>' +
          '</div>';
   });
+
+  cut("box");
 
   /* 선택권 둘 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
    * 없거나(0개) 고를 것이 하나도 안 남았으면 손잡이를 잠급니다. */
@@ -13327,6 +13513,8 @@ function openVault(back) {
          '</div>';
   });
 
+  cut("ticket");
+
   /* 엔케팔린 캡슐 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
    * 없거나(0개) 엔케팔린이 이미 가득이면 손잡이를 잠급니다. */
   const capCnt  = enkCapCount();
@@ -13342,6 +13530,8 @@ function openVault(back) {
              (capCnt > 0 && capFull ? '　(가득 차 있어 쓸 수 없습니다)' : '') + '</div>' +
          '</div>' +
        '</div>';
+
+  cut("cap");
 
   /* 동기화 모듈 — 캡슐과 같은 모양입니다. 동기화 자체가 아직 안 열렸으면
    * (3장 전) 칸을 아예 내지 않습니다 — 쓸 수 없는 물건을 보여 줄 까닭이 없습니다. */
@@ -13367,15 +13557,17 @@ function openVault(back) {
          '</div>';
   }
 
-  /* E.G.O 기프트 — 지닌 것만, 높은 성급부터. 여기서는 «보기만» 합니다 —
-   * 지니고 내려놓는 것은 편성의 기프트 고르기에서, 올리는 것은 [강화] 에서 합니다. */
+  cut("mod");
+
+  /* E.G.O 기프트 — 지닌 것만, 높은 성급부터. 지니고 내려놓는 것은 편성의 기프트 고르기에서 하고,
+   * 올리고 합치는 것은 머리의 [기프트 강화] · [기프트 합성] 손잡이로 엽니다(giftWorkHTML — 유리창의 [강화] 를 쪼갠 것). */
   const vGifts = (typeof GIFTS !== "undefined" ? GIFTS : [])
     .filter(g => S.giftsOwned && S.giftsOwned[giftId(g)])
     .slice().sort((a, b) => b.star - a.star);
   const vGiftAll = giftGachaList().length + vGifts.filter(g => g.noGacha).length;
   h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">E.G.O 기프트</div>' +
        '<div class="hint" data-tut="vault-gift">보유 ' + vGifts.length + ' / ' + vGiftAll +
-       '　·　지니고 내려놓는 것은 편성 화면에서, 올리는 것은 [강화] 에서 합니다.</div>';
+       '　·　지니고 내려놓는 것은 편성 화면에서 합니다.</div>';
   if (!vGifts.length) h += '<div class="hint">아직 가진 기프트가 없습니다 — 상점에서 황금교본으로 뽑습니다.</div>';
   else {
     /* 목록이 길어 <details> 로 접어 둡니다 — 기본은 닫힌 채(사용자 지침 2026-10-16).
@@ -13396,12 +13588,16 @@ function openVault(back) {
     h += '</div></details>';
   }
 
+  /* 접힌 목록 «아래» 에 [기프트 강화] · [기프트 합성] 한 줄 */
+  h += giftWorkHTML();
+  cut("gift");
+  h = head + sec.cur + sec.gift + sec.cap + sec.mod + sec.frag + sec.box + sec.ticket;
+
   /* 화면 글꼴 칸은 여기 없습니다 — [설정] 으로 옮겼습니다(2026-09-12 사용자 지침).
    * 고르는 창(openFontPick)은 그대로이고, 부르는 자리만 설정 화면 하나로 모았습니다. */
 
-  h += '<div class="modalfoot"><button id="vclose">닫기</button>' +
-       '<button id="vrec">기록 · 내보내기</button>' +
-       '<button id="vreset" class="ghost">보관함 비우기</button></div>';
+  /* [기록 · 내보내기] · [보관함 비우기] 는 [설정] 으로 옮겼습니다 (사용자 지침 2026-10-16) */
+  h += '<div class="modalfoot"><button id="vclose">닫기</button></div>';
   $sheet.innerHTML = h;
 
   const vcap = document.getElementById("vcap");
@@ -13418,14 +13614,13 @@ function openVault(back) {
   const vgf = document.getElementById("vgiftfold");
   if (vgf) vgf.ontoggle = () => { if ($modal.classList.contains("on")) VAULT_GIFT_OPEN = vgf.open; };
   document.getElementById("vclose").onclick = () => { VAULT_GIFT_OPEN = false; closeModal(); render(); if (back) back(); };
-  document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
-  document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
   $sheet.querySelectorAll("[data-box]").forEach(el => {
     el.onclick = () => openFragBoxUse(el.dataset.box, back);
   });
   $sheet.querySelectorAll("[data-ticket]").forEach(el => {
     el.onclick = () => openPickTicketUse(el.dataset.ticket, back);
   });
+  giftWorkBind($sheet, () => openVault(back));
   const vmod = document.getElementById("vsyncmod");
   if (vmod) vmod.onclick = () => openSyncModuleUse(back);
   tutorOnce("vault");   /* 보관함에 처음 들어왔을 때 한 번 */
@@ -13592,11 +13787,13 @@ function openPickTicketUse(kind, back) {
  *  2) select 만 — 어느 작성위원 몫으로 받을지 고른다.
  *  3) 파편을 얹고 결과를 보여 준다.
  */
-function openFragBoxUse(kind, back) {
+/* ret — 다 쓰거나 그만뒀을 때 돌아갈 자리. 안 주면 보관함(back 을 들고). 동기화 창에서도 엽니다(사용자 지침 2026-10-16). */
+function openFragBoxUse(kind, back, ret) {
+  ret = ret || (() => openVault(back));
   $modal.classList.add("on");
   const meta = FRAGBOX_KINDS.find(k => k.key === kind);
   const owned = fragBoxCount(kind);
-  if (!meta || owned <= 0) { openVault(back); return; }
+  if (!meta || owned <= 0) { ret(); return; }
 
   let h = '<h2>' + meta.name + '</h2>' +
     '<div class="hint">' + FRAGBOX_RULE.desc + ' 사용할 개수를 고르십시오.  (보유 ' + owned + '개)</div>' +
@@ -13613,18 +13810,19 @@ function openFragBoxUse(kind, back) {
   const amt = document.getElementById("bxamt");
   range.oninput = () => { amt.textContent = range.value + "개 사용"; };
 
-  document.getElementById("bxcancel").onclick = () => openVault(back);
+  document.getElementById("bxcancel").onclick = () => ret();
   document.getElementById("bxnext").onclick = () => {
     const n = +range.value;
-    if (kind === "random") openFragBoxRandom(n, back);
-    else openFragBoxPickWho(n, back);
+    if (kind === "random") openFragBoxRandom(n, back, ret);
+    else openFragBoxPickWho(n, back, ret);
   };
 }
 
 /* 무작위 — 개수(n)만큼 상자를 태워 n×mult 개를 낱개로 12명에게 임의로 흩는다.
  * 낱개(1)씩 얹으므로 몫은 늘 자연수이고, 합은 언제나 n×mult 와 같다. */
-function openFragBoxRandom(n, back) {
-  if (fragBoxCount("random") < n) { openVault(back); return; }
+function openFragBoxRandom(n, back, ret) {
+  ret = ret || (() => openVault(back));
+  if (fragBoxCount("random") < n) { ret(); return; }
   S.fragBox.random -= n;
   const total = n * FRAGBOX_RULE.mult;
   const who12 = Object.keys(SINNERS);
@@ -13648,11 +13846,12 @@ function openFragBoxRandom(n, back) {
     '</div>' +
     '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
   $sheet.innerHTML = h;
-  document.getElementById("bxdone").onclick = () => openVault(back);
+  document.getElementById("bxdone").onclick = () => ret();
 }
 
 /* 선택 — 개수(n)를 정한 뒤 12명 중 «누구 몫으로 받을지» 고르게 한다 */
-function openFragBoxPickWho(n, back) {
+function openFragBoxPickWho(n, back, ret) {
+  ret = ret || (() => openVault(back));
   const gain = n * FRAGBOX_RULE.mult;
   let h = '<h2>인격 파편 상자 (선택)</h2>' +
     '<div class="hint">상자 ' + n + '개를 쓰면 인격 파편 ' + gain +
@@ -13669,7 +13868,7 @@ function openFragBoxPickWho(n, back) {
 
   $sheet.querySelectorAll("[data-who]").forEach(el => {
     el.onclick = () => {
-      if (fragBoxCount("select") < n) { openVault(back); return; }
+      if (fragBoxCount("select") < n) { ret(); return; }
       const w = el.dataset.who;
       S.fragBox.select -= n;
       addFrag(w, gain);
@@ -13681,10 +13880,10 @@ function openFragBoxPickWho(n, back) {
           '개를 얻었습니다.  (지금 ' + fragCount(w) + '개)</div>' +
         '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
       $sheet.innerHTML = h2;
-      document.getElementById("bxdone").onclick = () => openVault(back);
+      document.getElementById("bxdone").onclick = () => ret();
     };
   });
-  document.getElementById("bxback").onclick = () => openFragBoxUse("select", back);
+  document.getElementById("bxback").onclick = () => openFragBoxUse("select", back, ret);
 }
 
 /* ── 보관함 비우기 — 되돌릴 수 없는 자리 ────────────────────────
@@ -13819,6 +14018,7 @@ function glass() {
   SCENES = [];
   if (vaultLocked()) return vaultLockScreen();
   clearLog();
+  AT_GLASS = true;         // 머리줄에 [우편함] · [보상] 아이콘을 세웁니다 (renderHeader)
   paletteCheck();          // 고른 색 테마를 입힙니다 (잠긴 것이면 기본으로)
   /* 유리창 그림 — 고른 묶음(기본은 마지막으로 마친 장)에서 한 장. 아래 glassBgPick 참고 */
   showCard(glassBgPick(), "라슈 컴퍼니");
@@ -13884,7 +14084,7 @@ function glass() {
     return openReward(() => glass());
   }
 
-  /* 받지 않은 우편은 로그에 따로 적지 않습니다 — 아래 [우편함] 손잡이에
+  /* 받지 않은 우편은 로그에 따로 적지 않습니다 — 머리줄의 [우편함] 아이콘에
    * 통수가 적히고 테두리가 금빛으로 바뀝니다 (사용자 지침 2026-09-12). */
 
   render();
@@ -13894,15 +14094,8 @@ function glass() {
     { label: "상점",   fn: () => openShop(() => glass()) },
     { label: "노트",   fn: () => openNote(() => glass()) },
     { label: "업적",   fn: () => openAchieve(() => glass()) },
-    /* 받지 않은 우편이 있으면 몇 통인지 손잡이에 적고, 테두리를 금빛으로
-     * 두릅니다(button.mailon — index.html). 없으면 흐린 손잡이입니다. */
-    { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
-      cls: mailWaiting() ? "mailon" : "ghost", fn: () => openMail(() => glass()) },
-    /* 출석 · 주간 보상 — 받을 것이 있으면 우편함처럼 개수와 금빛 테두리 */
-    rewardOn() ? { label: REWARD_RULE.name + (rewardWaiting() ? " (" + rewardWaiting() + ")" : ""),
-                   cls: rewardWaiting() ? "mailon" : "ghost", fn: () => openReward(() => glass()) } : null,
-    /* 동기화(3장)·기프트 강화(5장) 어느 하나라도 열리기 전에는 손잡이를 아예 내놓지 않습니다 */
-    upgradeUnlocked() ? { label: "강화", fn: () => openUpgrade(() => glass()) } : null,
+    /* [우편함] · [보상] 은 머리줄 오른쪽의 아이콘 손잡이로 옮겼습니다 (renderHeader · AT_GLASS) */
+    /* [강화] 는 쪼개 옮겼습니다 — 동기화는 [편성] 맨 위, 기프트 강화 · 합성은 [보관함] 의 기프트 칸 아래 (사용자 지침 2026-10-16) */
     { label: "보관함", fn: () => openVault(() => glass()) },
     /* 유리창 배경 · 화면 글꼴 — openSettings */
     { label: "설정", cls: "ghost", fn: () => openSettings(() => glass()) },
