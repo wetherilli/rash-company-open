@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.12.1";
+const VERSION = "2.13.0";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1543,14 +1543,16 @@ function storageNotice() {
     divider();
     return;
   }
-  if (!isWebKit() || Store.get(STORAGE_SEEN_KEY) === VERSION) return;
+  /* 홈 화면 앱으로 연 것이면 7일 지우기를 받지 않습니다 — 알릴 것이 없습니다 */
+  if (!isWebKit() || appEnv().standalone || Store.get(STORAGE_SEEN_KEY) === VERSION) return;
   Store.set(STORAGE_SEEN_KEY, VERSION);
   divider();
   say("사파리로 열고 계십니다 — 한 가지만 일러 둡니다.", "place");
   say("사파리는 7일 넘게 이쪽에 들르지 않으면 저장해 둔 것을 통째로 지웁니다. " +
       "게임이 잘못된 것이 아니라 브라우저가 하는 일이라, 이쪽에서 막을 수가 없습니다.", "sys");
   say("오래 쉬실 것 같으면 [보관함 내보내기] 로 vault.js 를 받아 두십시오. " +
-      "홈 화면(맥이라면 독)에 추가해 두고 그쪽으로 여시면 지워지지 않습니다.", "good");
+      "앱으로 깔아 두고 그쪽으로 여시면 지워지지 않습니다 — [설정] → [앱으로 설치 · 보관함 옮기기]. " +
+      "아이폰은 깔기 «전에» 그 화면에서 [보관함 복사] 를 꼭 해 두십시오.", "good");
   divider();
 }
 
@@ -13100,6 +13102,12 @@ function openSettings(back, draft0) {
              '<div class="nm">기록 · 내보내기</div>' +
              '<div class="sub">보관함을 파일로 받아 두거나, 받아 둔 파일을 다시 읽습니다. ' +
              '보관함에서도 같은 화면이 열립니다.</div></div>' +
+           '<div class="slot" data-go="app">' +
+             '<div class="nm">' + (appEnv().standalone ? '보관함 옮기기' : '앱으로 설치 · 보관함 옮기기') + '</div>' +
+             '<div class="sub">' + (appEnv().standalone
+               ? '다른 브라우저·기기에서 복사해 온 보관함을 이 앱에 옮겨 담습니다.'
+               : '홈 화면에 앱으로 깔아 바로 엽니다. 아이폰은 설치하기 전에 보관함을 복사해 두어야 이어집니다.') +
+             '</div></div>' +
          '</div>';
 
     if (바뀜)
@@ -13131,6 +13139,7 @@ function openSettings(back, draft0) {
     go("pal").onclick  = () => openPalettePick(() => openSettings(back, draft));
     go("font").onclick = () => openFontPick(() => openSettings(back, draft));
     go("rec").onclick  = () => openRecord(() => openSettings(back, draft));
+    go("app").onclick  = () => openInstall(() => openSettings(back, draft));
 
     /* ── 나가는 길은 반드시 창을 먼저 닫습니다 ────────────────────
      *  이 창은 «유리창에서 바로» 열립니다 — 다른 창 위에 얹히는 창이 아닙니다.
@@ -13813,6 +13822,215 @@ function glass() {
 /* 예전 이름 — 부팅과 내부 호출에서 그대로 쓸 수 있게 남겨 둡니다 */
 function title() { glass(); }
 
+/* ── 앱으로 설치 · 보관함 옮기기 ─────────────────────────────────
+ *  manifest.json · sw.js 를 갖춰 홈 화면에 앱으로 깔 수 있습니다(콘첸트라트와 같은 결).
+ *
+ *  ■ 보관함이 따라오는가 — 기기마다 다릅니다
+ *    안드로이드 · PC 의 크롬/엣지   깐 앱이 브라우저와 «같은» 저장소를 씁니다. 그대로 이어집니다.
+ *    아이폰 · 아이패드             홈 화면 앱은 사파리와 저장소가 «따로» 입니다. 깔면 빈 보관함으로
+ *                                 시작합니다. 그래서 «옮기기 글» 을 둡니다(사용자 지침 2026-10-16) —
+ *                                 사파리에서 [복사] → 앱에서 [붙여넣기]. 서버도 계정도 필요 없습니다.
+ *
+ *  ■ 옮기기 글
+ *    이 주소(같은 출처)에 «rash_company_» 로 시작하는 저장 칸을 «전부» 담습니다 — 진행 기록 · 보관함 ·
+ *    판 바뀔 때 떠 둔 것 · 출입 코드 통과 · 색 테마 · 콘첸트라트 연결까지. 칸을 손으로 세지 않으므로
+ *    새 칸이 생겨도 저절로 따라옵니다. 같은 출처의 콘첸트라트 칸은 이름이 달라 섞이지 않습니다.
+ *    JSON 을 base64 로 싸서 붙여 넣는 도중 따옴표가 «둥근 따옴표» 로 바뀌는 일을 막습니다.
+ *
+ *  ■ 옮겨 담을 때
+ *    받는 쪽의 rash_company_ 칸을 모두 지우고 들어온 것으로 채웁니다 — 반쯤 섞이면
+ *    콘첸트라트 연결이 엉뚱한 구름을 끌어옵니다. 다만 보관함은 파일 가져오기와 같이
+ *    vaultMergeOnce 로 «이미 받은 우편·업적» 을 합쳐 되살아나지 않게 합니다.
+ */
+const MOVE_HEAD = "RASH-MOVE1.";
+let INSTALL_EVENT = null;   // 크롬 계열이 «설치할 수 있다» 고 알려 준 것 — [설치하기] 손잡이에 씁니다
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); INSTALL_EVENT = e; });
+
+function appEnv() {
+  const ua = navigator.userAgent || "";
+  return {
+    inApp: /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|everytimeApp|DaumApps/i.test(ua),
+    ios: /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+    android: /Android/.test(ua),
+    standalone: (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+                navigator.standalone === true
+  };
+}
+
+/* 저장 칸 이름들 — localStorage 가 막혀 손안(mem)에만 있을 때도 셉니다 */
+function moveKeys() {
+  const m = {};
+  if (Store.ok) {
+    try { for (let i = 0; i < localStorage.length; i++) m[localStorage.key(i)] = true; } catch (e) {}
+  }
+  Object.keys(Store.mem).forEach(k => m[k] = true);
+  return Object.keys(m).filter(k => k.indexOf("rash_company_") === 0);
+}
+
+function moveText() {
+  save();
+  saveVault();
+  const keys = {};
+  moveKeys().forEach(k => { const v = Store.get(k); if (v !== null) keys[k] = v; });
+  const json = JSON.stringify({ v: 1, ver: VERSION, at: Date.now(), keys: keys });
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return MOVE_HEAD + btoa(bin);
+}
+
+/* 옮기기 글을 읽어 { ver, at, keys } 로. 못 읽으면 null */
+function moveParse(text) {
+  const s = String(text || "").replace(/\s+/g, "");
+  const i = s.indexOf(MOVE_HEAD);
+  if (i < 0) return null;
+  try {
+    const bin = atob(s.slice(i + MOVE_HEAD.length));
+    const bytes = new Uint8Array(bin.length);
+    for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+    const o = JSON.parse(new TextDecoder().decode(bytes));
+    if (!o || o.v !== 1 || !o.keys || typeof o.keys !== "object") return null;
+    const ks = Object.keys(o.keys);
+    if (!ks.length || ks.some(k => k.indexOf("rash_company_") !== 0 || typeof o.keys[k] !== "string")) return null;
+    if (o.keys[VAULT_KEY]) JSON.parse(o.keys[VAULT_KEY]);   // 보관함이 깨져 있으면 여기서 걸립니다
+    return o;
+  } catch (e) { return null; }
+}
+
+/* 옮겨 담고 새로고침합니다 — 켤 때와 같은 길로 보관함 → S 를 타게 (importVaultFile 과 같은 까닭) */
+function moveApply(o) {
+  const keys = Object.assign({}, o.keys);
+  if (keys[VAULT_KEY]) {
+    const seed = JSON.parse(keys[VAULT_KEY]);
+    const 어긋남 = vaultTouched(seed);
+    const merged = vaultMergeOnce(seed);           // 지우기 «전» 의 보관함과 합칩니다
+    if (!어긋남) merged.sig = vaultSig(merged);
+    keys[VAULT_KEY] = JSON.stringify(merged);
+  }
+  moveKeys().forEach(k => Store.del(k));
+  Object.keys(keys).forEach(k => Store.set(k, keys[k]));
+  location.reload();
+}
+
+/* 지금 이 기기에 모아 둔 것이 있는가 — 덮어쓰기 전에 한 번 더 묻는 데 씁니다 */
+function moveHasVault() {
+  const v = loadVault();
+  return !!(v && ((v.ids && v.ids.length) || Object.keys(v.cleared || {}).length));
+}
+
+function openInstall(back) {
+  $modal.classList.add("on");
+  const env = appEnv();
+
+  const draw = (msg) => {
+    let h = '<h2>앱 으 로 설 치</h2>';
+    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
+
+    /* ── 설치 ── */
+    if (env.standalone) {
+      h += '<div class="hint">지금 앱으로 열려 있습니다.' +
+           (env.ios ? ' 사파리에서 하던 보관함은 아래 <b>[붙여넣고 옮겨 담기]</b> 로 가져옵니다.' : '') + '</div>';
+    } else if (env.inApp) {
+      h += '<div class="hint">카카오톡 같은 앱 안 브라우저에서는 설치할 수 없습니다. ' +
+           (env.ios ? '오른쪽 아래 공유 손잡이 → «Safari로 열기»' : '오른쪽 위 ⋮ → «다른 브라우저로 열기»') +
+           ' 로 연 다음 다시 오십시오.</div>';
+    } else if (env.ios) {
+      h += '<div class="hint">아이폰·아이패드는 홈 화면 앱이 사파리와 <b>저장소가 따로</b>입니다. ' +
+           '그냥 깔면 빈 보관함으로 시작하니, 아래 차례대로 하십시오.</div>' +
+           '<ol class="hint" style="padding-left:20px;line-height:1.9">' +
+             '<li>아래 <b>[보관함 복사]</b> 를 누릅니다.</li>' +
+             '<li>사파리 아래쪽 <b>공유 손잡이</b> → <b>홈 화면에 추가</b> → <b>추가</b>.</li>' +
+             '<li>홈 화면의 <b>라슈 컴퍼니</b> 를 열고, 출입 코드 화면의 <b>[보관함 옮겨 오기]</b> 에서 붙여 넣습니다. 출입 코드도 함께 옮겨집니다.</li>' +
+           '</ol>' +
+           '<div class="hint dim">복사한 «뒤» 에 사파리에서 더 하신 것은 따라가지 않습니다 — 옮기기 직전에 복사하십시오. ' +
+           '옮긴 뒤로는 앱에서만 하시면 됩니다. 홈 화면 앱은 7일이 지나도 지워지지 않습니다.</div>';
+    } else if (INSTALL_EVENT) {
+      h += '<div class="hint">아래 손잡이를 누르면 설치 창이 뜹니다. 깔고 나서도 보관함은 <b>그대로 이어집니다</b> — ' +
+           '이 브라우저와 같은 저장소를 씁니다.</div>' +
+           '<div style="margin:8px 0 4px"><button id="ainst" class="primary">설치하기</button></div>';
+    } else {
+      h += '<div class="hint">브라우저 메뉴에서 깝니다 — ' +
+           (env.android ? '크롬 오른쪽 위 <b>⋮</b> → <b>앱 설치</b>(또는 <b>홈 화면에 추가</b>).'
+                        : '크롬·엣지 주소창 오른쪽의 <b>설치</b> 아이콘, 또는 메뉴의 <b>앱 설치</b>.') +
+           ' 깔고 나서도 보관함은 <b>그대로 이어집니다</b> — 이 브라우저와 같은 저장소를 씁니다.</div>' +
+           '<div class="hint dim">메뉴에 설치가 없으면 이 브라우저는 앱 설치를 지원하지 않는 것입니다. 크롬·엣지·사파리로 열어 보십시오.</div>';
+    }
+
+    /* ── 옮기기 — 어느 기기든 같은 글로 옮겨집니다 (메신저로 보내 다른 기기에 붙여도 됩니다) ── */
+    h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">보관함 옮기기</div>' +
+         '<div class="hint">보관함과 진행을 글 한 덩이로 복사해, 다른 곳(홈 화면 앱 · 다른 브라우저 · 다른 기기)에 붙여 넣습니다. ' +
+         '<span class="dim">콘첸트라트에 연결해 두셨다면 그 연결도 함께 옮겨집니다.</span></div>' +
+         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px">' +
+           '<button id="acopy"' + (env.ios && !env.standalone ? ' class="primary"' : ' class="ghost"') + '>보관함 복사</button>' +
+         '</div>' +
+         '<div id="acopybox" style="display:none">' +
+           '<div class="hint">복사가 막혀 있습니다 — 아래 글을 길게 눌러 <b>전체 선택 → 복사</b> 하십시오.</div>' +
+           '<textarea id="acopytext" readonly style="width:100%;height:84px;box-sizing:border-box;background:var(--panel);color:var(--text-2);border:1px solid var(--line-2);font-size:11px;word-break:break-all"></textarea>' +
+         '</div>' +
+         '<div class="hint" style="margin-top:6px">복사해 온 글이 있으면 여기 붙여 넣습니다 — <b>지금 이 곳의 보관함을 덮어씁니다.</b></div>' +
+         '<textarea id="apaste" placeholder="RASH-MOVE1. 로 시작하는 글" spellcheck="false" autocomplete="off" ' +
+           'style="width:100%;height:84px;box-sizing:border-box;background:var(--panel);color:var(--text-2);border:1px solid var(--line-2);font-size:11px;word-break:break-all"></textarea>' +
+         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px">' +
+           (navigator.clipboard && navigator.clipboard.readText ? '<button id="aread" class="ghost">붙여넣기</button>' : '') +
+           '<button id="aapply"' + (env.ios && env.standalone ? ' class="primary"' : '') + '>옮겨 담기</button>' +
+         '</div>';
+
+    h += '<div class="modalfoot"><button id="aclose">닫기</button></div>';
+    $sheet.innerHTML = h;
+
+    const inst = document.getElementById("ainst");
+    if (inst) inst.onclick = async () => {
+      const ev = INSTALL_EVENT;
+      INSTALL_EVENT = null;
+      ev.prompt();
+      const r = await ev.userChoice.catch(() => null);
+      draw(r && r.outcome === "accepted" ? "설치했습니다. 홈 화면(또는 앱 목록)의 라슈 컴퍼니로 여십시오." : "");
+    };
+
+    document.getElementById("acopy").onclick = async () => {
+      const t = moveText();
+      try {
+        await navigator.clipboard.writeText(t);
+        draw("복사했습니다 — 글자 " + t.length.toLocaleString() + "자. " +
+             (env.ios && !env.standalone ? "이제 공유 손잡이 → 홈 화면에 추가로 까십시오." : "옮길 곳에 붙여 넣으십시오."));
+      } catch (e) {
+        document.getElementById("acopybox").style.display = "";
+        const ta = document.getElementById("acopytext");
+        ta.value = t;
+        ta.focus(); ta.select();
+      }
+    };
+
+    const rd = document.getElementById("aread");
+    if (rd) rd.onclick = async () => {
+      try { document.getElementById("apaste").value = await navigator.clipboard.readText(); }
+      catch (e) { draw("붙여넣기가 막혀 있습니다 — 칸을 길게 눌러 «붙여넣기» 를 고르십시오."); }
+    };
+
+    document.getElementById("aapply").onclick = () => {
+      const o = moveParse(document.getElementById("apaste").value);
+      if (!o) { alert("옮기기 글을 읽지 못했습니다. [보관함 복사] 로 받은 글을 빠짐없이 붙여 넣었는지 확인하십시오."); return; }
+      const when = new Date(o.at || 0).toLocaleString("ko-KR");
+      if (!confirm("v" + o.ver + " 에서 " + when + " 에 복사한 보관함을 옮겨 담습니다.\n" +
+                   (moveHasVault() ? "지금 이 곳에 있는 보관함은 덮어써지고 되돌릴 수 없습니다.\n" : "") +
+                   "이미 받으신 우편과 업적은 지워지지 않습니다.\n\n계속할까요?")) return;
+      moveApply(o);
+    };
+
+    document.getElementById("aclose").onclick = () => { closeModal(); if (back) back(); };
+  };
+
+  draw();
+}
+
+/* 서비스 워커 — 설치 조건이자, 끊겼을 때 한 번 본 화면을 꺼내 쓰는 자리입니다(sw.js).
+ * https 나 localhost 에서만 됩니다. file:// 이나 완전판(한 파일)에서는 조용히 넘어갑니다. */
+function registerSW() {
+  if (!("serviceWorker" in navigator)) return;
+  if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+
 /* ── 출입 코드 ────────────────────────────────────────────────
  *  data/access.js 에 적힌 해시와 맞아야 들어올 수 있습니다.
  *  한 번 통과하면 그 브라우저에 기억해 둡니다.
@@ -13849,8 +14067,13 @@ function gate(msg) {
 
   $actions.innerHTML =
     '<input id="codein" class="codein" autocomplete="off" spellcheck="false" placeholder="코드">' +
-    '<button id="codego" class="primary">확인</button>';
+    '<button id="codego" class="primary">확인</button>' +
+    /* 홈 화면 앱으로 갓 깐 아이폰은 사파리와 저장소가 따로라 여기서 시작합니다 —
+     * 옮겨 오면 출입 코드 통과도 함께 따라옵니다 (openInstall) */
+    (appEnv().standalone ? '<button id="codemove" class="ghost">보관함 옮겨 오기</button>' : '');
   $actions.classList.add("mid");        // 출입 코드 칸은 화면 가운데에
+  const mv = document.getElementById("codemove");
+  if (mv) mv.onclick = () => openInstall(() => {});
 
   const inp = document.getElementById("codein");
   const go = () => {
@@ -13872,6 +14095,7 @@ function gate(msg) {
 /* 글꼴을 가장 먼저 입힙니다 — 출입 코드 화면부터 고른 글꼴로 보이도록 */
 function boot() {
   applyFont((loadVault() || {}).font);
+  registerSW();
   if (gateOpen()) glass(); else gate();
   /* 콘첸트라트에 연결돼 있으면 뒤에서 구름을 봅니다 — 더 새로우면 합치고 새로고침합니다.
    * 기다리게 하지 않습니다: 오프라인이면 그냥 지금 것으로 갑니다. */
