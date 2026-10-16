@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.14.1";
+const VERSION = "2.14.2";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1122,7 +1122,9 @@ function enkBarHTML() {
            '<span class="enknm">' + ENK_RULE.name + '</span>' +
            '<span class="enkpips">' + pips + '</span>' +
            '<span class="enknum">' + n + ' / ' + ENK_RULE.max + '</span>' +
-           '<span class="enksub">' + enkNextText() + '</span>' +
+           /* 가득 찼을 때는 «가득 찼습니다» 를 적지 않습니다 — 눈금과 10 / 10 으로 이미 보이고,
+            * 좁은 화면에서 줄을 하나 더 먹었습니다 (사용자 지침 2026-10-17) */
+           (n >= ENK_RULE.max ? '' : '<span class="enksub">' + enkNextText() + '</span>') +
          '</div>';
 }
 
@@ -3802,23 +3804,30 @@ function renderHeader() {
     ? "v" + VERSION + (VERSION_NAME ? "  «" + VERSION_NAME + "»" : "")
     : (c ? (c.no + "  " + c.title + (c.subtitle ? "  ─  " + c.subtitle : "")) : "") + "   v" + VERSION;
   /* 재화는 아이콘과 양만 — 이름 · 설명은 누르면 작은 창으로 뜹니다(WALLET_INFO · #chipinfo, 사용자 지침 2026-10-16) */
-  let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") +
+  /* 재화 둘은 한 덩이(.curs)로 묶습니다 — 좁은 화면에서는 위아래 두 줄로 쌓습니다(index.html, 사용자 지침 2026-10-17) */
+  let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") + '<span class="curs">' +
               '<span class="cur" data-cur="money" title="' + CURRENCY + '">' + iconMini("원고료") + "<b>" + S.money + "</b></span>";
   if (S.codex) right += '<span class="cur" data-cur="codex" title="황금교본">' + iconMini("황금교본") + "<b>" + S.codex + "</b></span>";
-  /* 유리창에서만 — [우편함] · [보상] 을 아이콘 손잡이로 (사용자 지침 2026-10-16).
+  right += '</span>';
+  /* 유리창에서만 — [우편함] · [보상] · [설정] 을 아이콘 손잡이로 (사용자 지침 2026-10-16 · 17).
    * 예전에는 아래 손잡이 줄에 글자로 섰습니다. 받을 것이 있으면 금빛 테두리와 개수 딱지 */
   if (AT_GLASS && !S.battle) {
     const hb = (key, name, n) =>
       '<button class="hdrbtn' + (n ? ' on' : '') + '" data-hdr="' + key + '" title="' + name + (n ? ' (' + n + ')' : '') + '">' +
         iconMini(name) + (n ? '<i>' + n + '</i>' : '') + '</button>';
+    /* [설정] 도 톱니바퀴 아이콘으로 맨 끝에 (사용자 지침 2026-10-17) */
     right += '<span class="hdrbtns">' + hb("mail", MAIL_RULE.name, mailWaiting()) +
-             (rewardOn() ? hb("reward", REWARD_RULE.name, rewardWaiting()) : "") + '</span>';
+             (rewardOn() ? hb("reward", REWARD_RULE.name, rewardWaiting()) : "") +
+             hb("settings", "설정", 0) + '</span>';
   }
   /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
   /* 관리력은 머리에 숫자로 적지 않고, 아래쪽 눈금으로 보여 줍니다 (renderManage) */
   $wallet.innerHTML = right;
   $wallet.querySelectorAll("[data-hdr]").forEach(el => {
-    el.onclick = () => el.dataset.hdr === "mail" ? openMail(() => glass()) : openReward(() => glass());
+    const k = el.dataset.hdr;
+    el.onclick = () => k === "mail" ? openMail(() => glass())
+                     : k === "reward" ? openReward(() => glass())
+                     : openSettings(() => glass());
   });
 }
 
@@ -14063,8 +14072,7 @@ function glass() {
     /* [우편함] · [보상] 은 머리줄 오른쪽의 아이콘 손잡이로 옮겼습니다 (renderHeader · AT_GLASS) */
     /* [강화] 는 쪼개 옮겼습니다 — 동기화는 [편성] 맨 위, 기프트 강화 · 합성은 [보관함] 의 기프트 칸 아래 (사용자 지침 2026-10-16) */
     { label: "보관함", fn: () => openVault(() => glass()) },
-    /* 유리창 배경 · 화면 글꼴 — openSettings */
-    { label: "설정", cls: "ghost", fn: () => openSettings(() => glass()) },
+    /* [설정] 은 머리줄 오른쪽 끝의 톱니바퀴로 옮겼습니다 (renderHeader, 사용자 지침 2026-10-17) */
     /* [패치 노트] 는 [설정] 안으로 옮겼습니다 (사용자 지침 2026-10-16) */
   ]);
   showEnkBar(true);
