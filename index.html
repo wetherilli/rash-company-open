@@ -346,6 +346,7 @@
   .pcard{
     position:relative;border:1px solid var(--line);border-left:4px solid #4a6d92;
     background:var(--sheet);padding:9px 10px;font-size:13px;
+    border-radius:8px;               /* 작성위원 · 교육위원 카드는 둥근 모서리 (사용자 지침 2026-10-16) */
   }
   .pcard.down{opacity:.4;}
   /* 지금 명령을 고르는 사람 — 초록 */
@@ -358,6 +359,7 @@
   .pcard.aimed{background:#170e10;}
   .pcard.aimed::after{
     content:"";position:absolute;inset:-3px;border:2px dashed var(--red);pointer-events:none;
+    border-radius:10px;              /* 카드 모서리를 따라 둥글게 */
   }
   /* 지원 작성위원 — 연두 */
   .pcard.sup{background:#101a10;border-left-color:#9ccc65;}
@@ -515,8 +517,51 @@
   .hpbar i{display:block;height:100%;background:#8d3b36;}
   .star{color:var(--gold);letter-spacing:-1px;}
 
+  /* ── 보조 교육위원 카드 줄 (engine.js renderAdvisors) ──
+   * 작성위원 카드와 같은 셋 칸으로 줄을 맞추고, 낮고 납작하게. 왼쪽 띠는 교육위원 보라 */
+  #advisors{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px;}
+  #advisors:empty{display:none;}
+  .acard{
+    border:1px solid var(--line);border-left:4px solid #7d6bb0;background:var(--sheet);
+    padding:6px 10px;font-size:12.5px;cursor:default;border-radius:8px;
+  }
+  .acard .nm{color:var(--text);font-weight:700;display:flex;align-items:center;gap:2px;flex-wrap:wrap;}
+  .acard .id{color:var(--muted);font-size:11.5px;margin-top:1px;}
+
+  /* ── 머리 달린 딱지 줄 — 「E.G.O 기프트 |」(테마팩 특전도 이 줄에 다른 색으로) · 「활성화된 시너지 |」
+   *    (engine.js renderGifts · renderSynergy). 머리 색은 딱지 색을 따릅니다 ── */
+  #gifts{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  #gifts:empty{display:none;}
+  /* 기프트 줄과 시너지 줄은 줄바꿈 없이 한 줄로 — 넘치면 손가락으로 옆으로 밀어 봅니다
+   * (사용자 지침 2026-10-16). 시너지 줄은 아래 #synergy 에 같은 규칙이 있습니다 */
+  #gifts{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+  #gifts > *{flex:0 0 auto;white-space:nowrap;}
+  #gifts::-webkit-scrollbar{height:4px;}
+  #gifts::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px;}
+  #gifts .gift,#gifts .perk{cursor:pointer;}
+  /* 좁은 화면에서 넘칠 때만 — 이름을 감추고 아이콘만 (engine.js giftRowFit) */
+  #gifts.compact .gtx{display:none;}
+  #gifts.compact .gift,#gifts.compact .perk{padding:2px 5px;gap:2px;}
+  #gifts.compact .icmini{margin:0;}
+  /* 딱지를 눌렀을 때 뜨는 이름 · 설명 창 */
+  #chipinfo{
+    position:fixed;z-index:30;background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;
+    padding:8px 10px;font-size:12px;color:var(--text-2);box-shadow:0 4px 14px rgba(0,0,0,.45);
+  }
+  #chipinfo .nm{color:var(--text);font-weight:700;margin-bottom:3px;}
+  #chipinfo .sub{color:var(--muted);line-height:1.6;}
+  .rowlabel{font-size:11.5px;font-weight:700;letter-spacing:.04em;}
+  .rowbar{color:var(--muted);font-size:12px;margin:0 2px;}
+  #gifts .rowlabel{color:#7fc0a0;}
+  #synergy .rowlabel{color:var(--gold);}
+
   /* ── 시너지 ───────────────────────────── */
-  #synergy{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  #synergy{margin-top:8px;display:flex;flex-wrap:nowrap;gap:6px;align-items:center;
+           overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+  #synergy > *{flex:0 0 auto;white-space:nowrap;}
+  #synergy::-webkit-scrollbar{height:4px;}
+  #synergy::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px;}
+  #synergy > .none{flex:1 1 auto;white-space:normal;}   /* «시너지 없음» 안내 글만은 줄을 넘겨도 됩니다 */
   #synergy .none{color:var(--off);font-size:11.5px;letter-spacing:.05em;}
   .syn{
     border:1px solid var(--gold-line);background:var(--gold-bg);color:var(--gold);
@@ -835,11 +880,24 @@
   .mailnote.no{border-color:var(--red);background:#170e10;color:#e0a09a;}
   /* ── 출석 · 주간 보상 (engine.js openReward) ── */
   .rwhead{color:var(--text);font-weight:700;font-size:13px;margin:14px 0 6px;letter-spacing:.06em;}
-  .attgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  /* 일곱 칸을 4칸 · 3칸 두 줄로 — 아랫줄 셋은 줄을 다 채우게 늘립니다 (사용자 지침 2026-10-16).
+   * 열둘로 나눠 윗줄은 셋씩, 아랫줄은 넷씩 차지합니다 */
+  .attgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:6px;}
+  .attgrid .attcell{grid-column:span 3;}
+  .attgrid .attcell:nth-child(n+5){grid-column:span 4;}
   .attgrid .attcell{text-align:center;padding:8px 4px;cursor:default;}
   .attgrid .attcell.now{border-color:var(--gold);cursor:pointer;}
   .attgrid .attcell .nm{display:flex;align-items:center;justify-content:center;gap:3px;margin:3px 0;}
   .grid.rwgrid{grid-template-columns:repeat(4,1fr);}
+  /* 주간 과제 진행 게이지 — 다 채우면 금빛 */
+  .rwgauge{display:inline-block;vertical-align:middle;width:calc(100% - 56px);height:7px;background:var(--panel-2);border:1px solid var(--line-2);}
+  .rwgauge i{display:block;height:100%;background:var(--text-3);}
+  .rwgauge.full i{background:var(--gold);}
+  .rwgnum{display:inline-block;width:52px;text-align:right;vertical-align:middle;font-variant-numeric:tabular-nums;}
+  /* 업적 창 맨 위 달성도 — 같은 게이지를 조금 굵게 */
+  .achgauge{margin:4px 0 12px;color:var(--text-2);font-size:13px;}
+  .achgauge .rwgauge{height:10px;width:calc(100% - 64px);}
+  .achgauge .rwgnum{width:60px;}
   .rwpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
   .rwpick button{display:flex;align-items:center;gap:5px;}
   .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
@@ -1060,6 +1118,8 @@
   body.battling .pcard.sup{border-left-color:#9ccc65;}
   body.battling .pcard .id{color:var(--b-muted);}
   body.battling .pcard .st{color:var(--b-muted);}
+  body.battling .acard{border-color:var(--b-line-soft);border-left-color:#7d6bb0;background:var(--b-card);}
+  body.battling .acard .id{color:var(--b-muted);}
   body.battling .hpbar{background:var(--b-bar);border-color:var(--b-line);}
   body.battling .hpbar i{background:var(--b-hp);}
 
@@ -1171,8 +1231,15 @@
     .pcard .st{font-size:11px;}
     .pcard .cmd{font-size:11px;}
 
+    #advisors{gap:5px;margin-top:5px;}
+    .acard{padding:5px 7px;font-size:12px;}
+    .acard .id{display:none;}                   /* 교육위원 인격 제목 — 이름과 별만 */
+
     #synergy{gap:4px;margin-top:6px;}
-    .syn .eff, .adv, .gift{display:none;}       /* 시너지 효과·교육위원·기프트 딱지 */
+    #gifts{gap:4px;margin-top:6px;}
+    .perk{font-size:10.5px;}
+    .gift{font-size:10.5px;padding:2px 7px;}
+    .syn .eff{display:none;}                    /* 시너지 효과 */
     .syn{font-size:10.5px;padding:2px 7px;}
 
     #manage{margin-top:6px;}
@@ -1192,8 +1259,6 @@
     .grid{grid-template-columns:1fr;}
     /* 셋을 나란히 세우는 규칙은 여기서 풀립니다 — 좁은 화면에서는 한 줄에 하나씩 */
     .grid.three{grid-template-columns:1fr;}
-    /* 출석 일곱 칸은 좁은 화면에서 넷 · 셋 두 줄로 */
-    .attgrid{grid-template-columns:repeat(4,1fr);}
     .grid.rwgrid{grid-template-columns:1fr;}
     /* 배정 광고 띠도 화면에 맞춰 낮춥니다 */
     .pkline{height:92px;font-size:16px;letter-spacing:.06em;padding:0 10px;}
@@ -1314,6 +1379,8 @@
   <div id="stage"></div>
   <div id="log"></div>
   <div id="party"></div>
+  <div id="advisors"></div>
+  <div id="gifts"></div>
   <div id="synergy"></div>
   <div id="manage"></div>
   <div id="enk"></div>
@@ -1323,24 +1390,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.13.0"></script>
-<script src="data/vault.js?v=2.13.0"></script>
-<script src="data/characters.js?v=2.13.0"></script>
-<script src="data/skills.js?v=2.13.0"></script>
-<script src="data/allies.js?v=2.13.0"></script>
-<script src="data/gifts.js?v=2.13.0"></script>
-<script src="data/pickup.js?v=2.13.0"></script>
-<script src="data/achievements.js?v=2.13.0"></script>
-<script src="data/mail.js?v=2.13.0"></script>
-<script src="data/notice.js?v=2.13.0"></script>
-<script src="data/patch.js?v=2.13.0"></script>
-<script src="data/event.js?v=2.13.0"></script>
-<script src="data/reward.js?v=2.13.0"></script>
-<script src="data/tutorial.js?v=2.13.0"></script>
-<script src="data/foes.js?v=2.13.0"></script>
-<script src="data/story.js?v=2.13.0"></script>
-<script src="data/mirrorpacks.js?v=2.13.0"></script>
-<script src="engine.js?v=2.13.0"></script>
+<script src="data/access.js?v=2.13.1"></script>
+<script src="data/vault.js?v=2.13.1"></script>
+<script src="data/characters.js?v=2.13.1"></script>
+<script src="data/skills.js?v=2.13.1"></script>
+<script src="data/allies.js?v=2.13.1"></script>
+<script src="data/gifts.js?v=2.13.1"></script>
+<script src="data/pickup.js?v=2.13.1"></script>
+<script src="data/achievements.js?v=2.13.1"></script>
+<script src="data/mail.js?v=2.13.1"></script>
+<script src="data/notice.js?v=2.13.1"></script>
+<script src="data/patch.js?v=2.13.1"></script>
+<script src="data/event.js?v=2.13.1"></script>
+<script src="data/reward.js?v=2.13.1"></script>
+<script src="data/tutorial.js?v=2.13.1"></script>
+<script src="data/foes.js?v=2.13.1"></script>
+<script src="data/story.js?v=2.13.1"></script>
+<script src="data/mirrorpacks.js?v=2.13.1"></script>
+<script src="engine.js?v=2.13.1"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

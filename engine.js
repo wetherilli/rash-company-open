@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.13.0";
+const VERSION = "2.13.1";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4046,26 +4046,85 @@ function showEnkBar(on) {
   box.innerHTML = on ? enkBarHTML() : "";
 }
 
-/* 발동 중인 편성 시너지 — 전투 중에도 항상 보인다 */
+/* 세워 둔 보조 교육위원 — 작성위원 카드 바로 아래에 카드 한 줄 (사용자 지침 2026-10-16).
+ * 예전에는 시너지 줄 맨 앞에 딱지로 섰는데, 기프트 · 시너지와 뒤섞여 누가 서 있는지 잘 안 보였고
+ * 좁은 화면에서는 딱지째 감춰졌습니다. 칸은 작성위원과 같은 셋으로 나눠 위 카드와 줄을 맞춥니다.
+ * 효과 글(desc)은 카드에 다 적기엔 길어 마우스를 올리면 뜨게 둡니다. 아무도 안 세웠으면 줄이 비워집니다. */
+function renderAdvisors() {
+  const box = document.getElementById("advisors");
+  if (!box) return;
+  box.innerHTML = equippedAdvisors().map(a =>
+    '<div class="acard" title="' + String(a.desc || "").replace(/"/g, "&quot;") + '">' +
+      '<div class="nm">' + iconMini(advisorIconName(a)) + a.name +
+        ' <span class="star">' + stars(a.star) + '</span></div>' +
+      '<div class="id">' + a.title + '</div>' +
+    '</div>').join("");
+}
+
+/* 지닌 E.G.O 기프트 — 「E.G.O 기프트 |」 로 시작하는 줄 하나 (사용자 지침 2026-10-16).
+ * 예전에는 시너지 줄에 섞여 있었고 좁은 화면에서는 감춰졌습니다.
+ * 거울 던전에서 얻은 테마팩 특전도 이 줄 뒤에 다른 색 딱지(.perk)로 함께 겁니다 (사용자 지침).
+ * 둘 다 없으면 줄이 비워집니다.
+ *
+ * ■ 좁은 화면에서 줄이 넘치면 — 아이콘만 (사용자 지침 2026-10-16)
+ *   휴대폰에서 한 줄에 다 안 들어가 밀어 봐야 할 때만 .compact 를 달아 이름을 감추고 아이콘 · 별만 남깁니다.
+ *   다 들어가면 이름까지 그대로입니다. 딱지를 누르면 이름과 설명이 작은 창(#chipinfo)으로 뜹니다 —
+ *   아이콘만 남았을 때 무엇인지 알아보는 길이고, 넓은 화면에서도 똑같이 눌러 볼 수 있습니다. */
+let GIFT_ROW_INFO = [];
+function renderGifts() {
+  const box = document.getElementById("gifts");
+  if (!box) return;
+  const list = equippedGifts(), perks = packPerks();
+  GIFT_ROW_INFO = list.map(gf => ({ name: stars(gf.star) + ' ' + giftLabel(gf), desc: gf.desc || "" }))
+    .concat(perks.map(p => ({ name: "테마팩 특전 · " + p.name, desc: p.desc || "" })));
+  const esc = t => String(t || "").replace(/<[^>]*>/g, "").replace(/"/g, "&quot;");
+  box.innerHTML = (list.length || perks.length)
+    ? '<span class="rowlabel">E.G.O 기프트</span><span class="rowbar">|</span>' +
+      list.map((gf, i) => '<span class="gift" data-ginfo="' + i + '" title="' + esc(gf.desc) + '">' + iconMini(gf.name) +
+                       '<span class="star">' + stars(gf.star) + '</span><span class="gtx"> ' + giftLabel(gf) + '</span></span>').join("") +
+      perks.map((p, j) => '<span class="perk" data-ginfo="' + (list.length + j) + '" title="' + esc(p.desc) + '">' +
+                       iconMini(p.name) + '<span class="gtx">' + p.name + '</span></span>').join("")
+    : "";
+  giftRowFit();
+}
+/* 좁은 화면에서만, 넘칠 때만 아이콘으로 줄입니다. 화면을 돌리거나 창 크기가 바뀌면 다시 잽니다. */
+function giftRowFit() {
+  const box = document.getElementById("gifts");
+  if (!box) return;
+  box.classList.remove("compact");
+  if (!box.firstChild || !rwNarrow()) return;
+  if (box.scrollWidth > box.clientWidth + 1) box.classList.add("compact");
+}
+window.addEventListener("resize", () => giftRowFit());
+
+/* 딱지를 누르면 이름 · 설명을 그 아래에 작은 창으로. 같은 딱지를 다시 누르거나 다른 곳을 누르면 닫힙니다. */
+document.addEventListener("click", e => {
+  const tip = document.getElementById("chipinfo");
+  const chip = e.target.closest && e.target.closest("#gifts [data-ginfo]");
+  if (!chip) { if (tip) tip.remove(); return; }
+  const same = tip && tip.dataset.for === chip.dataset.ginfo;
+  if (tip) tip.remove();
+  if (same) return;
+  const info = GIFT_ROW_INFO[+chip.dataset.ginfo];
+  if (!info) return;
+  const el = document.createElement("div");
+  el.id = "chipinfo";
+  el.dataset.for = chip.dataset.ginfo;
+  el.innerHTML = '<div class="nm">' + info.name + '</div>' + (info.desc ? '<div class="sub">' + info.desc + '</div>' : '');
+  document.body.appendChild(el);
+  const b = chip.getBoundingClientRect(), w = Math.min(280, window.innerWidth - 16);
+  el.style.width = w + "px";
+  el.style.left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8)) + "px";
+  el.style.top = (b.bottom + 6) + "px";
+});
+
+/* 발동 중인 편성 시너지 — 「활성화된 시너지 |」 로 시작하는 줄 (사용자 지침 2026-10-16). 전투 중에도 항상 보인다.
+ * 보조 교육위원은 renderAdvisors, 기프트 · 테마팩 특전은 renderGifts 가 따로 줄을 그립니다. */
 function renderSynergy() {
   const box = document.getElementById("synergy");
   if (!box) return;
 
-  /* 세워둔 보조 교육위원과 지닌 기프트 — 별과 이름만 */
-  let head = "";
-  equippedAdvisors().forEach(a => {
-    head += '<span class="adv">' + iconMini(advisorIconName(a)) + '<span class="star">' + stars(a.star) + '</span> ' +
-            a.title + ' ' + a.name + '</span>';
-  });
-  equippedGifts().forEach(gf => {
-    head += '<span class="gift">' + iconMini(gf.name) + '<span class="star">' + stars(gf.star) + '</span> ' +
-            giftLabel(gf) + '</span>';
-  });
-  /* 테마팩 특전 — 이번 거울에서 얻어 들고 있는 것 (거울 던전 밖에서는 없습니다) */
-  packPerks().forEach(p => {
-    head += '<span class="perk" title="' + p.desc + '">' + iconMini(p.name) + p.name + '</span>';
-  });
-
+  const head = '<span class="rowlabel">활성화된 시너지</span><span class="rowbar">|</span>';
   const list = activeSynergies();
   if (!list.length) {
     box.innerHTML = head +
@@ -4086,7 +4145,7 @@ function renderSynergy() {
 }
 
 function render() {
-  renderMood(); renderHeader(); renderFoeBar(); renderParty(); renderSynergy(); renderManage();
+  renderMood(); renderHeader(); renderFoeBar(); renderParty(); renderAdvisors(); renderGifts(); renderSynergy(); renderManage();
   /* 고유 능력 설명 칸은 askNext()가 그 차례에만 채운다 — 전투 밖에서는 비워 둔다 */
   if (!S.battle) { const box = document.getElementById("uniqueskills"); if (box) box.innerHTML = ""; }
 }
@@ -11712,13 +11771,15 @@ function rewardCount(id, n) {
 }
 
 /* 유리창에 들어섰을 때 출석 창을 저절로 띄울지 (사용자 지침 2026-10-16).
+ * 받을 것(오늘 출석 · 주간 보상)이 남아 있을 때만 뜹니다.
  * 상점 알림이 뜰 판이면 알림을 닫은 뒤(glass() 를 다시 부를 때) 뜹니다.
  * 한 번 띄운 날은 다시 안 띄웁니다 — 받지 않고 닫아도 유리창을 오갈 때마다 붙들지 않게.
  * 이 표시는 탭을 닫으면 사라지므로, 받지 않은 채 다음에 켜면 한 번 더 뜹니다.
  * 처음 오신 분의 유리창 안내(tutorOnce "glass")를 아직 안 봤으면 그 안내를 먼저 둡니다. */
 let REWARD_AUTO_DAY = null;
 function rewardAutoDue() {
-  if (!rewardOn() || !rewardDailyOpen()) return false;
+  /* 받을 것이 하나라도 있을 때만 — 다 받았으면 [보상] 을 눌렀을 때만 엽니다 (사용자 지침 2026-10-16) */
+  if (!rewardOn() || !rewardWaiting()) return false;
   if (REWARD_AUTO_DAY === enkDayKey(Date.now())) return false;
   return tutorSaw("glass");
 }
@@ -11799,6 +11860,27 @@ function rewardMerge(a, b) {
   return out;
 }
 
+/* 보상 창의 접는 칸 — 좁은 화면(모바일, index.html 의 max-width:640px 와 같은 선)에서만 접습니다.
+ * 넓은 화면은 접는 칸 없이 한 격자에 차례대로 늘어놓습니다 — 나눠 두면 칸이 넷인데도
+ * 두 줄로 갈립니다 (사용자 지침 2026-10-16).
+ * 좁은 화면에서 펼친 것은 받아서 다시 그릴 때 이어 가고, [닫기] 로 나가면 다시 접힙니다. */
+const RW_OPEN = { week: false, tasks: false };
+function rwNarrow() { return !!(window.matchMedia && window.matchMedia("(max-width:640px)").matches); }
+
+/* items: [{ html, ok }] — ok 인 것(받았거나 받을 수 있는 것)만 내놓고 나머지는 접습니다 */
+function rwFoldGrid(key, items, label, empty) {
+  if (!rwNarrow()) return '<div class="grid rwgrid">' + items.map(x => x.html).join("") + '</div>';
+  const ok = items.filter(x => x.ok), left = items.filter(x => !x.ok);
+  let h = ok.length ? '<div class="grid rwgrid">' + ok.map(x => x.html).join("") + '</div>'
+                    : (empty ? '<div class="hint" style="margin:0">' + empty + '</div>' : '');
+  if (left.length)
+    h += '<details class="vfold" data-rwfold="' + key + '"' + (RW_OPEN[key] ? ' open' : '') + '>' +
+           '<summary>' + label + ' ' + left.length + '개</summary>' +
+           '<div class="grid rwgrid">' + left.map(x => x.html).join("") + '</div>' +
+         '</details>';
+  return h;
+}
+
 function openReward(back, note) {
   $modal.classList.add("on");
   const r = rewardSync();
@@ -11814,17 +11896,16 @@ function openReward(back, note) {
   const L = ATTEND_DAYS.length;
   const todayOpen = rewardDailyOpen();
   const filled = todayOpen ? r.n % L : ((r.n - 1) % L) + 1;   // 이번 바퀴에서 받은 칸 수
-  h += '<div class="rwhead">매일 출석</div><div class="attgrid">';
-  ATTEND_DAYS.forEach((g, i) => {
+  const cell = (g, i) => {
     const got = i < filled, now = todayOpen && i === filled;
-    h += '<div class="slot attcell' + (got ? ' sel' : '') + (now ? ' now' : '') + '"' +
-           (now ? ' data-rw="daily"' : '') + '>' +
-           '<div class="sub">' + (i + 1) + '일째</div>' +
-           '<div class="nm">' + giveIc(g) + (g.money || giveTxt(g)) + '</div>' +
-           '<div class="sub">' + (got ? '✓ 받음' : now ? '<b style="color:var(--gold)">받기</b>' : '') + '</div>' +
-         '</div>';
-  });
-  h += '</div>';
+    return '<div class="slot attcell' + (got ? ' sel' : '') + (now ? ' now' : '') + '"' +
+             (now ? ' data-rw="daily"' : '') + '>' +
+             '<div class="sub">' + (i + 1) + '일째</div>' +
+             '<div class="nm">' + giveIc(g) + (g.money || giveTxt(g)) + '</div>' +
+             '<div class="sub">' + (got ? '✓ 받음' : now ? '<b style="color:var(--gold)">받기</b>' : '') + '</div>' +
+           '</div>';
+  };
+  h += '<div class="rwhead">매일 출석</div><div class="attgrid">' + ATTEND_DAYS.map(cell).join("") + '</div>';
   if (!todayOpen) h += '<div class="hint" style="margin:6px 0 0">오늘 몫은 받았습니다. 내일 0시에 다음 칸이 열립니다.</div>';
 
   /* ── 이번 주 — 첫 상자 · 누적 출석 ── */
@@ -11838,23 +11919,27 @@ function openReward(back, note) {
     '</div>';
 
   const days = r.wk.days.length;
-  h += '<div class="rwhead">이번 주 출석 — ' + days + '일</div><div class="grid rwgrid">';
-  h += row("first", WEEKLY_FIRST.name, "이번 주에 처음 들어온 날", WEEKLY_FIRST.give,
-           r.wk.first ? "got" : "open");
-  WEEKLY_ATTEND.forEach(a => {
-    h += row("attend:" + a.days, a.days + "일 출석", "이번 주에 게임을 연 날 " + Math.min(days, a.days) + " / " + a.days,
-             a.give, r.wk.attend[a.days] ? "got" : days >= a.days ? "open" : "lock");
-  });
-  h += '</div>';
+  /* 주간 과제와 같은 규칙 — 좁은 화면에서는 받았거나 받을 수 있는 칸만 내놓고, 아직인 칸은 접어 둡니다 */
+  const wRows = [{ html: row("first", WEEKLY_FIRST.name, "이번 주에 처음 들어온 날", WEEKLY_FIRST.give,
+                             r.wk.first ? "got" : "open"), ok: true }]
+    .concat(WEEKLY_ATTEND.map(a => ({
+      html: row("attend:" + a.days, a.days + "일 출석", "이번 주에 게임을 연 날 " + Math.min(days, a.days) + " / " + a.days,
+                a.give, r.wk.attend[a.days] ? "got" : days >= a.days ? "open" : "lock"),
+      ok: days >= a.days })));
+  h += '<div class="rwhead">이번 주 출석 — ' + days + '일</div>' + rwFoldGrid("week", wRows, "남은 출석 보상");
 
   /* ── 주간 과제 ── */
-  h += '<div class="rwhead">주간 과제</div><div class="grid rwgrid">';
-  WEEKLY_TASKS.forEach(t => {
-    const p = Math.min(r.wk.prog[t.id] || 0, t.need);
-    h += row("task:" + t.id, t.name + " " + t.need + "회", "진행 " + p + " / " + t.need, t.give,
-             r.wk.done[t.id] ? "got" : rewardTaskFull(t) ? "open" : "lock");
-  });
-  h += '</div>';
+  /* 채운 과제(받을 것 · 받은 것)만 내놓고, 아직 못 채운 것은 접어 둡니다 — 좁은 화면만 (rwFoldGrid) */
+  /* 진행은 게이지로 — 숫자만 있을 때보다 얼마 남았는지가 한눈에 들어옵니다 (사용자 지침 2026-10-16) */
+  const gauge = (p, need) =>
+    '<span class="rwgauge' + (p >= need ? ' full' : '') + '"><i style="width:' + Math.round(p / need * 100) + '%"></i></span>' +
+    '<span class="rwgnum">' + p + ' / ' + need + '</span>';
+  const task = t => row("task:" + t.id, t.name + " " + t.need + "회",
+                        gauge(Math.min(r.wk.prog[t.id] || 0, t.need), t.need), t.give,
+                        r.wk.done[t.id] ? "got" : rewardTaskFull(t) ? "open" : "lock");
+  h += '<div class="rwhead">주간 과제</div>' +
+       rwFoldGrid("tasks", WEEKLY_TASKS.map(t => ({ html: task(t), ok: rewardTaskFull(t) })),
+                  "남은 과제", "아직 채운 과제가 없습니다.");
 
   /* 넷 다 채우면 — 선택권 둘 중 하나를 고릅니다 */
   const allFull = rewardAllFull();
@@ -11862,7 +11947,8 @@ function openReward(back, note) {
   h += '<div class="slot wide' + (r.wk.all ? ' sel' : '') + '" style="margin-top:8px;cursor:default">' +
          '<div class="' + (allFull || r.wk.all ? 'nm' : 'lock') + '">' + (r.wk.all ? '✓ ' : allFull ? '● ' : '') +
            WEEKLY_ALL.name + '</div>' +
-         '<div class="sub">과제 ' + fullN + ' / ' + WEEKLY_TASKS.length + ' — 넷 다 채우면 아래 둘 가운데 하나를 골라 받습니다.</div>' +
+         '<div class="sub">' + gauge(fullN, WEEKLY_TASKS.length) + '</div>' +
+         '<div class="sub">과제를 넷 다 채우면 아래 둘 가운데 하나를 골라 받습니다.</div>' +
          (r.wk.all ? '<div class="sub mailfoot">받았습니다</div>'
            : '<div class="rwpick">' + WEEKLY_ALL.pick.map((g, i) =>
                '<button' + (allFull ? ' data-rw="all:' + i + '"' : ' disabled') + '>' + giveTxt(g) + '</button>').join("") +
@@ -11879,7 +11965,14 @@ function openReward(back, note) {
       openReward(back, res);
     };
   });
-  document.getElementById("rwclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  $sheet.querySelectorAll("[data-rwfold]").forEach(el => {
+    /* 창을 닫은 뒤 늦게 오는 toggle 은 받지 않습니다 — [닫기] 가 접어 둔 것을 도로 펴지 않게 */
+    el.ontoggle = () => { if ($modal.classList.contains("on")) RW_OPEN[el.dataset.rwfold] = el.open; };
+  });
+  document.getElementById("rwclose").onclick = () => {
+    RW_OPEN.week = RW_OPEN.tasks = false;
+    closeModal(); render(); if (back) back();
+  };
 }
 
 function openAchieve(back) {
@@ -11887,9 +11980,12 @@ function openAchieve(back) {
   const all = achieveList();
   const done = all.filter(achieved).length;
 
+  /* 달성도는 맨 위 게이지로 — 보상 창의 주간 과제와 같은 모양(.rwgauge) (사용자 지침 2026-10-16) */
   let h = '<h2>업 적</h2>' +
-          '<div class="hint">조건을 채우면 그 자리에서 보상이 들어옵니다.　' +
-          done + ' / ' + all.length + '</div>';
+          '<div class="hint">조건을 채우면 그 자리에서 보상이 들어옵니다.</div>' +
+          '<div class="achgauge"><span class="rwgauge' + (all.length && done >= all.length ? ' full' : '') + '">' +
+            '<i style="width:' + (all.length ? Math.round(done / all.length * 100) : 0) + '%"></i></span>' +
+            '<span class="rwgnum">' + done + ' / ' + all.length + '</span></div>';
 
   if (!all.length) h += '<div class="box dim">아직 업적이 없습니다.</div>';
 
@@ -13320,7 +13416,7 @@ function openVault(back) {
   };
 
   const vgf = document.getElementById("vgiftfold");
-  if (vgf) vgf.ontoggle = () => { VAULT_GIFT_OPEN = vgf.open; };
+  if (vgf) vgf.ontoggle = () => { if ($modal.classList.contains("on")) VAULT_GIFT_OPEN = vgf.open; };
   document.getElementById("vclose").onclick = () => { VAULT_GIFT_OPEN = false; closeModal(); render(); if (back) back(); };
   document.getElementById("vrec").onclick = () => openRecord(() => openVault(back));
   document.getElementById("vreset").onclick = () => openReset(() => openVault(back));
@@ -14062,6 +14158,8 @@ function gate(msg) {
   if (msg) say(msg, "bad");
   $party.innerHTML = "";
   document.getElementById("synergy").innerHTML = "";
+  document.getElementById("advisors").innerHTML = "";
+  document.getElementById("gifts").innerHTML = "";
   $chap.textContent = "v" + VERSION;
   $wallet.innerHTML = "";
 
