@@ -39,7 +39,7 @@ const SHOP_NOTICE = {
       "하드에서는 하나, 익스트림에서는 둘까지 들고 다음 팩에 들어갑니다 — 무엇을 먼저 깰지가 다음 싸움을 바꿉니다."
     ] },
     { head: "이벤트 교환소 — 「모스라」", showEventCountdown: true, lines: [
-      "새 이벤트 재화 <b style=\"color:var(--gold)\">「모스라」</b>입니다. 교환소는 <b style=\"color:var(--gold)\">10월 16일(금)까지</b> 열립니다.",
+      "새 이벤트 재화 <b style=\"color:var(--gold)\">「모스라」</b>입니다. 교환소는 <b style=\"color:var(--gold)\">10월 21일(수)까지</b> 열립니다(코드레드가 미뤄져 늘렸습니다).",
       "L사 인격을 편성에 세우면 한 명당 <b style=\"color:var(--gold)\">20%</b>씩 더 받습니다."
     ] },
     { head: "새로 뽑을 수 있는 것", lines: [

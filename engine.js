@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.11.3";
+const VERSION = "2.12.0";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -310,6 +310,10 @@ function vaultBody() {
      * 편성은 담지 않습니다(resumeMirror 참고). vaultSig() 에는 일부러 안 넣습니다 —
      * 손댐 검사가 아니라 그냥 진행 상황이라서요. */
     railSave: S.railSave || null,
+    /* 출석 · 주간 보상 — 받은 칸과 이번 주 진행(rewardSync 참고). 손댐 검사(vaultSig)에는
+     * 넣지 않습니다 — 옛 판 셈법이 여럿 얽혀 있어서요. 대신 합칠 때(vaultMergeOnce)
+     * 받은 것이 되살아나지 않게 rewardMerge 로 묶습니다. */
+    reward:   S.reward || null,
     /* 거울굴절철도 결과 카드 — 최근 세 판까지. 손댐 검사(vaultSig)에는 일부러
      * 안 넣습니다 — 업적처럼 지키려는 값이 아니라 그냥 지난 기록이라서요. */
     mirrorRecords: S.mirrorRecords || [],
@@ -373,6 +377,7 @@ function loadVault() {
     newbie:   typeof v.newbie === "number" ? v.newbie : 0,
     enk:      v.enk || null,
     railSave: v.railSave || null,
+    reward:   v.reward || null,
     storySave: v.storySave || null,
     mirrorRecords: v.mirrorRecords || [],
     font:     v.font || null,
@@ -718,6 +723,8 @@ function vaultMergeOnce(seed) {
   /* 이야기 인격 지급 자리도 한 번만 받는 것입니다 — 옛 파일을 들여와도 되살아나지 않게 */
   seed.storyGain = union(seed.storyGain, now.storyGain);
   seed.newbie    = Math.max(Number(seed.newbie) || 0, Number(now.newbie) || 0);
+  /* 출석 · 주간 보상도 받은 칸이 되살아나지 않게 */
+  seed.reward    = rewardMerge(seed.reward, now.reward);
   return seed;
 }
 
@@ -1099,6 +1106,7 @@ function enkSpend(n) {
   if (!e || e.n < need) return false;
   if (e.n >= ENK_RULE.max) e.at = Date.now();   // 가득에서 처음 쓰는 순간부터 다시 잰다
   e.n -= need;
+  rewardCount("enk", need);       // 주간 과제 「엔케팔린 쓰기」
   saveVault();
   return true;
 }
@@ -1338,6 +1346,7 @@ function newState() {
      * { key, picked, checkpoint } (순환 없는 갈래) 또는
      * { key, rail2:{bosses,done,picks}, checkpoint } (2호선류). */
     railSave: (v && v.railSave) || null,
+    reward: (v && v.reward) || null,     // 출석 · 주간 보상 — rewardSync() 가 채웁니다
     /* 본편 편성 자리(case "party") 중간 저장 — 패배했을 때 돌아갈 자리로만
      * 씁니다(defeat() 참고). { chId, sc, party, equip, hp, flags,
      * partyStack, partyBan, battleForced }. */
@@ -8409,6 +8418,7 @@ function openGacha(done, pk, deal) {
         if (tier !== 1) gotHigh = true;
         out.push(tier === "adv" ? pullAdvisor() : pullIdentity(tier));
       }
+      rewardCount("pull", out.length);   // 주간 과제 「상점 배정」
       saveVault();
       render();
       /* 처음 얻은 ★★★ 이 섞여 있으면 한 번 빛낸 뒤에 펼친다.
@@ -8522,6 +8532,7 @@ function openStockGacha(kind, done) {
         S.codex -= cost;
         out.push(isGift ? pullGiftOnce() : pullAdvisorOnce());
       }
+      rewardCount("pull", out.length);   // 주간 과제 「상점 배정」
       saveVault();
       render();
       /* 중복은 축하할 일이 아니니 연출을 넣지 않습니다.
@@ -11156,6 +11167,8 @@ function mirrorClear() {
   const firstRun = !(S.mirrorDone && S.mirrorDone[rule.key]);
   if (!S.mirrorDone) S.mirrorDone = {};
   S.mirrorDone[rule.key] = true;
+  /* 주간 과제 — 거울굴절철도와 그 밖의 거울 던전을 따로 셉니다 */
+  rewardCount(rule.group === "rail" ? "rail" : "mirror", 1);
 
   /* ── 「행운의 부적」 ──────────────────────────────────────────
    *  2호선에서 순환마다 고를 수 있는 넷 중 하나입니다. 고른 수만큼
@@ -11507,20 +11520,10 @@ function mailWasted(m) {
   return enkCount() >= ENK_RULE.max;
 }
 
-/* 받아 봅니다. 돌려주는 것은 창에 그대로 적을 한 줄입니다 —
- * { ok, msg }. 받은 뒤 유리창으로 돌아가면 로그가 지워지므로,
- * 결과는 반드시 창 안에서 보여 주어야 합니다. */
-function mailTake(m) {
-  if (!mailOpen(m))
-    return { ok: false, msg: "기간이 지난 우편입니다." };
-  if (mailWasted(m))
-    return { ok: false, msg: ENK_RULE.name + "이 이미 가득 차 있습니다 (" +
-             enkCount() + " / " + ENK_RULE.max + "). 한 개도 받지 못하고 우편만 사라지므로, " +
-             "조금 쓰신 뒤에 받으십시오." };
-  const g = m.give || {};
-  if (!S.mailTaken) S.mailTaken = {};
-  S.mailTaken[m.id] = true;
-
+/* give 덩이를 실제로 보관함에 넣습니다. 돌려주는 것은 「무엇을 받았나」 줄들입니다.
+ * 우편(mailTake)과 출석·주간 보상(rewardTake)이 함께 씁니다. 저장은 부르는 쪽이 합니다. */
+function giveApply(g) {
+  g = g || {};
   const got = [];
   if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); }
   if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
@@ -11571,6 +11574,24 @@ function mailTake(m) {
       got.push("지원 작성위원 " + stars(sp.star) + " " + sp.title + " " + sp.name);
     } else got.push("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")");
   }
+  return got;
+}
+
+/* 받아 봅니다. 돌려주는 것은 창에 그대로 적을 한 줄입니다 —
+ * { ok, msg }. 받은 뒤 유리창으로 돌아가면 로그가 지워지므로,
+ * 결과는 반드시 창 안에서 보여 주어야 합니다. */
+function mailTake(m) {
+  if (!mailOpen(m))
+    return { ok: false, msg: "기간이 지난 우편입니다." };
+  if (mailWasted(m))
+    return { ok: false, msg: ENK_RULE.name + "이 이미 가득 차 있습니다 (" +
+             enkCount() + " / " + ENK_RULE.max + "). 한 개도 받지 못하고 우편만 사라지므로, " +
+             "조금 쓰신 뒤에 받으십시오." };
+  const g = m.give || {};
+  if (!S.mailTaken) S.mailTaken = {};
+  S.mailTaken[m.id] = true;
+
+  const got = giveApply(g);
   saveVault();
 
   /* 로그에도 남깁니다 — 창을 닫은 뒤에도 무엇을 받았는지 되짚을 수 있게 */
@@ -11637,6 +11658,226 @@ function openMail(back, note) {
   document.getElementById("mlclose").onclick = () => {
     closeModal(); render(); if (back) back();
   };
+}
+
+/* ── 출석 · 주간 보상 ─────────────────────────────────────────
+ *  유리창의 [보상] 으로 열립니다. 표는 data/reward.js 에 있습니다.
+ *
+ *  S.reward = {
+ *    n:    매일 출석을 받은 횟수(통틀어) — 일곱 칸 가운데 어디인지는 n % 7
+ *    last: 마지막으로 매일 출석을 받은 날 (enkDayKey 꼴)
+ *    wk:   이번 주 — { week: 월요일 날짜, days: [연 날들], first, attend: {3:true…},
+ *                     prog: {mirror: n…}, done: {mirror: true…}, all }
+ *  }
+ *  주가 갈리면 wk 를 통째로 새로 깝니다. 날짜는 기기 시계를 봅니다(우편과 같음).
+ */
+function rewardOn() { return typeof ATTEND_DAYS !== "undefined" && typeof WEEKLY_TASKS !== "undefined"; }
+
+/* 그 주 월요일의 날짜 열쇠 */
+function weekKeyOf(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+  return enkDayKey(d.getTime());
+}
+function dayKeyMs(k) {
+  const p = String(k || "").split("-").map(Number);
+  return (p.length === 3 && !p.some(isNaN)) ? new Date(p[0], p[1] - 1, p[2]).getTime() : 0;
+}
+function rewardFreshWeek(wk) {
+  return { week: wk, days: [], first: false, attend: {}, prog: {}, done: {}, all: false };
+}
+
+/* 오늘 날짜로 맞춥니다 — 주가 갈렸으면 주간 칸을 새로 깔고, 오늘을 «연 날» 로 적습니다 */
+function rewardSync() {
+  if (!S || !rewardOn()) return null;
+  const now = Date.now(), today = enkDayKey(now), wk = weekKeyOf(now);
+  if (!S.reward || typeof S.reward !== "object") S.reward = { n: 0, last: null, wk: null };
+  const r = S.reward;
+  if (typeof r.n !== "number") r.n = 0;
+  if (!r.wk || r.wk.week !== wk) r.wk = rewardFreshWeek(wk);
+  ["days"].forEach(k => { if (!Array.isArray(r.wk[k])) r.wk[k] = []; });
+  ["attend", "prog", "done"].forEach(k => { if (!r.wk[k] || typeof r.wk[k] !== "object") r.wk[k] = {}; });
+  if (r.wk.days.indexOf(today) < 0) r.wk.days.push(today);
+  return r;
+}
+
+/* 주간 과제 진행 — mirrorClear · 배정 · enkSpend 가 부릅니다. 저장은 부르는 쪽이 합니다. */
+function rewardCount(id, n) {
+  const r = rewardSync();
+  if (!r || !n) return;
+  r.wk.prog[id] = (r.wk.prog[id] || 0) + n;
+}
+
+/* 유리창에 들어섰을 때 출석 창을 저절로 띄울지 (사용자 지침 2026-10-16).
+ * 상점 알림이 뜰 판이면 알림을 닫은 뒤(glass() 를 다시 부를 때) 뜹니다.
+ * 한 번 띄운 날은 다시 안 띄웁니다 — 받지 않고 닫아도 유리창을 오갈 때마다 붙들지 않게.
+ * 이 표시는 탭을 닫으면 사라지므로, 받지 않은 채 다음에 켜면 한 번 더 뜹니다.
+ * 처음 오신 분의 유리창 안내(tutorOnce "glass")를 아직 안 봤으면 그 안내를 먼저 둡니다. */
+let REWARD_AUTO_DAY = null;
+function rewardAutoDue() {
+  if (!rewardOn() || !rewardDailyOpen()) return false;
+  if (REWARD_AUTO_DAY === enkDayKey(Date.now())) return false;
+  return tutorSaw("glass");
+}
+
+function rewardDailyOpen() { const r = rewardSync(); return !!r && r.last !== enkDayKey(Date.now()); }
+function rewardTaskFull(t) { const r = rewardSync(); return !!r && (r.wk.prog[t.id] || 0) >= t.need; }
+function rewardAllFull() { return WEEKLY_TASKS.every(rewardTaskFull); }
+
+/* 지금 받을 수 있는 것의 수 — 유리창 손잡이에 붙습니다 */
+function rewardWaiting() {
+  const r = rewardSync();
+  if (!r) return 0;
+  let n = 0;
+  if (rewardDailyOpen()) n++;
+  if (!r.wk.first) n++;
+  WEEKLY_ATTEND.forEach(a => { if (r.wk.days.length >= a.days && !r.wk.attend[a.days]) n++; });
+  WEEKLY_TASKS.forEach(t => { if (rewardTaskFull(t) && !r.wk.done[t.id]) n++; });
+  if (rewardAllFull() && !r.wk.all) n++;
+  return n;
+}
+
+/* 받습니다. what — "daily" · "first" · "attend:3" · "task:mirror" · "all:0"(고른 칸) */
+function rewardTake(what) {
+  const r = rewardSync();
+  if (!r) return { ok: false, msg: "보상 표를 읽지 못했습니다." };
+  const [kind, arg] = String(what).split(":");
+  let g = null, label = "";
+  if (kind === "daily") {
+    if (!rewardDailyOpen()) return { ok: false, msg: "오늘 출석 보상은 이미 받았습니다." };
+    const i = r.n % ATTEND_DAYS.length;
+    g = ATTEND_DAYS[i];
+    r.n++; r.last = enkDayKey(Date.now());
+    label = "출석 " + (i + 1) + "일째";
+  } else if (kind === "first") {
+    if (r.wk.first) return { ok: false, msg: "이번 주 첫 상자는 이미 받았습니다." };
+    g = WEEKLY_FIRST.give; r.wk.first = true; label = WEEKLY_FIRST.name;
+  } else if (kind === "attend") {
+    const a = WEEKLY_ATTEND.find(x => String(x.days) === arg);
+    if (!a || r.wk.attend[a.days] || r.wk.days.length < a.days)
+      return { ok: false, msg: "아직 받을 수 없습니다." };
+    g = a.give; r.wk.attend[a.days] = true; label = "이번 주 " + a.days + "일 출석";
+  } else if (kind === "task") {
+    const t = WEEKLY_TASKS.find(x => x.id === arg);
+    if (!t || r.wk.done[t.id] || !rewardTaskFull(t)) return { ok: false, msg: "아직 받을 수 없습니다." };
+    g = t.give; r.wk.done[t.id] = true; label = t.name + " " + t.need + "회";
+  } else if (kind === "all") {
+    const p = WEEKLY_ALL.pick[+arg];
+    if (!p || r.wk.all || !rewardAllFull()) return { ok: false, msg: "아직 받을 수 없습니다." };
+    g = p; r.wk.all = true; label = WEEKLY_ALL.name;
+  } else return { ok: false, msg: "알 수 없는 보상입니다." };
+
+  const got = giveApply(g);
+  saveVault();
+  divider();
+  say("보상을 받았다 — " + label, "gain");
+  got.forEach(x => say(x + " 획득.", "gain"));
+  return { ok: true, msg: label + " — " + got.join("　·　") };
+}
+
+/* 다른 기기·옛 파일과 합칠 때 — 이미 받은 것이 되살아나지 않게 (vaultMergeOnce) */
+function rewardMerge(a, b) {
+  if (!a || typeof a !== "object") return b || null;
+  if (!b || typeof b !== "object") return a;
+  const base = (a.n || 0) >= (b.n || 0) ? a : b;
+  const out = { n: Math.max(a.n || 0, b.n || 0), last: base.last || null, wk: null };
+  const wa = a.wk, wb = b.wk;
+  if (!wa || !wb) out.wk = wa || wb || null;
+  else if (wa.week !== wb.week) out.wk = dayKeyMs(wa.week) > dayKeyMs(wb.week) ? wa : wb;
+  else {
+    const or = (x, y) => { const m = Object.assign({}, x || {}); for (const k in (y || {})) if (y[k]) m[k] = true; return m; };
+    const prog = Object.assign({}, wa.prog || {});
+    for (const k in (wb.prog || {})) prog[k] = Math.max(prog[k] || 0, wb.prog[k] || 0);
+    out.wk = { week: wa.week,
+               days: Array.from(new Set([].concat(wa.days || [], wb.days || []))),
+               first: !!(wa.first || wb.first), attend: or(wa.attend, wb.attend),
+               prog, done: or(wa.done, wb.done), all: !!(wa.all || wb.all) };
+  }
+  return out;
+}
+
+function openReward(back, note) {
+  $modal.classList.add("on");
+  const r = rewardSync();
+  const giveTxt = g => mailGiveText({ give: g });
+  const giveIc  = g => iconMiniOr(giveIcon(g));
+
+  let h = '<h2>' + REWARD_RULE.title + '</h2>' +
+    (note ? '<div class="mailnote' + (note.ok ? ' ok' : ' no') + '">' + note.msg + '</div>' : '') +
+    '<div class="hint">매일 출석은 원고료, 주간 보상은 키우는 재료입니다. ' +
+    '하루는 0시에, 주는 <b>월요일 0시</b>에 갈립니다 — 받지 않은 주간 보상은 그때 사라집니다.</div>';
+
+  /* ── 매일 출석 — 일곱 칸 ── */
+  const L = ATTEND_DAYS.length;
+  const todayOpen = rewardDailyOpen();
+  const filled = todayOpen ? r.n % L : ((r.n - 1) % L) + 1;   // 이번 바퀴에서 받은 칸 수
+  h += '<div class="rwhead">매일 출석</div><div class="attgrid">';
+  ATTEND_DAYS.forEach((g, i) => {
+    const got = i < filled, now = todayOpen && i === filled;
+    h += '<div class="slot attcell' + (got ? ' sel' : '') + (now ? ' now' : '') + '"' +
+           (now ? ' data-rw="daily"' : '') + '>' +
+           '<div class="sub">' + (i + 1) + '일째</div>' +
+           '<div class="nm">' + giveIc(g) + (g.money || giveTxt(g)) + '</div>' +
+           '<div class="sub">' + (got ? '✓ 받음' : now ? '<b style="color:var(--gold)">받기</b>' : '') + '</div>' +
+         '</div>';
+  });
+  h += '</div>';
+  if (!todayOpen) h += '<div class="hint" style="margin:6px 0 0">오늘 몫은 받았습니다. 내일 0시에 다음 칸이 열립니다.</div>';
+
+  /* ── 이번 주 — 첫 상자 · 누적 출석 ── */
+  const row = (key, title, sub, g, state) =>
+    '<div class="slot' + (state === "got" ? ' sel' : '') + '"' + (state === "open" ? ' data-rw="' + key + '"' : '') + '>' +
+      '<div class="' + (state === "lock" ? 'lock' : 'nm') + '">' + (state === "got" ? '✓ ' : state === "open" ? '● ' : '') + title + '</div>' +
+      (sub ? '<div class="sub">' + sub + '</div>' : '') +
+      '<div class="sub"><span class="star">보상</span> ' + giveTxt(g) + '</div>' +
+      '<div class="sub mailfoot"' + (state === "open" ? ' style="color:var(--gold)"' : '') + '>' +
+        (state === "got" ? '받았습니다' : state === "open" ? '<b>눌러서 받기</b>' : '아직') + '</div>' +
+    '</div>';
+
+  const days = r.wk.days.length;
+  h += '<div class="rwhead">이번 주 출석 — ' + days + '일</div><div class="grid rwgrid">';
+  h += row("first", WEEKLY_FIRST.name, "이번 주에 처음 들어온 날", WEEKLY_FIRST.give,
+           r.wk.first ? "got" : "open");
+  WEEKLY_ATTEND.forEach(a => {
+    h += row("attend:" + a.days, a.days + "일 출석", "이번 주에 게임을 연 날 " + Math.min(days, a.days) + " / " + a.days,
+             a.give, r.wk.attend[a.days] ? "got" : days >= a.days ? "open" : "lock");
+  });
+  h += '</div>';
+
+  /* ── 주간 과제 ── */
+  h += '<div class="rwhead">주간 과제</div><div class="grid rwgrid">';
+  WEEKLY_TASKS.forEach(t => {
+    const p = Math.min(r.wk.prog[t.id] || 0, t.need);
+    h += row("task:" + t.id, t.name + " " + t.need + "회", "진행 " + p + " / " + t.need, t.give,
+             r.wk.done[t.id] ? "got" : rewardTaskFull(t) ? "open" : "lock");
+  });
+  h += '</div>';
+
+  /* 넷 다 채우면 — 선택권 둘 중 하나를 고릅니다 */
+  const allFull = rewardAllFull();
+  const fullN = WEEKLY_TASKS.filter(rewardTaskFull).length;
+  h += '<div class="slot wide' + (r.wk.all ? ' sel' : '') + '" style="margin-top:8px;cursor:default">' +
+         '<div class="' + (allFull || r.wk.all ? 'nm' : 'lock') + '">' + (r.wk.all ? '✓ ' : allFull ? '● ' : '') +
+           WEEKLY_ALL.name + '</div>' +
+         '<div class="sub">과제 ' + fullN + ' / ' + WEEKLY_TASKS.length + ' — 넷 다 채우면 아래 둘 가운데 하나를 골라 받습니다.</div>' +
+         (r.wk.all ? '<div class="sub mailfoot">받았습니다</div>'
+           : '<div class="rwpick">' + WEEKLY_ALL.pick.map((g, i) =>
+               '<button' + (allFull ? ' data-rw="all:' + i + '"' : ' disabled') + '>' + giveTxt(g) + '</button>').join("") +
+             '</div>') +
+       '</div>';
+
+  h += '<div class="modalfoot"><button id="rwclose">닫기</button></div>';
+  $sheet.innerHTML = h;
+
+  $sheet.querySelectorAll("[data-rw]").forEach(el => {
+    el.onclick = () => {
+      const res = rewardTake(el.dataset.rw);
+      render();
+      openReward(back, res);
+    };
+  });
+  document.getElementById("rwclose").onclick = () => { closeModal(); render(); if (back) back(); };
 }
 
 function openAchieve(back) {
@@ -13521,6 +13762,13 @@ function glass() {
      * 여기서 열리는 것은 이제 유리창뿐이므로, 어느 손잡이로 닫든 한 번 본 것으로 봅니다. */
     return openNotice(() => { noticeHide(); closeModal(); glass(); });
   }
+  /* 오늘 출석을 아직 안 받았으면 출석 창을 띄웁니다 — 알림이 있으면 알림을 닫은 뒤에 */
+  if (rewardAutoDue()) {
+    REWARD_AUTO_DAY = enkDayKey(Date.now());
+    render();
+    buttons([{ label: "…", cls: "primary", disabled: true }]);
+    return openReward(() => glass());
+  }
 
   /* 받지 않은 우편은 로그에 따로 적지 않습니다 — 아래 [우편함] 손잡이에
    * 통수가 적히고 테두리가 금빛으로 바뀝니다 (사용자 지침 2026-09-12). */
@@ -13536,6 +13784,9 @@ function glass() {
      * 두릅니다(button.mailon — index.html). 없으면 흐린 손잡이입니다. */
     { label: MAIL_RULE.name + (mailWaiting() ? " (" + mailWaiting() + ")" : ""),
       cls: mailWaiting() ? "mailon" : "ghost", fn: () => openMail(() => glass()) },
+    /* 출석 · 주간 보상 — 받을 것이 있으면 우편함처럼 개수와 금빛 테두리 */
+    rewardOn() ? { label: REWARD_RULE.name + (rewardWaiting() ? " (" + rewardWaiting() + ")" : ""),
+                   cls: rewardWaiting() ? "mailon" : "ghost", fn: () => openReward(() => glass()) } : null,
     /* 동기화(3장)·기프트 강화(5장) 어느 하나라도 열리기 전에는 손잡이를 아예 내놓지 않습니다 */
     upgradeUnlocked() ? { label: "강화", fn: () => openUpgrade(() => glass()) } : null,
     { label: "보관함", fn: () => openVault(() => glass()) },

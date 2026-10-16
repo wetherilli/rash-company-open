@@ -818,6 +818,15 @@
   .mailnote{border-left:3px solid;padding:8px 12px;margin:8px 0 4px;font-size:13px;}
   .mailnote.ok{border-color:var(--gold);background:var(--gold-bg);color:var(--gold-hi);}
   .mailnote.no{border-color:var(--red);background:#170e10;color:#e0a09a;}
+  /* ── 출석 · 주간 보상 (engine.js openReward) ── */
+  .rwhead{color:var(--text);font-weight:700;font-size:13px;margin:14px 0 6px;letter-spacing:.06em;}
+  .attgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .attgrid .attcell{text-align:center;padding:8px 4px;cursor:default;}
+  .attgrid .attcell.now{border-color:var(--gold);cursor:pointer;}
+  .attgrid .attcell .nm{display:flex;align-items:center;justify-content:center;gap:3px;margin:3px 0;}
+  .grid.rwgrid{grid-template-columns:repeat(4,1fr);}
+  .rwpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+  .rwpick button{display:flex;align-items:center;gap:5px;}
   .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
   .slot:hover{border-color:var(--red);}
   .slot.sel{border-color:var(--gold);background:var(--panel-2);}
@@ -1168,6 +1177,9 @@
     .grid{grid-template-columns:1fr;}
     /* 셋을 나란히 세우는 규칙은 여기서 풀립니다 — 좁은 화면에서는 한 줄에 하나씩 */
     .grid.three{grid-template-columns:1fr;}
+    /* 출석 일곱 칸은 좁은 화면에서 넷 · 셋 두 줄로 */
+    .attgrid{grid-template-columns:repeat(4,1fr);}
+    .grid.rwgrid{grid-template-columns:1fr;}
     /* 배정 광고 띠도 화면에 맞춰 낮춥니다 */
     .pkline{height:92px;font-size:16px;letter-spacing:.06em;padding:0 10px;}
     .pkline.small{height:46px;}
@@ -1296,23 +1308,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.11.3"></script>
-<script src="data/vault.js?v=2.11.3"></script>
-<script src="data/characters.js?v=2.11.3"></script>
-<script src="data/skills.js?v=2.11.3"></script>
-<script src="data/allies.js?v=2.11.3"></script>
-<script src="data/gifts.js?v=2.11.3"></script>
-<script src="data/pickup.js?v=2.11.3"></script>
-<script src="data/achievements.js?v=2.11.3"></script>
-<script src="data/mail.js?v=2.11.3"></script>
-<script src="data/notice.js?v=2.11.3"></script>
-<script src="data/patch.js?v=2.11.3"></script>
-<script src="data/event.js?v=2.11.3"></script>
-<script src="data/tutorial.js?v=2.11.3"></script>
-<script src="data/foes.js?v=2.11.3"></script>
-<script src="data/story.js?v=2.11.3"></script>
-<script src="data/mirrorpacks.js?v=2.11.3"></script>
-<script src="engine.js?v=2.11.3"></script>
+<script src="data/access.js?v=2.12.0"></script>
+<script src="data/vault.js?v=2.12.0"></script>
+<script src="data/characters.js?v=2.12.0"></script>
+<script src="data/skills.js?v=2.12.0"></script>
+<script src="data/allies.js?v=2.12.0"></script>
+<script src="data/gifts.js?v=2.12.0"></script>
+<script src="data/pickup.js?v=2.12.0"></script>
+<script src="data/achievements.js?v=2.12.0"></script>
+<script src="data/mail.js?v=2.12.0"></script>
+<script src="data/notice.js?v=2.12.0"></script>
+<script src="data/patch.js?v=2.12.0"></script>
+<script src="data/event.js?v=2.12.0"></script>
+<script src="data/reward.js?v=2.12.0"></script>
+<script src="data/tutorial.js?v=2.12.0"></script>
+<script src="data/foes.js?v=2.12.0"></script>
+<script src="data/story.js?v=2.12.0"></script>
+<script src="data/mirrorpacks.js?v=2.12.0"></script>
+<script src="engine.js?v=2.12.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
