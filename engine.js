@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.14.3";
+const VERSION = "2.14.4";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -14090,7 +14090,7 @@ function glass() {
   }
   /* 이번 판에 새로 들어온 것들을 한 번 알려 줍니다.
    * 유리창을 다 그린 뒤에 덮어씌우므로, 닫으면 바로 유리창이 보입니다. */
-  if (noticeDue()) {
+  if (!INSTALL_ASKING && noticeDue()) {
     render();
     buttons([{ label: "…", cls: "primary", disabled: true }]);
     /* 닫을 때 «본 것» 으로 적어 둡니다.
@@ -14102,7 +14102,7 @@ function glass() {
     return openNotice(() => { noticeHide(); closeModal(); glass(); });
   }
   /* 오늘 출석을 아직 안 받았으면 출석 창을 띄웁니다 — 알림이 있으면 알림을 닫은 뒤에 */
-  if (rewardAutoDue()) {
+  if (!INSTALL_ASKING && rewardAutoDue()) {
     REWARD_AUTO_DAY = enkDayKey(Date.now());
     render();
     buttons([{ label: "…", cls: "primary", disabled: true }]);
@@ -14127,7 +14127,7 @@ function glass() {
   ]);
   showEnkBar(true);
   /* 처음 오신 분께 — 손잡이를 하나씩 짚어 드립니다. 한 번만 나옵니다. */
-  tutorOnce("glass");
+  if (!INSTALL_ASKING) tutorOnce("glass");   // 설치 창을 닫으면 glass() 가 다시 불려 그때 나옵니다
 }
 
 /* 예전 이름 — 부팅과 내부 호출에서 그대로 쓸 수 있게 남겨 둡니다 */
@@ -14155,7 +14155,9 @@ function title() { glass(); }
  */
 const MOVE_HEAD = "RASH-MOVE1.";
 let INSTALL_EVENT = null;   // 크롬 계열이 «설치할 수 있다» 고 알려 준 것 — [설치하기] 손잡이에 씁니다
-window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); INSTALL_EVENT = e; });
+let INSTALL_REDRAW = null;  // 설치 창이 열려 있을 때 다시 그리는 길 — 알림이 창보다 늦게 오면 [설치하기] 를 세웁니다
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); INSTALL_EVENT = e; if (INSTALL_REDRAW) INSTALL_REDRAW(); });
+window.addEventListener("appinstalled", () => { INSTALL_EVENT = null; });
 
 function appEnv() {
   const ua = navigator.userAgent || "";
@@ -14229,12 +14231,16 @@ function moveHasVault() {
   return !!(v && ((v.ids && v.ids.length) || Object.keys(v.cleared || {}).length));
 }
 
-function openInstall(back) {
+/* ask: 콘첸트라트 바로가기(?install)로 왔을 때 — 맨 위에서 «설치하시겠습니까?» 를 묻고, [설치하기] 를 바로 세웁니다 */
+function openInstall(back, ask) {
   $modal.classList.add("on");
   const env = appEnv();
+  let lastMsg = "";
 
   const draw = (msg) => {
+    lastMsg = msg || "";
     let h = '<h2>앱 으 로 설 치</h2>';
+    if (ask && !env.standalone) h += '<div class="hint" style="color:var(--text);font-weight:700">라슈 컴퍼니를 앱으로 설치하시겠습니까?</div>';
     if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
     /* ── 설치 ── */
@@ -14258,13 +14264,14 @@ function openInstall(back) {
     } else if (INSTALL_EVENT) {
       h += '<div class="hint">아래 손잡이를 누르면 설치 창이 뜹니다. 깔고 나서도 보관함은 <b>그대로 이어집니다</b> — ' +
            '이 브라우저와 같은 저장소를 씁니다.</div>' +
-           '<div style="margin:8px 0 4px"><button id="ainst" class="primary">설치하기</button></div>';
+           '<div style="margin:8px 0 4px;display:flex;gap:8px;flex-wrap:wrap"><button id="ainst" class="primary">설치하기</button>' +
+             (ask ? '<button id="alater" class="ghost">나중에</button>' : '') + '</div>';
     } else {
       h += '<div class="hint">브라우저 메뉴에서 깝니다 — ' +
            (env.android ? '크롬 오른쪽 위 <b>⋮</b> → <b>앱 설치</b>(또는 <b>홈 화면에 추가</b>).'
                         : '크롬·엣지 주소창 오른쪽의 <b>설치</b> 아이콘, 또는 메뉴의 <b>앱 설치</b>.') +
            ' 깔고 나서도 보관함은 <b>그대로 이어집니다</b> — 이 브라우저와 같은 저장소를 씁니다.</div>' +
-           '<div class="hint dim">메뉴에 설치가 없으면 이 브라우저는 앱 설치를 지원하지 않는 것입니다. 크롬·엣지·사파리로 열어 보십시오.</div>';
+           '<div class="hint dim">메뉴에 설치가 없으면 이미 깔려 있거나(앱 목록의 라슈 컴퍼니로 여십시오), 이 브라우저가 앱 설치를 지원하지 않는 것입니다. 크롬·엣지·사파리로 열어 보십시오.</div>';
     }
 
     /* ── 옮기기 — 어느 기기든 같은 글로 옮겨집니다 (메신저로 보내 다른 기기에 붙여도 됩니다) ── */
@@ -14298,6 +14305,9 @@ function openInstall(back) {
       draw(r && r.outcome === "accepted" ? "설치했습니다. 홈 화면(또는 앱 목록)의 라슈 컴퍼니로 여십시오." : "");
     };
 
+    const later = document.getElementById("alater");
+    if (later) later.onclick = () => { INSTALL_REDRAW = null; closeModal(); if (back) back(); };
+
     document.getElementById("acopy").onclick = async () => {
       const t = moveText();
       try {
@@ -14328,10 +14338,25 @@ function openInstall(back) {
       moveApply(o);
     };
 
-    document.getElementById("aclose").onclick = () => { closeModal(); if (back) back(); };
+    document.getElementById("aclose").onclick = () => { INSTALL_REDRAW = null; closeModal(); if (back) back(); };
   };
 
+  INSTALL_REDRAW = () => { if ($modal.classList.contains("on") && document.getElementById("aclose")) draw(lastMsg); else INSTALL_REDRAW = null; };
   draw();
+}
+
+/* 콘첸트라트 더보기의 [라슈 컴퍼니] 바로가기는 ?install 을 붙여 엽니다 — 앱으로 열려 있지 않으면 설치를 묻습니다.
+ * 휴대폰(안드로이드 · 아이폰 · 아이패드)에서만 묻습니다. 주소의 ?install 은 바로 지웁니다(새로고침 · 홈 화면 추가 때 다시 묻지 않게).
+ * 설치 창이 가장 위에 뜹니다 — 묻는 동안(INSTALL_ASKING) 유리창은 알림 · 출석 창 · 튜토리얼을 미루고, 닫으면 유리창을 다시 그려 이어서 띄웁니다. */
+let INSTALL_ASKING = false;
+function installAskWanted() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("install")) return false;
+  q.delete("install");
+  const rest = q.toString();
+  try { history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash); } catch (e) {}
+  const env = appEnv();
+  return !env.standalone && (env.android || env.ios);   // 휴대폰에서만 묻습니다 (사용자 지침) — PC 는 그냥 엽니다
 }
 
 /* 서비스 워커 — 설치 조건이자, 끊겼을 때 한 번 본 화면을 꺼내 쓰는 자리입니다(sw.js).
@@ -14409,7 +14434,10 @@ function gate(msg) {
 function boot() {
   applyFont((loadVault() || {}).font);
   registerSW();
+  const ask = installAskWanted();
+  INSTALL_ASKING = ask;
   if (gateOpen()) glass(); else gate();
+  if (ask) openInstall(() => { INSTALL_ASKING = false; if (gateOpen()) glass(); }, true);
   /* 콘첸트라트에 연결돼 있으면 뒤에서 구름을 봅니다 — 더 새로우면 합치고 새로고침합니다.
    * 기다리게 하지 않습니다: 오프라인이면 그냥 지금 것으로 갑니다. */
   Cloud.autoPull();
