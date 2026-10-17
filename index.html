@@ -9,7 +9,9 @@
      열쇠·이름은 engine.js 의 PALETTE_KEY · PALETTES 와 같아야 합니다. -->
 <script>
   try { var p = localStorage.getItem("rash_company_palette_v1");
-        if (p && /^[a-z]+$/.test(p) && p !== "ink") document.documentElement.setAttribute("data-palette", p); } catch (e) {}
+        if (p && /^[a-z]+$/.test(p) && p !== "ink") document.documentElement.setAttribute("data-palette", p);
+        /* 밝은 테마 — engine.js PALETTES 의 light: true 와 같게 */
+        if (/^(chalk|rouge|sakura|sorna)$/.test(p || "")) document.documentElement.setAttribute("data-tone", "light"); } catch (e) {}
 </script>
 <link rel="icon" type="image/png" href="assets/icon/라슈 컴퍼니-큰.png">
 <!-- 앱으로 설치 — manifest.json · sw.js · assets/app/ (그림은 tools/아이콘-굽기.js 가 굽습니다).
@@ -1303,6 +1305,14 @@
     #wallet .curs .cur .icmini{width:14px;height:14px;}
     #log .packgate .grid.three{grid-template-columns:repeat(3,1fr);gap:6px;}
     .grid.partytools{grid-template-columns:repeat(3,1fr);gap:6px;}   /* 편성 맨 위 세 칸 — 좁아도 나란히 */
+    /* 색 테마 — 두 칸씩 작게, 견본 띠와 이름만. 잠긴 칸은 «몇 장을 마치면» 을 남깁니다 */
+    .hint.palnow{display:block;}   /* 아래 기본값(.palnow{display:none})보다 앞에 적혀 있어 한 단계 세게 */
+    .grid.palgrid{grid-template-columns:repeat(2,1fr);gap:6px;}
+    .grid.palgrid .slot{padding:7px 8px;}
+    .grid.palgrid .palsw{height:18px;margin-bottom:5px;}
+    .grid.palgrid .nm,.grid.palgrid .lock{font-size:12px;line-height:1.35;}
+    .grid.palgrid .slot:not(.ro) > .sub{display:none;}
+    .grid.palgrid .slot.ro > .sub{font-size:10.5px;line-height:1.35;}
     .grid.partytools .slot{padding:8px 8px;}
     .grid.partytools .sub{font-size:11px;line-height:1.4;}
     #log .packgate .pgcard{padding:9px 5px 10px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;}
@@ -1351,33 +1361,74 @@
     --gold:#8a6412; --gold-hi:#6b4c08; --gold-mid:#8a6c22; --gold-bg:#f6edd6; --gold-line:#dcc48c; --gold-line-2:#b9953f; 
     --red:#b3372f; --hi:#000000;
   }
-  /* 백악(밝은 테마)에서 따로 손볼 것 — 변수만으로는 안 뒤집히는 자리들 */
-  :root[data-palette="chalk"]{ color-scheme:light; }
-  :root[data-palette="chalk"] #modal{ background:#00000070; }
-  :root[data-palette="chalk"] .ic{ background:#e4e1da; }
-  :root[data-palette="chalk"] .ic.dim img{ filter:brightness(0) opacity(.22); }
-  :root[data-palette="chalk"] .ic .cnt{ color:#fff; }
-  :root[data-palette="chalk"] button.primary{ color:#9c3a34; }
-  :root[data-palette="chalk"] .dl{ color:#9c3a34; }
-  :root[data-palette="chalk"] .mrcard{ background:var(--gold-bg); }
-  :root[data-palette="chalk"] .pkline:not(.pic){ background:#e9dcb8; }
-  :root[data-palette="chalk"] .hpbar{ background:#e3ddd6; border-color:#cdbfb8; }
-  :root[data-palette="chalk"] .syn.full{ background:#f3e3b4; box-shadow:0 0 0 1px #dcc48c inset; }
-  :root[data-palette="chalk"] .syn .eff{ color:#7a5a1c; }
-  :root[data-palette="chalk"] .uskill{ background:#55524e; border-color:#55524e; }
-  :root[data-palette="chalk"] .uskill span{ color:#e4e1da !important; }
-  :root[data-palette="chalk"] .tag2{ background:#f6e4e0; border-color:#d9a79f; color:#8d3b36; }
-  :root[data-palette="chalk"] #log .heavy{ color:#c0281e; }
-  :root[data-palette="chalk"] #log .todo{ border-left-color:#bdb9af; }
-  :root[data-palette="chalk"] .enkwrap .enknm{ color:#3f6a8a; }
-  :root[data-palette="chalk"] button.mailon{ color:var(--gold); }
-  :root[data-palette="chalk"] #log .good{ color:#3f7a2c; }
-  :root[data-palette="chalk"] #log .crit{ color:#8a6000; }
-  :root[data-palette="chalk"] #log .recall{ color:#6a5a9a; }
-  :root[data-palette="chalk"] #log.recalling{ background:#ece8f4; }
-  :root[data-palette="chalk"] .enkwrap .enknum{ color:#2f5f7c; }
-  :root[data-palette="chalk"] .pcard.sup{ background:#eef6e8; }
-  :root[data-palette="chalk"] .pcard .suptag{ color:#4f8a1c; }
+  /* ── 콘첸트라트에서 옮겨 온 테마 (2026-10-17, 사용자 지침) — 이름 · 해금 조건도 콘첸트라트와 같습니다.
+   *  콘첸트라트의 바탕 · 일반 · 강조 · 글씨 · 흐린 글씨 · 테두리를 라슈 변수로 펴 냈습니다
+   *  (sheet · line-2 · text-2·3 · dim · off · gold 무리는 그 사이를 섞어 얻습니다). */
+  :root[data-palette="rouge"]{   /* 오르크튀르 루르주 — 콘첸트라트 같은 이름 테마의 배색 */
+    --bg:#fdf2ec; --sheet:#fef6f2; --panel:#fffaf7; --panel-2:#f8e3d8; --line:#eed8cc; --line-2:#d3bcb1;
+    --text:#3a1f18; --text-2:#472a22; --text-3:#604135; --muted:#7a5749; --dim:#a1867a; --off:#bca59b;
+    --gold:#c62828; --gold-hi:#951e1e; --gold-mid:#9c2523; --gold-bg:#f6dad4; --gold-line:#eaaba7; --gold-line-2:#dc7976;
+    --red:#a8231d; --hi:#000000;
+  }
+  :root[data-palette="sakura"]{   /* 벚꽃놀이 — 콘첸트라트 같은 이름 테마의 배색 */
+    --bg:#fff5f8; --sheet:#fffafc; --panel:#ffffff; --panel-2:#fde7ee; --line:#f5d6e1; --line-2:#d9b9c5;
+    --text:#3b1627; --text-2:#4b2536; --text-3:#6c4455; --muted:#8d6273; --dim:#af8e9b; --off:#c6acb6;
+    --gold:#e0457b; --gold-hi:#a8345c; --gold-mid:#ae3762; --gold-bg:#fbe0e9; --gold-line:#f4b7cc; --gold-line-2:#ec8bad;
+    --red:#b52459; --hi:#000000;
+  }
+  :root[data-palette="sorna"]{   /* 여전히 살아있다 — 콘첸트라트 같은 이름 테마의 배색 */
+    --bg:#f2edfa; --sheet:#f9f6fd; --panel:#ffffff; --panel-2:#dcebf7; --line:#ded3ee; --line-2:#c2b8d2;
+    --text:#241d33; --text-2:#322b42; --text-3:#4f4861; --muted:#6b6480; --dim:#948da5; --off:#afa9bd;
+    --gold:#55627a; --gold-hi:#404a5c; --gold-mid:#464d65; --gold-bg:#dfdceb; --gold-line:#bbbccd; --gold-line-2:#949aad;
+    --red:#9a3a5a; --hi:#000000;
+  }
+  :root[data-palette="noir"]{   /* 블랙 — 콘첸트라트 같은 이름 테마의 배색 */
+    --bg:#0a0a0a; --sheet:#0f0f0f; --panel:#141414; --panel-2:#1e1e1e; --line:#2b2b2b; --line-2:#484848;
+    --text:#efefed; --text-2:#dededc; --text-3:#bdbdb9; --muted:#9c9c97; --dim:#70706d; --off:#535351;
+    --gold:#e8e8e4; --gold-hi:#f2f2f0; --gold-mid:#9a9a98; --gold-bg:#252524; --gold-line:#585856; --gold-line-2:#8f8f8d;
+    --red:#d9534a; --hi:#ffffff;
+  }
+  :root[data-palette="sewer"]{   /* 하수구를 바라보는 검은 눈 — 콘첸트라트 같은 이름 테마의 배색 */
+    --bg:#1e1234; --sheet:#23163c; --panel:#281a44; --panel-2:#3a3016; --line:#3d2f5c; --line-2:#584b74;
+    --text:#f0e8fb; --text-2:#e5dcf2; --text-3:#cfc3df; --muted:#b9abcc; --dim:#8b7d9e; --off:#6c5f80;
+    --gold:#b6f23a; --gold-hi:#d7f893; --gold-mid:#81a438; --gold-bg:#302d35; --gold-line:#536036; --gold-line-2:#799838;
+    --red:#ff6f8f; --hi:#ffffff;
+  }
+  :root[data-palette="boom"]{   /* 붐은 온다 — 콘첸트라트 같은 이름 테마의 배색 */
+    --bg:#4a0e0b; --sheet:#53120f; --panel:#5c1512; --panel-2:#170f0e; --line:#6e241e; --line-2:#84423c;
+    --text:#ffeae5; --text-2:#f9ded9; --text-3:#eec7c0; --muted:#e2b0a7; --dim:#b47f78; --off:#965f59;
+    --gold:#ffd83d; --gold-hi:#ffea94; --gold-mid:#c0912c; --gold-bg:#602611; --gold-line:#89551d; --gold-line-2:#b78729;
+    --red:#ff8a5c; --hi:#ffffff;
+  }
+  /* 밝은 테마(백악 · 오르크튀르 루르주 · 벚꽃놀이 · 여전히 살아있다)에서 따로 손볼 것 — 변수만으로는 안 뒤집히는 자리들.
+   * 예전에는 백악 하나뿐이라 data-palette 가 chalk 일 때만 걸었는데, 밝은 테마가 늘어 data-tone="light" 에 겁니다
+   * (engine.js applyPalette · index.html 머리의 미리 칠하기가 함께 답니다). */
+  :root[data-tone="light"]{ color-scheme:light; }
+  :root[data-tone="light"] #modal{ background:#00000070; }
+  :root[data-tone="light"] .ic{ background:#e4e1da; }
+  :root[data-tone="light"] .ic.dim img{ filter:brightness(0) opacity(.22); }
+  :root[data-tone="light"] .ic .cnt{ color:#fff; }
+  :root[data-tone="light"] button.primary{ color:#9c3a34; }
+  :root[data-tone="light"] .dl{ color:#9c3a34; }
+  :root[data-tone="light"] .mrcard{ background:var(--gold-bg); }
+  :root[data-tone="light"] .pkline:not(.pic){ background:#e9dcb8; }
+  :root[data-tone="light"] .hpbar{ background:#e3ddd6; border-color:#cdbfb8; }
+  :root[data-tone="light"] .syn.full{ background:#f3e3b4; box-shadow:0 0 0 1px #dcc48c inset; }
+  :root[data-tone="light"] .syn .eff{ color:#7a5a1c; }
+  :root[data-tone="light"] .uskill{ background:#55524e; border-color:#55524e; }
+  :root[data-tone="light"] .uskill span{ color:#e4e1da !important; }
+  :root[data-tone="light"] .tag2{ background:#f6e4e0; border-color:#d9a79f; color:#8d3b36; }
+  :root[data-tone="light"] #log .heavy{ color:#c0281e; }
+  :root[data-tone="light"] #log .todo{ border-left-color:#bdb9af; }
+  :root[data-tone="light"] .enkwrap .enknm{ color:#3f6a8a; }
+  :root[data-tone="light"] button.mailon{ color:var(--gold); }
+  :root[data-tone="light"] #log .good{ color:#3f7a2c; }
+  :root[data-tone="light"] #log .crit{ color:#8a6000; }
+  :root[data-tone="light"] #log .recall{ color:#6a5a9a; }
+  :root[data-tone="light"] #log.recalling{ background:#ece8f4; }
+  :root[data-tone="light"] .enkwrap .enknum{ color:#2f5f7c; }
+  :root[data-tone="light"] .pcard.sup{ background:#eef6e8; }
+  :root[data-tone="light"] .pcard .suptag{ color:#4f8a1c; }
   /* 전투 중 — 테마마다 «제 색이 붉게 가라앉은» 화면입니다 (2026-10-13).
    * 예전에는 전투에 들어가면 어느 테마든 「먹」으로 되돌렸습니다. 이제는 그 테마의 뼈대 색에
    * 그 테마의 --red 를 조금씩 섞어 --b-* 를 짓습니다 — 테마를 새로 더해도 따로 적을 것이 없습니다.
@@ -1407,16 +1458,22 @@
     --b-heavy:color-mix(in srgb, var(--red) 80%, var(--hi));
   }
   :root:has(body.battling){ background:var(--b-bg); }
-  /* 백악은 바탕이 밝아, 어두운 바탕을 딛고 짠 자리 몇을 따로 뒤집습니다 */
-  :root[data-palette="chalk"] body.battling .hpbar{ background:var(--b-bar); border-color:var(--b-line); }
-  :root[data-palette="chalk"] body.battling button.skill{ border-color:#7d55a8; color:#5f3a8c; }
-  :root[data-palette="chalk"] body.battling button.claw1{ border-color:#6c9a3a; color:#476e1c; }
-  :root[data-palette="chalk"] body.battling .pcard.acting    { box-shadow:inset 0 0 0 1px #b9e2bf; }
-  :root[data-palette="chalk"] body.battling .pcard.cmd-attack{ box-shadow:inset 0 0 0 1px #f0c3d6; }
-  :root[data-palette="chalk"] body.battling .pcard.cmd-guard { box-shadow:inset 0 0 0 1px #bcdcf2; }
+  /* 밝은 테마는 바탕이 밝아, 어두운 바탕을 딛고 짠 자리 몇을 따로 뒤집습니다 */
+  :root[data-tone="light"] body.battling .hpbar{ background:var(--b-bar); border-color:var(--b-line); }
+  :root[data-tone="light"] body.battling button.skill{ border-color:#7d55a8; color:#5f3a8c; }
+  :root[data-tone="light"] body.battling button.claw1{ border-color:#6c9a3a; color:#476e1c; }
+  :root[data-tone="light"] body.battling .pcard.acting    { box-shadow:inset 0 0 0 1px #b9e2bf; }
+  :root[data-tone="light"] body.battling .pcard.cmd-attack{ box-shadow:inset 0 0 0 1px #f0c3d6; }
+  :root[data-tone="light"] body.battling .pcard.cmd-guard { box-shadow:inset 0 0 0 1px #bcdcf2; }
   /* 테마 고르는 칸의 색 견본 (engine.js openPalettePick) */
   .palsw{display:flex;height:26px;border:1px solid var(--line-2);margin-bottom:8px;}
   .palsw i{flex:1;}
+  /* 설정의 색 테마 접는 칸 — 머리는 칸 제목처럼 (engine.js openSettings) */
+  .setpal{margin:6px 0 4px;}
+  .setpal > summary{color:var(--text);font-size:13px;padding:6px 2px;}
+  .setpal > summary b{font-weight:700;}
+  .palnow{margin:0 0 8px;display:none;}   /* 좁은 화면에서만 — 넓은 화면은 칸마다 한 줄이 이미 있습니다 */
+  .palnow b{color:var(--gold);font-weight:600;}
 </style>
 </head>
 <body>
@@ -1442,24 +1499,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.14.2"></script>
-<script src="data/vault.js?v=2.14.2"></script>
-<script src="data/characters.js?v=2.14.2"></script>
-<script src="data/skills.js?v=2.14.2"></script>
-<script src="data/allies.js?v=2.14.2"></script>
-<script src="data/gifts.js?v=2.14.2"></script>
-<script src="data/pickup.js?v=2.14.2"></script>
-<script src="data/achievements.js?v=2.14.2"></script>
-<script src="data/mail.js?v=2.14.2"></script>
-<script src="data/notice.js?v=2.14.2"></script>
-<script src="data/patch.js?v=2.14.2"></script>
-<script src="data/event.js?v=2.14.2"></script>
-<script src="data/reward.js?v=2.14.2"></script>
-<script src="data/tutorial.js?v=2.14.2"></script>
-<script src="data/foes.js?v=2.14.2"></script>
-<script src="data/story.js?v=2.14.2"></script>
-<script src="data/mirrorpacks.js?v=2.14.2"></script>
-<script src="engine.js?v=2.14.2"></script>
+<script src="data/access.js?v=2.14.3"></script>
+<script src="data/vault.js?v=2.14.3"></script>
+<script src="data/characters.js?v=2.14.3"></script>
+<script src="data/skills.js?v=2.14.3"></script>
+<script src="data/allies.js?v=2.14.3"></script>
+<script src="data/gifts.js?v=2.14.3"></script>
+<script src="data/pickup.js?v=2.14.3"></script>
+<script src="data/achievements.js?v=2.14.3"></script>
+<script src="data/mail.js?v=2.14.3"></script>
+<script src="data/notice.js?v=2.14.3"></script>
+<script src="data/patch.js?v=2.14.3"></script>
+<script src="data/event.js?v=2.14.3"></script>
+<script src="data/reward.js?v=2.14.3"></script>
+<script src="data/tutorial.js?v=2.14.3"></script>
+<script src="data/foes.js?v=2.14.3"></script>
+<script src="data/story.js?v=2.14.3"></script>
+<script src="data/mirrorpacks.js?v=2.14.3"></script>
+<script src="engine.js?v=2.14.3"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.14.2";
+const VERSION = "2.14.3";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -12928,21 +12928,58 @@ function fontChoiceName(kind, key) {
  *    콘첸트라트와 같은 결이고, 보관함에 넣으면 손댐 검사·내보내기에 얽힙니다.
  *    보관함을 비워도 남습니다. 대신 기기를 옮기면 다시 골라야 합니다.
  *
- *  ■ need — 그 장을 마쳐야 열립니다 (콘첸트라트가 같은 장으로 테마를 엽니다).
+ *  ■ need — 그 장을 마쳐야 열립니다. needMirror — 그 거울 갈래(S.mirrorDone 열쇠, 예: railLine3)를 완주해야 열립니다.
  *    안 적으면 처음부터 열려 있습니다. 고른 테마가 (보관함을 비워) 도로 잠기면 기본으로 물러납니다.
+ *
+ *  ■ light: true — 밝은 바탕. <html data-tone="light"> 가 함께 붙어 index.html 의 밝은 테마 덧칠을 받습니다
+ *    (index.html 머리의 미리 칠하기에도 같은 목록이 있습니다 — 늘리면 둘 다).
+ *
+ *  ■ 이름 · 한 줄 (사용자 지침 2026-10-17) — 앞의 다섯은 «먹과 붓» 처럼 라슈 이름을 새로 붙였고(열쇠는 그대로),
+ *    뒤의 여섯은 콘첸트라트의 같은 이름 테마에서 배색 · 해금 조건째 옮겨 왔습니다.
  *
  *  ■ 테마를 더하려면 — index.html «색 테마들» 에 한 덩이, 여기에 한 줄.
  *    sw 는 고르는 칸에 뜨는 견본 색 넷(바탕 · 칸 · 강조 · 글씨)입니다. */
 const PALETTE_KEY = "rash_company_palette_v1";
 const PALETTES = [
-  { key: "ink",     name: "먹",   sub: "기본 — 검은 바탕에 금",        sw: ["#0a0a0c", "#16161b", "#d8b26a", "#e8e4de"] },
-  { key: "chalk",   name: "백악", sub: "밝은 바탕에 먹글씨",            sw: ["#e9e7e1", "#ffffff", "#8a6412", "#1c1b19"] },
-  { key: "sea",     name: "심해", sub: "짙은 청색에 하늘빛",            sw: ["#0a121d", "#192739", "#6db8f2", "#e4edf8"], need: "ch3" },
-  { key: "blossom", name: "분홍", sub: "어두운 자줏빛에 분홍",          sw: ["#170b11", "#321a27", "#ff8db5", "#fce9f1"], need: "ch5" },
-  { key: "amber",   name: "호박", sub: "짙은 갈색에 금",                sw: ["#110d09", "#2a2018", "#dbb45e", "#f4e9d8"], need: "ch7" }
+  { key: "ink",     name: "먹과 붓",        sub: "글을 쓰는 행위는 검은 바탕에 금을 긋는 것과 같다",
+    sw: ["#0a0a0c", "#16161b", "#d8b26a", "#e8e4de"] },
+  { key: "chalk",   name: "종이와 펜",      sub: "글을 흰 종이에 적는 것이 자연스럽다", light: true,
+    sw: ["#e9e7e1", "#ffffff", "#8a6412", "#1c1b19"] },
+  { key: "sea",     name: "북극해",         sub: "\"승선을 환영한다, 선원들이여!\"", need: "ch5",
+    sw: ["#0a121d", "#192739", "#6db8f2", "#e4edf8"] },
+  { key: "blossom", name: "알리우네",       sub: "\"작업결과 좋음, 알. 우.가 탈출할 거다.\"", needMirror: "railLine3",
+    sw: ["#170b11", "#321a27", "#ff8db5", "#fce9f1"] },
+  { key: "amber",   name: "르누아르 명품관", sub: "\"안락함은 르누아르의 것이오\"", need: "ch7",
+    sw: ["#110d09", "#2a2018", "#dbb45e", "#f4e9d8"] },
+  /* ── 콘첸트라트에서 (이름 · 한 줄 · 해금 조건 모두 콘첸트라트와 같게) ── */
+  { key: "rouge",   name: "오르크튀르 루르주", sub: "유행을 선도하는 사람들", light: true, need: "ch3_5",
+    sw: ["#fdf2ec", "#f8e3d8", "#c62828", "#3a1f18"] },
+  { key: "sakura",  name: "벚꽃놀이",       sub: "올해도 꽃은 핀다", light: true, need: "ch5",
+    sw: ["#fff5f8", "#fde7ee", "#e0457b", "#3b1627"] },
+  { key: "sorna",   name: "여전히 살아있다", sub: "이슬라 소르나 어딘가에 살아계신 그분의 색감을 담았다.", light: true, needMirror: "railLine1",
+    sw: ["#f2edfa", "#dcebf7", "#55627a", "#241d33"] },
+  { key: "noir",    name: "블랙",           sub: "고급스럽고 깔끔한 블랙", need: "ch3",
+    sw: ["#0a0a0a", "#1e1e1e", "#e8e8e4", "#efefed"] },
+  { key: "sewer",   name: "하수구를 바라보는 검은 눈", sub: "알록달록하고 혼란스러운 테마", need: "ch6_5",
+    sw: ["#1e1234", "#3a3016", "#b6f23a", "#f0e8fb"] },
+  { key: "boom",    name: "붐은 온다",       sub: "터져서 없어짐 수고하세요.", needMirror: "railLine2",
+    sw: ["#4a0e0b", "#170f0e", "#ffd83d", "#ffeae5"] }
 ];
 function paletteBy(key) { return PALETTES.find(p => p.key === key) || null; }
-function paletteOpen(p) { return !p.need || !!(S && S.cleared && S.cleared[p.need]); }
+function paletteOpen(p) {
+  if (p.need && !(S && S.cleared && S.cleared[p.need])) return false;
+  if (p.needMirror && !(S && S.mirrorDone && S.mirrorDone[p.needMirror])) return false;
+  return true;
+}
+/* 잠긴 테마 칸에 적는 말 — «5장을 마치면» · «거울굴절철도 3호선을 마치면» */
+function paletteLockText(p) {
+  if (p.needMirror) {
+    const m = (typeof MIRROR_TIERS !== "undefined") && MIRROR_TIERS.find(x => x.key === p.needMirror);
+    return (m ? m.name : p.needMirror) + "을 마치면 열립니다";
+  }
+  const c = p.need ? CHAPTERS.find(x => x.id === p.need) : null;
+  return (c ? c.no : p.need) + "을 마치면 열립니다";
+}
 function paletteNow() {
   const p = paletteBy(Store.get(PALETTE_KEY));
   return p ? p.key : "ink";
@@ -12951,6 +12988,8 @@ function applyPalette(key) {
   const p = paletteBy(key) || PALETTES[0];
   if (p.key === "ink") document.documentElement.removeAttribute("data-palette");
   else document.documentElement.setAttribute("data-palette", p.key);
+  if (p.light) document.documentElement.setAttribute("data-tone", "light");
+  else document.documentElement.removeAttribute("data-tone");
 }
 /* 유리창에 들어올 때마다 한 번 — 잠긴 테마가 걸려 있으면 기본으로 물립니다 */
 function paletteCheck() {
@@ -12962,16 +13001,19 @@ function paletteCheck() {
  * 누르면 곧바로 입히고 저장한 뒤 redraw() 로 그 화면을 다시 그립니다. */
 function paletteGridHTML() {
   const now = paletteNow();
-  let h = '<div class="grid">';
+  /* 좁은 화면에서는 두 칸씩 작게 — 견본 띠와 이름만 (사용자 지침 2026-10-17, index.html .palgrid).
+   * 열린 칸의 한 줄은 감추는 대신, 지금 고른 테마의 한 줄을 격자 위에 따로 적습니다(.palnow) */
+  const cur = paletteBy(now) || PALETTES[0];
+  let h = '<div class="hint palnow">지금 「<b>' + cur.name + '</b>」 — ' + cur.sub + '</div>' +
+          '<div class="grid palgrid">';
   PALETTES.forEach(p => {
     const open = paletteOpen(p);
-    const c = p.need ? CHAPTERS.find(x => x.id === p.need) : null;
     h += '<div class="slot' + (now === p.key ? ' sel' : '') + (open ? '' : ' ro') + '"' +
            (open ? ' data-pal="' + p.key + '"' : '') + '>' +
            '<div class="palsw"' + (open ? '' : ' style="opacity:.35"') + '>' +
              p.sw.map(x => '<i style="background:' + x + '"></i>').join("") + '</div>' +
            '<div class="' + (open ? 'nm' : 'lock') + '">' + p.name + (now === p.key ? ' <span class="sub">· 지금</span>' : '') + '</div>' +
-           '<div class="sub">' + (open ? p.sub : (c ? c.no : p.need) + '을 마치면 열립니다') + '</div>' +
+           '<div class="sub">' + (open ? p.sub : paletteLockText(p)) + '</div>' +
          '</div>';
   });
   return h + '</div>';
@@ -13233,6 +13275,7 @@ let SET_SEC_OPEN = {};
 /* ── 설정 화면 (사용자 지침 2026-10-16) ──────────────────────────
  *  맨 위에 색 테마를 바로 펼쳐 두고, 그 아래 «다른 설정» 칸들 — 유리창 배경 · 화면 글꼴 ·
  *  기록 · 내보내기 · 앱으로 설치 · 보관함 비우기. 칸마다 제 화면을 열고, 닫으면 여기로 돌아옵니다. */
+let SET_PAL_OPEN = false;   // 설정의 색 테마 칸을 펼쳐 두었는가
 function openSettings(back) {
   $modal.classList.add("on");
   const draw = () => {
@@ -13240,9 +13283,14 @@ function openSettings(back) {
     const slot = (key, name, sub, red) =>
       '<div class="slot" data-go="' + key + '"><div class="nm"' + (red ? ' style="color:var(--red)"' : '') + '>' + name + '</div>' +
       '<div class="sub">' + sub + '</div></div>';
+    /* 색 테마는 기본으로 접어 둡니다 — 열한 가지라 펴 두면 «다른 설정» 이 한참 아래로 밀립니다
+     * (사용자 지침 2026-10-17). 고르면 다시 그리므로 펼친 것은 SET_PAL_OPEN 에 들고, [닫기] 로 나가면 다시 접힙니다. */
+    const cur = paletteBy(paletteNow()) || PALETTES[0];
     let h = '<h2>설 정</h2>' +
-            '<div style="margin:6px 0 6px;color:var(--text);font-weight:700">색 테마</div>' +
-            '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
+            '<details class="vfold setpal" id="setpal"' + (SET_PAL_OPEN ? ' open' : '') + '>' +
+              '<summary><b>색 테마</b>　지금 「' + cur.name + '」</summary>' +
+              '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
+            '</details>' +
             '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
             '<div class="grid">' +
               slot("bg", "유리창 배경", "마친 장의 배경으로 갈아 끼웁니다 — 지금 「" +
@@ -13268,7 +13316,9 @@ function openSettings(back) {
     go("patch").onclick = () => openPatch(here);
     go("app").onclick   = () => openInstall(here);
     go("reset").onclick = () => openReset(here);
-    document.getElementById("setclose").onclick = () => { closeModal(); render(); if (back) back(); };
+    const sp = document.getElementById("setpal");
+    if (sp) sp.ontoggle = () => { if ($modal.classList.contains("on")) SET_PAL_OPEN = sp.open; };
+    document.getElementById("setclose").onclick = () => { SET_PAL_OPEN = false; closeModal(); render(); if (back) back(); };
   };
   draw();
 }
