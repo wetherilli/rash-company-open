@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.14.4";
+const VERSION = "2.14.5";
 const VERSION_NAME = "권모술수가 난무하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5321,14 +5321,22 @@ function beginTurn() {
 
   /* 강타를 준비하는 턴에는 그림이 바뀝니다.
    * data/story.js 의 FOES 에 heavyImg 로 적습니다. 안 적은 적은 그대로 서 있습니다.
-   * 크게 휘두를 자세라는 말과 함께 모습이 달라지도록 한 것입니다. */
+   * 크게 휘두를 자세라는 말과 함께 모습이 달라지도록 한 것입니다.
+   * 광역·되받아치기에 따로 그림이 있으면 aoeImg · counterImg 로 적습니다
+   * (2026-10-18, 7.5장 코드레드 이서진). 안 적으면 광역은 heavyImg 를 그대로 씁니다.
+   * 강타로 치는 선공(firstHeavy)도 강타 그림을 씁니다. */
   if (!b.foeHidden) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg · b.imgScale) */
     const nowImg   = b.img      || f.img      || null;
     const nowHeavy = b.heavyImg || f.heavyImg || null;
+    const nowAoe   = b.aoeImg   || f.aoeImg   || nowHeavy;
+    const nowCtr   = b.counterImg || f.counterImg || null;
     const nowScale = b.imgScale || f.imgScale || null;
-    const want = ((b.heavy || b.aoe) && nowHeavy) ? nowHeavy : nowImg;
+    const want = (b.aoe && nowAoe) ? nowAoe
+               : (b.counter && nowCtr) ? nowCtr
+               : ((b.heavy || b.firstHeavyNow) && nowHeavy) ? nowHeavy
+               : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
   if (b.foeFirst) {
@@ -5472,7 +5480,8 @@ function battleSay(who, text, portraitSrc) {
   const 적본인 = who === S.battle.id ||
                  who === S.battle.name ||
                  nameOf(who) === S.battle.name ||
-                 (!!pt && (pt === f.img || pt === f.heavyImg || pt === S.battle.shown));
+                 (!!pt && (pt === f.img || pt === f.heavyImg || pt === f.aoeImg ||
+                           pt === f.counterImg || pt === S.battle.shown));
   if (!적본인 && pt) showSpeaker(pt, nameOf(who));
 }
 /* ── 전투 중 끼어드는 대사 ──────────────────────────────────────────
@@ -6130,6 +6139,8 @@ function resolveTurn() {
     if (f2.heavyLine) b.heavyLine = f2.heavyLine;
     if (f2.img) { b.img = f2.img; showFoe(f2.img, f2.name, f2.imgScale || null); b.shown = f2.img; }
     if (f2.heavyImg) b.heavyImg = f2.heavyImg;
+    if (f2.aoeImg) b.aoeImg = f2.aoeImg;
+    if (f2.counterImg) b.counterImg = f2.counterImg;
     if (f2.imgScale) b.imgScale = f2.imgScale;
     say("체력 " + b.hp + " / " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
     shakeScreen(true);
@@ -10216,6 +10227,8 @@ function mirrorFoeCopy(id, src, r, k, dk) {
     quote: f.quote || null,
     heavyLine: f.heavyLine || null,
     heavyImg: f.heavyImg || null,
+    aoeImg: f.aoeImg || null,
+    counterImg: f.counterImg || null,
     noHeavy: !!f.noHeavy,
     /* 등장 연출과 등장 음성 — 종점·종착역처럼 «만나 봐야 아는» 것이 여기 걸립니다.
      * 빠뜨리면 암전 없이 그냥 서 버립니다 (startMirror 가 cineEntrance 를 봅니다). */
