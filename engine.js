@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.14.5";
-const VERSION_NAME = "권모술수가 난무하는";
+const VERSION = "2.15.0";
+const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -49,6 +49,13 @@ const RULE = {
    * 말이 되므로 그 위로 잡았습니다. 적마다 counterMult 로 따로 적을 수
    * 있고, 안 적으면 이 값을 씁니다 (FOES 의 counterEvery 머리말 참고). */
   counterMult: 2.4,
+  /* 버티기 깨기 배수 — 적이 «웅크린 자리를 노리는» 턴에 방어·교정을 고른
+   * 사람에게 들어가는 한 대입니다. 되받아치기(2.4)의 거울인데 그보다 낮게
+   * 잡았습니다: 되받아치기는 «치지 않으면» 아무 일도 없어 피해 갈 수 있지만,
+   * 이쪽은 광역처럼 여럿이 한꺼번에 맞을 수 있어서입니다. 게다가 그 한 대에는
+   * 방어·교정의 경감이 아예 안 걸립니다 — 그게 이 기믹의 전부입니다.
+   * 적마다 breakMult 로 따로 적을 수 있습니다 (FOES 의 breakEvery 머리말 참고). */
+  breakMult:   1.5,
   startMoney:  400,    // 보관함이 아예 없을 때 손에 쥐고 시작하는 원고료
   /* 장을 마칠 때 주는 원고료. «처음 마칠 때만» 나옵니다 (storyPays 참고).
    * 장마다 다르게 주고 싶으면 그 장에 clearPay 를 적으면 그것이 이깁니다. */
@@ -5155,11 +5162,19 @@ function startBattleFight(scene, f) {
    "healEvery", "healFrom", "healAtk", "healLine", "healWarn",
    "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
    "evadeEvery", "evadeFrom", "evadeLine", "evadeWarn",
+   "takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit",
+   "breakEvery", "breakFrom", "breakMult", "breakLine", "breakWarn",
+   "rampEvery", "rampPct", "rampMax", "rampLine",
+   "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn", "rageImg",
    "firstEvery", "firstFrom", "firstLine", "firstWarn", "firstHeavy",
    "firstAoeEvery", "firstAoeFrom", "firstAoeFlat", "firstAoeLine", "firstAoeWarn"].forEach(k => {
     if (scene[k] != null) S.battle[k] = scene[k];
   });
   if (scene.hp != null) S.battle.maxhp = scene.hp;
+  /* 「몰아친다」(ramp)·「격분」(rage)이 공격력을 올려 쓰므로, 올리기 전의 값을
+   * 따로 들고 있어야 합니다 — 매 턴 b.atk 를 다시 셈할 때 이 값에서 출발합니다.
+   * 그러지 않으면 올린 값 위에 또 올려 눈덩이가 됩니다 (beginTurn 참고). */
+  S.battle.atk0 = S.battle.atk;
   S.restManage = false;
   const b = S.battle;            // 딜레이가 끝났을 때 같은 전투인지 확인용
 
@@ -5275,7 +5290,68 @@ function beginTurn() {
   const fFrom    = (b.firstFrom != null) ? b.firstFrom : fnow.firstFrom;
   const faEvery  = b.firstAoeEvery || fnow.firstAoeEvery || 0;
   const faFrom   = (b.firstAoeFrom != null) ? b.firstAoeFrom : fnow.firstAoeFrom;
-  b.aoe      = !!(b.boss && 주기(aoeEvery, aoeFrom));
+  const tkEvery  = b.takeEvery || fnow.takeEvery || 0;
+  const tkFrom   = (b.takeFrom != null) ? b.takeFrom : fnow.takeFrom;
+  const brEvery  = b.breakEvery || fnow.breakEvery || 0;
+  const brFrom   = (b.breakFrom != null) ? b.breakFrom : fnow.breakFrom;
+
+  /* ── 격분 — 체력이 깎이면 결이 바뀝니다 ──────────────────────
+   *  rageAt(0.3 이면 30%) 밑으로 내려가면 그때부터 다른 주기로 갑니다.
+   *  이 판에서 «단계» 를 가지는 유일한 자리입니다 — 처음 넘어서는 턱에
+   *  한 번 알리고(rageLine · rageWarn), 그림도 있으면 갈아 끼웁니다.
+   *  턴 행동이 아니라 «상태» 라, 아래 겹치는 차례에는 끼지 않습니다.
+   *
+   *    rageAt          이 비율 아래로 내려가면 격분합니다
+   *    rageHeavyEvery  격분한 뒤의 강타 주기 (안 적으면 2턴 — 평소는 3턴)
+   *    rageAoeEvery    격분한 뒤에야 열리는 광역 주기 (안 적으면 안 엽니다)
+   *    rageAtkPct      격분한 동안 공격력 +n (0.25 = +25%)
+   *
+   *  체력이 다시 차오르면(회복을 쓰는 적) 격분은 풀리지 않습니다 —
+   *  한 번 넘어선 턱은 그대로 둡니다. 「되돌아가는 단계」는 결이 약합니다. */
+  const rageAt = b.rageAt || fnow.rageAt || 0;
+  if (rageAt && b.boss && !b.raged && b.hp <= b.maxhp * rageAt) {
+    b.raged = true;
+    b.rageSay = true;          // 이 턱에 한 번만 — 아래 대사 자리에서 쓰고 끕니다
+    shakeScreen(true);
+    say("▶ " + withJosa(b.name, "이") + " " + (b.rageWarn || fnow.rageWarn ||
+        "지금까지와 다른 소리를 낸다.  결이 바뀌었다."), "heavy");
+  }
+  const rageHeavy = b.raged ? (b.rageHeavyEvery || fnow.rageHeavyEvery || 2) : 3;
+  const rageAoe   = b.raged ? (b.rageAoeEvery || fnow.rageAoeEvery || 0) : 0;
+
+  /* ── 몰아친다 — 오래 끌수록 세집니다 ─────────────────────────
+   *  rampEvery 턴마다 공격력이 rampPct 만큼 더해집니다(1턴째가 바탕).
+   *  rampMax 를 적으면 거기서 멈춥니다. 이것도 턴 행동이 아니라 «상태» 입니다.
+   *
+   *  이 게임은 본래 길게 끌수록 이쪽이 유리합니다 — 퇴고·교정·회복이 전부
+   *  턴을 벌어 주기 때문입니다. 그 셈을 뒤집으려고 둔 자리라, 체력을 올려
+   *  «오래 걸리게» 만드는 것과는 결이 다릅니다.
+   *
+   *  공격력 하나만 올립니다. 그래서 강타·광역·되받아치기·회복(healAtk 가
+   *  공격력 배수입니다)까지 전부 저절로 따라 오릅니다. */
+  const rampPct = b.rampPct || fnow.rampPct || 0;
+  let rampK = 1;
+  if (rampPct) {
+    const every = b.rampEvery || fnow.rampEvery || 1;
+    const max   = (b.rampMax != null) ? b.rampMax : fnow.rampMax;
+    rampK = 1 + rampPct * Math.floor(Math.max(0, b.turn - 1) / every);
+    if (max) rampK = Math.min(rampK, max);
+  }
+  b.rampK = rampK;
+  /* 한 칸 올라설 때마다 한 줄 알립니다 — 모르는 사이에 세지면 «왜 갑자기
+   * 아픈지» 를 알 수가 없습니다. 1턴째(바탕)에는 알리지 않습니다. */
+  if (rampPct && rampK > (b.rampShown || 1)) {
+    b.rampShown = rampK;
+    if (b.turn > 1)
+      say("▷ " + withJosa(b.name, "이") + " " + (b.rampLine || fnow.rampLine ||
+          "점점 몰아친다.") + "　(공격 ×" + rampK.toFixed(2) + ")", "bad");
+  }
+  /* 올리기 전의 값(atk0)에서 매번 다시 셈합니다 — 올린 값 위에 또 올리면
+   * 눈덩이가 됩니다 (startBattleFight 에서 담아 둡니다). */
+  const atkK = rampK * (b.raged ? (1 + (b.rageAtkPct || fnow.rageAtkPct || 0)) : 1);
+  if (b.atk0 != null) b.atk = Math.round(b.atk0 * atkK);
+
+  b.aoe      = !!(b.boss && (주기(aoeEvery, aoeFrom) || (rageAoe && 주기(rageAoe, null))));
   b.foeHeal  = !b.aoe && !!(b.boss && 주기(hEvery, hFrom));
   /* 선공 — 이 턴만 차례가 뒤집혀 적이 먼저 칩니다(resolveTurn 참고).
    * 둘로 갈립니다. 광역 선공이 단일 선공보다 위입니다 — 둘 다 걸리는 턴이면
@@ -5293,12 +5369,29 @@ function beginTurn() {
    * 치는 길을 냈습니다. FOES 나 전투 장면에 firstHeavy: true. foeTurn 이 이 값을 봅니다. */
   b.firstHeavyNow = 선공단일 && !!(b.firstHeavy || fnow.firstHeavy);
   if (선공광역) b.aoe = true;        // 이 턴 적의 «행동» 은 광역입니다
-  b.counter  = !b.aoe && !b.foeHeal && !b.foeFirst && !!(b.boss && 주기(cEvery, cFrom));
-  b.foeEvade = !b.aoe && !b.foeHeal && !b.foeFirst && !b.counter &&
+  /* 데려가기 — 선공 바로 아래입니다. 치는 것이 아니라 «판에서 뺀다» 는 짓이라
+   * 되받아치기·회피처럼 «조건이 맞아야 무슨 일이 생기는» 턴들보다 위에 둡니다. */
+  /* takeOnce — «한 사람을 데려가는 데 성공하면 그만» 입니다. 막히거나
+   * 되살아나서 아무도 못 데려간 턴은 성공으로 안 칩니다(b.tookOne 은
+   * 실제로 쓰러진 그 자리에서만 섭니다 — foeTurn 참고). 그래서
+   * takeFrom: 2 · takeEvery: 4 · takeOnce 를 함께 적으면 «2턴에 한 번,
+   * 그때 못 데려갔으면 4턴마다 다시, 하나를 데려가면 그만» 이 됩니다. */
+  const takeOnce = b.takeOnce || fnow.takeOnce;
+  b.take     = !b.aoe && !b.foeHeal && !b.foeFirst && !(takeOnce && b.tookOne) &&
+               !!(b.boss && 주기(tkEvery, tkFrom));
+  b.counter  = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take &&
+               !!(b.boss && 주기(cEvery, cFrom));
+  /* 버티기 깨기 — 되받아치기의 거울이라 바로 옆자리입니다 */
+  b.foeBreak = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter &&
+               !!(b.boss && 주기(brEvery, brFrom));
+  b.foeEvade = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter && !b.foeBreak &&
                !!(b.boss && 주기(eEvery, eFrom));
-  b.heavy   = !b.aoe && !b.foeHeal && !b.foeFirst && !b.counter && !b.foeEvade &&
-              !(b.noHeavy || fnow.noHeavy) && !!(b.boss && b.turn % 3 === 0);
-  b.aim     = (b.aoe || b.foeHeal || b.counter) ? null
+  b.heavy   = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter && !b.foeBreak &&
+              !b.foeEvade &&
+              !(b.noHeavy || fnow.noHeavy) && !!(b.boss && b.turn % rageHeavy === 0);
+  /* 데려가기는 «한 사람» 을 집는 것이라 노려진 사람이 있습니다.
+   * 버티기 깨기는 웅크린 사람들이 대상이라 미리 정해진 하나가 없습니다. */
+  b.aim     = (b.aoe || b.foeHeal || b.counter || b.foeBreak) ? null
                                    : (standing.length ? standing[rnd(standing.length)] : null);
 
   /* ── 설득 전투 — 정해진 차례가 지나면 적을 무대에서 내립니다 ──────
@@ -5328,14 +5421,17 @@ function beginTurn() {
   if (!b.foeHidden) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg · b.imgScale) */
-    const nowImg   = b.img      || f.img      || null;
+    /* 격분한 뒤로는 바탕 그림 자체가 갈립니다 — rageImg 를 적은 적만 */
+    const nowImg   = (b.raged && (b.rageImg || f.rageImg)) || b.img || f.img || null;
     const nowHeavy = b.heavyImg || f.heavyImg || null;
     const nowAoe   = b.aoeImg   || f.aoeImg   || nowHeavy;
     const nowCtr   = b.counterImg || f.counterImg || null;
     const nowScale = b.imgScale || f.imgScale || null;
+    /* 데려가기·버티기 깨기는 제 그림을 따로 두지 않고 강타 그림을 함께 씁니다
+     * — 둘 다 «크게 한 번» 하는 자세라 광역이 heavyImg 를 빌리는 것과 같습니다. */
     const want = (b.aoe && nowAoe) ? nowAoe
                : (b.counter && nowCtr) ? nowCtr
-               : ((b.heavy || b.firstHeavyNow) && nowHeavy) ? nowHeavy
+               : ((b.heavy || b.firstHeavyNow || b.take || b.foeBreak) && nowHeavy) ? nowHeavy
                : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
@@ -5372,6 +5468,22 @@ function beginTurn() {
     say("▷ " + withJosa(b.name, "이") + " " + (b.counterWarn || f.counterWarn ||
         "몸을 웅크린 채 이쪽을 본다.  되받아칠 준비를 하고 있다."), "bad");
     say("　지금 공격하는 것은 위험할 것 같다.", "bad");
+  } else if (b.take) {
+    /* 데려가기 — 막을 길이 있는 짓이라 반드시 미리, 누구인지까지 알립니다.
+     * 교정으로 지켜 두거나 그 사람이 회피를 고르면 놓칩니다 (foeTurn 참고). */
+    const f = FOES[b.id] || {};
+    say("▷ " + withJosa(b.name, "이") + " " + (b.takeWarn || f.takeWarn ||
+        "한 사람 위로 그림자가 좁아진다.  집어 올릴 자세다."), "bad");
+    if (b.aim)
+      say("　" + withJosa(memberName(b.aim), "을") + " 노리고 있다!", "bad");
+    say("　데려가면 그 자리에서 쓰러진다 — 교정으로 지키거나 피해야 한다.", "bad");
+  } else if (b.foeBreak) {
+    /* 버티기 깨기 — 되받아치기와 반대로 «웅크리지 말라» 고 알립니다.
+     * 이 턴에 방어를 고를지가 곧 이 기믹이므로 미리 알리지 않으면 찍는 것이 됩니다. */
+    const f = FOES[b.id] || {};
+    say("▷ " + withJosa(b.name, "이") + " " + (b.breakWarn || f.breakWarn ||
+        "내리칠 자리를 고른다.  웅크린 사람을 노릴 자세다."), "bad");
+    say("　이번 차례에 웅크리는 것은 위험할 것 같다.", "bad");
   } else if (b.aim)
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
         (b.heavy ? "  크게 휘두를 자세다." : ""), "bad");
@@ -5386,14 +5498,18 @@ function beginTurn() {
   /* 보스가 강타·광역·회복을 준비하는 턴에는 한마디 한다.
    * data/story.js 의 FOES 에 heavyLine · aoeLine · healLine 으로 적습니다.
    * 여럿이면 배열로 — 그중 하나가 무작위로 나옵니다. */
-  if (b.aoe || b.foeHeal || b.counter || b.foeEvade || b.foeFirst || (b.heavy && b.aim)) {
+  if (b.aoe || b.foeHeal || b.counter || b.foeEvade || b.foeFirst || b.take || b.foeBreak ||
+      b.rageSay || (b.heavy && b.aim)) {
     const f = FOES[b.id] || {};
     /* 난입한 것이 있으면 그쪽 대사가 이깁니다 (b.heavyLine) */
-    let line = b.foeFirst ? (b.aoe ? (b.firstAoeLine || f.firstAoeLine)
+    let line = b.rageSay ? (b.rageLine || f.rageLine)
+             : b.foeFirst ? (b.aoe ? (b.firstAoeLine || f.firstAoeLine)
                                    : (b.firstLine || f.firstLine))
              : b.foeHeal  ? (b.healLine || f.healLine)
              : b.aoe      ? (b.aoeLine  || f.aoeLine)
              : b.counter  ? (b.counterLine || f.counterLine)
+             : b.take     ? (b.takeLine || f.takeLine)
+             : b.foeBreak ? (b.breakLine || f.breakLine)
              : b.foeEvade ? (b.evadeLine || f.evadeLine)
              :              (b.heavyLine || f.heavyLine);
     if (Array.isArray(line)) line = line[rnd(line.length)];
@@ -5405,6 +5521,7 @@ function beginTurn() {
       if (line === "TODO") say("(강타 대사 미작성)", "todo");
       else say(line, "d");
     }
+    b.rageSay = false;      // 격분 대사는 넘어서는 그 턱에 한 번뿐입니다
   }
 
   /* checkLinkSkills() 는 대사(선창·대답)를 한 줄씩 끊어 보여 주느라 이제
@@ -6466,6 +6583,100 @@ function resolveTurn() {
       render();
       /* 못박은 광역(aoeFlat)은 «반드시 전멸» 자리라 강타처럼 세게 보여 줍니다 */
       hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: h.tag, heavy: !!flatAoe, blue: h.blue }));
+      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      return setTimeout(afterFoe, RULE.turnGapMs);
+    }
+
+    /* ── 데려가기 ─────────────────────────────────────────────────
+     *  치는 것이 아니라 «판에서 뺍니다». 노려 둔 한 사람을 집어 올려,
+     *  체력이 얼마든 그 자리에서 쓰러뜨립니다.
+     *
+     *  피해가 아니라서 방어·갑주·강공처럼 «피해를 깎는» 것들은 걸리지
+     *  않습니다. 막는 길은 둘뿐입니다 —
+     *    교정    그 사람을 미리 지켜 두면 손이 닿지 않습니다
+     *    회피    노려진 사람이 회피를 골랐으면 그대로 빠져나갑니다
+     *  책임(추민수)은 «대신 받는» 자리라 그대로 걸립니다 — 노려진 사람
+     *  대신 추민수가 끌려갑니다.
+     *
+     *  setHp 로 눕히므로 되살리는 기프트(찰랑이는 연료통)는 그대로 듣습니다.
+     *  갈래에 따라 뜻이 갈립니다 — 본편·1~3호선에서는 «쓰러졌으니 첨삭으로
+     *  일으킨다» 이지만, 쓰러진 사람이 돌아오지 않는 갈래에서는 그대로
+     *  «내렸다» 가 됩니다. */
+    if (b.take) {
+      const f = FOES[b.id] || {};
+      let t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
+      if (hero && t !== hero) t = hero;          // 책임 — 대신 끌려간다
+      if (b.mods[t + "_guard"] || b.mods[t + "_evadeActive"]) {
+        const 교정 = !!b.mods[t + "_guard"];
+        say("▶ " + withJosa(b.name, "이") + " " + memberName(t) + "에게 손을 뻗었지만 놓쳤다." +
+            (교정 ? "　(교정)" : "　(회피)"), "good");
+        /* 회피로 빠져나갔으면 다음 공격에 걸릴 확정 치명타는 그대로 남깁니다 */
+        if (!교정) b.persist[t + "_evadeBonus"] = b.mods[t + "_evadeActive"];
+        render();
+        allyHitFx(t, 0, { miss: true });
+        return setTimeout(afterFoe, RULE.turnGapMs);
+      }
+      shakeScreen(true);
+      /* 무엇을 하는 짓인지는 적마다 다릅니다 — 들어 올리는 것, 삼키는 것,
+       * 끌고 들어가는 것. takeHit 에 적으면 그 말을 쓰고, 안 적으면 아래 기본. */
+      const hitLine = b.takeHit || f.takeHit;
+      say("▶ " + (hitLine
+            ? withJosa(b.name, "이") + " " + withJosa(memberName(t), "을") + " " + hitLine
+            : withJosa(b.name, "이") + " " + withJosa(memberName(t), "을") + " 들어 올렸다!"), "heavy");
+      setHp(t, 0);
+      render();
+      allyHitFx(t, 0, { heavy: true, tag: "데려감" });
+      if (!alive(t)) {
+        say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+        /* 실제로 데려간 그 자리에서만 섭니다 — 되살아났으면(찰랑이는 연료통)
+         * 아직 못 데려간 것이라 takeOnce 가 걸리지 않고 다시 노립니다. */
+        b.tookOne = true;
+      } else {
+        say(withJosa(memberName(t), "이") + " 그 입에서 빠져나왔다.", "good");
+      }
+      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      return setTimeout(afterFoe, RULE.turnGapMs);
+    }
+
+    /* ── 버티기 깨기 ──────────────────────────────────────────────
+     *  되받아치기의 거울입니다. 되받아치기가 «치면 벌» 이라면 이쪽은
+     *  «안 치면 벌» 입니다 — 이번 차례에 방어를 골랐거나 교정으로 지켜 둔
+     *  사람을 전부 골라, 웅크린 자리를 그대로 뚫습니다.
+     *
+     *  그 한 대에는 **방어·교정의 경감이 걸리지 않습니다.** 그게 이 기믹의
+     *  전부입니다 — 광역이 올 때 전원 방어가 거의 언제나 정답이던 자리를
+     *  흔들려고 둔 것입니다. 갑주·강공처럼 피해 자체를 더하고 더는 것은
+     *  그대로 먹습니다.
+     *
+     *  아무도 웅크리지 않았으면 적은 아무 일도 하지 않습니다(되받아치기와 같습니다).
+     *  책임(추민수)은 걸리지 않습니다 — 노려진 한 사람이 아니라 «웅크린
+     *  사람들» 이 대상이라, 광역에 도발·회피가 안 걸리는 것과 같은 까닭입니다. */
+    if (b.foeBreak) {
+      const 웅크린 = targets.filter(t => b.cmds[t] === "guard" || b.mods[t + "_guard"]);
+      if (!웅크린.length) {
+        say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
+        render();
+        return setTimeout(afterFoe, RULE.turnGapMs);
+      }
+      const mult = b.breakMult || (FOES[b.id] || {}).breakMult || RULE.breakMult;
+      shakeScreen(true);
+      say("▶ " + withJosa(b.name, "이") + " 웅크린 자리를 그대로 뚫는다!", "heavy");
+      const hits = [];
+      웅크린.forEach(t => {
+        const st = effStats(t);
+        let dmg = b.atk * mult + rnd(4) - st.def;
+        if (b.mods[t + "_immune"])  dmg *= (1 - b.mods[t + "_immune"]);
+        if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
+        dmg = Math.max(1, Math.floor(dmg));
+        setHp(t, curHp(t) - dmg);
+        hits.push({ who: t, dmg: dmg });
+        say("　" + memberName(t) + "에게 " + dmg + " 피해　(웅크린 것이 듣지 않았다)" +
+            (b.mods[t + "_immune"] ? " (갑주)" : "") +
+            (b.mods[t + "_fragile"] ? " (강공)" : ""), "heavy");
+        if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+      });
+      render();
+      hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: true, tag: "버티기 깨기" }));
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
     }
@@ -10264,6 +10475,33 @@ function mirrorFoeCopy(id, src, r, k, dk) {
     firstAoeFrom: f.firstAoeFrom != null ? f.firstAoeFrom : null,
     firstAoeLine: f.firstAoeLine || null,
     firstAoeWarn: f.firstAoeWarn || null,
+    /* 데려가기·버티기 깨기·몰아친다·격분도 함께 옮깁니다 — 빠뜨리면 거울 위에서만
+     * 그 짓을 안 합니다(beginTurn 이 읽는 것은 원본이 아니라 이 사본입니다). */
+    takeEvery: f.takeEvery || 0,
+    takeFrom: f.takeFrom != null ? f.takeFrom : null,
+    takeOnce: !!f.takeOnce,
+    takeLine: f.takeLine || null,
+    takeWarn: f.takeWarn || null,
+    takeHit: f.takeHit || null,
+    breakEvery: f.breakEvery || 0,
+    breakFrom: f.breakFrom != null ? f.breakFrom : null,
+    breakMult: f.breakMult || 0,
+    breakLine: f.breakLine || null,
+    breakWarn: f.breakWarn || null,
+    /* 몰아친다 — 비율이라 배수를 곱하지 않습니다. 공격력이 이미 k 배로
+     * 올라가 있으므로, 같은 비율로 올라도 실제로 붙는 몫은 함께 커집니다. */
+    rampEvery: f.rampEvery || 0,
+    rampPct: f.rampPct || 0,
+    rampMax: f.rampMax != null ? f.rampMax : null,
+    rampLine: f.rampLine || null,
+    /* 격분 — rageAt 은 «제 최대 체력 대비» 라 배수와 상관없이 그대로 갑니다 */
+    rageAt: f.rageAt || 0,
+    rageHeavyEvery: f.rageHeavyEvery || 0,
+    rageAoeEvery: f.rageAoeEvery || 0,
+    rageAtkPct: f.rageAtkPct || 0,
+    rageLine: f.rageLine || null,
+    rageWarn: f.rageWarn || null,
+    rageImg: f.rageImg || null,
     desc: "유리창에 비쳐 나온 것. 본래보다 " +
           Math.round((k - 1) * 100) + "% 강하다."
   };

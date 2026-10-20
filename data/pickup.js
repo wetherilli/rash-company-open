@@ -25,6 +25,16 @@ const PICKUP_MAX = 2;
 const PICKUPS = [
   {
     on:   true,
+    name: "제3발톱 특정 배정",
+    tag:  "제3발톱",
+    rate: 0.60,
+    cost: 30,
+    line:   "발톱을 세울 시간이다.",
+    banner: "assets/scene/대양 구 핀벤져스 지부.jpg",
+    desc: "이름에 「제3발톱」이 든 인격과 교육위원이 자주 나옵니다."
+  },
+  {
+    on:   true,
     name: "L사 특정 배정",
     tag:  "L사",
     rate: 0.60,
@@ -32,22 +42,22 @@ const PICKUPS = [
     line:   "신입사원의 빈자리",
     banner: "assets/scene/메카고질라 갑판 낮.jpg",
     desc: "이름에 「L사」가 든 인격과 교육위원이 자주 나옵니다."
-  },
-  {
-    on:   true,
-    name: "신해수랜드 특정 배정",
-    tag:  "신해수랜드",
-    rate: 0.60,
-    cost: 30,
-    line:   "피를 머금을 시간이다.",
-    banner: "assets/scene/신해수랜드 대치중.jpg",
-    desc: "이름에 「신해수랜드」가 든 인격과 교육위원이 자주 나옵니다."
   }
 ];
 
 /* 내려간 배정 — 기록용입니다. 게임에는 쓰이지 않습니다.
  * 다시 세우려면 그대로 베껴 PICKUPS 로 옮기면 됩니다. */
 const PICKUP_PAST = [
+  {
+    name: "신해수랜드 특정 배정",
+    tag:  "신해수랜드",
+    rate: 0.60,
+    cost: 30,
+    line:   "피를 머금을 시간이다.",
+    banner: "assets/scene/신해수랜드 대치중.jpg",
+    desc: "이름에 「신해수랜드」가 든 인격과 교육위원이 자주 나옵니다.",
+    ver: "2.0.0 ~ 2.14.5"
+  },
   {
     name: "G사 특정 배정",
     tag:  "G사",

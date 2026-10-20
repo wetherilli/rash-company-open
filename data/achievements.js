@@ -250,5 +250,19 @@ const ACHIEVEMENTS = [
     reward: "인격 ★★★ L사 E.G.O :: 로단 (이한범)",
     when: { clear: "rodan_pressed" },
     give: { id: { who: "lee_hanbeom", star: 3, title: "L사 E.G.O :: 로단" } }
+  },
+  {
+    name: "어둠 속의 눈동자",
+    desc: "익스트림 거울 던전에서 기가노토사우루스를 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ 흑수 구 필두 짹G",
+    when: { kill: "기가노토사우루스", where: "mirrorExtreme" },
+    give: { support: "흑수 구 필두|짹G" }
+  },
+  {
+    name: "돔배기 회먹기",
+    desc: "김두현과 이한범을 편성한 채로, 익스트림 거울 던전에서 제3발톱 큰형님 이서진을 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ 제2발톱 솔다토 김승채",
+    when: { kill: "제3발톱 큰형님 이서진", where: "mirrorExtreme", party: ["kim_duhyeon", "lee_hanbeom"] },
+    give: { support: "제2발톱 솔다토|김승채" }
   }
 ];

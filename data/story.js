@@ -2538,5 +2538,304 @@ const CHAPTERS = [
       { t: "codex" }
 
     ]
+  },
+  {
+    id: "ch7_5_codered", no: "7.5장", title: "코드레드", side: true,
+    img: "assets/scene/메카고질라 내부.jpg",
+    place: "H사",
+    summary: "새 군주를 뽑는 밤, 시험이 아닌 것이 먼저 찾아왔다.",
+    pitch: [
+      "H사에서 새 군주를 뽑는 선발전이 열린다.",
+      "「헨리우」의 이름을 기억하는 자들이, 하나둘 유아인을 시험하려 든다.",
+      "그리고 밤이 되자, 시험이 아닌 것이 찾아왔다."
+    ],
+    scenes: [
+
+      /* ── ① H사로 ─────────────────────────────────────────── */
+      { t: "place", img: "assets/scene/메카고질라 내부.jpg", name: "메카고질라 내부" },
+      { t: "n", text: "메카고질라는 P사를 떠나 H사로 움직이고 있었다." },
+      { t: "place", img: "assets/scene/H사 전경.jpg", name: "H사 전경" },
+      { t: "n", text: "창으로 보이는 H사의 모습은 사실 라거슈타트의 작성위원들에게는 많이 익숙했다." },
+      { t: "n", text: "H사의 다른 이름, B구역." },
+      { t: "n", text: "많은 라거슈타트 인원들이 거쳐온 공룡사랑꾼들의 요람같은 곳이었기에." },
+      { t: "place", img: "assets/scene/메카고질라 내부.jpg", name: "메카고질라 내부" },
+      { t: "d", who: "manager", text: "그런데 왜 H사로 돌아온 거야?" },
+      { t: "d", who: "guide", text: "날개의 궁극적인 목표가 뭔지 알아?" },
+      { t: "d", who: "manager", text: "?" },
+      { t: "d", who: "guide", text: "바로 머리가 되는 거야." },
+      { t: "d", who: "manager", text: "그게 무슨 말이야." },
+      { t: "d", who: "guide", text: "H사의 군주가 C사의 임원으로 선출되었거든." },
+      { t: "d", who: "guide", text: "그리고 그 공석을 두고... 군주를 선발하게 될거야." },
+      { t: "d", who: "manager", text: "B구역의... 군주라고?" },
+      { t: "n", text: "둘의 대화를 듣고있던 이가 있었다." },
+      { t: "d", who: "yu_ain", text: "그렇다면 이번에는..." },
+      { t: "d", who: "guide", text: "그래, 네 차례다." },
+      { t: "d", who: "yu_ain", text: "이런 것은 익숙하지 않네요... 주인공이라니." },
+      { t: "d", who: "manager", text: "누구에게나 처음은 있는 거니까." },
+      { t: "d", who: "cha_minjun", text: "형도 잘 해낼 거야!" },
+      { t: "d", who: "driver", text: "너가... 잘 해낸 케이스인가?" },
+      { t: "d", who: "seong_siyun", text: "언제쯤 들려주실 거에요." },
+      { t: "d", who: "chu_minsu", text: "그냥 둬" },
+      { t: "n", text: "다른 작성위원들도 웃는 것이 보였다." },
+
+      /* ── ② H사 입구 · 길잡이가 빠지고 두 파견원이 붙는다 ────── */
+      { t: "place", img: "assets/scene/H사 입구.jpg", name: "H사 입구" },
+      { t: "n", text: "H사 입구에 도착했고," },
+      { t: "d", who: "guide", text: "그리고 나는 다른 일을 처리하러 간다." },
+      { t: "d", who: "manager", text: "에?" },
+      { t: "d", who: "guide", text: "사스한테는 이미 메일을 보내뒀으니, 알아서 잘 해줄거야." },
+      { t: "d", who: "guide", text: "그렇지만, 내가 직접 매니저 선발전에 참여하는 것은 불가능하니…" },
+      { t: "d", who: "manager", text: "그렇지만.." },
+      { t: "d", who: "guide", text: "잘 할거야. 그동안…" },
+      { t: "d", who: "김연준", text: "그동안, 제가 대신 도와드리죠-" },
+      { t: "d", who: "guide", text: "때맞춰 왔군." },
+      { t: "d", who: "도규민", text: "그리고 저도 왔답니다. Y사 연구원 도규민입니다." },
+      { t: "d", who: "guide", text: "남부협회와 Y사에서 파견원을 받았다…" },
+      { t: "d", who: "seong_siyun", text: "연준님은 정말 자주 보는 것 같네요." },
+      { t: "d", who: "kim_taeseong", text: "바로 전 장에서도 뵈었으니까요." },
+      { t: "d", who: "kim_duhyeon", text: "그런 이야기, 해도 되는 거야?" },
+      { t: "d", who: "cha_minjun", text: "좀비 사태 때는 적이었는데?" },
+      { t: "d", who: "kim_taeseong", text: "좀비 사태 때 사고 친 걸 지금 갚고 계신 거 아닌가요?" },
+      { t: "d", who: "김연준", text: "네? 갖고 있는 거 아니냐고요?" },
+      { t: "d", who: "guide", text: "하아. 난 간다." },
+      { t: "n", text: "길잡이의 한숨을 뒤로 하고, H사의 문이 열렸다." },
+
+      /* ── ③ 결투 릴레이 ────────────────────────────────────── */
+      { t: "place", img: "assets/scene/H사 거리.jpg", name: "H사 거리" },
+      { t: "n", text: "H사 입구에 도착하자마자 아인군을 알아보는 사람들이 가득했다." },
+      { t: "d", who: "잡배놈들", text: "저 사람… B구역 관리직이었던…" },
+      { t: "d", who: "yu_ain", text: "알아보는 사람이 많군요." },
+      { t: "d", who: "kim_duhyeon", text: "좋은 거야?" },
+      { t: "d", who: "yu_ain", text: "나쁜 것일 수도요?" },
+      { t: "d", who: "분탕을 원하는 여자", text: "어이 헨리우, 결투다!" },
+      { t: "d", who: "yu_ain", text: "네?" },
+      { t: "d", who: "분탕을 원하는 여자", text: "너를 제거하고, 매니저 선발전에 참여할 자격을 얻겠어!" },
+
+      /* 유아인 1인 편성 + 보스판정. party 를 이 전투 하나에만 걸어
+       * (forceParty·전투 단위) 강제로 혼자 세우고, engine.js 가 party 를
+       * 건 전투는 시작 전 자동으로 openEquip() 을 띄우므로 원작 지문의
+       * "편성을 고칠 기회를 주고" 가 그대로 구현됩니다. */
+      { t: "battle", foe: "duel_challenger", party: ["yu_ain"] },
+
+      { t: "d", who: "yu_ain", text: "허접하시네요~" },
+      { t: "d", who: "seong_siyun", text: "아인님, 엄청나게 잘 싸우시네요." },
+      { t: "d", who: "yu_ain", text: "B구역 관리직으로 있던 시절에 정말 많은 분탕을 처리해왔으니까요." },
+      { t: "d", who: "kim_duhyeon", text: "공룡의날에 만났던 황저도 그중 하나였을거야." },
+      { t: "d", who: "chu_minsu", text: "매니저 선발전이 기대가 되는군." },
+      { t: "d", who: "kim_taeseong", text: "인터넷에서는 흔한 일이지요." },
+      { t: "d", who: "yu_ain", text: "맞아요, 이런 수준의 놈들은 굉장히 흔하지만," },
+      { t: "d", who: "yu_ain", text: "진짜 우승 후보들은 따로 있어요." },
+      { t: "d", who: "seong_siyun", text: "얼마나 강하길래…" },
+      { t: "n", text: "그리고 H사 내에서 서너 명의 결투를 더 치렀어야 했다." },
+      { t: "n", text: "경쟁자들이 계속해서 아인군을 노렸고, 아인군은 계속해서 적들을 순식간에 처리했다." },
+
+      /* ── ④ 여관으로 ───────────────────────────────────────── */
+      { t: "n", text: "계속 나타나는 경쟁자가 피곤해질 무렵," },
+      { t: "d", who: "도규민", text: "곧 우리가 예약한 숙소에 도착합니다." },
+      { t: "d", who: "김연준", text: "제가 여기에 있는 친구한테 소개받은, 엄청 좋은…" },
+      { t: "place", img: "assets/scene/여관 입구.jpg", name: "여관 · 커다란 전기울타리" },
+      { t: "d", who: "도규민", text: "이 커다란 울타리는 뭐지?" },
+      { t: "n", text: "쥬라기공원에 나올 것 같은… 아니 쥬라기공원이 맞나?" },
+      { t: "n", text: "커다란 전기울타리가 한쪽 골목에서 시작해서 한참을 둘러쳐있었고, 끝이 보이지 않았다." },
+      { t: "n", text: "울타리 문이 열리고, 안내인이 나타났다." },
+      { t: "d", who: "안내인", text: "안녕하세요~ 저희 여관에 오신 것을 환영합니다." },
+      { t: "d", who: "seong_siyun", text: "뭔가를 키우고 있나요?" },
+      { t: "d", who: "안내인", text: "그런 컨셉의 여관입니다~ 아니, 호텔이요~" },
+      { t: "d", who: "kim_duhyeon", text: "생각보다는 음.." },
+      { t: "d", who: "안내인", text: "방으로 안내할게요-" },
+      { t: "place", img: "assets/scene/여관 내부.jpg", name: "여관 · 안" },
+      { t: "n", text: "안내인이 여관 안으로 안내를 하고, 각자의 방으로 갈 수 있도록 키를 나누어주었다." },
+      { t: "d", who: "kim_taeseong", text: "그래도 방 안은 좋은데요?" },
+      { t: "d", who: "song_hamin", text: "군대 생활관보단 훨씬 나은데…" },
+      { t: "d", who: "seong_siyun", text: "지성님, 여기 사람이 왜 아무도 없죠?" },
+      { t: "d", who: "manager", text: "우리가 전세 낸 거 아니야?" },
+      { t: "d", who: "안내인", text: "그럼 편안한 밤 되세요~" },
+      { t: "d", who: "seong_siyun", text: "어? 잠깐…" },
+      { t: "n", text: "안내인은 순식간에 시야에서 사라졌다." },
+      { t: "d", who: "김연준", text: "저희도 숙소로 가볼게요." },
+      { t: "d", who: "manager", text: "에?" },
+      { t: "d", who: "도규민", text: "일단, 어… 작성위원들이 열명이 넘어서 숙소 잡기가 쉽지 않았는데.." },
+      { t: "d", who: "김연준", text: "마침 여기 사는 제 친구가 여기를 추천해줬고…" },
+      { t: "d", who: "도규민", text: "그리고 결정적으로.." },
+      { t: "d", who: "도규민", text: "렐상이 저희 숙박비를 따로 주질 않았어요." },
+      { t: "d", who: "김연준", text: "그래서 좀 싼 곳으로…" },
+      { t: "d", who: "manager", text: "아?" },
+      { t: "n", text: "두 교육위원도 다른 곳으로 향하고…" },
+      { t: "n", text: "이윽고 밤이 찾아왔다." },
+
+      /* ── ⑤ 기습 — 뮤타돈 ──────────────────────────────────── */
+      { t: "place", img: "assets/scene/여관 내부 사이렌.jpg", name: "여관 · 밤" },
+      { t: "n", text: "사이렌이 요란하게 울리고, 붉은 경보등이 점멸한다.", shake: true },
+      { t: "d", who: "manager", text: "에?" },
+      { t: "d", who: "kim_haju", text: "지성아, 기습… 같은데?" },
+      { t: "n", text: "콰직!", shake: true },
+      { t: "d", who: "manager", text: "아 어떻게 해야돼…" },
+      { t: "d", who: "yu_ain", text: "일단 다들 무사한지부터 확인하죠?" },
+      { t: "d", who: "???", text: "키에에에엑!" },
+      { t: "n", text: "어디선가 공룡의 울음소리가 들린다." },
+      { t: "d", who: "kim_duhyeon", text: "이 목소리는!!!" },
+      { t: "d", who: "manager", text: "일단 내 방까지 잘 도착한 사람들이…" },
+      { t: "d", who: "song_hamin", text: "저도 방금 도착했습니다." },
+      { t: "d", who: "lee_hanbeom", text: "절반 정도는 이미 당한 것 같군요." },
+      { t: "d", who: "chu_minsu", text: "일단 이대로 한 번 전투를 해야겠습니다." },
+
+      /* 이한범·추민수·유아인·성시윤·송하민·김하주·김두현 일곱만 편성
+       * 가능 — 원작 지문 그대로, banParty(engine.js)로 나머지 다섯
+       * (박수오·차민준·이소정·이경원·김태성)을 편성에서 뺍니다.
+       * forceParty(정해진 인원 그대로)가 아니라 banParty(그 인원은 빼고)를
+       * 쓴 것은, 실제 전투 인원(3명)까지 못박은 게 아니라 «고를 수 있는
+       * 풀»만 일곱으로 좁힌 것이라 판단해서입니다 — 남은 다섯은 이미
+       * "당한" 상태일 뿐 퇴장한 게 아니라, 이후 장면(예: 159 김태성 대사)
+       * 에도 계속 등장합니다. t:"party" 장면 자체가 편성 화면과 중간
+       * 저장을 겸하므로, 원작 지문 "편성을 고칠 기회를 한번 주고,
+       * 중간 저장함"이 그대로 구현됩니다. */
+      { t: "party", ban: ["park_suo", "cha_minjun", "lee_sojeong", "lee_gyeongwon", "kim_taeseong"],
+        /* 누가 남았는지 이름으로 못박습니다(사용자 지침 2026-10-14) — 모르고 「이대로 진행」을
+         * 누르면, 빠진 사람 자리가 빈 채로 전투에 들어갑니다. */
+        text: "박수오 · 차민준 · 이소정 · 이경원 · 김태성은 이미 당했습니다. 이 밤이 끝날 때까지는 " +
+              "이한범 · 추민수 · 유아인 · 성시윤 · 송하민 · 김하주 · 김두현, 이 일곱만 편성할 수 있습니다 — " +
+              "빈자리가 생겼다면 지금 「편성」에서 채우십시오." },
+
+      { t: "d", who: "kim_duhyeon", text: "역시 혼종이었어!" },
+      { t: "d", who: "song_hamin", text: "리버스…에 나오는 거잖아?" },
+      { t: "battle", foe: "mutadon" },
+      { t: "n", text: "쓰러뜨리기가 무섭게, 또 다른 무리가 복도를 메운다." },
+      { t: "battle", foe: "mutadon" },
+
+      /* ── ⑥ 디아 등장 — 흑수 구 ────────────────────────────── */
+      { t: "n", text: "창 밖으로 비가 쏟아지고 있다." },
+      { t: "d", who: "kim_duhyeon", text: "폭풍우 치는 날 밤… 약간 쥬라기공원에서 본 것 같은…" },
+      { t: "d", who: "manager", text: "일단 지금 쓰러진 애들한테 다 첨삭을 걸고…" },
+      /* 첨삭으로 다섯이 다시 일어납니다(사용자 지침 2026-10-14) — 여기서부터는 편성 금지가
+       * 없고, 유아인만 반드시 서야 합니다(디아도 이서진도 그를 노리고 옵니다). 편성 자리를
+       * 하나 더 두어 금지를 풀고(unban) 유아인을 요구합니다(require) — 중간 저장도 겸합니다. */
+      { t: "party", unban: ["park_suo", "cha_minjun", "lee_sojeong", "lee_gyeongwon", "kim_taeseong"],
+        require: ["yu_ain"],
+        text: "쓰러졌던 다섯이 다시 일어났습니다. 이제 누구든 편성할 수 있습니다 — 다만 유아인은 반드시 서야 합니다." },
+      { t: "n", text: "쿵! 쿵!", shake: true },
+      { t: "d", who: "manager", text: "그래, 그러니까. 이게 끝이 아닌 거지?" },
+      { t: "place", img: "assets/scene/여관 폭발한 정문.jpg", name: "여관 · 폭발한 정문" },
+      { t: "n", text: "여관의 출입구였던 곳에 커다란 폭발이 일어난다.", shake: "hard" },
+      { t: "d", who: "디아", text: "좋은 밤이군, 유아인." },
+      { t: "d", who: "디아", text: "너희들의 숙소를 알아내는 데 시간을 꽤 썼지." },
+      { t: "d", who: "manager", text: "아는 사람이야?" },
+      { t: "d", who: "yu_ain", text: "디아… 스… 엄청난 부자에요." },
+      { t: "d", who: "디아", text: "이번에는 돈을 좀 썼다. 흑수들이 너희를 갈갈이 찢어놓을 테지!" },
+      { t: "d", who: "manager", text: "흑수라면…" },
+      { t: "d", who: "seong_siyun", text: "B구역에서 특별히 만들어낸… 공룡의 힘을 다루는 용병들이에요." },
+      { t: "d", who: "yu_ain", text: "저것들은 구(鉤)네요. 랩터의 힘을 다루는." },
+      { t: "d", who: "디아", text: "저기 유아인 녀석을 제거하고 내가!!" },
+      { t: "d", who: "kim_taeseong", text: "지겨운 멘트네요…" },
+      { t: "battle", foe: "heuksu_gu" },
+      { t: "d", who: "디아", text: "뭐야, 생각보다도 더 강하잖아?" },
+      { t: "d", who: "짹G", text: "쉬운 상대는 아닐 것이라 했는데." },
+      { t: "d", who: "디아", text: "너도 가서 싸워!" },
+      { t: "d", who: "짹G", text: "흑수를 부릴 권한과 필두를 움직이는 권한은 다르다." },
+      { t: "d", who: "짹G", text: "계약 조건도 헷갈리는 애송이였나." },
+      { t: "n", text: "성시윤이 노란테를 잡아끌었다." },
+      { t: "d", who: "seong_siyun", text: "이틈에 뒷문으로 나가죠." },
+      { t: "d", who: "manager", text: "그래…" },
+
+      /* ── ⑦ 이서진 — 5장 「참깨라면」의 그 원한 ──────────────── */
+      { t: "n", text: "그리고 또 한번 쿵 쿵 소리가 난다.", shake: true },
+      { t: "place", img: "assets/scene/여관 폭발한 뒷문.jpg", name: "여관 · 폭발한 뒷문" },
+      { t: "n", text: "여관의 뒷문이 화려한 폭발과 함께." },
+      { t: "n", text: "익숙한 얼굴이 등장한다." },
+      { t: "d", who: "튼튼한 조직원", text: "형님 여기입니다!" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "그래, 라슈컴 녀석들 공룡 우리 속에 숨어있었나!" },
+      { t: "d", who: "manager", text: "공룡 우리?" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "이런 일은 제3발톱 H사 지부에 연락해도 되지만" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "너희들을 응징하기 위해 내가 직접 왔다!" },
+      { t: "d", who: "seong_siyun", text: "하아…" },
+      { t: "d", who: "kim_duhyeon", text: "그때 돔배기 때문에?" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "잘 기억하는군!" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "전원 입수다!!!" },
+      /* spare — 이서진은 지지 않습니다(사용자 지침 2026-10-14). 그는 이쪽보다 강한 인물이고,
+       * 판이 난전이 되어 싸움이 «끊기는» 것입니다. 「격파」도 「제압」도 쓰지 않고, 쓰러지는
+       * 연출 없이 곧장 아래 대화로 넘어갑니다. endText 는 지어 붙인 한 줄입니다. */
+      /* endAt: 0.2 — 체력을 20% 까지 깎으면 거기서 싸움이 끊깁니다(끝까지 눕히는 상대가
+       * 아닙니다). 그 전에 전멸하면 그대로 패배입니다. hint 도 지어 붙인 한 줄입니다. */
+      { t: "battle", foe: "lee_seojin_codered", spare: true, endAt: 0.2,
+        hint: "쓰러뜨릴 수 있는 상대가 아니다. 버티며 몰아붙이면, 판이 먼저 뒤집힌다.",
+        endText: "▶ 승부가 나기도 전에, 판이 뒤엉켰다." },
+      { t: "d", who: "디아", text: "뭐야. 이녀석은 내 타겟이라고!" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "넌 뭐냐!" },
+
+      /* ── ⑧ 진짜 최종전 — 기가노토사우루스 ───────────────────── */
+      { t: "n", text: "다시 쿵쿵 소리가 들린다.", shake: true },
+      { t: "d", who: "manager", text: "또 뭐가 있어?" },
+      { t: "d", who: "song_hamin", text: "레전드 개판이네.." },
+      { t: "n", text: "지붕이 날아갔다.", shake: "hard" },
+      { t: "place", img: "assets/scene/여관 기가노토 조우.jpg", name: "여관 · 뜯겨나간 지붕, 쏟아지는 비" },
+      { t: "d", who: "kim_taeseong", text: "방금 씻었는데…" },
+      { t: "n", text: "그리고 거대한 육식공룡이 모습을 드러낸다." },
+      { t: "n", text: "번쩍이는 붉은 눈동자가 아래를 응시한다." },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "주인이 행차하셨나…" },
+      { t: "n", text: "기가노토사우루스." },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "어디 한 번 덤벼봐라!!!" },
+      { t: "n", text: "기가노토사우루스는 꼬리를 한번 세차게 휘두르더니" },
+      { t: "n", text: "이서진과 제3발톱 무리들을 한번에 날려버렸다.", shake: "hard" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "네놈들!!" },
+      { t: "d", who: "이서진", portrait: "assets/enemy/큰형님 이서진.png",
+        text: "각오해라!!" },
+      { t: "n", text: "날아가는 이서진은 날아가면서도 라거슈타트 작성위원들에게 고래고래 소리를 질렀지만," },
+      { t: "n", text: "점점 작아질 뿐이었다." },
+      { t: "n", text: "그리고 이번엔 거대한 눈동자가 작성위원들을 노려봤다." },
+
+      /* 원작 지문이 이 최종전 앞에만 "편성 고칠 수 있는 중간 저장"을 한 번
+       * 더 따로 적어 둬(뮤타돈 전 한 번뿐이던 다른 전투들과 달리), 여기서만
+       * ban/unban 없이 순수한 편성 확인 자리를 하나 더 얹었습니다. */
+      { t: "place", img: "assets/scene/여관 기가노토 전투.jpg", name: "여관 · 붉은 눈동자 아래" },
+      { t: "party", require: ["yu_ain"], text: "가장 큰 상대가 남았습니다 — 편성을 마지막으로 손보십시오. 유아인은 반드시 서야 합니다." },
+      { t: "battle", foe: "giganotosaurus" },
+
+      /* ── ⑨ 마무리 — 지와의 등장 ──────────────────────────── */
+      /* 컷신 — 쓰러진 기가노토사우루스. 원고에는 전투 뒤 나레이션이 한 줄도
+       * 없이 바로 "다들… 괜찮아?"로 넘어갑니다. 그래서 대사를 새로 지어
+       * 붙이지 않고, 그림 한 장이 그 자리를 대신하게 뒀습니다 — 첫 두 줄을
+       * 덮은 채로 지나가고, 디아 쪽으로 넘어가기 전에 걷습니다
+       * (로단 제압 컷신 둘과 같은 서식 — wip/ch7_5_권모술수/package.js 참고). */
+      { t: "place", img: "assets/scene/여관 무너짐.jpg", name: "여관 · 무너진 자리" },
+      { t: "cut", img: "assets/cut/기가노토사우루스 사망.png" },
+      { t: "d", who: "manager", text: "다들… 괜찮아?" },
+      { t: "d", who: "yu_ain", text: "그런 것 같네요." },
+      { t: "cut" },                               // 컷신 걷기 — 비만 남은 무너진 여관입니다
+      { t: "d", who: "디아", text: "젠장! 뭐가 이렇게 꼬여있는거야!" },
+      { t: "d", who: "yu_ain", text: "순순히 물러나시죠." },
+      { t: "d", who: "디아", text: "필두! 어서 나를 보호해!" },
+      { t: "d", who: "짹G", text: "아니…?" },
+      { t: "d", who: "지와", text: "여기까지다 디아." },
+      { t: "n", text: "뒤에서 나타난 새로운 인물이 디아를 제압했다." },
+      { t: "d", who: "지와", text: "오랜만이군 아인..군…" },
+      { t: "d", who: "yu_ain", text: "지와님…" },
+      { t: "d", who: "디아", text: "약속과 다르잖아.." },
+      { t: "d", who: "짹G", text: "약속된 시간은 3시까지였는걸요?" },
+      { t: "n", text: "시계는 3시 13분을 가리키고 있었다." },
+      { t: "d", who: "지와", text: "이 자는… 내가 데려가지." },
+      { t: "d", who: "yu_ain", text: "그," },
+      { t: "d", who: "지와", text: "왜 그러지?" },
+      { t: "d", who: "yu_ain", text: "다음에 또 뵈어요" },
+      { t: "d", who: "지와", text: "여전하군." },
+      { t: "d", who: "지와", text: "가자 짹G." },
+      { t: "d", who: "짹G", text: "충." },
+      { t: "n", text: "그리고 두 사람은 사라졌다." },
+      { t: "d", who: "seong_siyun", text: "쉽지 않은 밤이네요." },
+      { t: "d", who: "kim_taeseong", text: "… 우리 이제 어디서 자죠?" },
+      { t: "d", who: "manager", text: "연준이네 방.." },
+      { t: "n", text: "그날 밤 김연준은 한숨도 잘 수 없었다고 한다." },
+
+      { t: "codex" },
+      { t: "end", text: "7.5장 종료 — 그날 밤, 라거슈타트는 조금 젖은 채로 잠들었다." }
+
+    ]
   }
 ];

@@ -223,5 +223,40 @@ const EVENTS = [
         cost: 300, limit: 1,
         give: { id: { who: "lee_gyeongwon", star: 3, title: "LST E.G.O :: 악어괴인" } } }
     ]
+  },
+
+  /* v2.15.0 에 7.5장 「코드레드」가 CHAPTERS 맨 끝에 서면서 열린 기간입니다.
+   * 재화 이름 「노리개」와 기간(10-21 ~ 10-27 화, 10-28 0시에 닫힘)은 사용자 지침(2026-10-20) —
+   * 한 주짜리입니다. */
+  {
+    id:      "norigae",            /* 보관함에 남는 열쇠 — 바꾸지 마십시오 */
+    chapter: "코드레드",
+    cur:     "노리개",
+    desc:    "선발전 참가자들이 허리춤에 매달고 다니는 작은 표식.",
+    line:    "붉은 경보가 울리는 밤, 발톱을 세운다.",
+    banner:  "assets/scene/H사 전경.jpg",
+    from:    "2026-10-21",
+    days:    7,
+    goods: [
+      { id: "norigae_box_select", name: "인격 파편 상자 (선택) 10개",
+        cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
+      { id: "norigae_box_random", name: "인격 파편 상자 (무작위) 5개",
+        cost: 10, limit: 30, give: { fragBoxRandom: 5 } },
+      { id: "norigae_cap",        name: "엔케팔린 캡슐 1개",
+        cost: 10, limit: 6,  give: { enkCap: 1 } },
+      { id: "norigae_codex",      name: "황금교본 5권",
+        cost: 10, limit: 5,  give: { codex: 5 } },
+      { id: "norigae_money",      name: "원고료 5",
+        cost: 1,  limit: 0,  give: { money: 5 } },
+      /* 인격 — 모스라 때처럼 «기존 인격» 둘. 새로 선 「제3발톱 특정 배정」과 결을 맞춰
+       * 제3발톱 ★★★ 둘로 골랐습니다(혼자 정한 것 — TODO.md). 값은 지난 기간들과 같은 200·300 —
+       * 둘은 성능이 같아(3.0성급, 실효 57.7) 서열대로 작은형님을 300 으로 두었습니다(사용자 지침 2026-10-20) */
+      { id: "norigae_id_taeseong", name: "김태성 — 제3발톱 작은아우",
+        cost: 200, limit: 1,
+        give: { id: { who: "kim_taeseong", star: 3, title: "제3발톱 작은아우" } } },
+      { id: "norigae_id_siyun",   name: "성시윤 — 제3발톱 작은형님",
+        cost: 300, limit: 1,
+        give: { id: { who: "seong_siyun", star: 3, title: "제3발톱 작은형님" } } }
+    ]
   }
 ];

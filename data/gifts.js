@@ -706,6 +706,30 @@ const GIFTS = [
         effect: { crit: 0.20, critMult: 0.75, critDmg: 0.50 } }
     ],
     effect: { crit: 0.15, critMult: 0.5, critDmg: 0.30 }
+  },
+  {
+    star: 3, name: "절차탁마",
+    flavor: "깎이고 갈릴수록 빛난다. 옥도, 원한도.",
+    desc: "흑수 인격이 쓰러질 때 유아인의 「보복」이 2배로 오름",
+    up: [
+      { desc: "흑수 인격이 쓰러질 때 유아인의 「보복」이 2.5배로 오름",
+        effect: { retribTag: "흑수", retribMult: 2.5 } },
+      { desc: "흑수 인격이 쓰러질 때 유아인의 「보복」이 3배로 오름",
+        effect: { retribTag: "흑수", retribMult: 3 } }
+    ],
+    effect: { retribTag: "흑수", retribMult: 2 }
+  },
+  {
+    star: 3, name: "찰랑이는 연료통",
+    flavor: "아직 반쯤 남았다. 한 번은 더 갈 수 있다.",
+    desc: "전투에서 처음으로 쓰러진 작성위원이 체력 50%로 한 번 살아남",
+    up: [
+      { desc: "전투에서 처음으로 쓰러진 작성위원이 체력 60%로 한 번 살아남",
+        effect: { reviveFirst: 0.60 } },
+      { desc: "전투에서 처음으로 쓰러진 작성위원이 체력 70%로 한 번 살아남",
+        effect: { reviveFirst: 0.70 } }
+    ],
+    effect: { reviveFirst: 0.50 }
   }
 ];
 
