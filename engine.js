@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.15.4";
+const VERSION = "2.15.5";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -8760,8 +8760,9 @@ function openGacha(done, pk, deal) {
     };
 
     const pullIdentity = (star) => {
-      let cand = pool.filter(p => p.id.star === star && !S.owned[idKey(p.who, p.id)]);
-      if (!cand.length) cand = pool.filter(p => p.id.star === star);
+      /* 미보유를 먼저 골라 주지 않습니다 — 남은 것이 있어도 중복이 뜹니다(사용자 지침 2026-10-20).
+       * 덕분에 특정 배정 대상을 이미 지녔어도 rate 만큼 그 대상이 다시 뜹니다. */
+      let cand = pool.filter(p => p.id.star === star);
       if (!cand.length) cand = pool;
       cand = narrow(cand, p => p.id.title);
       const pick = cand[rnd(cand.length)];
@@ -8781,9 +8782,8 @@ function openGacha(done, pk, deal) {
     const pullAdvisor = () => {
       const all = advisorOpenList();
       if (!all.length) return pullIdentity(3);          // 교육위원이 없으면 3성으로 대신
-      let cand = all.filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
-      if (!cand.length) cand = all;
-      cand = narrow(cand, a => a.title);
+      /* 미보유를 먼저 골라 주지 않습니다 — 남은 것이 있어도 중복이 뜹니다(사용자 지침 2026-10-20) */
+      let cand = narrow(all, a => a.title);
       const a = cand[rnd(cand.length)];
       const k = advisorId(a);
       const isNew = !(S.advisorsOwned && S.advisorsOwned[k]);
@@ -8854,8 +8854,8 @@ function pullGiftOnce() {
   const star = r < GIFT_RULE.rate3 ? 3
              : r < GIFT_RULE.rate3 + GIFT_RULE.rate2 ? 2 : 1;
   const pool = giftGachaList();
-  let cand = pool.filter(x => x.star === star && !(S.giftsOwned && S.giftsOwned[giftId(x)]));
-  if (!cand.length) cand = pool.filter(x => x.star === star);
+  /* 미보유를 먼저 골라 주지 않습니다 — 남은 것이 있어도 중복이 뜹니다(사용자 지침 2026-10-20) */
+  let cand = pool.filter(x => x.star === star);
   if (!cand.length) cand = pool;
   const pick = cand[rnd(cand.length)];
   const isNew = !(S.giftsOwned && S.giftsOwned[giftId(pick)]);
@@ -8871,8 +8871,8 @@ function pullAdvisorOnce() {
   const all = advisorOpenList();
   if (!all.length) return null;
   const star = Math.random() < ADVISOR_RULE.rate3 ? 3 : 2;
-  let cand = all.filter(a => a.star === star && !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
-  if (!cand.length) cand = all.filter(a => a.star === star);
+  /* 미보유를 먼저 골라 주지 않습니다 — 남은 것이 있어도 중복이 뜹니다(사용자 지침 2026-10-20) */
+  let cand = all.filter(a => a.star === star);
   if (!cand.length) cand = all;
   const pick = cand[rnd(cand.length)];
   const key = advisorId(pick);
