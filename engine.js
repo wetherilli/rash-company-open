@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.15.2";
+const VERSION = "2.15.3";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5165,6 +5165,7 @@ function startBattleFight(scene, f) {
    "takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit",
    "breakEvery", "breakFrom", "breakMult", "breakLine", "breakWarn",
    "rampEvery", "rampPct", "rampMax", "rampLine",
+   "heavyRampPct", "heavyRampMax",
    "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn", "rageImg",
    "firstEvery", "firstFrom", "firstLine", "firstWarn", "firstHeavy",
    "firstAoeEvery", "firstAoeFrom", "firstAoeFlat", "firstAoeLine", "firstAoeWarn"].forEach(k => {
@@ -5338,6 +5339,22 @@ function beginTurn() {
     if (max) rampK = Math.min(rampK, max);
   }
   b.rampK = rampK;
+  /* ── 강타만 몰아친다 (사용자 지침 2026-10-20) ──────────
+   *  몰아친다(rampPct)가 공격력 전체를 올린다면, 이쪽은 «강타의 배수» 만 올립니다.
+   *  강타를 «한 번 칠 때마다» 다음 강타 배수(1.7)에 heavyRampPct 만큼 곱이 더해집니다
+   *  (0.1 이면 첫 강타 ×1.0 → 둘째 ×1.1 → 셋째 ×1.2 …). heavyRampMax 에서 멈춥니다.
+   *  턴이 아니라 «친 횟수» 로 세므로, 다른 기믹이 강타 턴을 먹어도 한 칸씩만 오릅니다.
+   *  회피로 빗나간 강타도 한 번 친 것으로 셉니다. 강타 선공(firstHeavy)도 함께 셉니다.
+   *  보통 공격 · 광역 · 되받아치기 · 버티기 깨기는 그대로입니다.
+   *  강타를 예고하는 줄에 지금 배수를 함께 적습니다. */
+  const hrPct = b.heavyRampPct || fnow.heavyRampPct || 0;
+  let heavyK = 1;
+  if (hrPct) {
+    const max = (b.heavyRampMax != null) ? b.heavyRampMax : fnow.heavyRampMax;
+    heavyK = 1 + hrPct * (b.heavyDone || 0);
+    if (max) heavyK = Math.min(heavyK, max);
+  }
+  b.heavyK = heavyK;
   /* 한 칸 올라설 때마다 한 줄 알립니다 — 모르는 사이에 세지면 «왜 갑자기
    * 아픈지» 를 알 수가 없습니다. 1턴째(바탕)에는 알리지 않습니다. */
   if (rampPct && rampK > (b.rampShown || 1)) {
@@ -5486,7 +5503,7 @@ function beginTurn() {
     say("　이번 차례에 웅크리는 것은 위험할 것 같다.", "bad");
   } else if (b.aim)
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
-        (b.heavy ? "  크게 휘두를 자세다." : ""), "bad");
+        (b.heavy ? "  크게 휘두를 자세다." + ((b.heavyK || 1) > 1 ? "　(강타 ×" + b.heavyK.toFixed(2) + ")" : "") : ""), "bad");
 
   /* 피하는 턴 — 적은 평소대로 노리고 치되, 이번 차례 아군의 공격은 전부
    * 빗나갑니다. 노려진 사람은 위에서 이미 알렸으므로 여기서는 «쳐 봐야
@@ -6702,6 +6719,8 @@ function resolveTurn() {
     /* 턴 머리에서 예고한 그 표적을 그대로 친다.
      * 그 사이 쓰러졌다면(첨삭 전이라면) 서 있는 사람 중에서 다시 고른다. */
     const heavy = !!b.heavy || 되받음 || !!b.firstHeavyNow;   // 화면 흔들림·굵은 글씨는 강타와 같게 갑니다 (강타 선공 포함)
+    /* 강타만 몰아친다 — 강타를 친 횟수. 회피로 빗나가도 친 것으로 셉니다 */
+    if (b.heavy || b.firstHeavyNow) b.heavyDone = (b.heavyDone || 0) + 1;
     let t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
 
     /* 책임 — 노려진 게 누구든 추민수가 대신 받는다 */
@@ -6722,7 +6741,7 @@ function resolveTurn() {
     /* 되받아치기는 강타(1.7)보다 셉니다 — 적마다 counterMult 로 따로 적을 수
      * 있고, 안 적으면 RULE.counterMult 를 씁니다. */
     const 배수 = 되받음 ? (b.counterMult || (FOES[b.id] || {}).counterMult || RULE.counterMult)
-               : heavy  ? 1.7 : 1;
+               : heavy  ? 1.7 * (b.heavyK || 1) : 1;
     let dmg = b.atk * 배수 + rnd(4) - st.def;
     /* 반격(김하주) 몫의 바탕 — 방어·교정·도발·갑주·강공 등 «경감»이 걸리기
      * 전의 값입니다(사용자 지침 2026-09-02 — 원래는 자기 공격력 기반의
@@ -10494,6 +10513,9 @@ function mirrorFoeCopy(id, src, r, k, dk) {
     rampPct: f.rampPct || 0,
     rampMax: f.rampMax != null ? f.rampMax : null,
     rampLine: f.rampLine || null,
+    /* 강타만 몰아친다 — 이것도 비율이라 배수를 곱하지 않습니다 */
+    heavyRampPct: f.heavyRampPct || 0,
+    heavyRampMax: f.heavyRampMax != null ? f.heavyRampMax : null,
     /* 격분 — rageAt 은 «제 최대 체력 대비» 라 배수와 상관없이 그대로 갑니다 */
     rageAt: f.rageAt || 0,
     rageHeavyEvery: f.rageHeavyEvery || 0,
