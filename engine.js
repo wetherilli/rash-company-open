@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.15.5";
+const VERSION = "2.15.6";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -7286,7 +7286,8 @@ function openParty(done) {
          '</div>';
 
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">작성위원</div>' +
-         '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다.</div>' +
+         '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다. ' +
+         '칸을 꾹 누르면 그 사람의 인격 장착으로 갑니다.</div>' +
          '<div class="grid" data-tut="party-sinners">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
@@ -7385,7 +7386,10 @@ function openParty(done) {
     };
 
     $sheet.querySelectorAll(".slot[data-who]").forEach(el => {
+      /* 꾹 누르면 그 사람의 인격 장착으로 (사용자 지침 2026-10-20) — 그때는 고르기·빼기를 하지 않습니다 */
+      onLongPress(el, () => openEquip(() => draw(), el.dataset.who));
       el.onclick = () => {
+        if (el._longPressed) { el._longPressed = false; return; }
         const who = el.dataset.who;
         const i = picking.indexOf(who);
         if (i >= 0) picking.splice(i, 1);
@@ -7459,7 +7463,29 @@ function openParty(done) {
 let EQUIP_OPEN = {};        // who -> 펴 두었나
 let EQUIP_OWNED_ONLY = true;
 
-function openEquip(back) {
+/* 꾹 누르기 — 손가락(또는 마우스)을 ms 동안 떼지 않고 있으면 fn 을 부릅니다.
+ * 부른 뒤에 따라오는 click 은 el._longPressed 로 알려 주므로, 그 칸의 onclick 이 걸러야 합니다.
+ * 누른 채 손가락이 미끄러지면(스크롤) 취소합니다. */
+function onLongPress(el, fn, ms) {
+  let timer = null, x0 = 0, y0 = 0;
+  const stop = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button) return;                       // 오른쪽 단추 등은 무시
+    el._longPressed = false;
+    x0 = e.clientX; y0 = e.clientY;
+    stop();
+    timer = setTimeout(() => { timer = null; el._longPressed = true; fn(); }, ms || 500);
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 10) stop();
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(t => el.addEventListener(t, stop));
+  el.addEventListener("contextmenu", (e) => e.preventDefault());   // 폰에서 꾹 누를 때 뜨는 메뉴
+}
+
+/* focus — 그 사람만 펴서 엽니다(편성 칸을 꾹 눌러 들어올 때) */
+function openEquip(back, focus) {
+  if (focus && SINNERS[focus]) { EQUIP_OPEN = {}; EQUIP_OPEN[focus] = true; }
   /* 강제 편성 중이면(장 강제·전투 강제 — forcePartyPush 참고) 알려 준다.
    * 아래 각 줄도 지금 편성에 든 사람만 금테를 둘러 눈에 띄게 한다. */
   const forced = S.partyStack && S.partyStack.length > 0;
@@ -7573,6 +7599,10 @@ function openEquip(back) {
     };
   });
   document.getElementById("edone").onclick = () => { if (back) back(); else closeModal(); };
+  if (focus) {
+    const head = $sheet.querySelector('.eqhead[data-open="' + focus + '"]');
+    if (head) head.scrollIntoView({ block: "start" });
+  }
 }
 
 /* ── 튜토리얼 ─────────────────────────────────────────────────
