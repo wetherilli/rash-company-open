@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.15.6";
+const VERSION = "2.15.7";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3958,7 +3958,15 @@ function buttons(list) {
   list.forEach(b => {
     if (!b) return;
     const el = document.createElement("button");
-    el.textContent = b.label + (b.key ? "  (" + b.key.toUpperCase() + ")" : "");
+    el.textContent = b.label;
+    /* 단축키 표시는 따로 감싸 둡니다 — 손가락으로 쓰는 기기(폰·태블릿)에서는 CSS 가 감춥니다.
+     * 글쇠가 없는 기기라 쓸 수도 없고, 손잡이 글자만 길어집니다(사용자 지침 2026-10-20). */
+    if (b.key) {
+      const hk = document.createElement("span");
+      hk.className = "hk";
+      hk.textContent = b.key.toUpperCase();      // 괄호 대신 글쇠 모양(CSS) — 비용 「(2)」와 헷갈리지 않게
+      el.appendChild(hk);
+    }
     if (b.key) el.dataset.key = b.key.toLowerCase();
     if (b.cls) el.className = b.cls;
     if (b.disabled) el.disabled = true;
@@ -4067,7 +4075,10 @@ document.addEventListener("keydown", function (e) {
   const t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
 
-  const k = String(e.key || "").toLowerCase();
+  /* 글쇠 자리(e.code)로 먼저 봅니다 — 한글 입력 상태에서는 e.key 가 「ㅂ」·「ㅔ」로 와서
+   * Q·P 가 안 먹었습니다. 숫자 패드의 숫자도 같은 숫자로 칩니다. */
+  const m = /^(?:Key([A-Z])|Digit(\d)|Numpad(\d))$/.exec(e.code || "");
+  const k = m ? (m[1] || m[2] || m[3]).toLowerCase() : String(e.key || "").toLowerCase();
   if (!k || k.length !== 1) return;
   const btn = $actions.querySelector('button[data-key="' + k + '"]');
   if (!btn || btn.disabled) return;
@@ -5928,9 +5939,11 @@ function askNext() {
   list.push({ label: "전원 공격", cls: "primary", key: "p",
               fn: () => { pending.forEach(w => b.cmds[w] = "attack"); askNext(); } });
 
-  list.push({ label: "공격", cls: claw1Order === "attack" ? "claw1" : "",
+  /* 단축키 (사용자 지침 2026-10-20) — Q 공격 · W 방어 · E 첨삭 · R 퇴고 · T 고유 능력 ·
+   * 1 독촉 · 2 교정(이어서 1·2·3·4 로 대상 — pickTarget) · P 전원 공격 */
+  list.push({ label: "공격", cls: claw1Order === "attack" ? "claw1" : "", key: "q",
               fn: () => { b.cmds[who] = "attack"; askNext(); } });
-  list.push({ label: "방어", cls: claw1Order === "guard" ? "claw1" : "", fn: () => {
+  list.push({ label: "방어", cls: claw1Order === "guard" ? "claw1" : "", key: "w", fn: () => {
       b.cmds[who] = "guard";
       b.manage = Math.min(manageCap(), b.manage + RULE.guardManage);
       askNext();
@@ -5939,7 +5952,7 @@ function askNext() {
   /* 작성위원 고유 능력 — 방어 바로 옆, 편성된 그 사람에게만 뜬다 */
   const skillNow = skillAvailable(who);
   if (skillNow) {
-    list.push({ label: skillNow.skill.name, cls: "skill",
+    list.push({ label: skillNow.skill.name, cls: "skill", key: "t",
                 fn: () => useUniqueSkill(who) });
   }
 
@@ -5951,7 +5964,7 @@ function askNext() {
   const downed = S.party.filter(w => w && !alive(w));
 
   list.push({
-    label: "첨삭 (" + cRevive + ")", cls: "ghost",
+    label: "첨삭 (" + cRevive + ")", cls: "ghost", key: "e",
     disabled: b.manage < cRevive || !downed.length,
     fn: () => {
       const t = downed[0];
@@ -5966,7 +5979,7 @@ function askNext() {
   const hurt = S.party.filter(w => w && alive(w) && curHp(w) < maxHp(w))
                       .sort((a, b) => curHp(a) - curHp(b))[0];
   list.push({
-    label: "퇴고 (" + cHeal + ")", cls: "ghost",
+    label: "퇴고 (" + cHeal + ")", cls: "ghost", key: "r",
     disabled: b.manage < cHeal || !hurt,
     fn: () => {
       b.manage -= cHeal;
@@ -5983,7 +5996,7 @@ function askNext() {
    * b.cur 에 그냥 걸면 관리력만 버리는 일이 잦았습니다. pickTarget 참고. */
   const guardable = S.party.filter(w => w && alive(w) && !b.mods[w + "_guard"]);
   list.push({
-    label: "교정 (" + cCorrect + ")…", cls: "ghost",
+    label: "교정 (" + cCorrect + ")…", cls: "ghost", key: "2",
     disabled: b.manage < cCorrect || !guardable.length,
     fn: () => pickTarget(guardable, t => {
       b.manage -= cCorrect; b.mods[t + "_guard"] = true;
@@ -5994,7 +6007,7 @@ function askNext() {
   /* 독촉은 고르게 하지 않습니다 — 세게 때리게 할 사람은 지금 명령을 고르는
    * 바로 그 사람이라, b.cur 가 늘 원하는 대상입니다. 이름만 적어 둡니다. */
   list.push({
-    label: "독촉 · " + memberName(who) + " (" + cPush + ")", cls: "ghost",
+    label: "독촉 · " + memberName(who) + " (" + cPush + ")", cls: "ghost", key: "1",
     disabled: b.manage < cPush || b.mods[who + "_push"],
     fn: () => {
       b.manage -= cPush; b.mods[who + "_push"] = true;

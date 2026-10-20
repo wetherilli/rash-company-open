@@ -731,6 +731,10 @@
   /* 편성 창 맨 위 — [인격 장착] · [동기화] · [편성 저장] 한 줄 (engine.js openParty) */
   .grid.partytools{grid-template-columns:repeat(3,1fr);margin:4px 0 2px;}
   .grid.partytools .slot{cursor:pointer;}
+  /* 손잡이의 단축키 표시 — 손가락으로 쓰는 기기에서는 감춥니다(글쇠가 없으니) */
+  .hk{display:inline-block;margin-left:7px;padding:0 5px;min-width:1.1em;border:1px solid currentColor;border-radius:4px;
+       font-size:.78em;line-height:1.35;opacity:.6;text-align:center;vertical-align:1px;}
+  @media (hover:none) and (pointer:coarse){ .hk{display:none;} }
   /* 편성 칸은 꾹 눌러 인격 장착으로 갑니다 — 폰이 글자 고르기·메뉴를 띄우지 않게 */
   .slot[data-who]{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;}
   .grid.partytools .slot.none{cursor:default;}
@@ -1501,24 +1505,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.15.6"></script>
-<script src="data/vault.js?v=2.15.6"></script>
-<script src="data/characters.js?v=2.15.6"></script>
-<script src="data/skills.js?v=2.15.6"></script>
-<script src="data/allies.js?v=2.15.6"></script>
-<script src="data/gifts.js?v=2.15.6"></script>
-<script src="data/pickup.js?v=2.15.6"></script>
-<script src="data/achievements.js?v=2.15.6"></script>
-<script src="data/mail.js?v=2.15.6"></script>
-<script src="data/notice.js?v=2.15.6"></script>
-<script src="data/patch.js?v=2.15.6"></script>
-<script src="data/event.js?v=2.15.6"></script>
-<script src="data/reward.js?v=2.15.6"></script>
-<script src="data/tutorial.js?v=2.15.6"></script>
-<script src="data/foes.js?v=2.15.6"></script>
-<script src="data/story.js?v=2.15.6"></script>
-<script src="data/mirrorpacks.js?v=2.15.6"></script>
-<script src="engine.js?v=2.15.6"></script>
+<script src="data/access.js?v=2.15.7"></script>
+<script src="data/vault.js?v=2.15.7"></script>
+<script src="data/characters.js?v=2.15.7"></script>
+<script src="data/skills.js?v=2.15.7"></script>
+<script src="data/allies.js?v=2.15.7"></script>
+<script src="data/gifts.js?v=2.15.7"></script>
+<script src="data/pickup.js?v=2.15.7"></script>
+<script src="data/achievements.js?v=2.15.7"></script>
+<script src="data/mail.js?v=2.15.7"></script>
+<script src="data/notice.js?v=2.15.7"></script>
+<script src="data/patch.js?v=2.15.7"></script>
+<script src="data/event.js?v=2.15.7"></script>
+<script src="data/reward.js?v=2.15.7"></script>
+<script src="data/tutorial.js?v=2.15.7"></script>
+<script src="data/foes.js?v=2.15.7"></script>
+<script src="data/story.js?v=2.15.7"></script>
+<script src="data/mirrorpacks.js?v=2.15.7"></script>
+<script src="engine.js?v=2.15.7"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
