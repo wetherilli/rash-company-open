@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.15.7";
+const VERSION = "2.15.8";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5940,7 +5940,7 @@ function askNext() {
               fn: () => { pending.forEach(w => b.cmds[w] = "attack"); askNext(); } });
 
   /* 단축키 (사용자 지침 2026-10-20) — Q 공격 · W 방어 · E 첨삭 · R 퇴고 · T 고유 능력 ·
-   * 1 독촉 · 2 교정(이어서 1·2·3·4 로 대상 — pickTarget) · P 전원 공격 */
+   * 1 독촉 · 2 교정(이어서 1·2·3·4 로 대상 — pickTarget) · 3 체포 · P 전원 공격 */
   list.push({ label: "공격", cls: claw1Order === "attack" ? "claw1" : "", key: "q",
               fn: () => { b.cmds[who] = "attack"; askNext(); } });
   list.push({ label: "방어", cls: claw1Order === "guard" ? "claw1" : "", key: "w", fn: () => {
@@ -6005,9 +6005,10 @@ function askNext() {
     })
   });
   /* 독촉은 고르게 하지 않습니다 — 세게 때리게 할 사람은 지금 명령을 고르는
-   * 바로 그 사람이라, b.cur 가 늘 원하는 대상입니다. 이름만 적어 둡니다. */
+   * 바로 그 사람이라, b.cur 가 늘 원하는 대상입니다. 손잡이에 이름도 붙이지 않습니다
+   * (사용자 지침 2026-10-20 — 지금 차례인 사람인 것이 뻔해 손잡이만 길어졌습니다). */
   list.push({
-    label: "독촉 · " + memberName(who) + " (" + cPush + ")", cls: "ghost", key: "1",
+    label: "독촉 (" + cPush + ")", cls: "ghost", key: "1",
     disabled: b.manage < cPush || b.mods[who + "_push"],
     fn: () => {
       b.manage -= cPush; b.mods[who + "_push"] = true;
@@ -6021,7 +6022,8 @@ function askNext() {
   if (skillOpen(arrest)) {
     const cArrest = skillCost(arrest.cost);
     list.push({
-      label: "체포 · " + b.name + " (" + cArrest + ")", cls: "ghost",
+      /* 상대가 늘 하나라 대상 이름은 붙이지 않습니다(사용자 지침 2026-10-20) — 손잡이가 짧아집니다 */
+      label: "체포 (" + cArrest + ")", cls: "ghost", key: "3",
       disabled: b.manage < cArrest || !!b.mods.arrest,
       fn: () => {
         b.manage -= cArrest;
