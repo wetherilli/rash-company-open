@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.15.8";
+const VERSION = "2.16.0";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1946,16 +1946,19 @@ function critMultFor(who) {
 }
 
 /* ── 테마팩 특전 (사용자 지침 2026-10-14) ───────────────────────
- *  거울 던전(노말·하드·익스트림)에서 테마팩 하나를 다 깨면, 그 팩에 딸린 특전을 얻습니다.
- *  특전은 «그 판이 끝날 때까지만» 듣습니다 — 다음 갈림길에서 고른 팩들을 그걸 들고 치릅니다.
- *  그래서 노말(팩 하나)과 마지막에 깬 팩의 특전은 쓸 전투가 없습니다(결과 카드에만 남습니다).
+ *  거울 던전(노말·하드·익스트림)에서 테마팩을 «고르면» 그 팩에 딸린 특전을 얻습니다
+ *  (사용자 지침 2026-10-21 — 예전에는 다 깨야 얻어서, 노말과 마지막 팩의 특전은 쓸 전투가
+ *  없었습니다). 고른 그 팩부터 «그 판이 끝날 때까지» 듣습니다.
+ *  다만 그 팩을 다 깨기 전에 지거나 유리창으로 나가면, 갈림길로 돌아올 때 그 팩의 특전은
+ *  빠집니다 — 다시 고른 팩의 특전을 새로 얻습니다.
  *
  *  ■ 어디에 적는가 — data/mirrorpacks.js 의 팩마다 perk: { name, desc, effect }.
  *    아이콘은 assets/icon/<특전 이름>.png (tools/아이콘-도안.js — check.js 가 빠진 것을 짚습니다).
  *
  *  ■ 무엇을 들고 있는가 — 따로 저장하지 않습니다. 이번 판에서 깬 팩 목록
- *    (S.railSave.clearedPacks)이 이미 중간 저장에 실려 있으므로, 거기서 그때그때 읽습니다.
- *    나갔다 이어해도, 지고 갈림길로 돌아가도 그대로입니다. 2호선 순환 보너스(RAIL2_BONUSES —
+ *    (S.railSave.clearedPacks)과 지금 치르는 팩(S.railSave.current)에서 그때그때 읽습니다.
+ *    current 는 갈림길이 열릴 때마다(openPackGate) 지워지므로, 나갔다 이어하거나 지고
+ *    갈림길로 돌아가면 깬 팩 몫만 남습니다. 2호선 순환 보너스(RAIL2_BONUSES —
  *    화면에는 그쪽도 「특전」이라 적힙니다)와는 다른 것입니다.
  *
  *  ■ effect 에 쓸 수 있는 것
@@ -1981,7 +1984,8 @@ function packPerks() {
   if (!S || !S.mirror || !S.railSave || typeof MIRROR_PACKS === "undefined") return [];
   const rule = mirrorRuleNow();
   if (!rule || !rule.packRounds || S.railSave.key !== rule.key) return [];
-  return (S.railSave.clearedPacks || []).map(id => {
+  const ids = (S.railSave.clearedPacks || []).concat(S.railSave.current ? [S.railSave.current] : []);
+  return ids.map(id => {
     const p = MIRROR_PACKS.find(x => x.id === id);
     return p && p.perk;
   }).filter(Boolean);
@@ -2019,9 +2023,10 @@ function perkStats() {
   });
   return o;
 }
-/* 팩을 다 깬 자리(case "mirrorPackDone")에서 부릅니다 — 얻었음을 알리고, «얻는 순간» 듣는 것을 겁니다.
- * last 면 이번 판의 마지막 팩이라 쓸 전투가 없습니다. */
-function grantPackPerk(packId, last) {
+/* 팩을 고른 자리(enterPack)에서 부릅니다 — 얻었음을 알리고, «얻는 순간» 듣는 것(광신·보복)을 겁니다.
+ * 그 몫은 S.arc 에 바로 얹히므로, enterPack 이 부르기 «전에» 갈림길 때의 S.arc 를
+ * S.railSave.arc 로 떠 둡니다 — 지거나 이어하면 resumeMirror 가 그것으로 되돌립니다. */
+function grantPackPerk(packId) {
   const pack = (typeof MIRROR_PACKS !== "undefined") ? MIRROR_PACKS.find(x => x.id === packId) : null;
   const p = pack && pack.perk;
   if (!p) return;
@@ -2033,8 +2038,13 @@ function grantPackPerk(packId, last) {
   divider();
   say("▶ 특전 「" + p.name + "」을 얻었다.", "gain");
   say("　" + p.desc, "sys");
-  if (last) say("　이번 거울은 여기까지다 — 쓸 자리는 남지 않았다.", "sys");
-  else say("　이 거울을 나설 때까지 이어진다.", "sys");
+  say("　이 팩부터 거울을 나설 때까지 이어진다. 이 팩을 넘지 못하면 잃는다.", "sys");
+}
+/* 「이번 갈래」 스택(광신·보복)을 떠 둡니다 — 같은 객체를 물려 두면 전투에서 쌓인 것이
+ * 저장해 둔 자리에도 그대로 묻어, 지고 돌아와도 되돌아가지 않습니다. */
+function arcCopy(a) {
+  a = a || {};
+  return { kills: a.kills || 0, retribution: Object.assign({}, a.retribution) };
 }
 /* 갈림길의 세 갈래를 «카드» 로 세웁니다 (사용자 지침 2026-10-14 — 글줄로 적으니 안 읽혔습니다).
  * 카드 하나가 길 하나입니다: 어느 길인지 · 팩 이름 · 그 팩이 주는 특전(아이콘 · 이름 · 효과).
@@ -3857,7 +3867,7 @@ function renderFoeBar() {
       (rl.final ? "종착역" :
        rl.cycle != null ? (rl.cycle + "순환 · " + rl.no + "번째") :
        (rl.no + " / " + rl.total + "번째")) +
-      '　' + railScaleText(rl.k) +
+      '　' + (rl.label || railScaleText(rl.k)) +
     '</i>';
   $foehp.innerHTML =
     '<div class="hpbar"><i style="width:' + pct + '%"></i></div>' +
@@ -4542,8 +4552,8 @@ function play(s) {
       const nextRound = ((S.railSave && S.railSave.round) || 1) + 1;
       /* 마지막 라운드까지 다 깼어도 방금 깬 팩을 S.railSave 에 먼저 실어 둡니다 —
        * mirrorClear() 가 결과 카드(고른 테마팩 목록)를 지을 때 이걸 읽습니다. */
-      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared, arc: S.arc };
-      grantPackPerk(s.packId, nextRound > rule.packRounds);   // 테마팩 특전 — 방금 깬 팩 몫
+      /* 특전은 팩을 고를 때 이미 얻었습니다(enterPack) — 깬 팩 목록에 실리면서 굳습니다 */
+      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared, arc: arcCopy(S.arc) };
       if (nextRound > rule.packRounds) return mirrorClear();
       saveVault();
       openPackGate(rule, nextRound, cleared);
@@ -9450,12 +9460,13 @@ function openChapterSelect(back) {
 
 /* ── 거울 던전 ────────────────────────────────────────────────
  *  유리창에 비친 것들과 싸운다. 이미 만난 적들 중 셋이 무작위로 나오고,
- *  본편보다 scale 만큼 강해져 있습니다. 쉬지 않고 이어집니다.
+ *  거울 전용 수치(계단 표)로 섭니다. 쉬지 않고 이어집니다.
  *
- *  세 갈래가 있습니다.
- *    MIRROR_RULE     보통   — 30% 강함. 보스 하나까지.
- *    MIRROR_HARD     하드   — 2배.  보스 둘까지.
- *    MIRROR_EXTREME  익스트림 — 3배. 셋 다 보스일 수 있습니다.
+ *  세 갈래가 있습니다 — 수치는 본편 × 배수가 아니라 거울 전용 계단 표입니다
+ *  (사용자 지침 2026-10-21, data/mirrorpacks.js 머리말).
+ *    MIRROR_RULE     노말     — 저층부
+ *    MIRROR_HARD     하드     — 저층부 → 중층부
+ *    MIRROR_EXTREME  익스트림 — 저층부 → 중층부 → 상층부
  *  전부 들어갈 때 엔케팔린을 씁니다 (ENK_RULE 참고).
  *
  *  완주 보상 원고료는 고정값입니다 — RULE.moneyGain 을 타지 않고
@@ -9485,8 +9496,8 @@ const MIRROR_RULE = {
   sub:  "유리창에 비친 것들",
   glassNote: "비친 것들이 이쪽을 마주 본다.",   // 유리창 나레이션 — data/story.js 의 glassNote 와 같은 자리
   prefix: "거울의 ",   // 비쳐 나온 적 이름 앞에 붙는 말
-  packRounds: 1,  // 테마팩을 몇 번 고르는가
-  scale:  2.0,    // 본편 대비 강화 배수 (테마팩 개편, 2026-09-02 — 1.3배에서 올림)
+  packRounds: 1,  // 테마팩을 몇 번 고르는가 — 갈림길마다 한 층씩 오릅니다(저층부만)
+  /* scale 이 없습니다 — 수치는 data/mirrorpacks.js 의 계단 표에서 나옵니다(2026-10-21) */
   bonus:  150,    // 완주 보상 (원고료) — «처음 완주할 때만» 나옵니다. moneyGain 을 타지 않습니다
   codex:  1,      // 완주 보상 (황금교본) — 돌 때마다 받습니다
   event:  20,     // 완주 보상 (이벤트 재화) — 이벤트가 서 있는 동안만 들어옵니다
@@ -9502,8 +9513,7 @@ const MIRROR_HARD = {
   glassNote: "금이 간 자리마다 다른 것이 서 있다.",
   bg:   "assets/scene/하드거울던전.jpg",
   prefix: "깨진 거울의 ",
-  packRounds: 2,  // 테마팩을 두 번 연달아 고릅니다
-  scale:  2.5,    // 테마팩 개편, 2026-09-02 — 2.0배에서 올림
+  packRounds: 2,  // 테마팩을 두 번 연달아 고릅니다 — 저층부 → 중층부
   bonus:  250,
   codex:  3,
   event:  30,
@@ -9519,8 +9529,7 @@ const MIRROR_EXTREME = {
   glassNote: "조각마다 다른 것이 비친다. 어느 쪽도 이쪽이 아니다.",
   bg:   "assets/scene/익스트림거울던전.jpg",
   prefix: "조각난 거울의 ",
-  packRounds: 3,  // 테마팩을 세 번 연달아 고릅니다
-  scale:  3.0,    // 본편의 3배 (그대로)
+  packRounds: 3,  // 테마팩을 세 번 연달아 고릅니다 — 저층부 → 중층부 → 상층부
   bonus:  900,
   codex:  7,
   event:  100,
@@ -9577,7 +9586,7 @@ const MIRROR_RAIL1 = {
     "twisted_mosasaur"     // 5장 · 뒤틀린 모사사우루스 :: 강호영
   ],
 
-  scale:  3.5,      // 본편의 3.5배
+  scale:  3.5,      // 눈금에 뜨는 세기. 수치는 철도 표(RAIL_STEPS)에서 나옵니다 — 본편 × 배수가 아닙니다(2026-10-21)
   defScale: 0,      // 방어는 본편 그대로 (2026-09-11 — DEF_SCALE 머리말 참고)
 
   /* 굴절철도는 «한 번 완주하는 값» 으로 치르는 자리입니다 (사용자 지침 2026-09-04).
@@ -9675,7 +9684,7 @@ const MIRROR_RAIL2 = {
   loop: {
     foes:  3,     // 한 순환에 세우는 보스 수 (loopFoes 를 적었으면 그 수가 곧 이 수입니다)
     free:  3,     // 이만큼 돌아야 종착역으로 갈 수 있습니다
-    scale: 3.0,   // 1순환 배수
+    scale: 3.0,   // 1순환 배수 — 철도 표 × (그 순환 배수 ÷ 3.0)
     step:  0.5    // 순환마다 오르는 몫
   },
 
@@ -9716,11 +9725,11 @@ function railScaleText(k) { return "×" + k.toFixed(1); }
 function railCycleFoes(r, cycle, srcs) {
   const k = railCycleScale(r, cycle), dk = railDefK(r, k);
   return srcs.map((src, i) =>
-    mirrorFoeCopy("__mirror_r2_" + cycle + "_" + i, src, r, k, dk));
+    mirrorFoeCopy("__mirror_r2_" + cycle + "_" + i, src, r, k, dk, railBase(r, src, i, k)));
 }
 function railFinalFoe(r, cycle) {
   const k = railCycleScale(r, cycle), dk = railDefK(r, k);
-  return mirrorFoeCopy("__mirror_r2_final", r.finalFoe, r, k, dk);
+  return mirrorFoeCopy("__mirror_r2_final", r.finalFoe, r, k, dk, railBase(r, r.finalFoe, 0, k));
 }
 
 /* 뽑아 둔 보스 셋의 «본래 열쇠». 순환마다 배수를 갈아 다시 빚어야 하므로,
@@ -9808,7 +9817,7 @@ const MIRROR_RAIL3 = {
   prefix: "굴절된 ",
 
   count:  8,        // 역 여덟 — 중간역과 종착역을 뺀 여섯이 통과할 수 있는 역입니다
-  scale:  3.0,      // 시작 배수. 한 역 통과할 때마다 skipStep 씩 오릅니다
+  scale:  3.0,      // 시작 배수. 한 역 통과할 때마다 skipStep 씩 오릅니다 — 철도 표 × (지금 배수 ÷ 3.0)
   skipStep: 0.5,
   defScale: 0,      // 1·2호선과 같게 — 방어는 본편 그대로 (2026-09-11 DEF_SCALE 머리말)
 
@@ -9912,7 +9921,7 @@ function buildExpressFoes(r) {
     const stops = 있는것.slice(0, 3).concat([r.midFoe], 있는것.slice(3), [r.finalFoe])
                         .filter(x => FOES[x]);
     const k0 = r.scale, dk0 = railDefK(r, k0);
-    return stops.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k0, dk0));
+    return stops.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k0, dk0, railBase(r, src, i, k0)));
   }
 
   const met = metFoes();
@@ -9940,7 +9949,7 @@ function buildExpressFoes(r) {
   const stops = 앞.concat([r.midFoe], 뒤, [r.finalFoe]).filter(x => FOES[x]);
 
   const k = r.scale, dk = railDefK(r, k);
-  return stops.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k, dk));
+  return stops.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k, dk, railBase(r, src, i, k)));
 }
 
 /* ── 급행 한 벌을 짓는다 ──────────────────────────────────────
@@ -9996,7 +10005,7 @@ SCENE_EXT.railExpressGate = function (s) {
   const 빚기 = () => {
     const k = railExpressScale(rule), dk = railDefK(rule, k);
     const src = (FOES[s.id] && FOES[s.id].src) || s.id;
-    mirrorFoeCopy(s.id, src, rule, k, dk);
+    mirrorFoeCopy(s.id, src, rule, k, dk, railBase(rule, src, s.no - 1, k));
     const bs = SCENES[S.sc];                 // 바로 뒤가 이 역의 전투입니다
     if (bs && bs.rail) bs.rail.k = k;
     return k;
@@ -10299,7 +10308,7 @@ function mirrorFacts(rule) {
 
   /* 테마팩 갈래(노말·하드·익스트림) — packRounds 번, 매번 셋 중 하나를 고릅니다 */
   if (r.packRounds) {
-    o.세기 = railScaleText(r.scale);
+    o.세기 = mirrorLayerText(r);
     o.상대라벨 = '테마팩';
     o.상대 = countBare(r.packRounds) + '번';
     o.자세히 = '들어가면 「테마팩」(잡졸 하나·보스 둘) 셋을 보여 주고, 그중 하나를 골라' +
@@ -10404,7 +10413,8 @@ function buildMirrorFoes(rule) {
                        .concat((r.finalFoe && FOES[r.finalFoe]) ? [r.finalFoe] : []);
     const kk = r.scale;
     const dkk = (r.defScale != null) ? (1 + (kk - 1) * r.defScale) : defK(kk);
-    return list.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, kk, dkk));
+    return list.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, kk, dkk,
+                                              r.group === "rail" ? railBase(r, src, i, kk) : null));
   }
 
   const k = r.scale;
@@ -10468,7 +10478,8 @@ function buildMirrorFoes(rule) {
    * 배수가 큰 갈래일수록 이 값을 낮춰 잡습니다. */
   const dk = (r.defScale != null) ? (1 + (k - 1) * r.defScale) : defK(k);
 
-  return picked.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k, dk));
+  return picked.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, r, k, dk,
+                                              r.group === "rail" ? railBase(r, src, i, k) : null));
 }
 
 /* ── 비친 것 하나를 빚는다 ────────────────────────────────────
@@ -10479,17 +10490,22 @@ function buildMirrorFoes(rule) {
  *    id  만들어 넣을 열쇠 (거울은 "__mirror_0", 2호선은 "__rail2_1_0" 처럼)
  *    src 본래 적의 열쇠      r  갈래 규칙 (prefix 를 봅니다)
  *    k   체력·공격에 곱할 배수      dk  방어에 곱할 배수
+ *    base  거울 전용 바탕 수치 {hp,atk,def} (사용자 지침 2026-10-21). 주면 본편 수치와 k·dk 를
+ *          보지 않고 이 값을 MIRROR_VARY 만큼 흔들어 씁니다 — 테마팩은 mirrorStepBase,
+ *          거울굴절철도는 railBase 가 지어 넘깁니다. 안 주면 예전처럼 본편 × 배수입니다.
  */
-function mirrorFoeCopy(id, src, r, k, dk) {
+function mirrorFoeCopy(id, src, r, k, dk, base) {
   const f = FOES[src];
+  const st = base ? mirrorVary(base)
+                  : { hp: Math.round(f.hp * k), atk: Math.round(f.atk * k), def: Math.round(f.def * dk) };
   FOES[id] = {
     /* 원래 열쇠를 남겨 둡니다 — 거울굴절철도 저장 이어하기(railSave)가
      * "무엇을 비췄었는지" 되짚을 때 씁니다. 다른 곳에서는 안 읽습니다. */
     src: src,
     name: f.mirrorName || ((r && r.prefix) || "거울의 ") + f.name,
-    hp:  Math.round(f.hp  * k),
-    atk: Math.round(f.atk * k),
-    def: Math.round(f.def * dk),
+    hp:  st.hp,
+    atk: st.atk,
+    def: st.def,
     boss: !!f.boss,
     img: f.img || null,
     /* 그림을 키워 세우는 적(타나콘다처럼 원본 안에서 몸집이 작게 잡힌 것)은
@@ -10569,10 +10585,59 @@ function mirrorFoeCopy(id, src, r, k, dk) {
     rageLine: f.rageLine || null,
     rageWarn: f.rageWarn || null,
     rageImg: f.rageImg || null,
-    desc: "유리창에 비쳐 나온 것. 본래보다 " +
-          Math.round((k - 1) * 100) + "% 강하다."
+    desc: base ? "유리창에 비쳐 나온 것. 본래와는 다른 세기로 서 있다."
+               : "유리창에 비쳐 나온 것. 본래보다 " + Math.round((k - 1) * 100) + "% 강하다."
   };
   return id;
+}
+
+/* ── 거울 전용 수치 (사용자 지침 2026-10-21) ──────────────────────
+ *  표(MIRROR_STEPS · RAIL_STEPS · MIRROR_VARY)는 data/mirrorpacks.js 머리말에 있습니다.
+ *
+ *  mirrorVary   바탕 수치를 흔듭니다 — 체력은 10 단위, 공격·방어는 정수.
+ *  mirrorStepBase  테마팩: round 번째 갈림길(= 층)의 i 번째 자리(= 계단).
+ *               철도 팩(railOnly)은 층과 상관없이 철도 표(RAIL_PACK_ROLES)를 씁니다.
+ *  railRole     거울굴절철도에서 i 번째로 서는 src 가 철도 표의 어느 줄인가.
+ *  railBase     railRole 의 값을 «시작 배수 대비 지금 배수» 만큼 키웁니다 — 2호선 순환·
+ *               3호선 통과로 오르는 세기가 여기서 곱해집니다. 방어는 곱하지 않습니다
+ *               (DEF_SCALE 머리말 — 방어가 벽이 되지 않게).
+ */
+function mirrorVary(b) {
+  const v = MIRROR_VARY;
+  const 흔듦 = x => 1 + (Math.random() * 2 - 1) * x;
+  return {
+    hp:  Math.max(10, Math.round(b.hp * 흔듦(v.hp) / 10) * 10),
+    atk: Math.max(1, Math.round(b.atk * 흔듦(v.atk))),
+    def: Math.max(0, Math.round(b.def) + rnd(v.def * 2 + 1) - v.def)
+  };
+}
+function mirrorStepNo(round, i) { return (round - 1) * 3 + i + 1; }   // 1 ~ 9
+function mirrorStepBase(pack, round, i) {
+  if (pack.railOnly) return RAIL_STEPS[RAIL_PACK_ROLES[i]] || RAIL_STEPS.final;
+  return MIRROR_STEPS[Math.min(MIRROR_STEPS.length, mirrorStepNo(round, i)) - 1];
+}
+/* 눈금에 적는 말 — 「중층부 5계단」 · 철도 팩은 「상층부 · 철도」 */
+function mirrorStepLabel(pack, round, i) {
+  const 층 = MIRROR_LAYER_NAMES[Math.min(MIRROR_LAYER_NAMES.length, round) - 1];
+  return pack.railOnly ? 층 + " · 철도" : 층 + " " + mirrorStepNo(round, i) + "계단";
+}
+/* 갈래 칸의 세기 — 노말 「저층부」, 하드 「저층부 ~ 중층부」, 익스트림 「저층부 ~ 상층부」 */
+function mirrorLayerText(r) {
+  const n = Math.min(MIRROR_LAYER_NAMES.length, r.packRounds || 1);
+  return n === 1 ? MIRROR_LAYER_NAMES[0] : MIRROR_LAYER_NAMES[0] + " ~ " + MIRROR_LAYER_NAMES[n - 1];
+}
+function railRole(r, src, i) {
+  if (src === r.finalFoe || src === r.midFoe) return "final";
+  if (r.loop) return "front";
+  if (r.express) return i < 3 ? "grunt" : "back";
+  if (i === 0 && FOES[src] && !FOES[src].boss) return "grunt";
+  return (r.rest && i < r.rest.after) ? "front" : "back";
+}
+function railBase(r, src, i, k) {
+  const b = RAIL_STEPS[railRole(r, src, i)];
+  const k0 = r.loop ? r.loop.scale : r.scale;
+  const rel = (k && k0) ? k / k0 : 1;
+  return { hp: b.hp * rel, atk: b.atk * rel, def: b.def };
 }
 
 /* ── 거울 던전에 들어가기 전 ──────────────────────────────────
@@ -10844,18 +10909,19 @@ function drawPackChoices(rule, round, clearedPacks) {
   return picks;
 }
 
-/* 테마팩 하나의 전투 셋을 배수만큼 세워 장면으로 짓습니다.
+/* 테마팩 하나의 전투 셋을 그 층의 계단 수치로 세워 장면으로 짓습니다.
  * buildMirrorRunScenes 와 같은 결이지만, 팩은 늘 정확히 셋이고 끝에
  * mirrorClear 대신 mirrorPackDone(그 팩 id를 실어)을 붙입니다 —
- * 다음 라운드로 이을지, 이걸로 판이 끝인지는 그 장면이 갈라 정합니다. */
-function buildPackRunScenes(rule, pack) {
-  const k = rule.scale;
-  const dk = (rule.defScale != null) ? (1 + (k - 1) * rule.defScale) : defK(k);
-  const ids = pack.foes.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, rule, k, dk));
+ * 다음 라운드로 이을지, 이걸로 판이 끝인지는 그 장면이 갈라 정합니다.
+ * round 번째 갈림길이 곧 층입니다(1 저층부 · 2 중층부 · 3 상층부 — data/mirrorpacks.js 머리말). */
+function buildPackRunScenes(rule, pack, round) {
+  round = round || 1;
+  const ids = pack.foes.map((src, i) =>
+    mirrorFoeCopy("__mirror_" + i, src, rule, 1, 1, mirrorStepBase(pack, round, i)));
   const scenes = [];
   ids.forEach((id, i) => {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
-    const rail = { no: i + 1, total: ids.length, k: k };
+    const rail = { no: i + 1, total: ids.length, label: mirrorStepLabel(pack, round, i) };
     scenes.push(FOES[id] && FOES[id].cineEntrance
       ? { t: "bossCine", foe: id, rail: rail } : { t: "battle", foe: id, rail: rail });
   });
@@ -10864,9 +10930,16 @@ function buildPackRunScenes(rule, pack) {
 }
 
 /* 고른 팩으로 실제로 들어갑니다 — startMirror() 의 뒷부분과 같은 결입니다. */
-function enterPack(rule, pack) {
+function enterPack(rule, pack, round) {
+  /* 테마팩 특전 — 고르는 순간 얻습니다(사용자 지침 2026-10-21). 얻기 «전» 의 스택을 떠 두고
+   * 지금 팩을 current 로 실어 둡니다 — 지거나 이어하면 openPackGate 가 current 를 지웁니다. */
+  if (S.railSave && S.railSave.key === rule.key) {
+    S.railSave.arc = arcCopy(S.arc);
+    S.railSave.current = pack.id;
+  }
+  grantPackPerk(pack.id);
   MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub,
-             scenes: buildPackRunScenes(rule, pack) };
+             scenes: buildPackRunScenes(rule, pack, round) };
   S.sc = 0;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
@@ -10892,6 +10965,8 @@ function enterPack(rule, pack) {
  * 고릅니다 — 팩 안에서 돌아온 것일 수 있으므로 배경은 늘 기본 배경으로
  * 되돌립니다. */
 function openPackGate(rule, round, clearedPacks) {
+  /* 다 깨지 못한 팩의 특전은 여기서 빠집니다 — 지고 돌아왔거나 나갔다 이어한 자리 (packPerks 머리말) */
+  if (S.railSave && S.railSave.current) delete S.railSave.current;
   setBackdrop(mirrorBG(rule), rule.name);
   S.waiting = true;
   divider();
@@ -10940,7 +11015,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
     S.waiting = false;
     $log.querySelectorAll(".packgate").forEach(el => el.parentNode.removeChild(el));
     say("→ " + p.name, "sys");
-    enterPack(rule, p);
+    enterPack(rule, p, round);
   });
 
   buttons(([
@@ -10997,7 +11072,7 @@ function startMirror(tier, preIds) {
     S.mirrorRunTurns = 0;
     S.ended = false;
     S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
-    S.railSave = { key: rule.key, round: 1, clearedPacks: [], arc: S.arc };
+    S.railSave = { key: rule.key, round: 1, clearedPacks: [], arc: arcCopy(S.arc) };
     saveVault();
     clearLog();
     $log.classList.remove("recalling");
@@ -11115,7 +11190,8 @@ function resumeMirror() {
     if (!picked.length) { S.railSave = null; return; }
     const k = rule.scale;
     const dk = (rule.defScale != null) ? (1 + (k - 1) * rule.defScale) : defK(k);
-    const ids = picked.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, rule, k, dk));
+    const ids = picked.map((src, i) => mirrorFoeCopy("__mirror_" + i, src, rule, k, dk,
+                                                     rule.group === "rail" ? railBase(rule, src, i, k) : null));
     const built = buildMirrorRunScenes(rule, ids);
     MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub,
                scenes: built.scenes, foeSrc: picked.slice() };
