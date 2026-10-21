@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.16.0";
+const VERSION = "2.16.1";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1940,7 +1940,14 @@ function critMultFor(who) {
     const e = a.effect || {};
     if (!e.tag || !e.critMult) return;
     const tags = Array.isArray(e.tag) ? e.tag : [e.tag];
-    if (tags.some(t => title.indexOf(t) >= 0)) v += e.critMult;
+    if (!tags.some(t => title.indexOf(t) >= 0)) return;
+    /* 기프트가 이 교육위원을 북돋우면 함께 배가 된다 (advisorBonusFor 와 같은 결) */
+    let m = 1;
+    equippedGifts().forEach(g => {
+      if (g.effect && g.effect.advisorName && a.name === g.effect.advisorName)
+        m *= g.effect.mult || 1;
+    });
+    v += e.critMult * m;
   });
   return v;
 }

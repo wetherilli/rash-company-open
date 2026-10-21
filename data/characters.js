@@ -634,8 +634,9 @@ const SINNERS = {
  *             한 줄(드뭅니다) — flavor 와는 다른 자리입니다.
  *
  *  ■ 「이형우의 오이샌드위치」를 잊지 마세요
- *    이 기프트는 이형우 위원의 effect 를 «모든 키에» 곱합니다(지금은 2배).
- *    그래서 이형우 위원은 correct 0.10, revive 0.40 이 상한입니다 —
+ *    이 기프트는 이형우 위원의 effect 를 «모든 키에» 곱합니다
+ *    (기본 2배 · + 2.5배 · ++ 3배 — data/gifts.js 의 up).
+ *    ++ 까지 셈하면 이형우 위원은 correct 0.06, revive 0.25 가 상한입니다 —
  *    그 위로 적으면 기프트를 낀 순간 바닥·천장에 걸려 버려집니다.
  *
  *  획득은 story.js 에서  { t:"advisor", name:"이형우", title:"N사 이단심문관" }  으로 줍니다.
@@ -667,35 +668,35 @@ const ADVISORS = [
     desc: "교정 +5%p, 시작 관리력 +2·최대 +1, 파티 방어 +5%·체력 +3%." },
 
   { name: "이형우", title: "L사 에프터팀", star: 2, portrait: "assets/enemy/다시 끌려온 이형우.png",
-    effect: { revive: 0.25, manage: 1, def: 0.04 },
+    effect: { revive: 0.25, manage: 2, manageMax: 1, def: 0.05 },
     flavor: "뒤처리를 맡는다.",
-    desc: "첨삭 회복 +25%p, 시작 관리력 +1, 파티 방어 +4%." },
+    desc: "첨삭 회복 +25%p, 시작 관리력 +2·최대 +1, 파티 방어 +5%." },
 
   { name: "이형우", title: "북부 총기 협회 4과 부장", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
-    effect: { push: 0.4, manage: 2, manageMax: 2, atk: 0.05 },
+    effect: { push: 0.4, manage: 3, manageMax: 3, atk: 0.08 },
     flavor: "몰아붙이는 법을 안다.",
-    desc: "독촉 +0.4배, 시작 관리력 +2·최대 +2, 파티 공격 +5%." },
+    desc: "독촉 +0.4배, 시작 관리력 +3·최대 +3, 파티 공격 +8%." },
 
   { name: "이형우", title: "구J사 수석연구원", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
-    effect: { gain: 2, manage: 3, manageMax: 3, def: 0.05 },
+    effect: { gain: 1, manage: 3, manageMax: 3, def: 0.05 },
     flavor: "설계도부터 다시 그린다.",
-    desc: "턴당 관리력 +2, 시작 +3·최대 +3, 파티 방어 +5%." },
+    desc: "턴당 관리력 +1, 시작 +3·최대 +3, 파티 방어 +5%." },
 
   { name: "강호영", title: "K사 해군 과장", star: 2, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
-    effect: { correct: 0.05, manage: 3, manageMax: 2, def: 0.07, hp: 0.06 },
+    effect: { correct: 0.05, manage: 2, manageMax: 1, def: 0.05, hp: 0.05 },
     flavor: "갑판 위의 규율.",
-    desc: "교정 +5%p, 시작 관리력 +3·최대 +2, 파티 방어 +7%·체력 +6%.",
+    desc: "교정 +5%p, 시작 관리력 +2·최대 +1, 파티 방어 +5%·체력 +5%.",
     note: "평범하게 해군 입대를 한 강호영" },
 
   { name: "강호영", title: "U사 해양의 왕", star: 2, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
-    effect: { gain: 1, manage: 2, manageMax: 2, hp: 0.05 },
+    effect: { gain: 1, manage: 1, hp: 0.05 },
     flavor: "바다가 등을 받친다.",
-    desc: "턴당 관리력 +1, 시작 +2·최대 +2, 파티 체력 +5%." },
+    desc: "턴당 관리력 +1, 시작 +1, 파티 체력 +5%." },
 
   { name: "강호영", title: "북부 총기 협회 3과", star: 3, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
-    effect: { push: 0.3, gain: 1, atk: 0.05 },
+    effect: { push: 0.4, gain: 1, manage: 1, atk: 0.05 },
     flavor: "화력을 끊지 않는다.",
-    desc: "독촉 +0.3배, 턴당 관리력 +1, 파티 공격 +5%." },
+    desc: "독촉 +0.4배, 턴당 관리력 +1, 시작 +1, 파티 공격 +5%." },
 
   { name: "김정래", title: "C사 미군 과장", star: 2, portrait: null,
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
@@ -742,21 +743,21 @@ const ADVISORS = [
     desc: "독촉 +0.15배, 시작 관리력 +2, 파티 공격 +3%." },
 
   { name: "이승찬", title: "L사 에프터팀", star: 2, portrait: "assets/portrait/guide.png",
-    effect: { revive: 0.20, manageMax: 2, def: 0.05 },
+    effect: { revive: 0.20, manage: 2, manageMax: 1, def: 0.05 },
     flavor: "마지막에야 길을 닫는다.",
-    desc: "첨삭 회복 +20%p, 관리력 최대 +2, 파티 방어 +5%." },
+    desc: "첨삭 회복 +20%p, 시작 관리력 +2·최대 +1, 파티 방어 +5%." },
 
   { name: "이승찬", title: "아라온호 작살잡이", star: 3, portrait: "assets/portrait/guide.png",
-    effect: { push: 0.4, manage: 2, manageMax: 2, crit: 0.06, atk: 0.03 },
+    effect: { push: 0.4, manage: 3, manageMax: 3, crit: 0.10, atk: 0.05 },
     flavor: "겨눈 곳에 한 번에 꽂는다.",
-    desc: "독촉 +0.4배, 시작 관리력 +2·최대 +2, 치명타 +6%p, 파티 공격 +3%." },
+    desc: "독촉 +0.4배, 시작 관리력 +3·최대 +3, 치명타 +10%p, 파티 공격 +5%." },
 
   { name: "이승찬", title: "Y사 수석연구원", star: 3, portrait: "assets/portrait/guide.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
-    effect: { manage: 1, cheap: 1 },
+    effect: { manage: 2, manageMax: 1, cheap: 1, hp: 0.04 },
     flavor: "설계가 앞선다.",
-    desc: "시작 관리력 +1, 첨삭·퇴고 비용 -1.",
+    desc: "시작 관리력 +2·최대 +1, 첨삭·퇴고 비용 -1, 파티 체력 +4%.",
     note: "연세대 입학한 세계선" },
 
   { name: "이승찬", title: "렐주먹 사무소 해결사", star: 3, portrait: "assets/portrait/guide.png",
@@ -768,41 +769,44 @@ const ADVISORS = [
    * effect.synergy/mult 은 기프트와 같은 자리(engine.js activeSynergies) — 세운 동안
    * 「동탄」 시너지의 atk/def 배율 자체가 2배가 됩니다. 제목에 「동탄」이 들어
    * 있어 이 교육위원 자신도 동탄 머릿수에 듭니다(synergyNames 가 교육위원 title
-   * 도 세므로) — 동탄 인격 둘과 함께 세우면 셋이 되어 1.75배에 다시 2배입니다. */
+   * 도 세므로) — 동탄 인격 둘과 함께 세우면 셋이 되어 1.75배에 다시 2배입니다.
+   * 2026-10-21 밸런스 조정 — 최대 +3 만으로는 시작 관리력이 늘지 않아,
+   * 시작 +2·최대 +2 로 바꿨습니다. */
   { name: "이승찬", title: "동탄의 방문자", star: 3, portrait: "assets/portrait/guide.png",
-    effect: { synergy: "동탄", mult: 2, manageMax: 3 },
+    effect: { synergy: "동탄", mult: 2, manage: 2, manageMax: 2 },
     flavor: "들르기만 했을 뿐인데.",
-    desc: "동탄 시너지 효과 100% 강화, 관리력 최대 +3.",
+    desc: "동탄 시너지 효과 100% 강화, 시작 관리력 +2·최대 +2.",
     note: "동탄 이름을 단 인격이 둘 이상 서야 시너지가 켜집니다. 이 교육위원도 동탄 머릿수에 듭니다" },
 
   /* ── 대륵도 ── */
   { name: "도규민", title: "Y사 수석연구원", star: 2, portrait: null,
-    effect: { correct: 0.05, manage: 3, manageMax: 3, def: 0.05, hp: 0.06 },
+    effect: { correct: 0.05, manage: 2, manageMax: 2, def: 0.05, hp: 0.04 },
     flavor: "먼저 재어 보고 움직인다.",
-    desc: "교정 +5%p, 시작 관리력 +3·최대 +3, 파티 방어 +5%·체력 +6%." },
+    desc: "교정 +5%p, 시작 관리력 +2·최대 +2, 파티 방어 +5%·체력 +4%." },
 
   { name: "도규민", title: "대륵도 발굴팀원", star: 3, portrait: null,
-    effect: { correct: 0.13, gain: 1, manage: 3, manageMax: 3, atk: 0.05 },
+    effect: { correct: 0.13, manage: 3, manageMax: 3, atk: 0.05 },
     flavor: "층을 걷어내며 나아간다.",
-    desc: "교정 +13%p, 턴당 관리력 +1, 시작 +3·최대 +3, 파티 공격 +5%." },
+    desc: "교정 +13%p, 시작 관리력 +3·최대 +3, 파티 공격 +5%." },
 
   { name: "김연준", title: "대륵도 발굴팀원", star: 2, portrait: "assets/enemy/김연준.png",
-    effect: { push: 0.2, manage: 3, manageMax: 3, def: 0.05, hp: 0.03 },
+    effect: { push: 0.2, manage: 2, manageMax: 2, def: 0.05, hp: 0.03 },
     flavor: "삽자루를 놓지 않는다.",
-    desc: "독촉 +0.2배, 시작 관리력 +3·최대 +3, 파티 방어 +5%·체력 +3%." },
+    desc: "독촉 +0.2배, 시작 관리력 +2·최대 +2, 파티 방어 +5%·체력 +3%." },
 
   { name: "이형우", title: "대륵도의 환자", star: 3, portrait: "assets/enemy/다시 끌려온 이형우.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
      * 크게 눌러 뒀습니다(같은 성급 cheap 없는 위원들 대비 — 사용자 지침) */
-    effect: { revive: 0.15, cheap: 1, manage: 1 },
+    effect: { revive: 0.15, cheap: 1, manage: 1, hp: 0.04 },
     flavor: "누워서도 원고를 본다.",
-    desc: "첨삭 회복 +15%p, 첨삭·퇴고 비용 -1, 시작 관리력 +1." },
+    desc: "첨삭 회복 +15%p, 첨삭·퇴고 비용 -1, 시작 관리력 +1, 파티 체력 +4%." },
 
   /* ── 제3발톱 ──
    *  effect 에 tag 를 적으면, 파티 전체가 아니라
    *  그 말이 이름에 든 인격에게만 걸립니다.
    *  단 관리력 계열(manage/manageMax/gain/cheap)과 관리자 능력 계열은
-   *  tag 와 무관하게 파티 전체에 걸립니다 — tag 로 걸러지는 것은 atk/def/hp 셋뿐입니다.
+   *  tag 와 무관하게 파티 전체에 걸립니다 — tag 로 걸러지는 것은 atk/def/hp,
+   *  crit·critMult, skillUses·skillStackMult 입니다.
    */
   { name: "이서진", title: "아라온호 갑판닦이", star: 2, portrait: "assets/enemy/이서진.png",
     effect: { correct: 0.05, manage: 1, manageMax: 2, def: 0.06, hp: 0.03 },
@@ -811,15 +815,15 @@ const ADVISORS = [
 
   /* ── 영덕의 밤 ── */
   { name: "이형우", title: "영덕의 요리사", star: 2, portrait: "assets/enemy/다시 끌려온 이형우.png",
-    effect: { correct: 0.10, manage: 2, manageMax: 1, hp: 0.04 },
+    effect: { correct: 0.06, manage: 2, manageMax: 1, hp: 0.06 },
     flavor: "잘라낼 데를 먼저 본다.",
-    desc: "교정 +10%p, 시작 관리력 +2·최대 +1, 파티 체력 +4%.",
+    desc: "교정 +6%p, 시작 관리력 +2·최대 +1, 파티 체력 +6%.",
     note: "3.5장에서 상을 차린 장본인" },
 
   { name: "강호영", title: "영덕의 요리사", star: 3, portrait: "assets/enemy/뒤틀린 모사사우루스.png",
-    effect: { correct: 0.20, manage: 3, manageMax: 3, hp: 0.05, def: 0.04 },
+    effect: { correct: 0.15, manage: 3, manageMax: 3, hp: 0.05, def: 0.04 },
     flavor: "다듬을 자리를 손끝으로 안다.",
-    desc: "교정 +20%p, 시작 관리력 +3·최대 +3, 파티 체력 +5%·방어 +4%." },
+    desc: "교정 +15%p, 시작 관리력 +3·최대 +3, 파티 체력 +5%·방어 +4%." },
 
   { name: "이서진", title: "제3발톱 상티아스", star: 3, portrait: "assets/enemy/이서진.png",
     effect: { tag: "제3발톱", def: 0.25, hp: 0.10, manage: 2, manageMax: 2 },
@@ -834,20 +838,20 @@ const ADVISORS = [
   { name: "박재민", title: "I사 선봉3팀 전술지휘관", star: 3, portrait: null,
     effect: { tag: "I사", def: 0.22, hp: 0.12, manage: 2, manageMax: 2, correct: 0.08 },
     flavor: "선봉의 앞자리를 맡는다.",
-    desc: "I사 인격 방어 +22%·체력 +12%, 시작 관리력 +2·최대 +2, 교정 강화.",
+    desc: "I사 인격 방어 +22%·체력 +12%, 시작 관리력 +2·최대 +2, 교정 +8%p.",
     note: "방어·체력은 I사 이름을 단 작성위원에게만, 관리력과 교정은 파티 전체에 걸립니다" },
 
   { name: "도규민", title: "I사 지원2팀 전술지원관", star: 2, portrait: null,
-    effect: { gain: 1, manage: 2, def: 0.05, hp: 0.04 },
+    effect: { gain: 1, def: 0.05, hp: 0.04 },
     flavor: "뒤에서 보급을 잇는다.",
-    desc: "턴마다 관리력 +1, 시작 관리력 +2, 방어 +5%·체력 +4%.",
+    desc: "턴마다 관리력 +1, 방어 +5%·체력 +4%.",
     note: "관리력이 끊기지 않게 하는 쪽입니다" },
 
   /* ── 모나크 ────────────────────────────────────────────────
    * 6장에서 들어온 사람입니다.
    * 모나크 인격이 전부 유리대포라, 회계사는 «상대를 깎는» 쪽으로 잡았습니다 —
    * 체포를 조금 세게 만들어, 방어가 두꺼운 상대를 더 빨리 무너뜨리게 합니다.
-   * arrest 는 RULE.arrestCut(20%) 에 그대로 더해집니다. */
+   * arrest 는 RULE.arrestCut(40%) 에 그대로 더해집니다. */
   /* ── 공룡의 날 ──────────────────────────────────────────────
    * 공룡의날 인격이 열 종이나 되는데 그동안 전용 교육위원이 없었습니다.
    * 축제를 총괄하는 자리이므로 «다 같이 버틴다» 쪽으로 잡았습니다 —
@@ -859,23 +863,23 @@ const ADVISORS = [
     note: "체력·방어는 공룡의날 이름을 단 작성위원에게만, 관리력은 파티 전체에 걸립니다" },
 
   { name: "도규민", title: "모나크 회계사", star: 2, portrait: null,
-    effect: { arrest: 0.05, manage: 1, atk: 0.05 },
+    effect: { arrest: 0.10, manage: 2, atk: 0.05 },
     flavor: "장부를 뒤져 약점을 찾아낸다.",
-    desc: "체포 +5%p, 시작 관리력 +1, 파티 공격 +5%.",
+    desc: "체포 +10%p, 시작 관리력 +2, 파티 공격 +5%.",
     note: "체포를 자주 쓰는 편성일수록 값을 합니다" },
 
   { name: "박재민", title: "U사 뇌과학 분석관", star: 2, portrait: null,
     effect: { manage: 2, manageMax: 2, correct: 0.10 },
     flavor: "맞을 자리를 미리 읽는다.",
-    desc: "시작 관리력 +2·최대 +2, 교정 강화.",
+    desc: "시작 관리력 +2·최대 +2, 교정 +10%p.",
     note: "때리는 힘은 없습니다. 대신 교정 한 번이 훨씬 두꺼워집니다" },
 
   /* ── G사 ───────────────────────────────────────────────────
    * 6.5장 「괴수살인괴수」에서 들어온 사람입니다. */
   { name: "김정래", title: "G사 각본가", star: 3, portrait: null,
-    effect: { correct: 0.08, manage: 2, manageMax: 2, atk: 0.04, hp: 0.04 },
+    effect: { correct: 0.08, manage: 3, manageMax: 3, atk: 0.05, hp: 0.05 },
     flavor: "각을 미리 짜 둔다.",
-    desc: "교정 +8%p, 시작 관리력 +2·최대 +2, 파티 공격·체력 +4%." },
+    desc: "교정 +8%p, 시작 관리력 +3·최대 +3, 파티 공격·체력 +5%." },
 
   { name: "이서진", title: "남부협회 수산시장", star: 2, portrait: "assets/enemy/이서진.png",
     /* cheap 을 낀 교육위원은 관리자 능력 비용 자체가 강력한 효과라, 다른 수치를
@@ -911,9 +915,9 @@ const ADVISORS = [
      * 으로 이 이름을 참조합니다(atkMult 2배 → 2.5배). 옮기고 나면
      * 손볼 것 없이 바로 걸립니다 — 「탐하는 가시」(주기 단축)와는 독립된
      * 자리라 둘 다 걸면 함께 적용됩니다. */
-    effect: { tag: "신해수랜드", atk: 0.15 },
+    effect: { tag: "신해수랜드", atk: 0.20, manage: 2, manageMax: 2 },
     flavor: "무엇을 캐물을지는 내가 정한다.",
-    desc: "신해수랜드 인격 공격 +15%, 신해수랜드 연계 효과 배율 2배 → 2.5배.",
+    desc: "신해수랜드 인격 공격 +20%, 시작 관리력 +2·최대 +2, 신해수랜드 연계 효과 배율 2배 → 2.5배.",
     /* 지원 작성위원 「개화 E.G.O :: 스테고우로스 하축론」은 본명이 이정빈이라
      * 이 교육위원과 같이 세울 수 없습니다 — 구현 완료(2026-09-01). engine.js
      * 에 personKey()/samePerson()을 새로 두어, data/characters.js CREW.driver
@@ -933,13 +937,14 @@ const ADVISORS = [
     flavor: "E.G.O를 다루는 법을 안다.",
     desc: "E.G.O 인격 공격·방어 +15%, 시작 관리력 +2·최대 +2." },
   { name: "이형우", title: "N사 E.G.O :: 아트로키", star: 2, portrait: null,
-    effect: { tag: "E.G.O", atk: 0.25, hp: -0.10 },
+    effect: { tag: "E.G.O", atk: 0.25, hp: -0.10, manage: 2 },
     flavor: "한계까지 밀어붙인다.",
-    desc: "E.G.O 인격 공격 +25%, 체력 -10%." },
+    desc: "E.G.O 인격 공격 +25%, 체력 -10%, 시작 관리력 +2." },
   { name: "김연준", title: "B구역 관광담당", star: 2, portrait: "assets/enemy/김연준.png",
-    effect: { tag: "흑수", hp: 0.20 },
+    effect: { tag: ["흑수", "B구역"], hp: 0.20, def: 0.08, manage: 2 },
     flavor: "관광객인 척, 뒤를 살핀다.",
-    desc: "흑수 인격 체력 +20%." },
+    desc: "흑수·B구역 인격 체력 +20%·방어 +8%, 시작 관리력 +2.",
+    note: "체력·방어는 흑수·B구역 이름을 단 작성위원에게만, 관리력은 파티 전체에 걸립니다" },
   { name: "도규민", title: "제3발톱 작은아우", star: 3, portrait: "assets/portrait/도규민.png",
     effect: { synergy: "제3발톱", mult: 1.5 },
     flavor: "형님들 뒤를 봐준다.",
