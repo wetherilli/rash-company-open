@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.16.1";
+const VERSION = "2.16.2";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5243,8 +5243,8 @@ function startBattleFight(scene, f) {
   render();
   if (RULE.battleDelay > 0) {
     buttons([{ label: "전투 개시…", cls: "primary", disabled: true }]);
-    setTimeout(() => { if (S.battle === b) beginTurn(); }, RULE.battleDelay);
-  } else beginTurn();
+    setTimeout(() => { if (S.battle === b) openingVolley(beginTurn); }, RULE.battleDelay);
+  } else openingVolley(beginTurn);
 }
 
 function beginTurn() {
@@ -5574,7 +5574,7 @@ function beginTurn() {
    * 이어 부르는 콜백(afterLinkSkills)에 넣습니다. 연계 호령
    * (checkLinkOrders)도 같은 자리에서 이어 부릅니다 — 둘 다 턴 머리에
    * 걸리는 것이라, 대사가 겹치지 않게 차례로 세웁니다. */
-  checkLinkSkills(() => checkLinkOrders(afterLinkSkills));
+  checkLinkSkills(() => checkLinkOrders(() => checkLinkGuards(afterLinkSkills)));
 
   function afterLinkSkills() {
     /* ── 설득 전투 ──────────────────────────────────────────────────
@@ -5811,6 +5811,112 @@ function checkLinkOrders(next) {
   }
   queueBattleLines(lines);
   next();
+}
+
+/* ── 연계 반격 · 일제 사격이 함께 쓰는 것 ─────────────────────────
+ *  tag 는 말 하나 또는 배열(「총기 협회」·「총기협회」 둘 다 받기). */
+function linkTagged(w, tag) {
+  const t = memberTitle(w);
+  return [].concat(tag).some(g => t.indexOf(g) >= 0);
+}
+/* callers 중 tag 를 두른 채 살아 서 있는 첫 사람 — 없으면 fallback(없으면 null). */
+function linkCaller(lk) {
+  const c = (lk.callers || []).find(c =>
+    S.party.indexOf(c.who) >= 0 && alive(c.who) && linkTagged(c.who, lk.tag));
+  return c || lk.fallback || null;
+}
+
+/* ── 연계 반격 ──────────────────────────────────────────────────
+ *  data/skills.js 의 LINK_GUARDS. 지난 차례에 tag 를 두른 «살아 있는
+ *  사람 전원» 이 방어를 골랐으면(beginTurn 이 옮겨 적은 b.persist.guardedLast),
+ *  이번 차례 그 사람들의 공격력을 올립니다. 배율은 연계 효과와 같은
+ *  _linkMult 자리에 곱해 얹습니다 — 둘이 한 사람에게 겹쳐도 둘 다 듣고,
+ *  로그의 라벨도 둘 다 붙습니다. 제3발톱 「장부」 — 사용자 지침 2026-10-23.
+ */
+function linkGuardList() {
+  return (typeof LINK_GUARDS !== "undefined" && LINK_GUARDS) ? LINK_GUARDS : [];
+}
+function checkLinkGuards(next) {
+  const b = S.battle;
+  const guarded = b.persist.guardedLast || {};
+  const lines = [];
+  linkGuardList().forEach(lk => {
+    const members = S.party.filter(w => w && linkTagged(w, lk.tag));
+    if (members.length < (lk.need || 1)) return;
+    const pool = members.filter(alive);
+    if (!pool.length || !pool.every(w => guarded[w])) return;
+
+    const label = lk.label || "반격";
+    pool.forEach(w => {
+      b.mods[w + "_linkMult"] = (b.mods[w + "_linkMult"] || 1) * lk.atkMult;
+      b.mods[w + "_linkLabel"] = b.mods[w + "_linkLabel"]
+        ? b.mods[w + "_linkLabel"] + "·" + label : label;
+    });
+    const c = linkCaller(lk);
+    if (c && c.line) lines.push({ who: c.who, text: c.line });
+    lines.push({ text: pool.map(memberName).join(" · ") + " — 이번 차례 공격력 +" +
+                       Math.round((lk.atkMult - 1) * 100) + "% (" + label + ")", cls: "good" });
+  });
+  queueBattleLines(lines);
+  next();
+}
+
+/* ── 일제 사격 ──────────────────────────────────────────────────
+ *  data/skills.js 의 LINK_VOLLEYS. 전투가 열리는 자리에서 한 번 —
+ *  startBattleFight 가 beginTurn 앞에 부릅니다. 한마디 → 한 사람씩 한 대.
+ *  피해 셈은 연계 추가타(resolveTurn 의 checkLinkBonus)와 같습니다.
+ *  여기서 적이 쓰러지면 1턴을 열지 않고 곧바로 이깁니다(설득 전투만은
+ *  체력을 1 로 붙듭니다 — afterAllies 와 같은 사정). 「북부 총기 협회」 —
+ *  사용자 지침 2026-10-23.
+ */
+function linkVolleyList() {
+  return (typeof LINK_VOLLEYS !== "undefined" && LINK_VOLLEYS) ? LINK_VOLLEYS : [];
+}
+function openingVolley(next) {
+  const b = S.battle;
+  const same = () => S.battle === b;
+  const queue = [];
+  linkVolleyList().forEach(lk => {
+    const members = S.party.filter(w => w && linkTagged(w, lk.tag));
+    if (members.length < (lk.need || 1)) return;
+    const pool = members.filter(alive);
+    if (pool.length) queue.push({ lk: lk, pool: pool });
+  });
+  if (!queue.length) return next();
+
+  const fire = (qi, i) => {
+    if (!same()) return;
+    if (qi >= queue.length) return setTimeout(next, RULE.turnGapMs);
+    const { lk, pool } = queue[qi];
+    if (i === 0) {
+      divider();
+      const c = linkCaller(lk);
+      if (c && c.line) battleSay(c.who, c.line);
+      render();
+      return setTimeout(() => fire(qi, 1), RULE.dialogueGapMs);
+    }
+    const w = pool[i - 1];
+    if (!w) return fire(qi + 1, 0);
+    if (alive(w)) {
+      const st = effStats(w);
+      let dmg = st.atk + rnd(4) - b.def;
+      const crit = Math.random() < critRate();
+      if (crit) dmg *= critMultFor(w) * critDmgMult();
+      dmg = Math.max(1, Math.floor(dmg));
+      b.hp -= dmg;
+      say((crit ? (memberName(w) + "의 치명적인 공격! — " + dmg + " 피해")
+                : (memberName(w) + "의 공격 — " + dmg + " 피해")) +
+          " (" + (lk.label || "일제사격") + ")", crit ? "crit" : "hit");
+      foeHit(0, dmg, crit);
+      render();
+      if (b.hp <= 0) {
+        if (b.scene.persuade) b.hp = 1;
+        else return setTimeout(victory, RULE.turnGapMs);
+      }
+    }
+    setTimeout(() => fire(qi, i + 1), RULE.allyStepMs);
+  };
+  fire(0, 0);
 }
 
 /* ── 관리자 능력의 대상 고르기 ──────────────────────────────────
