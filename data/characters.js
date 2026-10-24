@@ -285,6 +285,10 @@ const EXTRA_PORTRAITS = {
  *         배수를 곱합니다. 결은 그대로 남고 등급만 맞습니다.
  *      5. 반올림 오차는 체력 ±1 로 다듬습니다 (체력 1점 = 0.26 이라 가장 잘게
  *         조절됩니다). check.html 이 봐 주는 폭은 ±0.006 입니다.
+ *      6. 같은 사람의 다른 인격, 같은 시너지에 걸리는 인격·지원 작성위원과
+ *         공·방·체가 셋 다 같으면 안 됩니다(사용자 지침 2026-10-24 — check.html 8-2).
+ *         등급 표준형(3.1 → 29/13/109 · 3.2 → 31/14/122)을 그대로 베끼면 걸립니다.
+ *         같은 예산 안에서 옮기면 됩니다 — 공 +1 ↔ 방 −2, 방 −1 ↔ 체 +2 쯤.
  *
  *      한 줄로 재려면 —
  *        node -e 'const[a,d,h]=process.argv.slice(1).map(Number);
@@ -350,7 +354,7 @@ const SINNERS = {
       /* 2.3성급 — 실효 예산 53.7. 우승자다운 자리입니다 */
       { star: 2, tier: 2.0, title: "공룡의날 올림피아드 우승자", atk: 26, def: 8,  hp: 92, note: "이정도는 기본이지.",
         was: "올림피아드 우승자" },   /* v1.0.2 에서 제목이 바뀜 — 옛 보관함이 잃지 않도록 */
-      { star: 2, tier: 2.0, title: "우생회 행동대장",        atk: 20, def: 10,  hp: 80, note: "우생회의 망치이자 못." },
+      { star: 2, tier: 2.0, title: "우생회 행동대장",        atk: 21, def: 9,  hp: 80, note: "우생회의 망치이자 못." },
       { star: 3, tier: 3.1, title: "N사 큰망치",             atk: 35, def: 9,  hp: 93,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, tier: 3.2, title: "I사 지원2팀 변신로봇", atk: 30, def: 19, hp: 116, note: "트랜스포머 오타쿠의 꿈을 이룸" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 워커리",    atk: 30, def: 16, hp: 122, note: "워커리라는 이름에 부끄럽지 않은" },
@@ -469,7 +473,7 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "제3발톱 큰아우",       atk: 19, def: 8,  hp: 76, note: "꼭 해야되나요?"  },
       { star: 2, tier: 2.0, title: "L사 에프터팀",          atk: 16, def: 11, hp: 80, note: "길을 치우는 일"  },
       { star: 2, tier: 2.0, title: "S사 콘테스트 참가자",   atk: 17, def: 8,  hp: 74, note: "다음에는 꼭."  },
-      { star: 3, tier: 3.2, title: "LST E.G.O :: 악어괴인", atk: 34, def: 12, hp: 114, note: "괴인이라는 말도" },
+      { star: 3, tier: 3.2, title: "LST E.G.O :: 악어괴인", atk: 33, def: 14, hp: 114, note: "괴인이라는 말도" },
       { star: 3, tier: 3.3, title: "모나크 백룡야행",              atk: 35, def: 16, hp: 125, note: "다 찢어놓은 거야."  },
       /* 3.2성급 — 6장에서 만난 케빈의 힘을 담은 E.G.O (7.5장, 사용자 지침 2026-08-31 ⑤) */
       { star: 3, tier: 3.2, title: "L사 E.G.O :: 케빈", atk: 31, def: 14, hp: 122, note: "번개를 두른 손님." },
@@ -486,7 +490,7 @@ const SINNERS = {
     brief: "관리자님이 하자가 많아 보이는 여러 수감자들을 보며 막막해하고 있을지도 모르겠습니다. 안심하세요. 본 수감자는 비교적 군말 없이 일을 처리해 나갈 수 있는 몇 안 되는 유형입니다. 합리적인 의사결정을 내릴 가능성이 높은 유형이므로 조언을 구하고 싶을 땐 해당 수감자 쪽을 바라보며 화두를 꺼내는 것도 좋은 방법입니다. 하지만 잊지 마세요. 한 번 관계가 틀어지기 시작하면 회복하기 어려울 것입니다.",
     ids: [
       { star: 1, tier: 1.0, title: "L사 작성위원",          atk: 11, def: 7,  hp: 57, note: "성시윤이라고 불러주세요"  },
-      { star: 3, tier: 3.0, title: "제3발톱 작은형님",       atk: 23, def: 16, hp: 104, note: "뭐부터 부수면 되지?"   },
+      { star: 3, tier: 3.0, title: "제3발톱 작은형님",       atk: 25, def: 12, hp: 104, note: "뭐부터 부수면 되지?"   },
       { star: 2, tier: 2.0, title: "L사 부작성위원장",          atk: 15, def: 11, hp: 90, note: "꽤나 중책을..." },
       { star: 2, tier: 2.0, title: "L사 비포팀",            atk: 18, def: 9,  hp: 77, note: "미리 준비하는 게 중요한건 상식이죠." },
       { star: 3, tier: 3.0, title: "공룡의날 실장",         atk: 23, def: 16, hp: 104, note: "축제를 시작하지." },
@@ -506,9 +510,9 @@ const SINNERS = {
     ids: [
       { star: 1, tier: 1.0, title: "L사 영상편집부",        atk: 11, def: 6,  hp: 56, note: "일단 얼굴 나와도 되는 거죠?"  },
       { star: 2, tier: 2.0, title: "남부협회 3과 인파이터", atk: 22, def: 7,  hp: 71, note: "바다, 주먹, 그리고"  },
-      { star: 2, tier: 2.0, title: "L사 에프터팀",          atk: 16, def: 11, hp: 80, note: "이런 것까지 시킨다고요?"  },
+      { star: 2, tier: 2.0, title: "L사 에프터팀",          atk: 15, def: 12, hp: 84, note: "이런 것까지 시킨다고요?"  },
       { star: 3, tier: 3.1, title: "C사 육군 특수임무대대", atk: 31, def: 13, hp: 101, note: "보고드립니다."  },
-      { star: 3, tier: 3.1, title: "북부 총기 협회 3과 저격수", atk: 31, def: 13, hp: 101, note: "숨을 참고, 한 번만."  },
+      { star: 3, tier: 3.1, title: "북부 총기 협회 3과 저격수", atk: 33, def: 9, hp: 101, note: "숨을 참고, 한 번만."  },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 점박이",   atk: 32, def: 13, hp: 120, note: "벌레의 노래." },
       { star: 3, tier: 3.0, title: "남부협회 분석관",       atk: 26, def: 12, hp: 100, note: "숫자는 거짓말을 안 하죠." },
       /* 3.1성급 — 실효 예산 63.5, 표준형 29/13/109. P사 이야기 쪽 사람이라
@@ -529,7 +533,7 @@ const SINNERS = {
       { star: 3, tier: 3.0, title: "제3발톱 작은아우",       atk: 24, def: 15, hp: 102, note: "여기서는 할매를..."   },
       { star: 2, tier: 2.0, title: "외국곤충사육자",        atk: 19, def: 7,  hp: 72, note: "키우고 싶었는데!"  },
       { star: 3, tier: 3.0, title: "남부협회 길잡이",       atk: 26, def: 13, hp: 98, note: "이번 필드는 제게 맡기세요."  },
-      { star: 3, tier: 3.2, title: "LST E.G.O :: 깃털공룡", atk: 35, def: 12, hp: 110, note: "날아올라라."  },
+      { star: 3, tier: 3.2, title: "LST E.G.O :: 깃털공룡", atk: 36, def: 10, hp: 110, note: "날아올라라."  },
       { star: 3, tier: 3.1, title: "쥐어진 자",             atk: 33, def: 11, hp: 97, note: "우생회의 또다른 거울"  },
       /* 2.2성급 — 실효 예산 49.6 */
       { star: 2, tier: 2.0, title: "G사 3등급 가면라이더", atk: 22, def: 10, hp: 88, note: "포즈보다 판정이 먼저죠." }
@@ -567,7 +571,7 @@ const SINNERS = {
     brief: "본 수감자는 다른 수감자에 비해 인격적인 면에선 다루기가 무난한 편입니다. 하지만 감정 고조나 환경의 갑작스러운 변화에 따라서 신체의 일부, 간혹 가다가는 전부가 공룡 (혼종의 일부, ■■■■■■■와 유사함)의 조직으로 변합니다. 무례한 관리자가 되고 싶지 않다면(그럴 필요는 물론 없지만) 역겨움을 드러내지 않도록 표정 관리는 철저히 하는 것을 권장합니다. 냉소적인 어조를 일부 사용하지만 요령만 안다면 원만한 의사소통이 가능한 수감자이므로 크게 어려움을 요하진 않습니다.",
     ids: [
       { star: 1, tier: 1.0, title: "L사 작성위원",                 atk: 12, def: 6,  hp: 56, note: "카오스이팩트를 위하여"  },
-      { star: 2, tier: 2.0, title: "공룡의날 조수",                atk: 16, def: 10, hp: 79, note: "물 사오면 되나요?" },
+      { star: 2, tier: 2.0, title: "공룡의날 조수",                atk: 15, def: 11, hp: 81, note: "물 사오면 되나요?" },
       { star: 2, tier: 2.0, title: "동탄 학부모",                atk: 10, def: 20, hp: 79, note: "아들을 한없이 사랑함" },
       { star: 2, tier: 2.0, title: "L사 비포팀",                   atk: 19, def: 8,  hp: 76, note: "이런 것까지 내가 해야돼?" },
       { star: 2, tier: 2.0, title: "N사 작은망치",                 atk: 22, def: 7,  hp: 70,  note: "경북대 진학 후 야외조사 다니는 세계선" },
@@ -579,7 +583,7 @@ const SINNERS = {
       /* 3.0성급 — 성급 평균 그대로 26/12/100 */
       { star: 3, tier: 3.0, title: "신해수랜드 기록관", atk: 26, def: 12, hp: 100, note: "기록은, 지워지지 않는다." },
       /* 3.2성급 — 6.5장에서 만난 타나콘다의 힘을 담은 E.G.O (7.5장, 사용자 지침 2026-08-31 ⑤) */
-      { star: 3, tier: 3.2, title: "L사 E.G.O :: 타나콘다", atk: 31, def: 14, hp: 122, note: "배수로의 그림자가, 이제는 내 안에." }
+      { star: 3, tier: 3.2, title: "L사 E.G.O :: 타나콘다", atk: 32, def: 13, hp: 119, note: "배수로의 그림자가, 이제는 내 안에." }
     ]
   }
 };
@@ -1136,7 +1140,7 @@ const SUPPORTS = [
     portrait: null,
     note: "안 잡히는 날이 있어야 잡히는 날이 값지죠." },
   { name: "하축론", title: "개화 E.G.O :: 스테고우로스", star: 3, tier: 3.2,
-    atk: 31, def: 14, hp: 122,
+    atk: 29, def: 17, hp: 124,
     portrait: "assets/portrait/ha_chukron.png",
     note: "한 번 깨어난 뒤로는, 예전으로 돌아가지 않았다." },
   /* 3.1성급 — 실효 예산 63.5 (data/characters.js 머리말 「잣대」 참고).

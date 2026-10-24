@@ -41,6 +41,9 @@
  *    intro         전투가 열릴 때 한 번 뜨는 나레이션
  *    heavyLine     강타를 준비하는 턴에 하는 말
  *    heavyImg      강타를 준비하는 턴에만 바뀌는 그림
+ *    aoeImg · counterImg · takeImg · evadeImg · breakImg
+ *                  광역 · 되받아치기 · 데려가기 · 회피 · 버티기 깨기 턴의 그림
+ *                  (안 적으면 광역 · 데려가기 · 깨기는 heavyImg, 나머지는 img 그대로)
  *    noHeavy: true 3턴마다의 강타를 아예 쓰지 않습니다
  *    aoeEvery / aoeFrom / aoeLine / aoeWarn      광역 공격
  *    aoeFlat       광역 피해를 «수로 못박습니다». 방어도 방어 태세도 교정도
@@ -80,12 +83,14 @@
  *                  setHp 로 눕히므로 되살리는 기프트는 그대로 듭니다.
  *                  ※ 갈래에 따라 뜻이 갈립니다 — 쓰러진 사람이 돌아오지 않는
  *                    갈래(거울굴절철도 4호선)에서는 그대로 «내렸다» 가 됩니다.
- *    breakEvery / breakFrom / breakMult / breakLine / breakWarn   버티기 깨기 (2026-10-19)
+ *    breakEvery / breakFrom / breakMult / breakSplash / breakLine / breakWarn   버티기 깨기 (2026-10-19)
  *                  되받아치기의 거울입니다 — 그 턴에 **방어를 골랐거나 교정으로
  *                  지켜 둔 사람을 전부** 골라, 웅크린 자리를 그대로 뚫습니다.
  *                  그 한 대에는 방어·교정의 경감이 걸리지 않습니다(그게 전부입니다).
  *                  아무도 웅크리지 않았으면 적은 아무 일도 하지 않습니다.
  *                  배수는 기본 RULE.breakMult = 1.5. 책임은 안 걸립니다(광역과 같은 까닭).
+ *                  breakSplash(0.5 같은 비율)를 적으면 웅크리지 않은 사람도 그 비율만큼
+ *                  맞습니다 — 아무도 안 웅크려도 판 전체가 맞습니다(2026-10-24).
  *    rampEvery / rampPct / rampMax / rampLine       몰아친다 (2026-10-19)
  *                  턴 행동이 아니라 «상태» 입니다 — rampEvery 턴마다 공격력이
  *                  rampPct 만큼 더해지고(rampPct:0.08 이면 +8%p씩), rampMax 에서

@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.16.3";
+const VERSION = "2.16.4";
 const VERSION_NAME = "코드레드";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3901,8 +3901,10 @@ function renderParty() {
      *   정함   — 이미 명령을 골라 둔 사람 (초록 테두리, 흐리게)
      * 여기에 관리자 능력이 걸린 자국을 덧붙인다 — 교정·독촉은 이번 턴에만
      * 사는 것이라, 걸어 놓고도 걸렸는지 알 수 없으면 안 쓴 것과 같다. */
-    /* 광역 공격 턴은 노려지는 한 사람이 없고 전원이 맞으므로, 전원에게 노려짐을 켠다 */
-    const aimed  = !!(b && hp > 0 && (b.aoe || b.aim === who));
+    /* 광역 공격 턴은 노려지는 한 사람이 없고 전원이 맞으므로, 전원에게 노려짐을 켠다.
+     * 여파가 있는 버티기 깨기(breakSplash)도 웅크리든 말든 전원이 맞으므로 같습니다. */
+    const 판전체 = !!(b && (b.aoe || (b.foeBreak && (b.breakSplash || (FOES[b.id] || {}).breakSplash))));
+    const aimed  = !!(b && hp > 0 && (판전체 || b.aim === who));
     const acting = !!(b && b.cur === who && hp > 0);
     const ready  = !!(cmd && !acting && hp > 0);
     const sup    = supportBy(who);
@@ -5191,7 +5193,7 @@ function startBattleFight(scene, f) {
    "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
    "evadeEvery", "evadeFrom", "evadeLine", "evadeWarn",
    "takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit",
-   "breakEvery", "breakFrom", "breakMult", "breakLine", "breakWarn",
+   "breakEvery", "breakFrom", "breakMult", "breakSplash", "breakLine", "breakWarn",
    "rampEvery", "rampPct", "rampMax", "rampLine",
    "heavyRampPct", "heavyRampMax",
    "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn", "rageImg",
@@ -5471,12 +5473,19 @@ function beginTurn() {
     const nowHeavy = b.heavyImg || f.heavyImg || null;
     const nowAoe   = b.aoeImg   || f.aoeImg   || nowHeavy;
     const nowCtr   = b.counterImg || f.counterImg || null;
+    /* 데려가기 · 회피 · 버티기 깨기에도 제 그림을 둘 수 있습니다 — takeImg · evadeImg · breakImg
+     * (2026-10-24, 사용자 지침). 안 적으면 데려가기 · 깨기는
+     * 강타 그림을 함께 쓰고(둘 다 «크게 한 번» 하는 자세라), 회피는 평소 그림 그대로입니다. */
+    const nowTake  = b.takeImg  || f.takeImg  || nowHeavy;
+    const nowEvade = b.evadeImg || f.evadeImg || null;
+    const nowBreak = b.breakImg || f.breakImg || nowHeavy;
     const nowScale = b.imgScale || f.imgScale || null;
-    /* 데려가기·버티기 깨기는 제 그림을 따로 두지 않고 강타 그림을 함께 씁니다
-     * — 둘 다 «크게 한 번» 하는 자세라 광역이 heavyImg 를 빌리는 것과 같습니다. */
     const want = (b.aoe && nowAoe) ? nowAoe
                : (b.counter && nowCtr) ? nowCtr
-               : ((b.heavy || b.firstHeavyNow || b.take || b.foeBreak) && nowHeavy) ? nowHeavy
+               : (b.take && nowTake) ? nowTake
+               : (b.foeBreak && nowBreak) ? nowBreak
+               : (b.foeEvade && nowEvade) ? nowEvade
+               : ((b.heavy || b.firstHeavyNow) && nowHeavy) ? nowHeavy
                : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
@@ -5528,7 +5537,8 @@ function beginTurn() {
     const f = FOES[b.id] || {};
     say("▷ " + withJosa(b.name, "이") + " " + (b.breakWarn || f.breakWarn ||
         "내리칠 자리를 고른다.  웅크린 사람을 노릴 자세다."), "bad");
-    say("　이번 차례에 웅크리는 것은 위험할 것 같다.", "bad");
+    say("　이번 차례에 웅크리는 것은 위험할 것 같다." +
+        ((b.breakSplash || f.breakSplash) ? "  웅크리지 않아도 여파는 닿는다." : ""), "bad");
   } else if (b.aim)
     say("▷ " + withJosa(b.name, "이") + " " + withJosa(memberName(b.aim), "을") + " 노리고 있다!" +
         (b.heavy ? "  크게 휘두를 자세다." + ((b.heavyK || 1) > 1 ? "　(강타 ×" + b.heavyK.toFixed(2) + ")" : "") : ""), "bad");
@@ -5643,7 +5653,8 @@ function battleSay(who, text, portraitSrc) {
                  who === S.battle.name ||
                  nameOf(who) === S.battle.name ||
                  (!!pt && (pt === f.img || pt === f.heavyImg || pt === f.aoeImg ||
-                           pt === f.counterImg || pt === S.battle.shown));
+                           pt === f.counterImg || pt === f.takeImg || pt === f.evadeImg ||
+                           pt === f.breakImg || pt === S.battle.shown));
   if (!적본인 && pt) showSpeaker(pt, nameOf(who));
 }
 /* ── 전투 중 끼어드는 대사 ──────────────────────────────────────────
@@ -6413,6 +6424,9 @@ function resolveTurn() {
     if (f2.heavyImg) b.heavyImg = f2.heavyImg;
     if (f2.aoeImg) b.aoeImg = f2.aoeImg;
     if (f2.counterImg) b.counterImg = f2.counterImg;
+    if (f2.takeImg) b.takeImg = f2.takeImg;
+    if (f2.evadeImg) b.evadeImg = f2.evadeImg;
+    if (f2.breakImg) b.breakImg = f2.breakImg;
     if (f2.imgScale) b.imgScale = f2.imgScale;
     say("체력 " + b.hp + " / " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
     shakeScreen(true);
@@ -6805,33 +6819,41 @@ function resolveTurn() {
      *
      *  아무도 웅크리지 않았으면 적은 아무 일도 하지 않습니다(되받아치기와 같습니다).
      *  책임(추민수)은 걸리지 않습니다 — 노려진 한 사람이 아니라 «웅크린
-     *  사람들» 이 대상이라, 광역에 도발·회피가 안 걸리는 것과 같은 까닭입니다. */
+     *  사람들» 이 대상이라, 광역에 도발·회피가 안 걸리는 것과 같은 까닭입니다.
+     *
+     *  breakSplash — 적에 적으면 «웅크리지 않은 사람» 도 같은 한 대의 그 비율만큼
+     *  맞습니다(0.5 면 반). 그러면 아무도 웅크리지 않아도 판 전체가 맞습니다
+     *  (2026-10-24, 사용자 지침). 회피·책임은 광역처럼 안 걸립니다. */
     if (b.foeBreak) {
       const 웅크린 = targets.filter(t => b.cmds[t] === "guard" || b.mods[t + "_guard"]);
-      if (!웅크린.length) {
+      const splash = b.breakSplash || (FOES[b.id] || {}).breakSplash || 0;
+      const 선사람 = splash ? targets.filter(t => 웅크린.indexOf(t) < 0) : [];
+      if (!웅크린.length && !선사람.length) {
         say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
         render();
         return setTimeout(afterFoe, RULE.turnGapMs);
       }
       const mult = b.breakMult || (FOES[b.id] || {}).breakMult || RULE.breakMult;
       shakeScreen(true);
-      say("▶ " + withJosa(b.name, "이") + " 웅크린 자리를 그대로 뚫는다!", "heavy");
+      say("▶ " + withJosa(b.name, "이") + " " + (웅크린.length ? "웅크린 자리를 그대로 뚫는다!" : "판 전체를 내리친다!"), "heavy");
       const hits = [];
-      웅크린.forEach(t => {
+      웅크린.concat(선사람).forEach(t => {
         const st = effStats(t);
+        const 웅 = 웅크린.indexOf(t) >= 0;
         let dmg = b.atk * mult + rnd(4) - st.def;
+        if (!웅) dmg *= splash;
         if (b.mods[t + "_immune"])  dmg *= (1 - b.mods[t + "_immune"]);
         if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
         dmg = Math.max(1, Math.floor(dmg));
         setHp(t, curHp(t) - dmg);
-        hits.push({ who: t, dmg: dmg });
-        say("　" + memberName(t) + "에게 " + dmg + " 피해　(웅크린 것이 듣지 않았다)" +
+        hits.push({ who: t, dmg: dmg, splash: !웅 });
+        say("　" + memberName(t) + "에게 " + dmg + " 피해　" + (웅 ? "(웅크린 것이 듣지 않았다)" : "(여파)") +
             (b.mods[t + "_immune"] ? " (갑주)" : "") +
             (b.mods[t + "_fragile"] ? " (강공)" : ""), "heavy");
         if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
       });
       render();
-      hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: true, tag: "버티기 깨기" }));
+      hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: !h.splash, tag: h.splash ? "여파" : "버티기 깨기" }));
       if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
     }
@@ -10633,6 +10655,9 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     heavyImg: f.heavyImg || null,
     aoeImg: f.aoeImg || null,
     counterImg: f.counterImg || null,
+    takeImg: f.takeImg || null,
+    evadeImg: f.evadeImg || null,
+    breakImg: f.breakImg || null,
     noHeavy: !!f.noHeavy,
     /* 등장 연출과 등장 음성 — 종점·종착역처럼 «만나 봐야 아는» 것이 여기 걸립니다.
      * 빠뜨리면 암전 없이 그냥 서 버립니다 (startMirror 가 cineEntrance 를 봅니다). */
@@ -10679,6 +10704,7 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     breakEvery: f.breakEvery || 0,
     breakFrom: f.breakFrom != null ? f.breakFrom : null,
     breakMult: f.breakMult || 0,
+    breakSplash: f.breakSplash || 0,
     breakLine: f.breakLine || null,
     breakWarn: f.breakWarn || null,
     /* 몰아친다 — 비율이라 배수를 곱하지 않습니다. 공격력이 이미 k 배로
