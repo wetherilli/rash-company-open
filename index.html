@@ -209,6 +209,12 @@
     opacity:1;transition:opacity var(--fade,360ms) ease-out;
   }
   .scenebox .typefx.out{opacity:0;}
+  /* 설정의 «효과음 크기» — 막대 하나와 [들어 보기] 셋 (engine.js sfxSettingHTML) */
+  .setsfx{margin:16px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;}
+  .setsfxhead{display:flex;justify-content:space-between;align-items:baseline;color:var(--text);}
+  .setsfxhead span{color:var(--gold);font-variant-numeric:tabular-nums;}
+  .setsfx input[type=range]{width:100%;margin:10px 0 8px;accent-color:var(--gold);}
+  .setsfxtry{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
   /* 큰 피해 숫자 — 한 방에 RULE.bigHitMin(100) 이상 들어가면 적이 선 자리에 크게
    * 떴다가 떠오르며 사라집니다(engine.js showBigDamage, 사용자 지침 2026-09-11).
    * 자리(left/top)는 엔진이 적 그림을 재서 박고, 여기서는 가운데 맞춤과 움직임만 줍니다.
@@ -1590,24 +1596,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.19.1"></script>
-<script src="data/vault.js?v=2.19.1"></script>
-<script src="data/characters.js?v=2.19.1"></script>
-<script src="data/skills.js?v=2.19.1"></script>
-<script src="data/allies.js?v=2.19.1"></script>
-<script src="data/gifts.js?v=2.19.1"></script>
-<script src="data/pickup.js?v=2.19.1"></script>
-<script src="data/achievements.js?v=2.19.1"></script>
-<script src="data/mail.js?v=2.19.1"></script>
-<script src="data/notice.js?v=2.19.1"></script>
-<script src="data/patch.js?v=2.19.1"></script>
-<script src="data/event.js?v=2.19.1"></script>
-<script src="data/reward.js?v=2.19.1"></script>
-<script src="data/tutorial.js?v=2.19.1"></script>
-<script src="data/foes.js?v=2.19.1"></script>
-<script src="data/story.js?v=2.19.1"></script>
-<script src="data/mirrorpacks.js?v=2.19.1"></script>
-<script src="engine.js?v=2.19.1"></script>
+<script src="data/access.js?v=2.20.0"></script>
+<script src="data/vault.js?v=2.20.0"></script>
+<script src="data/characters.js?v=2.20.0"></script>
+<script src="data/skills.js?v=2.20.0"></script>
+<script src="data/allies.js?v=2.20.0"></script>
+<script src="data/gifts.js?v=2.20.0"></script>
+<script src="data/pickup.js?v=2.20.0"></script>
+<script src="data/achievements.js?v=2.20.0"></script>
+<script src="data/mail.js?v=2.20.0"></script>
+<script src="data/notice.js?v=2.20.0"></script>
+<script src="data/patch.js?v=2.20.0"></script>
+<script src="data/event.js?v=2.20.0"></script>
+<script src="data/reward.js?v=2.20.0"></script>
+<script src="data/tutorial.js?v=2.20.0"></script>
+<script src="data/foes.js?v=2.20.0"></script>
+<script src="data/story.js?v=2.20.0"></script>
+<script src="data/mirrorpacks.js?v=2.20.0"></script>
+<script src="engine.js?v=2.20.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

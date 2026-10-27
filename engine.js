@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.19.1";
+const VERSION = "2.20.0";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -332,6 +332,7 @@ function vaultBody() {
      * 함께 들어가 기기를 옮기면 따라갑니다. vaultSig() 에는 일부러 안 넣습니다 —
      * 지키려는 값이 아니라 보는 취향이라서요. */
     font:     S.font || null,
+    sfxVol:   S.sfxVol != null ? S.sfxVol : null,   // 효과음 크기 — 안 건드렸으면 비워 둡니다(기본값을 고치면 따라가게)
     /* 유리창 배경 — 설정에서 고른 «장 묶음» 의 열쇠(openSettings 참고). 글꼴과 같은 결로
      * vaultSig() 에는 넣지 않고, 보관함을 비워도 남깁니다. 비어 있으면 기본값(마지막으로
      * 마친 장)을 씁니다 — 그 값은 S.cleared 에서 알아내므로 여기 적을 것이 없습니다. */
@@ -388,6 +389,7 @@ function loadVault() {
     storySave: v.storySave || null,
     mirrorRecords: v.mirrorRecords || [],
     font:     v.font || null,
+    sfxVol:   v.sfxVol != null ? v.sfxVol : null,
     glassBg:  v.glassBg || null,
     ver:      v.ver || null
   };
@@ -584,10 +586,14 @@ function clearVault() {
   /* 고른 배경 묶음도 같이 — 마친 장이 없어지므로 화면에는 기본값(단체 그림)이 걸리지만,
    * 나중에 그 장을 다시 마치면 고른 것이 그대로 살아납니다. */
   const glassBg = S && S.glassBg;
+  const sfxV = S && S.sfxVol;          // 효과음 크기도 보는(듣는) 취향이라 남깁니다
   Store.del(VAULT_KEY);
   Store.del(SAVE_KEY);      // 어디까지 읽었나 하는 기록도 함께
   S = newState();           // 머릿속도 같이 비워야 곧바로 되살아나지 않습니다
-  if (font || glassBg) { if (font) S.font = font; if (glassBg) S.glassBg = glassBg; saveVault(); }
+  if (font || glassBg || sfxV != null) {
+    if (font) S.font = font; if (glassBg) S.glassBg = glassBg; if (sfxV != null) S.sfxVol = sfxV;
+    saveVault();
+  }
   enkSync();
 }
 
@@ -1362,6 +1368,7 @@ function newState() {
     storySave: (v && v.storySave) || null,
     mirrorRecords: (v && v.mirrorRecords) || [],   // 거울굴절철도 결과 카드 — 최근 세 판
     font: fontClean(v && v.font),                  // 화면 글꼴 — 못 알아보는 값은 처음 값으로
+    sfxVol: (v && v.sfxVol != null) ? sfxVolClean(v.sfxVol) : null,   // 효과음 크기 — null 이면 기본값(sfxVol)
     /* 유리창 배경 — 여기서는 거르지 않습니다. 쓸 수 있는 묶음인지는 볼 때마다
      * glassBgKey() 가 보고, 못 쓰면 기본값으로 물러납니다(고른 값은 지우지 않습니다). */
     glassBg: (v && v.glassBg) || null,
@@ -2124,17 +2131,20 @@ function foeDefNow(b) {
  * «쓰는 그림» 으로 셉니다. 이름을 조립해 부르면 한 번도 안 나간 그림이 배포에서 빠집니다(2.19.0 첫 배포 때 그랬습니다). */
 const ATK_TYPES = {
   pierce: { name: "관통", fx: ["assets/fx/관통-1.png", "assets/fx/관통-2.png",      // 금 간 총알 구멍
-                               "assets/fx/관통-3.png", "assets/fx/관통-4.png"] },
+                               "assets/fx/관통-3.png", "assets/fx/관통-4.png"],
+            sfx: "assets/sound/효과음 관통.mp3" },                                   // 총성 셋 — 0 · 0.17 · 0.33초
   slash:  { name: "참격", fx: ["assets/fx/참격-1.png", "assets/fx/참격-2.png",      // 강철 손톱 자국
-                               "assets/fx/참격-3.png", "assets/fx/참격-4.png"] },
+                               "assets/fx/참격-3.png", "assets/fx/참격-4.png"],
+            sfx: "assets/sound/효과음 참격.mp3" },
   blunt:  { name: "타격", fx: ["assets/fx/타격-1.png", "assets/fx/타격-2.png",      // 찌그러진 강판
-                               "assets/fx/타격-3.png", "assets/fx/타격-4.png"] }
+                               "assets/fx/타격-3.png", "assets/fx/타격-4.png"],
+            sfx: "assets/sound/효과음 타격.mp3" }
 };
 const ATK_TYPE_RULE = {
   weakMult:    1.5,     // 약점에 맞으면
   resistMult:  0.75,    // 내성에 맞으면
   supportType: "slash", // 지원 작성위원 — 우선 모두 참격
-  fxFrameMs:   150,     // 그림 한 장이 머무는 시간 (2.19.1 — 105 는 너무 빨라 자국이 다 그어지기 전에 지나갔습니다)
+  fxFrameMs:   165,     // 그림 한 장이 머무는 시간 — 관통 효과음의 총성 셋(0 · 0.17 · 0.33초)에 구멍이 하나씩 맞게 (2.20.0)
   fxHoldMs:    380,     // 마지막 장(다 그어진 자국)이 그대로 머무는 시간
   fxFadeMs:    360      // 그 뒤 흐려지며 사라지는 시간
 };
@@ -3934,6 +3944,9 @@ function soundsToUnlock() {
 function unlockSounds() {
   if (SOUND_UNLOCKED) return;
   SOUND_UNLOCKED = true;
+  /* 효과음 — Web Audio 도 «사용자가 누른 때» 에 깨워야 소리가 납니다. 파일도 이때 미리 읽어 둡니다 */
+  { const c = sfxCtx(); if (c && c.state === "suspended") c.resume().catch(() => {}); }
+  for (const k in ATK_TYPES) if (ATK_TYPES[k].sfx) sfxLoad(ATK_TYPES[k].sfx);
   soundsToUnlock().forEach(src => {
     try {
       const a = soundEl(src);
@@ -3947,6 +3960,55 @@ function unlockSounds() {
 }
 document.addEventListener("pointerdown", unlockSounds, true);
 document.addEventListener("keydown",     unlockSounds, true);
+
+/* ── 효과음 (공격 유형 — 사용자 지침 2026-10-27) ─────────────────────
+ *  playSound 는 파일마다 Audio 하나를 돌려 쓰므로, 같은 소리를 잇달아 틀면 앞의 것이 끊깁니다.
+ *  효과음은 한 턴에 셋이 겹쳐 울려야 해서 Web Audio 로 칠 때마다 새로 틉니다(SFX_CTX).
+ *  Web Audio 를 못 쓰거나 파일을 못 읽으면(file:// 등) 그때만 새 Audio 를 만들어 틉니다.
+ *
+ *  크기는 설정의 «효과음 크기»(S.sfxVol, 0 ~ 1, 보관함에 남음)이고, 귀에 고르게 들리도록
+ *  제곱해서 겁니다. 기본값은 작게(SFX_RULE.defaultVol — 사용자 지침 «기본값은 작게»). 0 이면 꺼짐. */
+const SFX_RULE = { defaultVol: 0.3, step: 5 };   // 0.3 → 실제 크기 0.09
+let SFX_CTX = null;
+const SFX_BUF = {};
+function sfxVolClean(v) {
+  const n = Number(v);
+  return (v == null || v === "" || isNaN(n)) ? SFX_RULE.defaultVol : Math.max(0, Math.min(1, n));
+}
+function sfxVol() { return sfxVolClean(S && S.sfxVol); }
+function sfxCtx() {
+  if (SFX_CTX) return SFX_CTX;
+  const C = window.AudioContext || window.webkitAudioContext;
+  try { SFX_CTX = C ? new C() : null; } catch (e) { SFX_CTX = null; }
+  return SFX_CTX;
+}
+function sfxLoad(src) {
+  if (SFX_BUF[src] !== undefined) return SFX_BUF[src];
+  const ctx = sfxCtx();
+  SFX_BUF[src] = !ctx ? Promise.resolve(null)
+    : fetch(assetURL(src)).then(r => r.arrayBuffer())
+        .then(b => new Promise((ok, no) => ctx.decodeAudioData(b, ok, no)))
+        .catch(() => null);
+  return SFX_BUF[src];
+}
+/* vol 을 넘기면 그 크기로(설정 화면의 [들어 보기]), 안 넘기면 설정값으로 */
+function playSfx(src, vol) {
+  const v = vol != null ? vol : sfxVol();
+  if (!src || v <= 0) return;
+  const gain = v * v;
+  const ctx = sfxCtx();
+  if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
+  sfxLoad(src).then(buf => {
+    if (buf && ctx) {
+      const s = ctx.createBufferSource(), g = ctx.createGain();
+      s.buffer = buf; g.gain.value = gain;
+      s.connect(g); g.connect(ctx.destination);
+      s.start();
+      return;
+    }
+    try { const a = new Audio(assetURL(src)); a.volume = gain; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  });
+}
 
 /* 효과음을 한 번 재생한다. assets/sound/ 의 파일을 씁니다.
  * 그래도 막히면 onBlocked 를 부릅니다 — 부르는 쪽이 손잡이를 내어 주도록.
@@ -3988,6 +4050,7 @@ function foeHit(delay, dmg, crit, type) {
 
     const fx = type && ATK_TYPES[type] && ATK_TYPES[type].fx;
     if (fx && fx.length) atkTypeFx(box, fx);
+    if (type && ATK_TYPES[type] && ATK_TYPES[type].sfx) playSfx(ATK_TYPES[type].sfx);   // 설정의 «효과음 크기» 로
     else {
       const s = document.createElement("img");
       s.className = "slashfx";
@@ -14849,6 +14912,7 @@ function openSettings(back) {
               '<summary><b>색 테마</b>　지금 「' + cur.name + '」</summary>' +
               '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
             '</details>' +
+            sfxSettingHTML() +
             '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
             '<div class="grid">' +
               slot("bg", "유리창 배경", "마친 장의 배경으로 갈아 끼웁니다 — 지금 「" +
@@ -14866,6 +14930,7 @@ function openSettings(back) {
             '<div class="modalfoot"><button id="setclose">닫기</button></div>';
     $sheet.innerHTML = h;
     paletteBind(draw);
+    sfxSettingBind();
     const here = () => openSettings(back);
     const go = k => $sheet.querySelector('[data-go="' + k + '"]');
     go("bg").onclick    = () => openGlassBgPick(here);
@@ -14879,6 +14944,35 @@ function openSettings(back) {
     document.getElementById("setclose").onclick = () => { SET_PAL_OPEN = false; closeModal(); render(); if (back) back(); };
   };
   draw();
+}
+
+/* 설정의 «효과음 크기» 칸 (사용자 지침 2026-10-27) — 막대를 끌면 곧바로 바뀌고, 놓을 때 보관함에 남깁니다.
+ * 옆의 [들어 보기] 셋은 지금 크기로 그 유형의 효과음을 한 번 틉니다. 0 이면 꺼짐. */
+function sfxVolText(v) { return v <= 0 ? "꺼짐" : Math.round(v * 100) + ""; }
+function sfxSettingHTML() {
+  const v = sfxVol();
+  return '<div class="setsfx">' +
+           '<div class="setsfxhead"><b>효과음 크기</b><span id="sfxval">' + sfxVolText(v) + '</span></div>' +
+           '<input type="range" id="sfxrange" min="0" max="100" step="' + SFX_RULE.step + '" value="' + Math.round(v * 100) + '">' +
+           '<div class="setsfxtry">' +
+             Object.keys(ATK_TYPES).filter(k => ATK_TYPES[k].sfx).map(k =>
+               '<button class="ghost" data-sfx="' + k + '">' + ATK_TYPES[k].name + ' 들어 보기</button>').join("") +
+           '</div>' +
+           '<div class="hint">공격이 맞을 때 공격 유형(관통 · 참격 · 타격)마다 나는 소리입니다. 기본은 작게 두었습니다.</div>' +
+         '</div>';
+}
+function sfxSettingBind() {
+  const r = document.getElementById("sfxrange"), lab = document.getElementById("sfxval");
+  if (!r) return;
+  r.oninput  = () => { S.sfxVol = Number(r.value) / 100; lab.textContent = sfxVolText(S.sfxVol); };
+  r.onchange = () => { S.sfxVol = Number(r.value) / 100; saveVault(); };
+  $sheet.querySelectorAll("[data-sfx]").forEach(b => {
+    b.onclick = () => {
+      const v = sfxVol();
+      if (v <= 0) { lab.textContent = "꺼짐 — 막대를 올려 주십시오"; return; }
+      playSfx(ATK_TYPES[b.dataset.sfx].sfx, v);
+    };
+  });
 }
 
 /* 유리창 배경 고르기 — 예전에는 설정 화면 그 자체였는데, 따로 떼어 [설정] → [유리창 배경] 으로 엽니다
