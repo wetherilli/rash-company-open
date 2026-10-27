@@ -6,6 +6,10 @@
  *      그대로 두면 게임에서 자동으로 가려지고, 채우면 바로 반영됩니다.
  *    - 인격의 atk / def / hp 를 적지 않으면 성급 기본값이 들어갑니다.
  *      (STAR_BASE 참고)  특정 인격만 세게 만들고 싶으면 그 인격에만 값을 적으세요.
+ *    - 공격 유형 atkType — "pierce"(관통) · "slash"(참격) · "blunt"(타격).
+ *      사람마다 기본 하나(SINNERS 의 atkType)를 두고, 무기가 다른 인격에만 그 인격 줄에
+ *      atkType 을 적어 덮어씁니다 — 창 · 총 · 작살은 관통, 칼 · 검은 참격, 방패 · 주먹은 타격.
+ *      지원 작성위원은 적지 않으면 참격입니다(engine.js ATK_TYPE_RULE.supportType). 사용자 지침 2026-10-27.
  * ===================================================================== */
 
 /* ─────────────────────────────────────────────────────────────
@@ -335,6 +339,7 @@ const EXTRA_PORTRAITS = {
 const SINNERS = {
   park_suo: {
     no: 1, name: "박수오", ego: "나로호 승무원 아크로칸토사우루스",
+    atkType: "pierce",
     portrait: "assets/portrait/park_suo.png",
     quote: "사과에 먹힌 유리를 아시오?",
     caution: ["망상"],
@@ -343,9 +348,9 @@ const SINNERS = {
       { star: 1, tier: 1.0, title: "L사 작성위원",        atk: 12, def: 5,  hp: 55, note: "가장 검은" },
       { star: 2, tier: 2.0, title: "공룡의날 빵 먹는 자", atk: 15, def: 9,  hp: 82, note: "공룡의 날의 감초" },
       { star: 2, tier: 2.0, title: "S사 콘테스트 참가자",   atk: 17, def: 8,  hp: 80, note: "S사의 마지막을" },
-      { star: 2, tier: 2.0, title: "동탄 골목대장",        atk: 20, def: 7,  hp: 72, note: "동탄 뒷골목의 암살자" },
-      { star: 2, tier: 2.0, title: "남부협회 암살자", atk: 22, def: 8,  hp: 70, note: "어둠 속을 지배하는 재능을 살렸다" },
-      { star: 2, tier: 2.0, title: "우생회 노예",        atk: 20, def: 10,  hp: 80, note: "우생회의 돌쇠" },
+      { star: 2, tier: 2.0, title: "동탄 골목대장", atkType: "slash",        atk: 20, def: 7,  hp: 72, note: "동탄 뒷골목의 암살자" },
+      { star: 2, tier: 2.0, title: "남부협회 암살자", atkType: "slash", atk: 22, def: 8,  hp: 70, note: "어둠 속을 지배하는 재능을 살렸다" },
+      { star: 2, tier: 2.0, title: "우생회 노예", atkType: "blunt",        atk: 20, def: 10,  hp: 80, note: "우생회의 돌쇠" },
       { star: 3, tier: 3.2, title: "I사 선봉3팀",         atk: 31, def: 17, hp: 116, note: "스페이스 마린의 꿈을 이룸" },
       { star: 3, tier: 3.0, title: "C사 해군 일등대리",   atk: 25, def: 13, hp: 102, note: "워해머 오타쿠로 살다가 현역병으로 입대" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 공룡비",              atk: 36, def: 11,  hp: 108, note: "가장 어두운 곳, 퍼져라." },
@@ -359,6 +364,7 @@ const SINNERS = {
 
   lee_hanbeom: {
     no: 2, name: "이한범", ego: "지질망치를 든 바리오닉스",
+    atkType: "blunt",
     portrait: "assets/portrait/lee_hanbeom.png",
     quote: "작성위원은 글을 쓰는 한, 말아먹는 법입니다.",
     caution: ["다혈질", "변신로봇"],
@@ -392,6 +398,7 @@ const SINNERS = {
 
   cha_minjun: {
     no: 3, name: "차민준", ego: "디나모사우루스",
+    atkType: "pierce",
     portrait: "assets/portrait/cha_minjun.png",
     quote: "닿을 수 없는 호감에 도달하기 위하여!",
     caution: ["과도한 열정", "[보안 검열]", "과대망상"],
@@ -401,11 +408,11 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "공룡의날 공룡탈",        atk: 16, def: 10, hp: 79, note: "공룡탈이 잘 어울리는" },
       { star: 2, tier: 2.0, title: "C사 해군 과장",          atk: 17, def: 10, hp: 77,  note: "건담 오타쿠로 살다가 현역병으로 입대" },
       { star: 2, tier: 2.0, title: "남부협회 과커플",        atk: 19, def: 8,  hp: 73,  note: "대학에 들어가고 과CC에 성공한 세계선" },
-      { star: 3, tier: 3.0, title: "N사 중간망치",           atk: 29, def: 11, hp: 90,  note: "경북대 진학 후 야외조사 다니는 세계선" },
+      { star: 3, tier: 3.0, title: "N사 중간망치", atkType: "blunt",           atk: 29, def: 11, hp: 90,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 기동전사",  atk: 33, def: 16, hp: 110,  note: "건담 오타쿠의 꿈을 이룸" },
       /* 2성보다 20% 좋게, 대신 «유리대포» 로 — 모나크 인격은 공격만 높습니다.
        * 2성 평균 18/8/75 → 22/10/90 을 잡고, 방어·체력을 깎아 공격에 몰았습니다. */
-      { star: 2, tier: 2.0, title: "모나크 버틀러",          atk: 28, def: 6,  hp: 68,  note: "은쟁반은 무기가 아닙니다만" },
+      { star: 2, tier: 2.0, title: "모나크 버틀러", atkType: "slash",          atk: 28, def: 6,  hp: 68,  note: "은쟁반은 무기가 아닙니다만" },
       { star: 3, tier: 3.0, title: "신해수랜드 실장",        atk: 24, def: 15, hp: 102, note: "여왕의 기사란." },
       /* 3.1성급 — 실효 예산 63.5 (머리말 「잣대」 참고). 표준형 29/13/109 */
       { star: 3, tier: 3.1, title: "남부협회 2과",           atk: 29, def: 13, hp: 109, note: "협회 방식대로, 정면으로." }
@@ -414,6 +421,7 @@ const SINNERS = {
 
   lee_sojeong: {
     no: 4, name: "이소정", ego: "맑은 눈의 아누로그나투스",
+    atkType: "slash",
     portrait: "assets/portrait/lee_sojeong.png",
     quote: "덜 떨어진 일반인들이 강철과 털의 아름다움을 알 리가 없지.",
     caution: ["미적 감각", "간접흡연"],
@@ -422,25 +430,26 @@ const SINNERS = {
       { star: 1, tier: 1.0, title: "L사 작성위원",                atk: 13, def: 4,  hp: 52 , note: "붓의 미학" },
       { star: 2, tier: 2.0, title: "이블죠 사무소 실장",          atk: 17, def: 10, hp: 78, note: "언제까지 보조 일만 맡길거죠?" },
       { star: 2, tier: 2.0, title: "공룡의날 과장",               atk: 16, def: 10, hp: 80, note: "내가 없이는 안 돌아가는군" },
-      { star: 2, tier: 2.0, title: "북부 총기 협회 4과",          atk: 22, def: 6,  hp: 68, note: "화력으로 밀어보죠." },
+      { star: 2, tier: 2.0, title: "북부 총기 협회 4과", atkType: "pierce",          atk: 22, def: 6,  hp: 68, note: "화력으로 밀어보죠." },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 너 대머리",      atk: 33, def: 13, hp: 116, note: "대머리 아니라고." },
       { star: 3, tier: 3.0, title: "제4발톱 도슨트",                 atk: 23, def: 15, hp: 106 , note: "이 미학을 아시겠어요?" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 아누로그나투스", atk: 35, def: 12, hp: 110, note: "날아오를 준비." },
       { star: 3, tier: 3.2, title: "N사 E.G.O :: 강철, 털",       atk: 31, def: 18, hp: 114, note: "털, 그리고 강철" },
-      { star: 3, tier: 3.0, title: "G사 3등급 가면라이더", atk: 26, def: 12, hp: 100, note: "각도는 제가 잡을게요." },
+      { star: 3, tier: 3.0, title: "G사 3등급 가면라이더", atkType: "blunt", atk: 26, def: 12, hp: 100, note: "각도는 제가 잡을게요." },
       /* 3.2성급 — 실효 예산 69.3. 업적 「퍼레이드를 끝내러 왔다」로만 오는
        * «숨은 인격» 입니다 — hidden: true 한 줄이 배정·노트·「n / 전체」
        * 세는 수에서 전부 가려 줍니다(위 「숨은 인격」 머리말 참고).
        * 「타격대」라는 이름대로 공격 쪽으로 기울였습니다. 송하민 「P사
        * 익룡무리 과장」과 마찬가지로 제목에 「P사」·「익룡무리」를 함께
        * 담아, 둘만 세워도 새 시너지 둘이 다 켜집니다. */
-      { star: 3, tier: 3.2, title: "P사 익룡무리 타격대", atk: 34, def: 13, hp: 112, hidden: true,
+      { star: 3, tier: 3.2, title: "P사 익룡무리 타격대", atkType: "blunt", atk: 34, def: 13, hp: 112, hidden: true,
         note: "방어선 너머는, 제가 맡죠." }
     ]
   },
 
   chu_minsu: {
     no: 5, name: "추민수", ego: "하얀 스피노사우루스",
+    atkType: "blunt",
     portrait: "assets/portrait/chu_minsu.png",
     quote: "오늘, 교육위원을 죽였다. 아니, 어쩌면 작성위원일지도.",
     caution: ["판단 거부"],
@@ -451,13 +460,14 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "L사 학생회장",              atk: 16, def: 10, hp: 80, note: "제게 맡기시오." },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 올챙이",       atk: 29, def: 14, hp: 129, note: "올챙이의 미." },
       { star: 3, tier: 3.1, title: "J사 3등급 강력징수직 직원", atk: 32, def: 12, hp: 99, note: "추민수 주일한국대사" },
-      { star: 3, tier: 3.1, title: "신해수랜드 왕자",                atk: 27, def: 15, hp: 113, note: "몰락의 길을."},
+      { star: 3, tier: 3.1, title: "신해수랜드 왕자", atkType: "pierce",                atk: 27, def: 15, hp: 113, note: "몰락의 길을."},
       { star: 2, tier: 2.0, title: "아라온호 갑판원",           atk: 18, def: 10, hp: 79, note: "갑판은 늘 젖어 있다." }
     ]
   },
 
   yu_ain: {
     no: 6, name: "유아인", ego: "개심한 브라키오사우루스",
+    atkType: "slash",
     portrait: "assets/portrait/yu_ain.png",
     quote: "방송 안에도 사람이 있고, 버튜버에도 졸업은 있는 법이죠.",
     caution: ["현실감각"],
@@ -466,12 +476,12 @@ const SINNERS = {
       { star: 1, tier: 1.0, title: "L사 부작성위원장",                        atk: 11, def: 6,  hp: 59, note: "큰 의미가 없지만." },
       { star: 2, tier: 2.0, title: "제5발톱 제자",                       atk: 17, def: 9,  hp: 79, note: "베어낸다."  },
       { star: 2, tier: 2.0, title: "공룡의날 부장",                       atk: 16, def: 10, hp: 81, note: "제가 총괄해보죠." },
-      { star: 2, tier: 2.0, title: "신해수랜드 경비",                atk: 20, def: 7,  hp: 73, note: "퍼레이드를 지키는 것." },
+      { star: 2, tier: 2.0, title: "신해수랜드 경비", atkType: "pierce",                atk: 20, def: 7,  hp: 73, note: "퍼레이드를 지키는 것." },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 사랑과 증오의 이름으로", atk: 34, def: 12, hp: 114, note: "마법소녀, 너무 좋잖아?" },
       { star: 3, tier: 3.3, title: "B구역 군주",                          atk: 30, def: 17, hp: 142, note: "다 부질없는 것들, 부쉈다.",
         was: "H사 군주" },   /* 8장을 대비해 이름을 바꿈 — 옛 보관함이 잃지 않도록 */
       /* 3.1성급 — 실효 예산 63.5. 총사라 공격 쪽으로 치우친 결입니다 */
-      { star: 3, tier: 3.1, title: "북부 총기 협회 총사",                 atk: 31, def: 11, hp: 105, note: "쏘는 법을 아는 쪽이 이긴다." },
+      { star: 3, tier: 3.1, title: "북부 총기 협회 총사", atkType: "pierce",                 atk: 31, def: 11, hp: 105, note: "쏘는 법을 아는 쪽이 이긴다." },
       /* 3.1성급 · 유리대포. 실효 예산 63.5 를 «결을 그대로 둔 채» 맞춘 값입니다 —
        * 방어와 체력을 크게 깎아 공격에 몰았습니다. 지금 게임에서 «가장 세게 때리는» 인격이고,
        * 대신 «가장 잘 쓰러지는» 인격입니다. 「치프버틀러의 비급서」와 짝지으면 더 극단이 됩니다. */
@@ -480,12 +490,13 @@ const SINNERS = {
       { star: 3, tier: 3.1, title: "제4발톱 야수파", atk: 29, def: 13, hp: 109, note: "짐승은 짐승답게." },
       /* 3.3성급 · 튼튼한 결 (7.5장 코드레드, 사용자 지침 2026-09-03) — 실효 75.1 을 방어·체력에.
        * 성시윤의 「제3발톱 작은형님」과 제목이 겹치는 것은 괜찮다고 확인받았습니다 */
-      { star: 3, tier: 3.3, title: "제3발톱 작은형님", atk: 27, def: 21, hp: 146, note: "무너지지 않는 게, 곧 이기는 거예요." }
+      { star: 3, tier: 3.3, title: "제3발톱 작은형님", atkType: "blunt", atk: 27, def: 21, hp: 146, note: "무너지지 않는 게, 곧 이기는 거예요." }
     ]
   },
 
   lee_gyeongwon: {
     no: 7, name: "이경원", ego: "데이노수쿠스",
+    atkType: "blunt",
     portrait: "assets/portrait/lee_gyeongwon.png",
     quote: "내가 한 게 아니야. 네가, 고질라를 찢으면서 내 마음까지 찢어놓은 거야.",
     caution: ["연락두절", "내적열등감"],
@@ -496,27 +507,28 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "L사 에프터팀",          atk: 16, def: 11, hp: 80, note: "길을 치우는 일"  },
       { star: 2, tier: 2.0, title: "S사 콘테스트 참가자",   atk: 17, def: 8,  hp: 74, note: "다음에는 꼭."  },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 악어괴인", atk: 33, def: 14, hp: 114, note: "괴인이라는 말도" },
-      { star: 3, tier: 3.3, title: "모나크 백룡야행",              atk: 35, def: 16, hp: 125, note: "다 찢어놓은 거야."  },
+      { star: 3, tier: 3.3, title: "모나크 백룡야행", atkType: "slash",              atk: 35, def: 16, hp: 125, note: "다 찢어놓은 거야."  },
       /* 3.2성급 — 6장에서 만난 케빈의 힘을 담은 E.G.O (7.5장, 사용자 지침 2026-08-31 ⑤) */
       { star: 3, tier: 3.2, title: "L사 E.G.O :: 케빈", atk: 31, def: 14, hp: 122, note: "번개를 두른 손님." },
       /* 3.3성급 · 유리대포 (7.5장 코드레드) — 김하주 「흑수 구」에 살짝 변주(사용자 지침 2026-10-14): 46 + 0.48×7 + 0.26×99 = 75.1 */
-      { star: 3, tier: 3.3, title: "흑수 구", atk: 46, def: 7, hp: 99, note: "부서지기 전에, 먼저 부순다." }
+      { star: 3, tier: 3.3, title: "흑수 구", atkType: "slash", atk: 46, def: 7, hp: 99, note: "부서지기 전에, 먼저 부순다." }
     ]
   },
 
   seong_siyun: {
     no: 8, name: "성시윤", ego: "안킬로사우루스",
+    atkType: "pierce",
     portrait: "assets/portrait/seong_siyun.png",
     quote: "저를 성시윤이라고 불러주세요.",
     caution: ["완벽주의"],
     brief: "관리자님이 하자가 많아 보이는 여러 수감자들을 보며 막막해하고 있을지도 모르겠습니다. 안심하세요. 본 수감자는 비교적 군말 없이 일을 처리해 나갈 수 있는 몇 안 되는 유형입니다. 합리적인 의사결정을 내릴 가능성이 높은 유형이므로 조언을 구하고 싶을 땐 해당 수감자 쪽을 바라보며 화두를 꺼내는 것도 좋은 방법입니다. 하지만 잊지 마세요. 한 번 관계가 틀어지기 시작하면 회복하기 어려울 것입니다.",
     ids: [
       { star: 1, tier: 1.0, title: "L사 작성위원",          atk: 11, def: 7,  hp: 57, note: "성시윤이라고 불러주세요"  },
-      { star: 3, tier: 3.0, title: "제3발톱 작은형님",       atk: 25, def: 12, hp: 104, note: "뭐부터 부수면 되지?"   },
+      { star: 3, tier: 3.0, title: "제3발톱 작은형님", atkType: "blunt",       atk: 25, def: 12, hp: 104, note: "뭐부터 부수면 되지?"   },
       { star: 2, tier: 2.0, title: "L사 부작성위원장",          atk: 15, def: 11, hp: 90, note: "꽤나 중책을..." },
       { star: 2, tier: 2.0, title: "L사 비포팀",            atk: 18, def: 9,  hp: 77, note: "미리 준비하는 게 중요한건 상식이죠." },
       { star: 3, tier: 3.0, title: "공룡의날 실장",         atk: 23, def: 16, hp: 104, note: "축제를 시작하지." },
-      { star: 3, tier: 3.2, title: "LST E.G.O :: 갑옷공룡", atk: 25, def: 23, hp: 128, note: "갑옷만큼은 가장 단단하다" },
+      { star: 3, tier: 3.2, title: "LST E.G.O :: 갑옷공룡", atkType: "blunt", atk: 25, def: 23, hp: 128, note: "갑옷만큼은 가장 단단하다" },
       { star: 3, tier: 3.3, title: "아라온호 선장",         atk: 31, def: 19, hp: 134, note: "승선을, 환영한다." },
       /* 3.1성급 — 실효 예산 63.5 (머리말 「잣대」 참고). 표준형 29/13/109 */
       { star: 3, tier: 3.1, title: "신해수랜드 집사",       atk: 29, def: 13, hp: 109, note: "여왕은 없어도, 격식은 남는다." }
@@ -525,16 +537,17 @@ const SINNERS = {
 
   song_hamin: {
     no: 9, name: "송하민", ego: "중간관리직 타르보사우루스",
+    atkType: "slash",
     portrait: "assets/portrait/song_hamin.png",
     quote: "그래도 언제까지나 미뤄둘 순 없잖아.",
     caution: ["거리감"],
     brief: "관리자의 세심한 주의가 필요합니다. 과거 H사 외부의 거대한 커뮤니티 조직을 이끌던 관리직이었습니다. 오늘날에는 <하나회>로 그 의지가 계승되었습니다. 가라앉은 상태가 비주기적으로 나타날 때가 있는데 관리자님 측에서 해줄 수 있는 방법은 없으니 조용히 기다리는 것이 효율적입니다.",
     ids: [
       { star: 1, tier: 1.0, title: "L사 영상편집부",        atk: 11, def: 6,  hp: 56, note: "일단 얼굴 나와도 되는 거죠?"  },
-      { star: 2, tier: 2.0, title: "남부협회 3과 인파이터", atk: 22, def: 7,  hp: 71, note: "바다, 주먹, 그리고"  },
+      { star: 2, tier: 2.0, title: "남부협회 3과 인파이터", atkType: "blunt", atk: 22, def: 7,  hp: 71, note: "바다, 주먹, 그리고"  },
       { star: 2, tier: 2.0, title: "L사 에프터팀",          atk: 15, def: 12, hp: 84, note: "이런 것까지 시킨다고요?"  },
-      { star: 3, tier: 3.1, title: "C사 육군 특수임무대대", atk: 31, def: 13, hp: 101, note: "보고드립니다."  },
-      { star: 3, tier: 3.1, title: "북부 총기 협회 3과 저격수", atk: 33, def: 9, hp: 101, note: "숨을 참고, 한 번만."  },
+      { star: 3, tier: 3.1, title: "C사 육군 특수임무대대", atkType: "pierce", atk: 31, def: 13, hp: 101, note: "보고드립니다."  },
+      { star: 3, tier: 3.1, title: "북부 총기 협회 3과 저격수", atkType: "pierce", atk: 33, def: 9, hp: 101, note: "숨을 참고, 한 번만."  },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 점박이",   atk: 32, def: 13, hp: 120, note: "벌레의 노래." },
       { star: 3, tier: 3.0, title: "남부협회 분석관",       atk: 26, def: 12, hp: 100, note: "숫자는 거짓말을 안 하죠." },
       /* 3.1성급 — 실효 예산 63.5, 표준형 29/13/109. P사 이야기 쪽 사람이라
@@ -545,6 +558,7 @@ const SINNERS = {
 
   kim_taeseong: {
     no: 11, name: "김태성", ego: "아케로랍토르",
+    atkType: "blunt",
     portrait: "assets/portrait/kim_taeseong.png",
     quote: "어느 날 창조론이 라거슈타트 한가운데에서 시작되었다.",
     caution: ["연약함", "창조 혐오"],
@@ -564,6 +578,7 @@ const SINNERS = {
 
   kim_haju: {
     no: 12, name: "김하주", ego: "기가노토사우루스",
+    atkType: "pierce",
     portrait: "assets/portrait/kim_haju.png",
     quote: "그림엔 목적이 있었지…",
     caution: ["교활함"],
@@ -575,18 +590,19 @@ const SINNERS = {
       /* 공격·방어 위주로 재분배 — 3성 평균(26/12/100) 대비 atk +31%·def +33%,
        * hp 는 평균 그대로 — 사용자 지침 */
       { star: 3, tier: 3.1, title: "살수 아티스트",      atk: 32, def: 15, hp: 94, note: "트위터 60만 좋아요"  },
-      { star: 3, tier: 3.2, title: "영덕의 요리사",      atk: 21, def: 25, hp: 140, note: "담는 게 반이에요, 반."  },
+      { star: 3, tier: 3.2, title: "영덕의 요리사", atkType: "slash",      atk: 21, def: 25, hp: 140, note: "담는 게 반이에요, 반."  },
       /* 3.2성급 — 제1발톱 지령의 첫 인격 (7.5장, 사용자 지침 2026-08-31 ⑤).
        * claw1Line — 지령을 따라 공격이 강화될 때 하는 한마디(engine.js 의 claw1LineFor). */
       { star: 3, tier: 3.2, title: "제1발톱 대행자", atk: 31, def: 14, hp: 122, note: "무엇이 나올지는, 나도 모른다.",
         claw1Line: "지령의 뜻은 이번에도 똑같군." },
       /* 3.3성급 · 유리대포 (7.5장 코드레드, 사용자 지침 2026-09-03) — 실효 예산 75.1 을 공격 쪽에 몰았습니다 */
-      { star: 3, tier: 3.3, title: "흑수 구", atk: 45, def: 8, hp: 101, note: "가늘고 길게, 살 생각은 없다." }
+      { star: 3, tier: 3.3, title: "흑수 구", atkType: "slash", atk: 45, def: 8, hp: 101, note: "가늘고 길게, 살 생각은 없다." }
     ]
   },
 
   kim_duhyeon: {
     no: 13, name: "김두현", ego: "울티마사우루스",
+    atkType: "slash",
     portrait: "assets/portrait/kim_duhyeon.png",
     quote: "악몽에서 깨어났을때 카오스 이펙트가 사라져있었다.",
     caution: ["갑작스러운 '카오스 이펙트' 발작"],
@@ -596,14 +612,14 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "공룡의날 조수",                atk: 15, def: 11, hp: 81, note: "물 사오면 되나요?" },
       { star: 2, tier: 2.0, title: "동탄 학부모",                atk: 10, def: 20, hp: 79, note: "아들을 한없이 사랑함" },
       { star: 2, tier: 2.0, title: "L사 비포팀",                   atk: 19, def: 8,  hp: 76, note: "이런 것까지 내가 해야돼?" },
-      { star: 2, tier: 2.0, title: "N사 작은망치",                 atk: 22, def: 7,  hp: 70,  note: "경북대 진학 후 야외조사 다니는 세계선" },
+      { star: 2, tier: 2.0, title: "N사 작은망치", atkType: "blunt",                 atk: 22, def: 7,  hp: 70,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, tier: 3.0, title: "이블죠 사무소 해결사",         atk: 28, def: 11, hp: 94, note: "이블죠 정도는 이제 간단하지" },
       { star: 3, tier: 3.2, title: "개화 E.G.O :: 궁극의 도마뱀",  atk: 31, def: 15, hp: 120, note: "울티마 그 자체가 됨" },
-      { star: 3, tier: 3.0, title: "구C사 일등대리",               atk: 25, def: 14, hp: 100, note: "보고드립니다!" },
+      { star: 3, tier: 3.0, title: "구C사 일등대리", atkType: "pierce",               atk: 25, def: 14, hp: 100, note: "보고드립니다!" },
       /* 3.1성급 — 실효 예산 63.5 (머리말 「잣대」 참고). 표준형 29/13/109 */
-      { star: 3, tier: 3.1, title: "G사 4등급 가면라이더", atk: 29, def: 13, hp: 109, note: "이번 생은 조연도 나쁘지 않다." },
+      { star: 3, tier: 3.1, title: "G사 4등급 가면라이더", atkType: "blunt", atk: 29, def: 13, hp: 109, note: "이번 생은 조연도 나쁘지 않다." },
       /* 3.0성급 — 성급 평균 그대로 26/12/100 */
-      { star: 3, tier: 3.0, title: "신해수랜드 기록관", atk: 26, def: 12, hp: 100, note: "기록은, 지워지지 않는다." },
+      { star: 3, tier: 3.0, title: "신해수랜드 기록관", atkType: "pierce", atk: 26, def: 12, hp: 100, note: "기록은, 지워지지 않는다." },
       /* 3.2성급 — 6.5장에서 만난 타나콘다의 힘을 담은 E.G.O (7.5장, 사용자 지침 2026-08-31 ⑤) */
       { star: 3, tier: 3.2, title: "L사 E.G.O :: 타나콘다", atk: 32, def: 13, hp: 119, note: "배수로의 그림자가, 이제는 내 안에." }
     ]
@@ -1135,7 +1151,7 @@ const SUPPORTS = [
     portrait: "assets/portrait/kim_junseong.png",
     note: "쥐어주는 건 나야." },
 
-  { name: "심승휘", title: "우생회 큰망치", star: 3, tier: 3.1,
+  { name: "심승휘", title: "우생회 큰망치", atkType: "blunt", star: 3, tier: 3.1,
     atk: 32, def: 13, hp: 96,
     portrait: null,
     note: "망치를 휘두를 때를 아는 것이 지혜라고 할 수 있지." },
@@ -1208,7 +1224,7 @@ const SUPPORTS = [
    * (2026-09-07 — 특화로 가르면서 hp 125 였는데, 그것은 «합» 으로 재던
    *  시절의 값입니다. 실효로 재면 ×1.083 밖에 안 되어 hp 를 129 로
    *  올렸습니다. 0df956a 에서 3.1성급으로 선언한 대로 맞춘 것입니다.) */
-  { name: "박상원", title: "신해수랜드 보건선생님", star: 3, tier: 3.1,
+  { name: "박상원", title: "신해수랜드 보건선생님", atkType: "pierce", star: 3, tier: 3.1,
     atk: 20, def: 21, hp: 129,
     portrait: null,
     note: "…처치가, 필요하신가요…?" },
@@ -1217,14 +1233,14 @@ const SUPPORTS = [
    * (2026-09-07 — atk 38 이었는데 실효로는 ×1.183 이었습니다. hp 를
    *  100 으로 못박아 둔 결이라, 모자란 몫을 공격 하나로 채웠습니다.
    *  0df956a 에서 3.2성급으로 선언한 대로 맞춘 것입니다.) */
-  { name: "신해수", title: "신해수랜드 교장선생님", star: 3, tier: 3.2,
+  { name: "신해수", title: "신해수랜드 교장선생님", atkType: "pierce", star: 3, tier: 3.2,
     atk: 39, def: 9, hp: 100,
     portrait: null,
     note: "파티는, 아직 끝나지 않았습니다." },
   /* 거울굴절철도 3호선을 끝까지 가야 옵니다. 지금 가장 늦게 얻는 사람이라
    * 이집티쿠스 모니터와 같은 3.4성급으로 잡았고, 결은 정반대입니다 —
    * 모니터가 «두껍게 오래 서는» 쪽이면 이쪽은 «먼저 부수는» 쪽입니다. */
-  { name: "이재호", title: "C사 미군 특수부대", star: 3, tier: 3.4,
+  { name: "이재호", title: "C사 미군 특수부대", atkType: "pierce", star: 3, tier: 3.4,
     atk: 44, def: 15, hp: 115,
     portrait: null,
     note: "먼저 쏘고, 먼저 빠진다." },

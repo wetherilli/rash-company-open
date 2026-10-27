@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.18.0";
+const VERSION = "2.19.0";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2106,6 +2106,66 @@ function foeDefNow(b) {
   }
   return Math.round(d);
 }
+/* ── 공격 유형 — 관통 · 참격 · 타격 (사용자 지침 2026-10-27) ─────────────
+ *  사람마다 기본 유형이 있고(SINNERS 의 atkType), 인격에 atkType 을 적으면 그 인격을 낀
+ *  동안은 그것으로 바뀝니다 — 창 · 총 · 작살은 관통, 칼 · 검은 참격, 방패 · 주먹은 타격.
+ *  지원 작성위원은 우선 모두 참격(supportType — TODO.md 「공격 유형」, 나중에 다시 짭니다).
+ *  조력자는 유형이 없습니다(배율 없음).
+ *
+ *  적은 FOES 에 weak: ["pierce"] · resist: ["blunt"] 처럼 적습니다(여럿이어도 됩니다).
+ *  약점에 맞으면 피해 ×1.5, 내성이면 ×0.75 — 방어를 빼고 독촉 · 치명타까지 곱한 «맨 끝» 에
+ *  곱합니다. 그래야 «50% 더» 가 화면의 숫자와 그대로 맞습니다(방어 앞에서 곱하면 방어가
+ *  두꺼운 적일수록 훨씬 크게 벌어집니다). 아군이 적을 때리는 넷 — 평타 · 연계 추가타 ·
+ *  일제사격 · 반격 — 이 모두 때린 사람의 유형을 탑니다(atkTypeHit).
+ *
+ *  fx — 맞을 때 차례로 넘기는 그림 넉 장(foeHit · atkTypeFx, 원본 720px 은 temp/fx-원본/).
+ *  유형이 없는 공격(조력자)은 예전 참격 한 장(slash.png)을 씁니다. */
+/* 경로는 글자 그대로 적습니다 — 배포 거르개(tools/wip-그림.js)가 따옴표 안의 assets 경로만
+ * «쓰는 그림» 으로 셉니다. 이름을 조립해 부르면 한 번도 안 나간 그림이 배포에서 빠집니다(2.19.0 첫 배포 때 그랬습니다). */
+const ATK_TYPES = {
+  pierce: { name: "관통", fx: ["assets/fx/관통-1.png", "assets/fx/관통-2.png",      // 금 간 총알 구멍
+                               "assets/fx/관통-3.png", "assets/fx/관통-4.png"] },
+  slash:  { name: "참격", fx: ["assets/fx/참격-1.png", "assets/fx/참격-2.png",      // 강철 손톱 자국
+                               "assets/fx/참격-3.png", "assets/fx/참격-4.png"] },
+  blunt:  { name: "타격", fx: ["assets/fx/타격-1.png", "assets/fx/타격-2.png",      // 찌그러진 강판
+                               "assets/fx/타격-3.png", "assets/fx/타격-4.png"] }
+};
+const ATK_TYPE_RULE = {
+  weakMult:    1.5,     // 약점에 맞으면
+  resistMult:  0.75,    // 내성에 맞으면
+  supportType: "slash", // 지원 작성위원 — 우선 모두 참격
+  fxFrameMs:   105      // 그림 한 장이 머무는 시간 — 넉 장이면 RULE.hitFxMs(420)와 맞습니다
+};
+/* 이 사람이 지금 치는 유형 — 낀 인격 → 그 사람의 기본 → (지원이면) supportType. 없으면 null */
+function atkTypeOf(w) {
+  if (!w || isAlly(w)) return null;
+  if (isSupport(w)) { const sp = supportBy(w); return (sp && sp.atkType) || ATK_TYPE_RULE.supportType; }
+  const id = S && S.equip ? idByKey(S.equip[w]) : null;
+  if (id && id.atkType) return id.atkType;
+  return (SINNERS[w] && SINNERS[w].atkType) || null;
+}
+/* 적의 약점 · 내성 — 전투 중이면 그 적(FOES[b.id], 거울이면 사본) */
+function foeTypeTable(b) {
+  const f = (b && FOES[b.id]) || {};
+  return { weak: f.weak || [], resist: f.resist || [] };
+}
+/* 한 대에 붙는 배율과 로그 꼬리 — { type, mult, tag } */
+function atkTypeHit(b, w) {
+  const t = atkTypeOf(w);
+  if (!t) return { type: null, mult: 1, tag: "" };
+  const ft = foeTypeTable(b);
+  if (ft.weak.indexOf(t) >= 0)   return { type: t, mult: ATK_TYPE_RULE.weakMult,   tag: " (약점 · " + ATK_TYPES[t].name + ")" };
+  if (ft.resist.indexOf(t) >= 0) return { type: t, mult: ATK_TYPE_RULE.resistMult, tag: " (내성 · " + ATK_TYPES[t].name + ")" };
+  return { type: t, mult: 1, tag: "" };
+}
+/* 전투 첫 줄 · 적 카드에 적는 말 — 「약점 관통 · 내성 타격」. 둘 다 없으면 빈 글 */
+function foeTypeText(b) {
+  const ft = foeTypeTable(b);
+  const nm = list => list.map(t => ATK_TYPES[t] ? ATK_TYPES[t].name : t).join("·");
+  return [ft.weak.length ? "약점 " + nm(ft.weak) : "", ft.resist.length ? "내성 " + nm(ft.resist) : ""]
+    .filter(Boolean).join("　");
+}
+
 /* 팩을 고른 자리(enterPack)에서 부릅니다 — 얻었음을 알리고, «얻는 순간» 듣는 것(광신·보복)을 겁니다.
  * 그 몫은 S.arc 에 바로 얹히므로, enterPack 이 부르기 «전에» 갈림길 때의 S.arc 를
  * S.railSave.arc 로 떠 둡니다 — 지거나 이어하면 resumeMirror 가 그것으로 되돌립니다. */
@@ -3905,8 +3965,12 @@ function playSound(src, onBlocked) {
 
 /* 맞는 연출 — 참격이 한 번 그어지고, 적이 좌우로 흔들리며 점멸한다.
  * dmg · crit 를 넘기면 그 피해가 크면(RULE.bigHitMin 이상) 숫자도 크게 띄웁니다 —
- * 참격과 같은 순간에 뜨도록 여기서 함께 부릅니다(showBigDamage). */
-function foeHit(delay, dmg, crit) {
+ * 참격과 같은 순간에 뜨도록 여기서 함께 부릅니다(showBigDamage).
+ *
+ * type — 공격 유형(ATK_TYPES). 그 유형에 fx 그림이 있으면 넉 장을 차례로 넘깁니다
+ * (atkTypeFx). 한 대마다 제 그림 요소 · 제 타이머를 따로 두므로, 셋이 잇달아 쳐서
+ * 앞의 것이 아직 남아 있어도 서로 덮어쓰지 않고 겹쳐 보입니다 — 유형이 서로 달라도 같습니다. */
+function foeHit(delay, dmg, crit, type) {
   setTimeout(() => {
     const box = document.querySelector(".scenebox");
     if (!box) return;
@@ -3920,15 +3984,39 @@ function foeHit(delay, dmg, crit) {
                          if (f) f.classList.remove("hit"); }, RULE.hitFxMs);
     }
 
-    const s = document.createElement("img");
-    s.className = "slashfx";
-    s.src = assetURL("assets/fx/slash.png");
-    s.onerror = function () { if (this.parentNode) this.parentNode.removeChild(this); };
-    box.appendChild(s);
-    setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, RULE.hitFxMs);
+    const fx = type && ATK_TYPES[type] && ATK_TYPES[type].fx;
+    if (fx && fx.length) atkTypeFx(box, fx);
+    else {
+      const s = document.createElement("img");
+      s.className = "slashfx";
+      s.src = assetURL("assets/fx/slash.png");
+      s.onerror = function () { if (this.parentNode) this.parentNode.removeChild(this); };
+      box.appendChild(s);
+      setTimeout(() => { if (s.parentNode) s.parentNode.removeChild(s); }, RULE.hitFxMs);
+    }
 
     showBigDamage(box, dmg, crit);
   }, delay || 0);
+}
+
+/* 공격 유형 그림 — 넉 장을 ATK_TYPE_RULE.fxFrameMs 마다 넘기고, 마지막 장에서 흐려지며 사라집니다.
+ * 대마다 조금씩 돌리고 비켜 세워, 잇달아 친 자국이 한 자리에 포개지지 않게 합니다. */
+const ATK_FX_CACHE = {};
+function atkTypeFx(box, frames) {
+  frames.forEach(f => { if (!ATK_FX_CACHE[f]) { ATK_FX_CACHE[f] = new Image(); ATK_FX_CACHE[f].src = assetURL(f); } });
+  const el = document.createElement("img");
+  el.className = "typefx";
+  el.style.setProperty("--rot", (rnd(31) - 15) + "deg");
+  el.style.setProperty("--dx", (rnd(13) - 6) + "%");
+  el.style.setProperty("--dy", (rnd(11) - 5) + "%");
+  el.src = assetURL(frames[0]);
+  el.onerror = function () { if (this.parentNode) this.parentNode.removeChild(this); };
+  box.appendChild(el);
+  const step = ATK_TYPE_RULE.fxFrameMs;
+  for (let i = 1; i < frames.length; i++)
+    setTimeout(() => { if (el.parentNode) el.src = assetURL(frames[i]); }, step * i);
+  setTimeout(() => el.classList.add("out"), step * (frames.length - 1));
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, step * frames.length + 180);
 }
 
 /* ── 적이 피하는 연출 ─────────────────────────────────────────────
@@ -5531,6 +5619,7 @@ function startBattleFight(scene, f) {
    * 여태 원본을 적고 있어서, 7.5장 로단처럼 덮어쓴 전투는 실제로 1150/50/19
    * 인데 안내에는 780/36/15(거울 던전 몫)라고 떴습니다 — 2026-09-23 확인. */
   say("체력 " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
+  { const tt = foeTypeText(b); if (tt) say(tt, "sys"); }   // 공격 유형 — 「약점 관통　내성 타격」
   /* hint — 이 전투가 평범한 전투가 아닐 때, 무엇을 해야 하는지 한 줄
    * (사용자 지침 2026-09-23). 버티는 전투(storyFrom)·설득 전투처럼
    * 「적을 눕히는 것」이 목표가 아닌 자리에 답니다. 전투 장면에 적습니다.
@@ -6336,12 +6425,13 @@ function openingVolley(next) {
       let dmg = st.atk + rnd(4) - b.def;
       const crit = Math.random() < critRate();
       if (crit) dmg *= critMultFor(w) * critDmgMult();
-      dmg = Math.max(1, Math.floor(dmg));
+      const ty = atkTypeHit(b, w);               // 공격 유형 — 약점 ×1.5 · 내성 ×0.75 (맨 끝에)
+      dmg = Math.max(1, Math.floor(dmg * ty.mult));
       b.hp -= dmg;
       say((crit ? (memberName(w) + "의 치명적인 공격! — " + dmg + " 피해")
                 : (memberName(w) + "의 공격 — " + dmg + " 피해")) +
-          " (" + (lk.label || "일제사격") + ")", crit ? "crit" : "hit");
-      foeHit(0, dmg, crit);
+          " (" + (lk.label || "일제사격") + ")" + ty.tag, crit ? "crit" : "hit");
+      foeHit(0, dmg, crit, ty.type);
       render();
       if (b.hp <= 0) {
         if (b.scene.persuade) b.hp = 1;
@@ -6907,14 +6997,15 @@ function resolveTurn() {
         dmg *= 1 + perkSum().linkBoost;          // 연계 추가타 피해 — 특전 linkBoost(만화경)
         const crit = Math.random() < critRate();
         if (crit) dmg *= critMultFor(target) * critDmgMult();
-        dmg = Math.max(1, Math.floor(dmg));
+        const ty = atkTypeHit(b, target);        // 공격 유형 — 추가타를 치는 사람의 유형
+        dmg = Math.max(1, Math.floor(dmg * ty.mult));
         b.hp -= dmg;
         say((crit ? (memberName(target) + "의 치명적인 공격! — " + dmg + " 피해")
                   : (memberName(target) + "의 공격 — " + dmg + " 피해")) +
             " (" + (ls.label || "연계") + ")" +
-            (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : ""),
+            (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : "") + ty.tag,
             crit ? "crit" : "hit");
-        foeHit(0, dmg, crit);
+        foeHit(0, dmg, crit, ty.type);
         stackAfterHit(target);     // 연계 추가타도 «공격» — 히트 · 염화가 쌓입니다(원작 «원호공격으로 인한 발동에도»)
         checkJoinIn();
         render();
@@ -6979,7 +7070,8 @@ function resolveTurn() {
     if (b.mods[who + "_push"]) dmg *= RULE.pushMult + advisorEffect().push;
     const crit = (evadeBonus || forceCrit) ? true : Math.random() < critRate();
     if (crit) dmg *= (evadeBonus || critMultFor(who)) * critDmgMult();
-    dmg = Math.max(1, Math.floor(dmg));
+    const ty = atkTypeHit(b, who);           // 공격 유형 — 약점 ×1.5 · 내성 ×0.75 (맨 끝에)
+    dmg = Math.max(1, Math.floor(dmg * ty.mult));
     b.hp -= dmg;
     say((crit ? (memberName(who) + "의 치명적인 공격! — " + dmg + " 피해")
               : (memberName(who) + "의 공격 — " + dmg + " 피해")) +
@@ -6990,7 +7082,7 @@ function resolveTurn() {
         (claw1Mult !== 1 ? " (지령)" : "") +
         (vampBonus ? " (흡혈 과잉회복 +" + vampBonus + ")" : "") +
         (evadeBonus ? " (회피 보상)" : "") +
-        (!evadeBonus && forceCrit ? " (" + b.mods[who + "_critLabel"] + ")" : ""),
+        (!evadeBonus && forceCrit ? " (" + b.mods[who + "_critLabel"] + ")" : "") + ty.tag,
         crit ? "crit" : "hit");
     if (evadeBonus) delete b.persist[who + "_evadeBonus"];
     if (vampBonus) delete b.persist[who + "_vampBonus"];
@@ -7011,7 +7103,7 @@ function resolveTurn() {
     { const hh = perkSum().hitHeal; if (hh) setHp(who, curHp(who) + maxHp(who) * hh); }   // 테마팩 특전 hitHeal
     stackAfterHit(who);            // 히트 · 염화 — 공격을 마칠 때마다 (stackRulesFor 머리말)
 
-    foeHit(0, dmg, crit);
+    foeHit(0, dmg, crit, ty.type);
     checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
     render();
 
@@ -7395,10 +7487,11 @@ function resolveTurn() {
     /* 반격 — 맞고도 살아 있으면, 방금 «경감되기 전» 받은 피해(rawDmg)에
      * ×v 를 곱해 그대로 되돌려준다(사용자 지침 2026-09-02). */
     if (b.mods[t + "_counter"] && alive(t)) {
-      const cdmg = Math.max(1, Math.floor(rawDmg * b.mods[t + "_counter"]));
+      const ty = atkTypeHit(b, t);             // 공격 유형 — 반격도 그 사람의 유형으로
+      const cdmg = Math.max(1, Math.floor(rawDmg * b.mods[t + "_counter"] * ty.mult));
       b.hp -= cdmg;
-      say(memberName(t) + "의 반격! — " + cdmg + " 피해", "crit");
-      foeHit(0, cdmg, false);
+      say(memberName(t) + "의 반격! — " + cdmg + " 피해" + ty.tag, "crit");
+      foeHit(0, cdmg, false, ty.type);
       checkJoinIn();
       render();
       if (finishReached(b)) return setTimeout(finishBlow, RULE.turnGapMs);   // 반격으로 턱을 넘어도 마무리 일격
@@ -11470,6 +11563,9 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     evadeImg: f.evadeImg || null,
     breakImg: f.breakImg || null,
     noHeavy: !!f.noHeavy,
+    /* 공격 유형의 약점 · 내성 — 수치가 아니라 성질이라 그대로 옮깁니다(빠뜨리면 거울에서만 약점이 사라집니다) */
+    weak: f.weak ? f.weak.slice() : null,
+    resist: f.resist ? f.resist.slice() : null,
     /* 등장 연출과 등장 음성 — 종점·종착역처럼 «만나 봐야 아는» 것이 여기 걸립니다.
      * 빠뜨리면 암전 없이 그냥 서 버립니다 (startMirror 가 cineEntrance 를 봅니다). */
     cineEntrance: !!f.cineEntrance,

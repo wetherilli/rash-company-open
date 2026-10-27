@@ -139,6 +139,9 @@
  *    cineEntrance  암전 → 등장 대사 → 흔들리며 등장
  *    mirrorName    거울 던전에서 쓸 이름 (「거울의 」 같은 접두사 대신)
  *    noMirror      거울 던전 뽑기 풀에서 뺍니다
+ *    weak · resist 공격 유형의 약점 · 내성 — "pierce"(관통) · "slash"(참격) · "blunt"(타격)를 배열로.
+ *                  weak: ["pierce"] 면 관통에 ×1.5, resist: ["blunt"] 면 타격에 ×0.75
+ *                  (engine.js ATK_TYPES · ATK_TYPE_RULE, 사용자 지침 2026-10-27). 거울 사본에도 그대로 옮겨집니다.
  *
  *  ■ 준비 중인 장의 적
  *    wip/<장>/package.js 안에 「@wip into: data/foes.js · FOES」 로 적어 두면

@@ -199,6 +199,16 @@
     55% {opacity:.95;transform:translate(-50%,-50%) scale(1.10) rotate(-1deg);}
     100%{opacity:0;  transform:translate(-50%,-50%) scale(1.22) rotate(2deg);}
   }
+  /* 공격 유형 그림 — 엔진(atkTypeFx)이 넉 장을 차례로 넘깁니다. 대마다 --rot · --dx · --dy 를
+   * 조금씩 달리 줘서, 잇달아 친 자국이 한 자리에 포개지지 않습니다. 마지막 장에서 .out 으로 흐려집니다. */
+  .scenebox .typefx{
+    position:absolute;left:50%;top:50%;
+    height:92%;width:auto;pointer-events:none;z-index:3;
+    transform:translate(calc(-50% + var(--dx,0%)),calc(-50% + var(--dy,0%))) rotate(var(--rot,0deg));
+    filter:drop-shadow(0 0 8px rgba(255,240,220,.55));
+    opacity:1;transition:opacity 180ms ease-out;
+  }
+  .scenebox .typefx.out{opacity:0;}
   /* 큰 피해 숫자 — 한 방에 RULE.bigHitMin(100) 이상 들어가면 적이 선 자리에 크게
    * 떴다가 떠오르며 사라집니다(engine.js showBigDamage, 사용자 지침 2026-09-11).
    * 자리(left/top)는 엔진이 적 그림을 재서 박고, 여기서는 가운데 맞춤과 움직임만 줍니다.
@@ -1580,24 +1590,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.18.0"></script>
-<script src="data/vault.js?v=2.18.0"></script>
-<script src="data/characters.js?v=2.18.0"></script>
-<script src="data/skills.js?v=2.18.0"></script>
-<script src="data/allies.js?v=2.18.0"></script>
-<script src="data/gifts.js?v=2.18.0"></script>
-<script src="data/pickup.js?v=2.18.0"></script>
-<script src="data/achievements.js?v=2.18.0"></script>
-<script src="data/mail.js?v=2.18.0"></script>
-<script src="data/notice.js?v=2.18.0"></script>
-<script src="data/patch.js?v=2.18.0"></script>
-<script src="data/event.js?v=2.18.0"></script>
-<script src="data/reward.js?v=2.18.0"></script>
-<script src="data/tutorial.js?v=2.18.0"></script>
-<script src="data/foes.js?v=2.18.0"></script>
-<script src="data/story.js?v=2.18.0"></script>
-<script src="data/mirrorpacks.js?v=2.18.0"></script>
-<script src="engine.js?v=2.18.0"></script>
+<script src="data/access.js?v=2.19.0"></script>
+<script src="data/vault.js?v=2.19.0"></script>
+<script src="data/characters.js?v=2.19.0"></script>
+<script src="data/skills.js?v=2.19.0"></script>
+<script src="data/allies.js?v=2.19.0"></script>
+<script src="data/gifts.js?v=2.19.0"></script>
+<script src="data/pickup.js?v=2.19.0"></script>
+<script src="data/achievements.js?v=2.19.0"></script>
+<script src="data/mail.js?v=2.19.0"></script>
+<script src="data/notice.js?v=2.19.0"></script>
+<script src="data/patch.js?v=2.19.0"></script>
+<script src="data/event.js?v=2.19.0"></script>
+<script src="data/reward.js?v=2.19.0"></script>
+<script src="data/tutorial.js?v=2.19.0"></script>
+<script src="data/foes.js?v=2.19.0"></script>
+<script src="data/story.js?v=2.19.0"></script>
+<script src="data/mirrorpacks.js?v=2.19.0"></script>
+<script src="engine.js?v=2.19.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
