@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.23.0";
+const VERSION = "2.23.1";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -9283,7 +9283,9 @@ function openNotice(then) {
       const ev = g.showEventCountdown ? openEvent() : null;
       const countdownLine = ev
         ? (() => {
-            const until = new Date(eventUntil(ev));
+            /* eventUntil 은 «닫히는 때»(다음 날 0시)라, 그대로 적으면 하루 늦게 읽힙니다 —
+             * 11-04 0시에 닫히는 것을 「11월 4일까지」 라 적고 있었습니다. 마지막으로 열린 날로 적습니다. */
+            const until = new Date(eventUntil(ev) - 1);
             const untilText = until.getMonth() + 1 + "월 " + until.getDate() + "일";
             return '<div class="slot"><div class="sub">' +
               '<b style="color:var(--gold);font-size:14px">' + ev.cur + ' — ' + eventLeftText(ev) + '</b>　' +
