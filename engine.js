@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.20.0";
+const VERSION = "2.21.0";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3947,6 +3947,7 @@ function unlockSounds() {
   /* 효과음 — Web Audio 도 «사용자가 누른 때» 에 깨워야 소리가 납니다. 파일도 이때 미리 읽어 둡니다 */
   { const c = sfxCtx(); if (c && c.state === "suspended") c.resume().catch(() => {}); }
   for (const k in ATK_TYPES) if (ATK_TYPES[k].sfx) sfxLoad(ATK_TYPES[k].sfx);
+  foeSfxList().forEach(sfxLoad);
   soundsToUnlock().forEach(src => {
     try {
       const a = soundEl(src);
@@ -3991,6 +3992,30 @@ function sfxLoad(src) {
         .catch(() => null);
   return SFX_BUF[src];
 }
+/* 적의 공격 소리 (사용자 지침 2026-10-27 — 유튜브 무료 효과음 묶음, 원본 temp/sfx-원본/).
+ * 여럿을 치는 공격(광역 · 버티기 깨기 · 마무리)도 소리는 한 번입니다. 일반 공격은 셋 중 하나를 무작위로. */
+const FOE_SFX = {
+  hit:     ["assets/sound/적 공격 1.mp3", "assets/sound/적 공격 2.mp3", "assets/sound/적 공격 3.mp3"],
+  heavy:   "assets/sound/적 강타.mp3",
+  aoe:     "assets/sound/적 광역.mp3",          // 광역 · 마무리
+  counter: "assets/sound/적 되받아치기.mp3",
+  breaks:  "assets/sound/적 버티기 깨기.mp3",
+  take:    "assets/sound/적 데려가기.mp3",
+  miss:    "assets/sound/적 빗나감.mp3"           // 교정 · 회피로 막았을 때 — 작게(missVol)
+};
+const FOE_SFX_MISS_VOL = 0.6;    // 빗나감은 설정 크기의 0.6 배로
+function foeSfxList() {
+  const out = [];
+  for (const k in FOE_SFX) [].concat(FOE_SFX[k]).forEach(x => out.push(x));
+  return out;
+}
+function foeSfx(kind) {
+  const v = FOE_SFX[kind];
+  if (!v) return;
+  const src = Array.isArray(v) ? v[rnd(v.length)] : v;
+  playSfx(src, kind === "miss" ? sfxVol() * FOE_SFX_MISS_VOL : undefined);
+}
+
 /* vol 을 넘기면 그 크기로(설정 화면의 [들어 보기]), 안 넘기면 설정값으로 */
 function playSfx(src, vol) {
   const v = vol != null ? vol : sfxVol();
@@ -7345,6 +7370,7 @@ function resolveTurn() {
       }
       render();
       /* 못박은 광역(aoeFlat)은 «반드시 전멸» 자리라 강타처럼 세게 보여 줍니다 */
+      foeSfx("aoe");
       hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: h.tag, heavy: !!flatAoe, blue: h.blue }));
       afterAoe(b);                    // 광역 배수 증가 · 광역마다 공격 증가
       if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
@@ -7377,6 +7403,7 @@ function resolveTurn() {
         /* 회피로 빠져나갔으면 다음 공격에 걸릴 확정 치명타는 그대로 남깁니다 */
         if (!교정) b.persist[t + "_evadeBonus"] = b.mods[t + "_evadeActive"];
         render();
+        foeSfx("miss");
         allyHitFx(t, 0, { miss: true });
         return setTimeout(afterFoe, RULE.turnGapMs);
       }
@@ -7389,6 +7416,7 @@ function resolveTurn() {
             : withJosa(b.name, "이") + " " + withJosa(memberName(t), "을") + " 들어 올렸다!"), "heavy");
       setHp(t, 0);
       render();
+      foeSfx("take");
       allyHitFx(t, 0, { heavy: true, tag: "데려감" });
       if (!alive(t)) {
         say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
@@ -7448,6 +7476,7 @@ function resolveTurn() {
         if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
       });
       render();
+      foeSfx("breaks");
       hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: !h.splash, tag: h.splash ? "여파" : "버티기 깨기" }));
       if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
@@ -7496,6 +7525,7 @@ function resolveTurn() {
       say(memberName(t) + " — 완전히 피했다! (회피)", "good");
       b.persist[t + "_evadeBonus"] = b.mods[t + "_evadeActive"];
       render();
+      foeSfx("miss");
       allyHitFx(t, 0, { miss: true });
       if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
@@ -7549,6 +7579,7 @@ function resolveTurn() {
     const eased = corrected ? "교정"
                 : b.cmds[t] === "guard" ? "방어"
                 : (t === hero && heroPct) ? "책임" : "";
+    foeSfx(되받음 ? "counter" : heavy ? "heavy" : "hit");
     allyHitFx(t, dmg, { heavy, blue: corrected,
       tag: [되받음 ? "되받아치기" : heavy ? "강타" : "", eased].filter(Boolean).join("·") });
 
@@ -7751,6 +7782,7 @@ function finishBlow() {
       if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     });
     render();
+    foeSfx("aoe");
     hits.forEach(t => allyHitFx(t, flat, { heavy: true, tag: "마무리" }));
     setTimeout(() => {
       if (S.battle !== b) return;
@@ -14957,8 +14989,9 @@ function sfxSettingHTML() {
            '<div class="setsfxtry">' +
              Object.keys(ATK_TYPES).filter(k => ATK_TYPES[k].sfx).map(k =>
                '<button class="ghost" data-sfx="' + k + '">' + ATK_TYPES[k].name + ' 들어 보기</button>').join("") +
+             '<button class="ghost" data-sfx="foe">적 공격 들어 보기</button>' +
            '</div>' +
-           '<div class="hint">공격이 맞을 때 공격 유형(관통 · 참격 · 타격)마다 나는 소리입니다. 기본은 작게 두었습니다.</div>' +
+           '<div class="hint">아군 공격이 맞을 때 공격 유형(관통 · 참격 · 타격)마다 나는 소리와, 적이 칠 때 나는 소리입니다. 기본은 작게 두었습니다.</div>' +
          '</div>';
 }
 function sfxSettingBind() {
@@ -14970,6 +15003,7 @@ function sfxSettingBind() {
     b.onclick = () => {
       const v = sfxVol();
       if (v <= 0) { lab.textContent = "꺼짐 — 막대를 올려 주십시오"; return; }
+      if (b.dataset.sfx === "foe") return playSfx(FOE_SFX.heavy, v);   // 적 쪽은 강타 소리로 들려 드립니다
       playSfx(ATK_TYPES[b.dataset.sfx].sfx, v);
     };
   });
