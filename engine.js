@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.19.0";
+const VERSION = "2.19.1";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2134,7 +2134,9 @@ const ATK_TYPE_RULE = {
   weakMult:    1.5,     // 약점에 맞으면
   resistMult:  0.75,    // 내성에 맞으면
   supportType: "slash", // 지원 작성위원 — 우선 모두 참격
-  fxFrameMs:   105      // 그림 한 장이 머무는 시간 — 넉 장이면 RULE.hitFxMs(420)와 맞습니다
+  fxFrameMs:   150,     // 그림 한 장이 머무는 시간 (2.19.1 — 105 는 너무 빨라 자국이 다 그어지기 전에 지나갔습니다)
+  fxHoldMs:    380,     // 마지막 장(다 그어진 자국)이 그대로 머무는 시간
+  fxFadeMs:    360      // 그 뒤 흐려지며 사라지는 시간
 };
 /* 이 사람이 지금 치는 유형 — 낀 인격 → 그 사람의 기본 → (지원이면) supportType. 없으면 null */
 function atkTypeOf(w) {
@@ -3999,7 +4001,8 @@ function foeHit(delay, dmg, crit, type) {
   }, delay || 0);
 }
 
-/* 공격 유형 그림 — 넉 장을 ATK_TYPE_RULE.fxFrameMs 마다 넘기고, 마지막 장에서 흐려지며 사라집니다.
+/* 공격 유형 그림 — 넉 장을 ATK_TYPE_RULE.fxFrameMs 마다 넘기고, 마지막 장을 fxHoldMs 동안 둔 뒤
+ * fxFadeMs 에 걸쳐 흐려지며 사라집니다(한 대 약 1.2초).
  * 대마다 조금씩 돌리고 비켜 세워, 잇달아 친 자국이 한 자리에 포개지지 않게 합니다. */
 const ATK_FX_CACHE = {};
 function atkTypeFx(box, frames) {
@@ -4012,11 +4015,13 @@ function atkTypeFx(box, frames) {
   el.src = assetURL(frames[0]);
   el.onerror = function () { if (this.parentNode) this.parentNode.removeChild(this); };
   box.appendChild(el);
-  const step = ATK_TYPE_RULE.fxFrameMs;
+  const R = ATK_TYPE_RULE, step = R.fxFrameMs;
+  const 끝장 = step * (frames.length - 1);                 // 마지막 장이 뜨는 때
+  el.style.setProperty("--fade", R.fxFadeMs + "ms");
   for (let i = 1; i < frames.length; i++)
     setTimeout(() => { if (el.parentNode) el.src = assetURL(frames[i]); }, step * i);
-  setTimeout(() => el.classList.add("out"), step * (frames.length - 1));
-  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, step * frames.length + 180);
+  setTimeout(() => el.classList.add("out"), 끝장 + R.fxHoldMs);
+  setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 끝장 + R.fxHoldMs + R.fxFadeMs + 40);
 }
 
 /* ── 적이 피하는 연출 ─────────────────────────────────────────────
