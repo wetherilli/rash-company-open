@@ -380,7 +380,7 @@ const SINNERS = {
       { star: 3, tier: 3.1, title: "N사 큰망치",             atk: 35, def: 9,  hp: 93,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, tier: 3.2, title: "I사 지원2팀 변신로봇", atk: 30, def: 19, hp: 116, note: "트랜스포머 오타쿠의 꿈을 이룸" },
       { star: 3, tier: 3.2, title: "LST E.G.O :: 워커리",    atk: 30, def: 16, hp: 122, note: "워커리라는 이름에 부끄럽지 않은" },
-      { star: 2, tier: 2.0, title: "아라온호 기관장",        atk: 19, def: 11, hp: 78, note: "엔진은, 제가 봅니다." },
+      { star: 2, tier: 2.0, title: "아라온호 기관장", atkType: "pierce",        atk: 19, def: 11, hp: 78, note: "엔진은, 제가 봅니다." },
       /* 3.4성급 — 실효 예산 80.96(1.4017). 업적 「눌러버린 날개」로만 오는
        * «숨은 인격» 입니다 (사용자 지침 2026-09-23). 인격으로는 첫 3.4성급 —
        * 21턴을 기다리지 않고 로단을 눌러야만 오는 자리라 그만한 값을 매겼습니다.
@@ -461,7 +461,7 @@ const SINNERS = {
       { star: 3, tier: 3.2, title: "LST E.G.O :: 올챙이",       atk: 29, def: 14, hp: 129, note: "올챙이의 미." },
       { star: 3, tier: 3.1, title: "J사 3등급 강력징수직 직원", atk: 32, def: 12, hp: 99, note: "추민수 주일한국대사" },
       { star: 3, tier: 3.1, title: "신해수랜드 왕자", atkType: "pierce",                atk: 27, def: 15, hp: 113, note: "몰락의 길을."},
-      { star: 2, tier: 2.0, title: "아라온호 갑판원",           atk: 18, def: 10, hp: 79, note: "갑판은 늘 젖어 있다." }
+      { star: 2, tier: 2.0, title: "아라온호 갑판원", atkType: "pierce",           atk: 18, def: 10, hp: 79, note: "갑판은 늘 젖어 있다." }
     ]
   },
 
@@ -1156,7 +1156,7 @@ const SUPPORTS = [
     portrait: null,
     note: "망치를 휘두를 때를 아는 것이 지혜라고 할 수 있지." },
 
-  { name: "윤희준", title: "아라온호 추진팀", star: 2, tier: 2.0,
+  { name: "윤희준", title: "아라온호 추진팀", atkType: "pierce", star: 2, tier: 2.0,
     atk: 17, def: 9, hp: 79,
     portrait: null,
     note: "엔진은 멈추지 않게 하는 게 일입니다." },

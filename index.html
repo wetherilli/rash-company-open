@@ -953,6 +953,9 @@
   .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
   .slot:hover{border-color:var(--red);}
   .slot.sel{border-color:var(--gold);background:var(--panel-2);}
+  /* 인격 카드 오른쪽 위의 공격 유형 아이콘 (engine.js atkTypeIconHTML) — 이름줄이 밑으로 파고들지 않게 오른쪽을 비웁니다 */
+  .slot.idcard{position:relative;padding-right:32px;}
+  .slot .atkic{position:absolute;top:7px;right:7px;width:20px;height:20px;image-rendering:pixelated;}
   /* 가로로 통째를 차지하는 칸 — 상점 맨 위 기념 배정에 씁니다 */
   .slot.wide{grid-column:1 / -1;}
   .slot.wide .pkline{margin:-2px 0 8px;height:150px;}
@@ -1596,24 +1599,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.21.0"></script>
-<script src="data/vault.js?v=2.21.0"></script>
-<script src="data/characters.js?v=2.21.0"></script>
-<script src="data/skills.js?v=2.21.0"></script>
-<script src="data/allies.js?v=2.21.0"></script>
-<script src="data/gifts.js?v=2.21.0"></script>
-<script src="data/pickup.js?v=2.21.0"></script>
-<script src="data/achievements.js?v=2.21.0"></script>
-<script src="data/mail.js?v=2.21.0"></script>
-<script src="data/notice.js?v=2.21.0"></script>
-<script src="data/patch.js?v=2.21.0"></script>
-<script src="data/event.js?v=2.21.0"></script>
-<script src="data/reward.js?v=2.21.0"></script>
-<script src="data/tutorial.js?v=2.21.0"></script>
-<script src="data/foes.js?v=2.21.0"></script>
-<script src="data/story.js?v=2.21.0"></script>
-<script src="data/mirrorpacks.js?v=2.21.0"></script>
-<script src="engine.js?v=2.21.0"></script>
+<script src="data/access.js?v=2.22.0"></script>
+<script src="data/vault.js?v=2.22.0"></script>
+<script src="data/characters.js?v=2.22.0"></script>
+<script src="data/skills.js?v=2.22.0"></script>
+<script src="data/allies.js?v=2.22.0"></script>
+<script src="data/gifts.js?v=2.22.0"></script>
+<script src="data/pickup.js?v=2.22.0"></script>
+<script src="data/achievements.js?v=2.22.0"></script>
+<script src="data/mail.js?v=2.22.0"></script>
+<script src="data/notice.js?v=2.22.0"></script>
+<script src="data/patch.js?v=2.22.0"></script>
+<script src="data/event.js?v=2.22.0"></script>
+<script src="data/reward.js?v=2.22.0"></script>
+<script src="data/tutorial.js?v=2.22.0"></script>
+<script src="data/foes.js?v=2.22.0"></script>
+<script src="data/story.js?v=2.22.0"></script>
+<script src="data/mirrorpacks.js?v=2.22.0"></script>
+<script src="engine.js?v=2.22.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

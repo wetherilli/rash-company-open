@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.21.0";
+const VERSION = "2.22.0";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2127,16 +2127,16 @@ function foeDefNow(b) {
  *
  *  fx — 맞을 때 차례로 넘기는 그림 넉 장(foeHit · atkTypeFx, 원본 720px 은 temp/fx-원본/).
  *  유형이 없는 공격(조력자)은 예전 참격 한 장(slash.png)을 씁니다. */
-/* 경로는 글자 그대로 적습니다 — 배포 거르개(tools/wip-그림.js)가 따옴표 안의 assets 경로만
+/* 경로와 아이콘 이름(icon)은 글자 그대로 적습니다 — 배포 거르개(tools/wip-그림.js)가 따옴표 안의 assets 경로 · 아이콘 이름만
  * «쓰는 그림» 으로 셉니다. 이름을 조립해 부르면 한 번도 안 나간 그림이 배포에서 빠집니다(2.19.0 첫 배포 때 그랬습니다). */
 const ATK_TYPES = {
-  pierce: { name: "관통", fx: ["assets/fx/관통-1.png", "assets/fx/관통-2.png",      // 금 간 총알 구멍
+  pierce: { name: "관통", icon: "공격 유형 - 관통", fx: ["assets/fx/관통-1.png", "assets/fx/관통-2.png",      // 금 간 총알 구멍
                                "assets/fx/관통-3.png", "assets/fx/관통-4.png"],
             sfx: "assets/sound/효과음 관통.mp3" },                                   // 총성 셋 — 0 · 0.17 · 0.33초
-  slash:  { name: "참격", fx: ["assets/fx/참격-1.png", "assets/fx/참격-2.png",      // 강철 손톱 자국
+  slash:  { name: "참격", icon: "공격 유형 - 참격", fx: ["assets/fx/참격-1.png", "assets/fx/참격-2.png",      // 강철 손톱 자국
                                "assets/fx/참격-3.png", "assets/fx/참격-4.png"],
             sfx: "assets/sound/효과음 참격.mp3" },
-  blunt:  { name: "타격", fx: ["assets/fx/타격-1.png", "assets/fx/타격-2.png",      // 찌그러진 강판
+  blunt:  { name: "타격", icon: "공격 유형 - 타격", fx: ["assets/fx/타격-1.png", "assets/fx/타격-2.png",      // 찌그러진 강판
                                "assets/fx/타격-3.png", "assets/fx/타격-4.png"],
             sfx: "assets/sound/효과음 타격.mp3" }
 };
@@ -2155,6 +2155,14 @@ function atkTypeOf(w) {
   const id = S && S.equip ? idByKey(S.equip[w]) : null;
   if (id && id.atkType) return id.atkType;
   return (SINNERS[w] && SINNERS[w].atkType) || null;
+}
+/* 공격 유형 아이콘 — 인격 카드 오른쪽 위에 작게(.atkic). 도안은 tools/아이콘-도안.js 「공격 유형」.
+ * 이름을 짚어 두면 마우스를 올렸을 때 「참격」 처럼 뜹니다. 유형이 없으면 빈 글. */
+function atkTypeIconHTML(t) {
+  const T = t && ATK_TYPES[t];
+  if (!T) return "";
+  return '<img class="atkic" src="' + iconSrc(T.icon) + '" alt="' + T.name + '" title="' + T.name +
+         '" onerror="this.style.display=\'none\'">';
 }
 /* 적의 약점 · 내성 — 전투 중이면 그 적(FOES[b.id], 거울이면 사본) */
 function foeTypeTable(b) {
@@ -8509,8 +8517,9 @@ function openEquip(back, focus) {
       shown++;
       const on = S.equip[who] === key;
       const st = statsOf(key);
-      body += '<div class="slot' + (on ? ' sel' : '') + '"' +
+      body += '<div class="slot idcard' + (on ? ' sel' : '') + '"' +
                 (has ? ' data-key="' + key + '"' : '') + '>' +
+                atkTypeIconHTML(id.atkType || s.atkType) +     // 오른쪽 위 — 이 인격을 끼면 치는 유형
                 '<div class="' + (has ? 'nm' : 'lock') + '">' +
                   '<span class="star">' + stars(id.star) + '</span> ' + id.title +
                   (on ? ' <span class="sub">· 장착</span>' : '') + '</div>' +
