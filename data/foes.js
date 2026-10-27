@@ -153,8 +153,10 @@ const FOES = {
   csa_fraud: { name: "잡배놈들", hp: 80, atk: 12, def: 4, img: "assets/enemy/잡배놈들.png" },
 
   /* 1장 */
-  csa_grunt: { name: "구C사 경비", hp: 110, atk: 12, def: 4, img: "assets/enemy/구C사 경비.png" },
+  csa_grunt: { name: "구C사 경비", hp: 110, atk: 12, def: 4, img: "assets/enemy/구C사 경비.png",
+    weak: ["slash"] },   // 공격 유형 (2026-10-27)
   won_daehan: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "구C사 이사 원대한", hp: 460, atk: 22, def: 6, boss: true,
     img: null,
     intro: "혼돈, 혼란 그 자체가 느껴진다.",
@@ -163,13 +165,16 @@ const FOES = {
   },
 
   /* 2장 */
-  olympiad_rival: { name: "올림피아드 참가자", hp: 95, atk: 11, def: 4, img: "assets/enemy/올림피아드 참가자.png" },
+  olympiad_rival: { name: "올림피아드 참가자", hp: 95, atk: 11, def: 4, img: "assets/enemy/올림피아드 참가자.png",
+    weak: ["blunt"] },   // 공격 유형 (2026-10-27)
   viper: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "공룡애호가 바이퍼", hp: 190, atk: 16, def: 5,
     img: null,
     desc: "올림피아드에서 이한범에 패배한 공룡덕후. 패배를 인정할 수 없다."
   },
   viper_twisted: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "뒤틀린 바이퍼", hp: 330, atk: 20, def: 6, boss: true,
     img: null,
     desc: "황금교본을 흡수하고 커다란 뱀의 모습으로 변했다.",
@@ -177,11 +182,13 @@ const FOES = {
     heavyLine: "네가 가져갈 건 내 허물 뿐이다!"      // 강타를 준비할 때 하는 말
   },
   hwangjeo_phantasm: {
+    weak: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "그림에서 나온 환상체", hp: 120, atk: 14, def: 5,
     img:      "assets/enemy/익룡 환상체.png",
     heavyImg: "assets/enemy/익룡 환상체_강타.gif"    // 강타를 준비하는 턴에만 이 그림
   },
   hwangjeo: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "파문당한 제2발톱 솔다토 황저", hp: 380, atk: 22, def: 7, boss: true,
     img: null,
     desc: "황금교본으로 H사를 뒤집고 모두를 퍼리 애호가로 만들겠다고 선언했다.",
@@ -190,8 +197,10 @@ const FOES = {
   },
 
   /* 3장 */
-  creationist: { name: "창조론자", hp: 100, atk: 12, def: 4, img: "assets/enemy/창조론자.png" },
+  creationist: { name: "창조론자", hp: 100, atk: 12, def: 4, img: "assets/enemy/창조론자.png",
+    weak: ["blunt"] },   // 공격 유형 (2026-10-27)
   sim_seunghwi: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "우생회 큰망치 심승휘", hp: 300, atk: 20, def: 7, boss: true,
     /* boss: true — 테마팩 개편(사용자 지침 2026-09-02)으로 붙였습니다.
      * pack04(「우생회의 그림자」)에서 실제 보스 자리에 서는 유일한 잡졸
@@ -202,12 +211,14 @@ const FOES = {
     intro: "망치를 휘두를 때를 아는 것이 지혜라고 할 수 있지."
   },
   kim_junseong: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "김준성", hp: 320, atk: 19, def: 7,
     img: "assets/portrait/kim_junseong.png",
     desc: "우생회를 이끄는 제1발톱 대행자.",
     quote: "쥐어주는 건 나야."
   },
   kim_junseong_crab: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "'게'화 E.G.O :: 사지동물 김준성", hp: 470, atk: 26, def: 8, boss: true,
     img: "assets/portrait/kim_junseong_crab.png",
     desc: "아직은 많이 불완전했지만 작성위원들을 충분히 압도했다.",
@@ -217,17 +228,20 @@ const FOES = {
 
   /* 4장 */
   geugya_remnant: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "극야의 잔재", hp: 165, atk: 18, def: 6, img: "assets/enemy/극야.png",
     desc: "수조에서 흘러나온 것. 한때 누군가가 상상으로 빚은 생물이었다.",
     intro: "공간의 뒤틀림이 느껴진다."
   },
   twisted_shrimp: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "뒤틀린 빛새우", hp: 560, atk: 27, def: 9, boss: true, img: "assets/enemy/빛새우.png",
     desc: "황금교본과 융합해, 그 밤을 다시 부르려 한다.",
     intro: "과거의 악몽이 떠오른다",
     heavyLine: "크르레코르퀰"      // 강타를 준비할 때 하는 말
   },
   ropo_incomplete: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "설익은 로포", hp: 300, atk: 20, def: 6, boss: true, img: null,
     desc: "교본의 힘을 온전히 받아들이지 못해, 겨우 머리만 목도리 딜로포사우루스로 변했다.",
     intro: "교본의 힘을 일할도 받아들이지 못한 것 같다.",
@@ -237,6 +251,7 @@ const FOES = {
   /* 3.5장 — 곁가지 */
   /* 참깨라면_임시.png — 나중에 직접 그린 것으로 갈아 끼울 자리입니다. TODO.md 참고. */
   ramen_twisted: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "뒤틀린 참깨라면", hp: 240, atk: 19, def: 6, boss: true,
     img: "assets/enemy/참깨라면_임시.png",     // 임시 — 나중에 교체
     desc: "길잡이가 먹다 만 것. 국물이 아직 끓고 있다.",
@@ -247,11 +262,13 @@ const FOES = {
   /* 5장 */
   /* 조직원_임시.png — 나중에 직접 그린 것으로 갈아 끼울 자리입니다. TODO.md 참고. */
   cartel_thug: {
+    weak: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "제3발톱 튼튼한 조직원", hp: 140, atk: 18, def: 6,
     img: "assets/enemy/조직원_임시.png",     // 임시 — 나중에 교체
     desc: "U사 뒷골목을 지키는 자들. 멸종한 것에는 관심이 없다."
   },
   cartel_capo: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "제3발톱 든든한 조직원", hp: 350, atk: 23, def: 8, boss: true,
     img: "assets/enemy/조직원_임시.png",     // 임시 — 나중에 교체
     desc: "제3발톱의 이름을 달고 U사 뒷골목을 쥔 자.",
@@ -259,6 +276,7 @@ const FOES = {
     heavyLine: "형님, 제가 해보겠습니다!"      // 강타를 준비할 때 하는 말
   },
   lee_seojin_shark: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "제3발톱 작은형님 이서진", hp: 430, atk: 27, def: 9, boss: true, img: "assets/enemy/이서진.png",
     heavyImg: "assets/enemy/이서진_필살.png",   // 강타를 준비하는 턴에만 이 그림
     desc: "상어고기 냄새를 맡고 바다 건너까지 쫓아왔다. 상슝좍.",
@@ -266,18 +284,21 @@ const FOES = {
     heavyLine: "전원! 입수다!"      // 강타를 준비할 때 하는 말
   },
   fused_yunhuijun: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "융합된 아라온호 추진팀 윤희준", hp: 190, atk: 20, def: 7,
     img: "assets/enemy/융합된 윤희준.png",
     desc: "배를 밀던 사람. 교본에 삼켜져 모사사우루스의 일부가 되었다.",
     intro: "사람의 형체가 어렴풋이 남아 있다."
   },
   fused_ihyeongwu: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "다시 끌려온 이형우", hp: 210, atk: 21, def: 7,
     img: "assets/enemy/다시 끌려온 이형우.png",
     desc: "선장의 부름에 이끌려 바다로 떨어진 뒤, 저쪽 편에 서서 돌아왔다.",
     intro: "낯익은 얼굴이 낯설게 서 있다."
   },
   twisted_mosasaur: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "뒤틀린 모사사우루스 :: 강호영", hp: 640, atk: 30, def: 10, boss: true, img: "assets/enemy/뒤틀린 모사사우루스.png",
     heavyImg: "assets/enemy/뒤틀린 모사사우루스_강타1.png",   // 강타를 준비하는 턴에만 이 그림
     desc: "황금교본과 선원들과 강호영이 한 덩어리로 엉겨붙은 것. 이제 메카고질라를 노린다.",
@@ -290,6 +311,7 @@ const FOES = {
    * lose: "story" 로 걸어 두어, 체력이 20% 아래로 떨어지면 «저쪽이 손을 놓습니다».
    * 이기고 지는 싸움이 아니라 «오해였다» 를 보여 주는 자리입니다. */
   unknown_squad: {
+    weak: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "정체를 밝히지 않는 무리", hp: 300, atk: 24, def: 9,
     img: "assets/enemy/오르도제노스.png",
     /* 거울 던전에서만 쓰는 이름입니다. 본편에서는 정체를 아직 밝히면 안 되지만,
@@ -303,12 +325,14 @@ const FOES = {
    * 지나치게 악당처럼 굴지 않게 두었습니다 — 경고만 하고 물러서라고 합니다.
    * 그림이 아직 없습니다. 생기면 img 를 채우면 됩니다. */
   nbga_gunner: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "북부 총기 협회 총원", hp: 240, atk: 23, def: 8,
     img: "assets/enemy/북부 총기 협회.png",
     desc: "본부 문간을 지키는 사람들. 쏘기보다 밀어내려 한다.",
     intro: "총구가 올라오는데, 겨눈 곳이 발밑이다."
   },
   nbga_heavy: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "북부 총기 협회 중화기반", hp: 320, atk: 26, def: 11,
     /* 총원과 나눠 쓰던 그림을 중화기반 제 그림으로 갈았습니다(2026-09-11).
      * 사진풍 그림이라 tools/README 의 «사진에서 잘라 온 적» 순서대로
@@ -329,6 +353,7 @@ const FOES = {
    * 총량으로는 모사사우루스보다 가벼운데, 때리는 맛이 없어 오래 걸립니다.
    * 암살자형이라는 설정에 맞게 «단단해서 무서운» 것이 아니라 «안 맞아서 성가신» 쪽입니다. */
   deathleaper: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "데스리퍼", hp: 520, atk: 27, def: 14, boss: true,
     img: "assets/enemy/데스리퍼.png",
     desc: "I사의 암살자형 티라니드. 본부 안쪽까지 파고들어 와 있었다. 좀처럼 제대로 맞지 않는다.",
@@ -346,12 +371,14 @@ const FOES = {
    *  저택에서 계속 쏟아지는 것들입니다. 둘을 번갈아 세워 지루함을 덜었습니다.
    *  A 는 빠르고 무르게, B 는 느리고 두껍게 — 같은 잡졸이라도 손맛이 갈리도록. */
   monarch_a: {
+    weak: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "관상용 괴수 A", hp: 280, atk: 26, def: 6,
     img: "assets/enemy/괴수 A.png",
     desc: "촬영용으로 길러진 것. 사람을 해치지 않도록 만들어졌을 터인데.",
     intro: "천장을 뚫고 무언가가 내려앉는다. 조명이 깨진다."
   },
   monarch_b: {
+    weak: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "관상용 괴수 B", hp: 360, atk: 22, def: 11,
     img: "assets/enemy/괴수 B.png",
     desc: "덩치가 크고 느리다. 촬영장에서는 뒤에 세워 두던 쪽이다.",
@@ -362,6 +389,7 @@ const FOES = {
    *  lose:"story" 로 걸어 두어, 체력을 20% 아래로 깎으면 이야기가 이어집니다.
    *  잡졸과 한눈에 갈리도록 덩치와 대사를 따로 주었습니다. */
   monarch_c: {
+    weak: ["blunt"], resist: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "관상용 괴수 C", hp: 1200, atk: 30, def: 11, boss: true,
     /* 거울에는 세우지 않습니다 — 체력을 «못 이긴다는 느낌» 으로 크게 잡아 두어,
      * 배수까지 곱하면 혼자만 터무니없이 길어집니다. */
@@ -372,6 +400,7 @@ const FOES = {
     heavyLine: "크아아아아아!"
   },
   garret: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "치프버틀러 가렛", hp: 460, atk: 29, def: 12, boss: true,
     img: "assets/enemy/치프버틀러 가렛.png",
     desc: "모나크 저택을 지켜 온 사람. 앞치마를 벗지 않은 채로 서 있다.",
@@ -381,6 +410,7 @@ const FOES = {
   /* 케빈 — 번개를 부르는 머리 없는 용.
    * joinIn 으로 마왕 이경원이 끼어드는 «둘째 판» 이 붙습니다 (6장 참고). */
   kevin: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "머리 없는 드래곤 케빈", hp: 620, atk: 31, def: 12, boss: true,
     img: "assets/enemy/케빈.png",
     desc: "목 위가 없다. 그런데도 번개가 어디로 떨어질지 알고 있다.",
@@ -388,6 +418,7 @@ const FOES = {
     heavyLine: "기도라여! 죽도록 달릴 시간이다!"
   },
   mawang_lee: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     /* atk·def 는 «케빈에게 더해지는» 값입니다 (joinIn). 합쳐서 40/18 이 됩니다 —
      * 강타가 1.7배라, 여기를 크게 잡으면 한 방에 사람이 죽습니다. */
     /* 난입 전용입니다 (joinIn). 홀로 서는 적이 아니라 hp 를 두지 않았고,
@@ -406,6 +437,7 @@ const FOES = {
    *  6.5장은 전반적으로 6장(monarch_a 280/26/6 · monarch_b 360/22/11)보다
    *  한 단계 위로 잡습니다 — 사용자 지침. */
   gsa_riders: {
+    weak: ["slash"],   // 공격 유형 (2026-10-27)
     name: "G사 특촬전대", hp: 300, atk: 24, def: 10,
     img: "assets/enemy/가면라이더.png",
     desc: "탈주 괴수를 막는 임무를 카메라 앞에서 겸사겸사 수행하는 이들. 정의보다 각도부터 잰다.",
@@ -414,6 +446,7 @@ const FOES = {
   /* 골목에서의 첫 조우 — 아직 이름을 밝히지 않습니다. 각본 전투(lose:"story")로,
    * 태성·소정·아인 셋만 강제 편성으로 붙습니다. 정체는 구C사 건물에서 드러납니다. */
   tanaconda_shadow: {
+    weak: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "정체불명의 그림자", hp: 200, atk: 20, def: 8,
     img: "assets/enemy/타나콘다 정체불명.png",
     desc: "어둠 속에서 튀어나온 무언가. 정체를 알아볼 틈도 주지 않는다.",
@@ -421,6 +454,7 @@ const FOES = {
     noMirror: true   // 각본 전투(lose:"story") 전용 — 거울 던전에는 세우지 않는다
   },
   tanaconda: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "타나콘다", hp: 720, atk: 33, def: 14, boss: true,
     img: "assets/enemy/타나콘다.png",
     imgScale: 2,   // 원본 그림 안에서 몸집이 작게 잡혀 있어, 자리(위치)는 그대로 두고 키만 키운다
@@ -441,6 +475,7 @@ const FOES = {
    *  3의 배수이므로 6턴째에는 강타와 겹치는데, 그때는 광역이 이깁니다.
    *  (9턴이던 것을 2026-10-23 에 6턴으로 — 사용자 지침, 너무 드물었습니다) */
   ju3pino: {
+    weak: ["blunt"], resist: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "쥬3피노", hp: 800, atk: 34, def: 13, boss: true, noMirror: true,
     img: "assets/enemy/쥬3피노.png",
     sound: "assets/sound/거울굴절철도 1호선 보스.mp3",   // 등장할 때 한 번 재생
@@ -472,6 +507,7 @@ const FOES = {
    *  38 × 4 = 152 가 본래 몫이고, ×4 순환에서는 608 을 되돌립니다.
    *  오래 끌면 끌수록 불리해지는 상대라는 뜻입니다. */
   david_peters: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "데이비드 피터스", hp: 900, atk: 38, def: 14, boss: true, noMirror: true,
     img: "assets/enemy/데이비드 피터스.png",
     /* 쥬3피노처럼 암전 → 등장 음성 → 흔들리며 등장 을 거칩니다.
@@ -497,6 +533,7 @@ const FOES = {
    *     장착해도 무난히 잡도록 오히려 크게 낮췄습니다 — 사용자 지침.
    * 실제로 굴려 보고 안 맞으면 고쳐야 합니다. */
   zombie_horde: {
+    weak: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "좀비 떼", hp: 560, atk: 28, def: 12,
     img: "assets/enemy/좀비 떼.png",
     desc: "출처를 알 수 없는 감염체. 통로를 가득 메우고 밀려든다.",
@@ -517,6 +554,7 @@ const FOES = {
    *   전투라 회복을 크게 잡으면 길어지기만 해서, 공격력의 0.6배(20 남짓)로
    *   얕게 뒀습니다. */
   kim_yeonjun_busan: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "김연준", hp: 460, atk: 33, def: 13, boss: true,
     img: "assets/enemy/김연준.png",
     desc: "남부협회 소속. 열차 조종실을 차지하고 '실험'을 벌이고 있었다.",
@@ -532,6 +570,7 @@ const FOES = {
    * 넣어 «번거로움»을 조금 줘도 좋다). 같은 적을 그대로 반복해서 씁니다 —
    * 층마다 다른 개체로 새로 지을 필요는 없어 보입니다. */
   hyeolgwi: {
+    weak: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "혈귀", hp: 260, atk: 29, def: 12,
     img: "assets/enemy/혈귀.png",
     desc: "신해수랜드의 «놀이기구»에 잡아먹힌 학생. 눈이 풀린 채로 달려든다.",
@@ -543,6 +582,7 @@ const FOES = {
    * 수치도 함께 올렸습니다(490/35/14 → 700/41/16) — 이 장의 첫 보스라
    * 잡졸(혈귀 260)과 2층 박상원(880) 사이에 또렷한 칸을 하나 두려는 것입니다. */
   gimhuijae: {
+    weak: ["slash"], resist: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "신해수랜드의 기록관 김...", hp: 700, atk: 41, def: 16, boss: true,
     img: "assets/enemy/신해수랜드 기록관 김희재.png",
     heavyImg: "assets/enemy/신해수랜드 기록관 김희재(강타).png",
@@ -561,6 +601,7 @@ const FOES = {
    * 곧 이 전투의 길이가 됩니다. 겹치면 회복이 강타를 밀어냅니다
    * (engine.js beginTurn — 광역 > 회복 > 강타). */
   baksangwon: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "신해수랜드 보건선생님 박상원", hp: 880, atk: 46, def: 18, boss: true,
     img: "assets/enemy/신해수랜드 보건선생님 박상원.png",
     heavyImg: "assets/enemy/신해수랜드 보건선생님 박상원(강타).png",
@@ -586,6 +627,7 @@ const FOES = {
    * 그대로 재등장합니다 — "적의 성능은 각본 전투와 동일"이라는 지침에 따라
    * 새 적을 안 만들고 같은 FOES 항목을 그대로 씁니다. */
   cha_minjun_bloodfiend: {
+    weak: ["blunt"], resist: ["pierce"],   // 공격 유형 (2026-10-27)
     /* 수치를 크게 올렸습니다(사용자 지침 2026-09-11 — "너무 약한 거 아니야").
      * 980 은 세 사람이 붙으면 대여섯 턴이면 녹고, scriptedOut(0.20)까지
      * 겹쳐 «감당 안 되는 상대»가 될 틈이 없었습니다. 4000 이면 3층에서는
@@ -626,6 +668,7 @@ const FOES = {
    * 아래 ACHIEVEMENTS 의 「퍼레이드를 끝내러 왔다」도 달성 가능해졌습니다
    * (그 업적은 사용자 지침 2026-09-06 으로 익스트림 거울 던전만 셉니다). */
   shinhaesuland_gan: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     /* 수치를 크게 올렸습니다(사용자 지침 2026-09-11 — "G안도 너무 약하네").
      * 1250 으로는 아래 광역(4턴부터)이 터지기도 전에 죽어서, 이 장의 «벽»
      * 노릇을 아예 못 하고 있었습니다. 교장 신해수(3750)의 8할쯤에 둡니다.
@@ -689,6 +732,7 @@ const FOES = {
    * 박상원 전투 전)에 { t:"party" } 중간 저장 자리를 새로 두었습니다
    * (아래 CHAPTERS 참고) — 지면 그 자리로 돌아갑니다. */
   shinhaesu_principal: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "신해수랜드의 교장 신해수", hp: 3750, atk: 156, def: 36, boss: true, noMirror: true,
     aoeEvery: 3,
     aoeLine: "이 파티는, 아직 끝나지 않았어요.",
@@ -719,6 +763,7 @@ const FOES = {
    *  mirrorName 을 적어 «굴절된 » 접두사를 떼어 둡니다 — 다른 데서
    *  비쳐 나온 것이 아니라 처음부터 이 선로에 살던 것이라서입니다. */
   rail3_locust: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "용골을 집어삼킨 메뚜기", mirrorName: "용골을 집어삼킨 메뚜기",
     hp: 880, atk: 36, def: 13, boss: true, noMirror: true,
     img: "assets/enemy/3호선 메뚜기.png",
@@ -755,6 +800,7 @@ const FOES = {
    *  쥬3피노·데이비드 피터스처럼 암전 → 등장 음성 → 흔들리며 등장 을
    *  거칩니다. 음성은 2026-09-12 에 들어왔습니다(8.3초). */
   rail3_therizino: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "눈을 감은 테리지노사우루스", mirrorName: "눈을 감은 테리지노사우루스",
     hp: 620, atk: 55, def: 15, boss: true, noMirror: true,
     img: "assets/enemy/3호선 테리지노.png",
@@ -772,6 +818,8 @@ const FOES = {
   },
 
   rodan_toy: {
+
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     /* 거울 던전 몫 — 스토리에서는 battle 줄이 1800/62/22 로 덮어씁니다.
      * 9턴마다의 광역은 «거울에서도» 그대로 섭니다(사용자 지침 2026-09-22) —
      * 3턴 강타 + 9턴 광역이 이 괴수의 기본 결입니다. 스토리에서만 그 위에
@@ -820,12 +868,14 @@ const FOES = {
    *  에 들어와 있습니다. 예전에 적어 둔 «3호선보다 먼저 나가면 안 된다» 는
    *  경고는 그래서 해소되었습니다. */
   ju3pino_test: {
+    weak: ["blunt"], resist: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "쥬3피노 (실기 시험)", hp: 510, atk: 30, def: 12, noMirror: true,
     img: "assets/enemy/쥬3피노.png",
     desc: "거울 속에서 만났던 그 벨소리가, 감독관들 손에 눌린 채로 다시 울린다.",
     intro: "…익숙한 전화벨소리가 들린다."
   },
   david_peters_test: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "데이비드 피터스 (실기 시험)", hp: 560, atk: 32, def: 14, noMirror: true,
     img: "assets/enemy/데이비드 피터스.png",
     desc: "사진 위에 덧그어진 선이, 이번에는 시험지 위에 그어진다.",
@@ -834,6 +884,7 @@ const FOES = {
   /* 3호선 중간역의 그것 — 실기 시험판. 선로에서는 6턴마다 웅크리고 되받아치지만,
    * 여기서는 «먼저 한 대 치고 시작하는» 정도로 눌렀습니다(6턴 단일 선공). */
   rail3_locust_test: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "용골을 집어삼킨 메뚜기 (실기 시험)", hp: 530, atk: 31, def: 12,
     boss: true, noMirror: true,
     img: "assets/enemy/3호선 메뚜기.png",
@@ -847,6 +898,7 @@ const FOES = {
   /* 3호선 종착역의 그것 — 실기 시험판. 선로에서는 3턴마다 다 흘려보내고 6턴마다
    * 먼저 쓸어버리지만, 여기서는 회피도 선공도 빼고 평범한 강타·광역으로 눌렀습니다. */
   rail3_therizino_test: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "눈을 감은 테리지노사우루스 (실기 시험)", hp: 590, atk: 33, def: 14,
     boss: true, noMirror: true,
     img: "assets/enemy/3호선 테리지노.png",
@@ -861,6 +913,7 @@ const FOES = {
    * 원작 지문: "꽤 강한 상대(그리고 보스판정)이지만, 이제 교육위원을
    * 두명 편성할 수 있으므로 교정을 잘 사용하면 쉽게 넘길 수 있을 것." */
   duel_challenger: {
+    weak: ["blunt"],   // 공격 유형 (2026-10-27)
     /* 보스 판정을 뺐습니다(사용자 지침 2026-10-14) — 원작 지문은 "보스판정" 이었지만,
      * 유아인 혼자 서는 전투라 3턴마다 오는 강타까지 얹으면 과했습니다. boss 가 없으면
      * 강타를 쓰지 않습니다. 수치도 580/43/17 에서 조금 내렸습니다. */
@@ -875,6 +928,7 @@ const FOES = {
   /* 여관 습격 — 잡졸. 같은 개체를 두 번 그대로 다시 부릅니다(혈귀·좀비
    * 떼와 같은 방식) — "리버스"라는 가상의 게임에서 온 혼종이라는 설정. */
   mutadon: {
+    weak: ["pierce"],   // 공격 유형 (2026-10-27)
     name: "뮤타돈", hp: 400, atk: 34, def: 13,
     img: "assets/enemy/뮤타돈.png",
     desc: "여러 육식공룡이 뒤섞인 혼종. 게임 「리버스」에서 튀어나온 듯한 모습이다.",
@@ -883,6 +937,7 @@ const FOES = {
   /* 디아가 고용한 B구역제 용병 — "구(鉤)", 랩터의 힘을 다루는 흑수 무리.
    * 짹G("필두")의 부하는 아니고, 어디까지나 디아가 돈으로 산 전력. */
   heuksu_gu: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "흑수 · 구(鉤)", hp: 980, atk: 47, def: 18, boss: true,
     /* 그림 2026-10-18 — 사용자가 배경까지 지운 채로 주셔서 누끼 없이 그대로 넣었습니다
      * (세로 720). 선공(강타) 턴에만 _선공 그림이 섭니다 — firstHeavy 라 heavyImg 를 씁니다. */
@@ -914,6 +969,7 @@ const FOES = {
    * 달았습니다(사용자 지침 — "실제로도 차이를 두자"). 9턴마다
    * (쥬3피노와 같은 주기) 강타 대신 광역을 씁니다. */
   lee_seojin_codered: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "제3발톱 큰형님 이서진", hp: 2500, atk: 78, def: 20, boss: true,   // 2026-10-14 — 기가노토사우루스 바로 아래로 (사용자 지침)
     /* 새 일러스트 2026-10-18 — 5장 이서진.png 와 따로 갑니다. 배경이 지워진 채로 와서
      * 누끼 없이 그대로(세로 720). 사용자 지침: temp 의 「(광역)」 그림은 «되받아치기» 턴,
@@ -950,6 +1006,7 @@ const FOES = {
    * 뜻으로 6턴마다로 잡았습니다(3턴마다 오는 기본 강타와 겹치는
    * 6·12·18…턴에는 광역이 이깁니다 — engine.js beginTurn() 참고). */
   giganotosaurus: {
+    weak: ["pierce"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     /* 방어 21 → 20 (사용자 지침 2026-10-19 — «방어는 20 을 넘기지 않는다»). */
     name: "기가노토사우루스", hp: 2800, atk: 84, def: 20, boss: true,
     img: "assets/enemy/기가노토사우루스.png",
@@ -984,6 +1041,7 @@ const FOES = {
    *    삼키기는 2026-10-19 에 엔진에 넣었습니다(takeEvery — 아래 「삼킨다」).
    *  그림 넷(기본 · 강타 · 삼키기 · 회피) 2026-10-24. 이름은 「눈보라의 주인」으로 정했습니다(사용자 지침 2026-10-27). 대사는 아직 임시입니다. */
   rail4_quetzal: {
+    weak: ["pierce"], resist: ["blunt"],   // 공격 유형 (2026-10-27)
     name: "눈보라의 주인 케찰코아틀루스", mirrorName: "눈보라의 주인 케찰코아틀루스",
     hp: 900, atk: 42, def: 16, boss: true, noMirror: true,
     img:      "assets/enemy/눈보라의 주인 케찰코아틀루스.png",            // 날아오는 모습
@@ -1030,6 +1088,7 @@ const FOES = {
    *  ⚠ 임시입니다 — 기믹은 정해졌고(아래), 그림 셋(기본 · 강타 · 광역 → 버티기 깨기)은
    *     2026-10-24 에 붙였습니다. 등장 음성 · 대사(desc · intro · quote · heavyLine · breakWarn · breakLine)도 같은 날. 수치는 거울에서 철도 표 «종점» 줄로 섭니다. */
   rail4_dirrex: {
+    weak: ["blunt"], resist: ["slash"],   // 공격 유형 (2026-10-27)
     name: "종점의 절망 디스토르투스 렉스", mirrorName: "종점의 절망 디스토르투스 렉스",
     hp: 950, atk: 45, def: 15, boss: true, noMirror: true,
     img:      "assets/enemy/종점의 절망 디스토르투스 렉스.png",
