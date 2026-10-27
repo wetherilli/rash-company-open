@@ -168,6 +168,8 @@
   }
   .scenebox .figwrap.left{justify-content:flex-start;}   /* 대사하는 사람 */
   .scenebox .figwrap.mid {justify-content:center;}       /* 적 */
+  .scenebox .figwrap.right{justify-content:flex-end;}    /* 전투 오른쪽 초상 (sideImg — 8장 짹G) */
+  .scenebox .figwrap.right img{max-width:30%;opacity:.92;}
   .scenebox .figwrap img{
     height:96%;width:auto;max-width:52%;object-fit:contain;
     filter:drop-shadow(0 5px 12px rgba(0,0,0,.6));
@@ -373,6 +375,7 @@
   .pcard .nm .allyname{font-weight:700;}
   /* 고유 능력 패시브 스택 — 광신 n, 격노 n 같은 것. 다른 태그와 안 겹치는 보라 */
   .pcard .stacktag{color:#b48ce0;font-size:11px;letter-spacing:.06em;}
+  .pcard .stacktag .skshort{display:none;}   /* 패시브 · 인격 스택의 짧은 글자(격노 → 💢 · 염화 → 🔥) — 좁은 화면에서만, 아래 @media */
   .pcard .aimtag  {color:var(--red);font-size:11px;letter-spacing:.06em;}
   .pcard .turntag {color:#5ec26a;font-size:11px;letter-spacing:.1em;}
   .pcard .readytag{color:var(--text-3);font-size:11px;letter-spacing:.06em;}
@@ -1086,6 +1089,76 @@
   .mslot .mrew em{display:block;font-style:normal;color:var(--gold);}
   .mslot .mrew em.done{color:var(--off);}   /* 처음 완주 몫을 이미 받은 갈래 */
   .mslot .mwarn{color:var(--red);font-size:11px;margin-top:5px;}
+
+  /* ── 돌입 준비 화면 (openMirrorGate) ──────────────────────────
+   *  2026-10-27 에 다시 짰습니다. 그 전에는 흐린 글 덩이(.hint) 다섯이
+   *  연달아 서서, 정작 고를 때 보는 수(세기·상대·입장)와 보상이 글 속에
+   *  묻혀 있었습니다. 이제 —
+   *    눈금 셋      수를 크게, 이름표를 작게 (칸 쪽 .mstats 와 같은 결)
+   *    보상 줄      재화마다 아이콘 + 수
+   *    짚는 줄      보유 엔케팔린 · 저장 · 경고를 테두리 있는 띠로
+   *    자세히       한 번 읽으면 되는 글이라 접어 둠 (details) */
+  .mgsub{color:var(--text-3);font-size:12.5px;margin:-6px 0 10px;}
+  .mggrid{display:flex;gap:8px;margin-bottom:10px;}
+  .mgtile{
+    flex:1;min-width:0;padding:8px 10px;text-align:center;
+    border:1px solid var(--line);background:var(--sheet);border-radius:3px;
+  }
+  .mgtile b{display:flex;align-items:center;justify-content:center;gap:4px;
+            color:var(--text);font-size:17px;line-height:1.2;
+            font-variant-numeric:tabular-nums;word-break:keep-all;}
+  .mgtile b .icmini{margin:0;}
+  .mgtile span{display:block;color:var(--dim);font-size:10px;letter-spacing:.08em;margin-top:3px;}
+  .mgtile.bad{border-color:#5e2a28;background:#1c1214;}
+  .mgtile.bad b{color:#d9705f;}
+  /* 보상 — 재화마다 아이콘 하나. 좁아지면 줄이 접힙니다 */
+  .mgrewrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;
+            padding:8px 10px;margin-bottom:8px;
+            border:1px solid var(--gold-line-2);background:var(--gold-bg);border-radius:3px;}
+  .mgrewhead{color:var(--dim);font-size:10px;letter-spacing:.08em;margin-right:2px;}
+  .mgrw{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:12px;}
+  .mgrw b{color:var(--gold);font-weight:700;font-variant-numeric:tabular-nums;}
+  .mgrw.done{color:var(--off);} .mgrw.done b{color:var(--off);}
+  .mgrw.done .icmini{filter:grayscale(1) brightness(.6);}
+  /* 엔케팔린 — 유리창과 같은 눈금 막대를 그대로 얹습니다 */
+  .mgenk{margin-bottom:8px;}
+  .mgenk .enkwrap{margin:0;}
+  /* [입장] 손잡이 안의 엔케팔린 아이콘 — 글자 밑선에 맞춰 세웁니다 */
+  .modalfoot button .icmini{margin:0 1px 0 0;vertical-align:-4px;}
+  /* 짚는 줄 — 보유 · 저장 · 경고 */
+  .mgnote{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+          padding:7px 10px;margin-bottom:8px;font-size:12px;line-height:1.5;
+          border:1px solid var(--line);background:var(--panel);border-radius:3px;
+          color:var(--muted);}
+  .mgnote b{color:var(--text);}
+  .mgnote.gold{border-color:var(--gold-line);background:var(--gold-bg);color:var(--text-2);}
+  .mgnote.gold b{color:var(--gold);}
+  .mgnote.red{border-color:#5e2a28;background:#1c1214;color:#d9705f;font-weight:700;}
+  .mgnote .icmini{flex:none;}
+  /* 자세히 — 기본 접힘 */
+  .mgmore{margin:2px 0 10px;border:1px solid var(--line);background:var(--sheet);border-radius:3px;}
+  .mgmore > summary{
+    padding:7px 10px;cursor:pointer;color:var(--text-2);font-size:12px;
+    list-style:none;user-select:none;-webkit-user-select:none;
+  }
+  .mgmore > summary::-webkit-details-marker{display:none;}
+  .mgmore > summary::before{content:"▸ ";color:var(--gold);}
+  .mgmore[open] > summary::before{content:"▾ ";}
+  .mgmore > summary:hover{color:var(--text);}
+  .mgmore .mgbody{padding:0 10px 9px;}
+  .mgmore .mgbody p{
+    margin:0 0 5px;padding-left:11px;position:relative;
+    color:var(--muted);font-size:12px;line-height:1.65;
+  }
+  .mgmore .mgbody p:last-child{margin-bottom:0;}
+  /* 줄마다 결정적인 한두 마디만 굵게 — 흐린 글 사이에서 그것부터 읽힙니다 */
+  .mgmore .mgbody b{color:var(--text);font-weight:700;}
+  .mgmore .mgbody em{font-style:normal;color:var(--gold);font-weight:700;}
+  .mgmore .mgbody p::before{content:"·";position:absolute;left:2px;color:var(--dim);}
+  .mghead{margin:16px 0 6px;color:var(--text);font-weight:700;}
+  /* 운전석 목록 — 감춰 둔 장이 있다고 알리는 한 줄 (chapterPeek) */
+  .csmore{margin-top:7px;padding:6px 10px;color:var(--dim);font-size:11.5px;
+          border:1px dashed var(--line-2);border-radius:3px;text-align:center;}
   /* ── 노트 ─────────────────────────────── */
   .note{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
   .notepic{flex:0 0 auto;}
@@ -1266,6 +1339,8 @@
     .pcard .nm{font-size:12.5px;}
     .pcard .id{display:none;}                   /* 장착한 인격 이름 */
     .pcard .ostat{display:none;}                /* 공·방 수치 */
+    .pcard .stacktag .skfull{display:none;}     /* 패시브 · 인격 스택 이름 → short 글자로 */
+    .pcard .stacktag .skshort{display:inline;}
     .pcard .st{font-size:11px;}
     .pcard .cmd{font-size:11px;}
 
@@ -1505,24 +1580,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.16.4"></script>
-<script src="data/vault.js?v=2.16.4"></script>
-<script src="data/characters.js?v=2.16.4"></script>
-<script src="data/skills.js?v=2.16.4"></script>
-<script src="data/allies.js?v=2.16.4"></script>
-<script src="data/gifts.js?v=2.16.4"></script>
-<script src="data/pickup.js?v=2.16.4"></script>
-<script src="data/achievements.js?v=2.16.4"></script>
-<script src="data/mail.js?v=2.16.4"></script>
-<script src="data/notice.js?v=2.16.4"></script>
-<script src="data/patch.js?v=2.16.4"></script>
-<script src="data/event.js?v=2.16.4"></script>
-<script src="data/reward.js?v=2.16.4"></script>
-<script src="data/tutorial.js?v=2.16.4"></script>
-<script src="data/foes.js?v=2.16.4"></script>
-<script src="data/story.js?v=2.16.4"></script>
-<script src="data/mirrorpacks.js?v=2.16.4"></script>
-<script src="engine.js?v=2.16.4"></script>
+<script src="data/access.js?v=2.18.0"></script>
+<script src="data/vault.js?v=2.18.0"></script>
+<script src="data/characters.js?v=2.18.0"></script>
+<script src="data/skills.js?v=2.18.0"></script>
+<script src="data/allies.js?v=2.18.0"></script>
+<script src="data/gifts.js?v=2.18.0"></script>
+<script src="data/pickup.js?v=2.18.0"></script>
+<script src="data/achievements.js?v=2.18.0"></script>
+<script src="data/mail.js?v=2.18.0"></script>
+<script src="data/notice.js?v=2.18.0"></script>
+<script src="data/patch.js?v=2.18.0"></script>
+<script src="data/event.js?v=2.18.0"></script>
+<script src="data/reward.js?v=2.18.0"></script>
+<script src="data/tutorial.js?v=2.18.0"></script>
+<script src="data/foes.js?v=2.18.0"></script>
+<script src="data/story.js?v=2.18.0"></script>
+<script src="data/mirrorpacks.js?v=2.18.0"></script>
+<script src="engine.js?v=2.18.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

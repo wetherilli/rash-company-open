@@ -40,7 +40,9 @@
  *           나옵니다(S.mirrorDone). 열린 것만으로는 안 나옵니다 —
  *           종점은 직접 닿아 봐야 아는 것이라서입니다.
  *
- *  ■ 지금 들어 있는 것 — 본편(main, wip 제외) 기준 11팩
+ *  ■ 지금 들어 있는 것 — 본편(main, wip 제외) 기준 21팩 (v2.18.0)
+ *    보통 15 · 거울굴절철도 팩(railOnly) 6 — 1호선 · 2호선 · 3호선 둘 · 4호선 둘.
+ *    아래는 처음 짤 때(11팩)의 이야기입니다.
  *    2026-09-02 사용자 지침으로 열 팩을 처음 짰고, 부산행이 병합되면서(v1.12.0,
  *    2026-09-04) 그 장 몫인 pack12 「곁가지의 밤」이 하나 늘었습니다. 아직 남은
  *    wip(7장·7.5장)에서 새로 생길 보스는 **일부러 뺐습니다** — 그 장들이 실제로
@@ -239,5 +241,13 @@ const MIRROR_PACKS = [
     foes: ["mutadon", "heuksu_gu", "lee_seojin_codered"],
     /* 죽어도 초기화되지 않습니다 — 보복이 2에서 시작하고 그 아래로 안 내려갑니다(사용자 지침 2026-10-14) */
     perk: { name: "돔배기 값", desc: "유아인의 보복이 2에서 시작하고, 쓰러져도 2 아래로 내려가지 않는다.",
-            effect: { retribFloor: 2 } } }
+            effect: { retribFloor: 2 } } },
+  { id: "rail4pack1", name: "데려가는 그늘", railOnly: true, tier: "railLine4",
+    bg: "assets/scene/거울굴절철도4호선중간보스.jpg",
+    foes: ["mutadon", "heuksu_gu", "rail4_quetzal"],
+    perk: { name: "남은 사람의 몫", desc: "쓰러진 아군 하나마다 남은 전원의 공격력 +15%.", effect: { fallAtk: 0.15 } } },
+  { id: "rail4pack2", name: "댐 앞 종점", railOnly: true, tier: "railLine4",
+    bg: "assets/scene/거울굴절철도4호선종점.jpg",
+    foes: ["duel_challenger", "giganotosaurus", "rail4_dirrex"],
+    perk: { name: "망치를 든 구조대", desc: "N사 인격의 공격력 +100%.", effect: { tagged: { tag: "N사", atk: 1.00 } } } },
 ];

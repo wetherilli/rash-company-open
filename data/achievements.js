@@ -24,6 +24,11 @@
  *                  적을 쓰러뜨리는 것과는 다른 사건이라, kill 과 같이 적지 마십시오.
  *                  "konzentrat" 는 던전이 아니라 «콘첸트라트 연결» 이라는 사건입니다
  *                  (engine.js 의 cloudLinkAchieve).
+ *                  전투에서 나오는 사건 둘(2026-10-25, 8장) —
+ *                    "allyDown:이름"   쓰러지면 지는 조력자(loseOnDown)가 쓰러져 그 전투를 졌다
+ *                    "phaseClean:n"    페이즈를 가진 전투를 넘겼고(승리 · 각본 결말 · 설득 · 마무리 일격),
+ *                                      n 페이즈에서 아무도 쓰러지지 않았다. kill · where 와 함께 적어
+ *                                      어느 적인지 가릅니다 — { clear: "phaseClean:1", kill: "이창수", where: "story" }
  *      where       "story" 본편 · "mirror" 거울 던전(하드·익스트림 포함)
  *                  · "mirrorHard" 하드만 · "mirrorExtreme" 익스트림만
  *                  여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
@@ -43,6 +48,7 @@
  *                «업적으로만 얻는 숨은 인격» 이 됩니다 — 배정·인격 교환에 안 나오고,
  *                얻기 전에는 노트·장착 화면·보관함 어디에도 뜨지 않습니다
  *                (engine.js 의 idHidden 머리말 참고).
+ *      gift      E.G.O 기프트 — 이름 그대로. 이미 지녔으면 원고료로 돌아옵니다(우편과 같음)
  *      money     원고료
  *      codex     황금교본
  *      advisor   보조 교육위원 — "제목|이름". ADVISORS 에 hidden: true 로 적어 둔
@@ -264,5 +270,38 @@ const ACHIEVEMENTS = [
     reward: "지원 작성위원 ★★★ 제2발톱 솔다토 김승채",
     when: { kill: "제3발톱 큰형님 이서진", where: "mirrorExtreme", party: ["kim_duhyeon", "lee_hanbeom"] },
     give: { support: "제2발톱 솔다토|김승채" }
+  },
+  {
+    /* 1·2·3호선과 같게 — 종점에 무엇이 서 있는지는 적지 않습니다. */
+    name: "편도 승차권",
+    desc: "거울굴절철도 4호선을 종점까지 끝낸다.",
+    reward: "인격 ★★★ 태백층군 발굴캠프 (이한범) · 지원 작성위원 ★★★ 공룡의날 래퍼 김강민",
+    when: { clear: "railLine4" },
+    give: { id: { who: "lee_hanbeom", star: 3, title: "태백층군 발굴캠프" },
+            support: "공룡의날 래퍼|김강민" }
+  },
+  {
+    name: "정시 운행",
+    desc: "거울굴절철도 4호선을 100턴 안에 끝낸다.",
+    reward: "동기화 모듈 1개",
+    when: { clear: "railLine4:t100" },
+    give: { syncModule: 1 }
+  },
+  {
+    /* 「아무도」 보다 한 칸 아래 — 사용자 지침 2026-10-21 */
+    name: "빈자리는 셋까지",
+    desc: "거울굴절철도 4호선을 내린 사람 셋 이하로 끝낸다.",
+    reward: "보조 교육위원 ★★★ 태백층군 발굴팀원 이승찬",
+    when: { clear: "railLine4:few3" },
+    give: { advisor: "태백층군 발굴팀원|이승찬" }
+  },
+  {
+    /* 턴수 둘에 더해, 이 갈래의 성격인 «사람» 도 한 자리 셉니다
+     * (2026-10-19 에 Claude 가 제안하고 사용자가 확정). */
+    name: "한 사람도 내리지 않았다",
+    desc: "거울굴절철도 4호선을 아무도 쓰러지지 않고 끝낸다.",
+    reward: "보조 교육위원 선택권 1개",
+    when: { clear: "railLine4:nofall" },
+    give: { advisorTicket: 1 }
   }
 ];

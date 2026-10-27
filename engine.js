@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.16.4";
-const VERSION_NAME = "코드레드";
+const VERSION = "2.18.0";
+const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -1986,7 +1986,15 @@ function critMultFor(who) {
  *    aoeGuardCut: 0.5           광역 턴에 방어를 고른 사람은 그 위에 한 번 더 감소
  *    firstCut: 0.50             적의 선공으로 받는 피해 감소
  *    kills: 3                   «얻는 순간» 광신(김태성) 스택을 그만큼
- *    retribFloor: 2             보복(유아인)이 그 수에서 시작하고, 쓰러져도 그 아래로 안 내려감 */
+ *    retribFloor: 2             보복(유아인)이 그 수에서 시작하고, 쓰러져도 그 아래로 안 내려감
+ *    tagged: { tag: "N사", atk: 1.0 }   지금 장착한 인격 제목(지원·조력자는 제 제목)에 그 말이 든
+ *                               사람에게만 atk · def · hp (tag 는 배열도 됩니다)
+ *    fallAtk: 0.15              전투 중 편성에서 쓰러져 있는 사람 하나마다 남은 전원 공격
+ *    ── 8장 ──
+ *    critMult · bossAtk · bossAtkSupport · bossDefCut · arrestZero   (이야기 특전 — storyPerks 머리말)
+ *    stackMult: { heat: 2 }     인격 스택(히트 · 염화)이 한 번에 쌓이는 몫 × 배수 (stackRulesFor)
+ *    linkBoost: 1               연계 효과의 몫(배율 − 1) · 연계 추가타 피해를 1 + 그만큼 (1 = 2배, 「만화경」)
+ *    egoSynergy: 1              이름에 «E.G.O» 가 든 인격은 시너지 몫을 1 + 그만큼 (1 = 2배, 「정신조작체」) */
 function packPerks() {
   if (!S || !S.mirror || !S.railSave || typeof MIRROR_PACKS === "undefined") return [];
   const rule = mirrorRuleNow();
@@ -1997,29 +2005,71 @@ function packPerks() {
     return p && p.perk;
   }).filter(Boolean);
 }
+
+/* ── 이야기 특전 (8장~, 사용자 지침 2026-10-25) ───────────────────
+ *  본편 장 안에서 얻는 특전입니다. 생김새와 effect 는 테마팩 특전과 같고(위 목록),
+ *  효과를 읽는 자리(perkSum · perkStats · 전투 화면 줄)도 함께 씁니다 — activePerks.
+ *
+ *  ■ 어디에 적는가 — data/story.js 의 STORY_PERKS 에 열쇠 하나마다 { name, desc, effect }.
+ *    아이콘은 테마팩 특전처럼 assets/icon/<특전 이름>.png.
+ *  ■ 어떻게 얻는가 — 장면 { t:"perk", id:"열쇠" } 또는 { t:"perk", ids:[…] }(한꺼번에, 알림은 한 줄).
+ *  ■ 얼마나 가는가 — 그 장(묶음이면 그 부분) 안에서만. 장을 새로 시작하면 비우고(startChapter),
+ *    마치면 지웁니다(chapterEnd). 거울 안에서는 듣지 않습니다.
+ *    이어하기 기록(SAVE_KEEPS)과 편성 자리 중간 저장(S.storySave)에 함께 실리므로,
+ *    지고 중간 저장 지점으로 돌아가면 그때 들고 있던 특전으로 돌아갑니다.
+ *
+ *  ■ 이야기 특전에서 처음 쓰는 effect 칸 (테마팩 특전에도 그대로 쓸 수 있습니다)
+ *    critMult: 1.0              치명타 배율에 더함 (1.0 = +100%)
+ *    bossAtk: 0.30              보스와 싸울 때 공격력 (+30%)
+ *    bossAtkSupport: 0.50       위 bossAtk 를 지원 작성위원에게는 이 값으로
+ *    bossDefCut: 0.5            상대 보스의 방어 감소 (0.5 = -50%)
+ *    arrestZero: true           체포를 쓴 턴에는 상대 방어가 0 */
+function storyPerks() {
+  if (!S || S.mirror || !S.storyPerks || typeof STORY_PERKS === "undefined") return [];
+  return S.storyPerks.map(id => STORY_PERKS[id]).filter(Boolean);
+}
+function activePerks() { return packPerks().concat(storyPerks()); }
+function grantStoryPerk(ids) {
+  if (!S.storyPerks) S.storyPerks = [];
+  const got = ids.filter(id => STORY_PERKS[id] && S.storyPerks.indexOf(id) < 0);
+  got.forEach(id => S.storyPerks.push(id));
+  if (!got.length) return;
+  divider();
+  if (got.length === 1) {
+    const p = STORY_PERKS[got[0]];
+    say("▶ 특전 「" + p.name + "」을 얻었다.", "gain");
+    say("　" + p.desc, "sys");
+  } else {
+    say("▶ 특전 " + got.length + "개를 얻었다 — " + got.map(id => "「" + STORY_PERKS[id].name + "」").join(" · "), "gain");
+  }
+}
 /* 수로 더해지는 것들을 한데 모읍니다. winHeal·retribFloor 는 큰 쪽 하나, healEvery 는 잦은 쪽. */
 function perkSum() {
-  const o = { crit: 0, bossCritDmg: 0, push: 0, correct: 0, manage: 0, manageMax: 0, manageFull: false,
+  const o = { crit: 0, critMult: 0, bossCritDmg: 0, push: 0, correct: 0, manage: 0, manageMax: 0, manageFull: false,
               skillUses: 0, winHeal: 0, healEvery: 0, healRatio: 0, hitHeal: 0,
-              aoeCut: 0, aoeGuardCut: 0, firstCut: 0, retribFloor: 0 };
-  packPerks().forEach(p => {
+              aoeCut: 0, aoeGuardCut: 0, firstCut: 0, retribFloor: 0, bossDefCut: 0, arrestZero: false,
+              linkBoost: 0, egoSynergy: 0 };
+  activePerks().forEach(p => {
     const e = p.effect || {};
-    ["crit", "bossCritDmg", "push", "correct", "manage", "manageMax", "skillUses", "hitHeal",
-     "aoeCut", "aoeGuardCut", "firstCut"].forEach(k => { o[k] += e[k] || 0; });
+    ["crit", "critMult", "bossCritDmg", "push", "correct", "manage", "manageMax", "skillUses", "hitHeal",
+     "aoeCut", "aoeGuardCut", "firstCut", "bossDefCut", "linkBoost", "egoSynergy"].forEach(k => { o[k] += e[k] || 0; });
     if (e.manageFull) o.manageFull = true;
+    if (e.arrestZero) o.arrestZero = true;
     o.winHeal = Math.max(o.winHeal, e.winHeal || 0);
     o.retribFloor = Math.max(o.retribFloor, e.retribFloor || 0);
     if (e.healEvery && (!o.healEvery || e.healEvery < o.healEvery)) { o.healEvery = e.healEvery; }
     if (e.healEvery) o.healRatio += e.healRatio || 0;
   });
   ["aoeCut", "aoeGuardCut", "firstCut"].forEach(k => { o[k] = Math.min(0.9, o[k]); });
+  o.bossDefCut = Math.min(1, o.bossDefCut);
   return o;
 }
 /* 능력치 몫 — effStats 가 다른 배수들과 같은 자리에 더합니다.
- * whileWho 의 «살아 있는가» 는 S.hp 를 직접 봅니다 — alive() 를 부르면 maxHp → effStats 로 돕니다. */
-function perkStats() {
+ * whileWho 의 «살아 있는가» 는 S.hp 를 직접 봅니다 — alive() 를 부르면 maxHp → effStats 로 돕니다.
+ * who 는 bossAtkSupport(지원 작성위원 몫)를 가르는 데만 씁니다. */
+function perkStats(who) {
   const o = { atk: 0, def: 0, hp: 0 };
-  packPerks().forEach(p => {
+  activePerks().forEach(p => {
     const e = p.effect || {};
     if (e.all) {
       const w = e.whileWho;
@@ -2027,8 +2077,34 @@ function perkStats() {
       if (ok) { o.atk += e.all.atk || 0; o.def += e.all.def || 0; o.hp += e.all.hp || 0; }
     }
     if (e.firstTurnAtk && S.battle && S.battle.turn <= 1) o.atk += e.firstTurnAtk;
+    if (e.tagged && who) {
+      const tags = Array.isArray(e.tagged.tag) ? e.tagged.tag : [e.tagged.tag];
+      const title = memberTitle(who);
+      if (tags.some(t => t && title.indexOf(t) >= 0)) {
+        o.atk += e.tagged.atk || 0; o.def += e.tagged.def || 0; o.hp += e.tagged.hp || 0;
+      }
+    }
+    /* 쓰러졌는지는 whileWho 처럼 S.hp 를 직접 봅니다(alive() → maxHp → effStats 순환을 피함) */
+    if (e.fallAtk && S.battle) {
+      const fell = S.party.filter(w => S.hp[w] != null && S.hp[w] <= 0).length;
+      o.atk += e.fallAtk * fell;
+    }
+    if (e.bossAtk && S.battle && S.battle.boss)
+      o.atk += (who && isSupport(who) && e.bossAtkSupport != null) ? e.bossAtkSupport : e.bossAtk;
   });
   return o;
+}
+/* 이번 차례 아군이 칠 때 보는 적의 방어 — 체포(관리자) · 보스 방어 감소 특전을 한데 셈합니다.
+ * 아군 공격(swing)과 연계 추가타가 같이 씁니다. */
+function foeDefNow(b) {
+  const ps = perkSum();
+  let d = b.def;
+  if (b.boss && ps.bossDefCut) d = d * (1 - ps.bossDefCut);
+  if (b.mods.arrest) {
+    if (ps.arrestZero) return 0;
+    d = d * (1 - Math.min(0.9, RULE.arrestCut + advisorEffect().arrest));
+  }
+  return Math.round(d);
 }
 /* 팩을 고른 자리(enterPack)에서 부릅니다 — 얻었음을 알리고, «얻는 순간» 듣는 것(광신·보복)을 겁니다.
  * 그 몫은 S.arc 에 바로 얹히므로, enterPack 이 부르기 «전에» 갈림길 때의 S.arc 를
@@ -2051,7 +2127,9 @@ function grantPackPerk(packId) {
  * 저장해 둔 자리에도 그대로 묻어, 지고 돌아와도 되돌아가지 않습니다. */
 function arcCopy(a) {
   a = a || {};
-  return { kills: a.kills || 0, retribution: Object.assign({}, a.retribution) };
+  const stacks = {};
+  for (const k in (a.stacks || {})) stacks[k] = Object.assign({}, a.stacks[k]);   // 인격 스택(히트 · 염화)도 함께
+  return { kills: a.kills || 0, retribution: Object.assign({}, a.retribution), stacks: stacks };
 }
 /* 갈림길의 세 갈래를 «카드» 로 세웁니다 (사용자 지침 2026-10-14 — 글줄로 적으니 안 읽혔습니다).
  * 카드 하나가 길 하나입니다: 어느 길인지 · 팩 이름 · 그 팩이 주는 특전(아이콘 · 이름 · 효과).
@@ -2148,7 +2226,9 @@ function advisorEffect() {
   /* 테마팩 특전 — 관리자 손에 걸리는 것들은 여기로 모읍니다 (packPerks 머리말) */
   const pk = perkSum();
   out.manage += pk.manage; out.manageMax += pk.manageMax;
-  out.correct += pk.correct; out.push += pk.push; out.crit += pk.crit;
+  /* 시너지가 올리는 최대 관리력(8장 K사 「호남평야」) — 배율을 곱해 반올림한 값(activeSynergies) */
+  activeSynergies().forEach(sy => { out.manageMax += sy.manageMax || 0; });
+  out.correct += pk.correct; out.push += pk.push; out.crit += pk.crit; out.critMult += pk.critMult;
   return out;
 }
 /* 원고료 수입은 전부 이 문을 지나갑니다. RULE.moneyGain 하나로 조절됩니다.
@@ -2454,9 +2534,14 @@ function gainEvent(base) {
 function eventStoryGain(c, first) {
   const g = eventRule().gain || {};
   const last = lastStory();
-  const t = (last && c && c.id === last.id) ? g.latest : g.story;
+  /* 장 묶음의 부분이면 «마지막 장» 도 묶음으로 보고, 한 장 몫을 부분 수로 나눠 줍니다
+   * (사용자 지침 2026-10-25 — 이벤트 재화는 부분마다 조금씩). */
+  const gid = partOf(c);
+  const isLatest = !!(last && c && (gid ? last.part === gid : c.id === last.id));
+  const t = isLatest ? g.latest : g.story;
   if (!t) return 0;
-  return first ? t.first : t.again;
+  const base = first ? t.first : t.again;
+  return gid ? Math.ceil(base / groupParts(gid).length) : base;
 }
 /* 이 기간에 그 물건을 몇 개 바꿨는가 */
 function eventBought(id) { return (S && S.eventBuy && +S.eventBuy[id]) || 0; }
@@ -2754,10 +2839,13 @@ function activeSynergies(party) {
         scale *= (a.effect.mult || 1);
     });
     out.push({
-      name: sy.name, tag: tags[0], count: n, desc: sy.desc,
+      name: sy.name, tag: tags[0], tags: tags, count: n, desc: sy.desc,
       atk: (sy.atk || 0) * scale,
       def: (sy.def || 0) * scale,
-      hp:  (sy.hp  || 0) * scale
+      hp:  (sy.hp  || 0) * scale,
+      /* 8장 — 최대 관리력(반올림, advisorEffect 가 더함) · 인격 스택(stackRulesFor 머리말) */
+      manageMax: sy.manageMax ? Math.round(sy.manageMax * scale) : 0,
+      stack: sy.stack || null, scale: scale
     });
   });
   return out;
@@ -2795,7 +2883,7 @@ function passiveSkillBonus(who, effHp) {
       out.atk = ((S.arc && S.arc.kills) || 0) * v / 100 * stackMult;
       break;
     case "yu_ain":                                // 보복 — 아군 사망마다, 자신이 죽으면 초기화
-      out.atk = ((S.arc && S.arc.retribution[who]) || 0) * v / 100 * stackMult;
+      out.atk = retribNow(who) * v / 100 * stackMult;
       break;
     /* 격노·배임 — 스택 하나당 얻는 몫을 3배로 올림(사용자 지침 2026-09-02
      * — 원래 스택당 +1%·+1이던 것을 +3%·+3으로). 스택 수 자체(표시용
@@ -2811,6 +2899,19 @@ function passiveSkillBonus(who, effHp) {
   return out;
 }
 
+/* 유아인 「보복」 의 지금 스택 — 쌓인 수와 E.G.O 기프트 retribBase(바닥, 8장 「잃어버린 돋보기」) 중 큰 쪽.
+ * 바닥은 쌓인 수를 바꾸지 않습니다 — 쓰러져 0 이 되어도 기프트를 지닌 동안은 그 수부터. */
+function retribNow(who) {
+  const n = (S.arc && S.arc.retribution && S.arc.retribution[who]) || 0;
+  let base = 0;
+  if (who === "yu_ain" && S.party && S.party.indexOf(who) >= 0)
+    equippedGifts().forEach(g => {
+      const e = g.effect;
+      if (e && e.retribBase && giftHits(e, who)) base = Math.max(base, e.retribBase);
+    });
+  return Math.max(n, base);
+}
+
 /* 파티 카드에 「광신 n」 처럼 보일 스택 수 — 표시 전용이라 curHp/maxHp를
  * 그대로 씁니다(effStats 밖에서 부르므로 순환 걱정이 없습니다). 해당 없으면
  * null (능력이 없거나, 패시브가 아니거나, 아직 1단계가 안 됐거나). */
@@ -2821,7 +2922,7 @@ function passiveStackCount(who) {
   if (level < 1) return null;
   const v = skillTierValue(skill, level);
   if (who === "kim_taeseong") return (S.arc && S.arc.kills) || 0;
-  if (who === "yu_ain") return (S.arc && S.arc.retribution.yu_ain) || 0;
+  if (who === "yu_ain") return retribNow(who);
   if (who === "lee_hanbeom" || who === "lee_sojeong") {
     const lostPct = Math.max(0, (1 - curHp(who) / maxHp(who)) * 100);
     return Math.floor(lostPct / v);
@@ -2838,13 +2939,16 @@ function effStats(who) {
   const flat = allyBy(who) || supportBy(who);
   const s = flat ? { atk: flat.atk, def: flat.def, hp: flat.hp } : statsOf(S.equip[who]);
   if (S.party.indexOf(who) < 0) return s;      // 편성 밖이면 시너지 없음
-  const b = synergyBonus();
+  const b0 = synergyBonus();
+  /* 특전 egoSynergy — 이름에 «E.G.O» 가 든 인격은 시너지 몫을 그만큼 더 받습니다(8장 「정신조작체」 — 1 이면 2배) */
+  const egoK = 1 + ((memberTitle(who) || "").indexOf("E.G.O") >= 0 ? perkSum().egoSynergy : 0);
+  const b = { atk: b0.atk * egoK, def: b0.def * egoK, hp: b0.hp * egoK };
   const a = advisorEffect();                   // 보조 교육위원은 파티 전원에게 걸린다
   const gf = giftBonusFor(who);                // E.G.O 기프트
   const af = advisorBonusFor(who);             // 교육위원이 특정 인격에만 거는 보정
   const rl = railBonus();                      // 거울굴절철도 2호선 순환 보너스 (밖에서는 전부 0)
   const sy = effSyncLevel(who) * SYNC_RULE.statPct;   // 동기화 — 단계 1당 능력치 전부 +5%
-  const pk = perkStats();                      // 테마팩 특전 (거울 던전 밖에서는 전부 0)
+  const pk = perkStats(who);                   // 테마팩 특전 · 이야기 특전 (activePerks)
   const hp  = Math.max(1, Math.round(s.hp  * (1 + b.hp  + a.hp  + gf.hp  + af.hp  + sy + rl.hp + pk.hp)));
   /* 작성위원 고유 능력(패시브) — 광신·격노·보복은 공격력에 얹는 배수,
    * 배임만 방어에 정수를 더하는 플랫 보정이라 따로 더한다. hp는 이미
@@ -2868,7 +2972,8 @@ function effStats(who) {
   const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def + pk.def) * claw1Def * vm) + pv.def);
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
-  return { atk: atk + Math.round(def * conv), def: def, hp: hp };
+  /* 인격 스택(히트 · 염화)은 얻은 «수» 그대로 더합니다 — 배수가 아니라서 끝에 얹습니다(stackRulesFor 머리말) */
+  return { atk: atk + Math.round(def * conv) + stackAtk(who), def: def, hp: hp };
 }
 
 /* 「기세」— 인격 줄에 vary: 0.15 처럼 적으면(data/characters.js 박수오 「동탄
@@ -2929,6 +3034,7 @@ function curHp(who) { return S.hp[who] != null ? S.hp[who] : maxHp(who); }
 function setHp(who, v) {
   const wasAlive = curHp(who) > 0;
   S.hp[who] = Math.max(0, Math.min(maxHp(who), Math.round(v)));
+  if (wasAlive && S.hp[who] <= 0 && stackGuardSave(who)) return;   // 스택을 태워 버팀 (stackGuard)
   if (wasAlive && S.hp[who] <= 0) { onAllyDown(who); reviveFirstDown(who); }
 }
 
@@ -2953,6 +3059,7 @@ function reviveFirstDown(who) {
     if (r && r > ratio) { ratio = r; name = giftLabel(g); }
   });
   if (!ratio) return;
+  if (allyLoseOnDown(who)) return;     // 작성위원이 아닌 조력자는 일으키지 않습니다 (allyLoseOnDown 참고)
   b.persist._reviveUsed = true;
   S.hp[who] = Math.max(1, Math.round(maxHp(who) * ratio));
   const hp = S.hp[who];
@@ -2963,6 +3070,14 @@ function reviveFirstDown(who) {
   }, 0);
 }
 function alive(who) { return curHp(who) > 0; }
+
+/* 조력자 가운데 loseOnDown 을 단 사람(data/allies.js — 8장 아멜리아)은 «쓰러지면 그 전투가 진다» 입니다.
+ * 작성위원이 아니라 첨삭으로 일으킬 수 없는 사람이라서입니다(사용자 지침 2026-10-25). */
+function allyLoseOnDown(w) { const a = allyBy(w); return !!(a && a.loseOnDown); }
+function fallenKeyAlly() { return S.party.find(w => w && allyLoseOnDown(w) && !alive(w)) || null; }
+/* 이 전투를 졌는가 — 전원이 쓰러졌거나, 쓰러지면 지는 조력자가 쓰러졌거나.
+ * 전투 안의 «졌나» 검사는 전부 이것을 봅니다. */
+function partyLost() { return !S.party.some(alive) || !!fallenKeyAlly(); }
 
 /* 유리창(newState)·상점·편성처럼 «전투에서 완전히 벗어난» 자리로 돌아오면
  * 「이번 갈래」 스택(광신·보복)을 지운다 — 던전·전투 도중(defeat 뒤의 「편성
@@ -3021,6 +3136,9 @@ function clearArcForChanged(before) {
  * setHp()가 살아있음→쓰러짐으로 바뀌는 순간에만 부르므로, 어느 경로로
  * 죽든(단일 표적·광역·강타 다 setHp를 거칩니다) 한 곳에서 잡힙니다. */
 function onAllyDown(who) {
+  /* 페이즈마다 누가 쓰러졌는지 — 업적 «phaseClean:n» 이 봅니다 (battleSuccess) */
+  if (S.battle) { const b = S.battle; (b.downIn = b.downIn || {})[b.phaseNo || 0] = true; }
+  stackOnDown(who);                // 히트 · 염화 — 쓰러지면 잃음(keepStack 제외)
   if (!S.arc) S.arc = { kills: 0, retribution: {} };
   if (!S.arc.retribution) S.arc.retribution = {};
   if (who === "yu_ain") S.arc.retribution.yu_ain = perkSum().retribFloor;   // 평소 0 — 테마팩 특전 retribFloor 가 있으면 그 수
@@ -3041,6 +3159,132 @@ function retribGain(who) {
       mult = Math.max(mult, e.retribMult);
   });
   return mult;
+}
+
+/* ── 인격 스택 — 히트 · 염화 (8장, 사용자 지침 2026-10-25) ──────────────────
+ *  SYNERGIES 에 stack: { key, name, atk, selfDmg } 를 단 시너지(오버히트 · 투계)가 켜져 있으면,
+ *  그 tag 를 이름에 단 사람이 «공격을 마칠 때마다»(연계 추가타 포함) 공격력을 얻습니다.
+ *    한 번에 얻는 몫 = atk × 시너지 배율(셋 1.75 · 넷 2) × stackMult(기프트 · 특전), 소수점 버림.
+ *    selfDmg — 얻을 때 체력을 그만큼 깎습니다(투계). 이것으로는 쓰러지지 않습니다 — 1 을 남깁니다.
+ *  쌓인 수가 곧 «얻은 공격력» 이고, 카드에 「히트 n」 으로 섭니다(effStats 가 공격에 그대로 더함 —
+ *  그 시너지가 켜져 있는 동안만). S.arc.stacks[key][who] 라 갈래(본편 장 · 거울 한 판) 동안 이어집니다.
+ *  쓰러지면 0 — E.G.O 기프트 keepStack: key 를 지녔으면 남깁니다(혈염도).
+ *  기프트 · 특전 effect 칸 —
+ *    stackMult: { key: 2 }           쌓는 몫 × 2 (상납받은 전자담배 · 가속탄)
+ *    keepStack: key                  쓰러져도 그 스택을 잃지 않음
+ *    stackGuard: { key, need }       쓰러질 피해를 받으면 그 스택 need 를 태워 체력 1 로 버팀(각본 피해에는 안 들음)
+ *  인격 줄 stackLine: { key, min, text } — 그 스택이 min 이상인 채 공격할 때 한마디(송하민 「전탄, 격발.」). */
+function arcStacks(key) {
+  if (!S.arc) S.arc = { kills: 0, retribution: {} };
+  if (!S.arc.stacks) S.arc.stacks = {};
+  return S.arc.stacks[key] || (S.arc.stacks[key] = {});
+}
+/* 이 사람에게 지금 걸리는 스택 시너지들 — [{ stack, scale, name }] */
+function stackRulesFor(who) {
+  if (!who || !S.party || S.party.indexOf(who) < 0) return [];
+  const title = memberTitle(who) || "";
+  if (!title) return [];
+  return activeSynergies().filter(sy => sy.stack && sy.tags.some(tg => title.indexOf(tg) >= 0));
+}
+function stackEffects() {
+  return equippedGifts().map(g => g.effect || {}).concat(activePerks().map(p => p.effect || {}));
+}
+function stackMultFor(key) {
+  let m = 1;
+  stackEffects().forEach(e => { if (e.stackMult && e.stackMult[key]) m *= e.stackMult[key]; });
+  return m;
+}
+/* effStats 가 공격에 더하는 몫 — 켜져 있는 스택 시너지의 쌓인 수 합 */
+function stackAtk(who) {
+  let n = 0;
+  stackRulesFor(who).forEach(r => { n += (S.arc && S.arc.stacks && S.arc.stacks[r.stack.key] &&
+                                         S.arc.stacks[r.stack.key][who]) || 0; });
+  return n;
+}
+/* 공격을 마친 자리에서 부릅니다(swing · 연계 추가타) */
+function stackAfterHit(who) {
+  if (!S.battle || !alive(who)) return;
+  stackRulesFor(who).forEach(r => {
+    const s = r.stack;
+    const add = Math.floor((s.atk || 0) * r.scale * stackMultFor(s.key));
+    if (add <= 0) return;
+    const st = arcStacks(s.key);
+    st[who] = (st[who] || 0) + add;
+    let hurt = "";
+    if (s.selfDmg) {
+      const before = curHp(who);
+      S.hp[who] = Math.max(1, before - s.selfDmg);         // setHp 를 거치지 않습니다 — 이것으로는 쓰러지지 않으므로
+      if (before - S.hp[who] > 0) hurt = "　·　체력 −" + (before - S.hp[who]);
+    }
+    say(memberName(who) + " — " + s.name + " +" + add + "　(공격 +" + st[who] + ")" + hurt, "sys");
+  });
+}
+/* 쓰러질 피해를 스택으로 버팁니다 — 버텼으면 true (setHp 가 부름) */
+function stackGuardSave(who) {
+  const b = S.battle;
+  if (!b || (b.mods && b.mods._scriptedHit)) return false;
+  const keys = stackRulesFor(who).map(r => r.stack.key);
+  if (!keys.length) return false;
+  let used = null;
+  equippedGifts().forEach(g => {
+    const sg = g.effect && g.effect.stackGuard;
+    if (used || !sg || keys.indexOf(sg.key) < 0) return;
+    const st = arcStacks(sg.key);
+    if ((st[who] || 0) < (sg.need || 0)) return;
+    st[who] -= sg.need || 0;
+    used = { g: g, sg: sg };
+  });
+  if (!used) return false;
+  S.hp[who] = 1;
+  const name = (stackRulesFor(who).find(r => r.stack.key === used.sg.key) || {}).stack.name;
+  setTimeout(() => {
+    if (S.battle !== b) return;
+    say(memberName(who) + " — " + name + " " + used.sg.need + "을 태워 체력 1로 버틴다. (" + giftLabel(used.g) + ")", "good");
+    render();
+  }, 0);
+  return true;
+}
+/* 쓰러지면 스택을 잃습니다 — keepStack 기프트가 지키는 것만 남깁니다 (onAllyDown) */
+function stackOnDown(who) {
+  if (!S.arc || !S.arc.stacks) return;
+  const keep = {};
+  stackEffects().forEach(e => { if (e.keepStack) keep[e.keepStack] = true; });
+  for (const k in S.arc.stacks) if (!keep[k] && S.arc.stacks[k][who]) S.arc.stacks[k][who] = 0;
+}
+/* ── 대신 받기 — 흑수 갑 (8장, 사용자 지침 2026-10-25) ──────────────────────
+ *  인격 줄에 cover: { synergy, titleHas, line } 를 적으면, 그 시너지가 켜져 있는 동안
+ *  이름에 titleHas 가 든 사람(«B구역 군주» — 유아인 「B구역 군주」 · 8.5장 김하주 「B구역 군주 후보」)을
+ *  노린 «한 사람 공격» 을 이 사람이 대신 맞고 line 을 말합니다.
+ *  광역 · 되받아치기 · 버티기 깨기 · 데려가기에는 걸리지 않습니다. 책임(추민수)이 선 턴에는 책임이 먼저입니다.
+ *  자기 자신을 노린 공격, 쓰러져 있는 동안은 해당 없음. 여럿이면 편성 차례에서 먼저 선 사람. */
+function coverFor(target) {
+  if (!target || !S.party) return null;
+  const tt = memberTitle(target) || "";
+  const syn = activeSynergies().map(sy => sy.name);
+  for (const w of S.party) {
+    if (!w || w === target || !alive(w) || !SINNERS[w]) continue;
+    const id = idByKey(S.equip[w]);
+    const c = id && id.cover;
+    if (!c || syn.indexOf(c.synergy) < 0 || tt.indexOf(c.titleHas) < 0) continue;
+    return { who: w, line: c.line || null };
+  }
+  return null;
+}
+/* E.G.O 기프트 coverCut — 남의 몫을 대신 맞을 때(대신 받기 · 책임) 받는 피해를 그 비율만큼 덜어 줌.
+ * 여럿을 지녔으면 가장 큰 하나(0.9 까지) */
+function giftCoverCut() {
+  let c = 0;
+  equippedGifts().forEach(g => { if (g.effect && g.effect.coverCut) c = Math.max(c, g.effect.coverCut); });
+  return Math.min(0.9, c);
+}
+
+/* 인격 줄의 stackLine — 그 스택이 min 이상이면 공격 직전 한마디 */
+function stackLineFor(who) {
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  const sl = id && id.stackLine;
+  if (!sl) return null;
+  const st = S.arc && S.arc.stacks && S.arc.stacks[sl.key];
+  return st && (st[who] || 0) >= (sl.min || 0) && stackRulesFor(who).length ? sl.text : null;
 }
 function stars(n) { return "★".repeat(n); }
 
@@ -3190,7 +3434,7 @@ function allyLeave(name) {
   gone.forEach(a => {
     (Array.isArray(a.bye) ? a.bye : (a.bye ? [a.bye] : [])).forEach(t => speak(allyId(a), t));
   });
-  if (gone.length) { divider(); say(gone.map(a => a.name).join("　·　") + " 물러난다.", "sys"); }
+  if (gone.length) { divider(); say(withJosa(gone.map(a => a.name).join("　·　"), "이") + " 물러난다.", "sys"); }
   render();
 }
 /* 장을 시작하거나 마칠 때는 조력자를 남기지 않습니다 */
@@ -3438,6 +3682,7 @@ let CUR_BG   = null;    // 지금 깔려 있는 배경 그림
 let CUR_NAME = null;    // 칸 아래에 적을 지명
 let CUR_FOE  = null;    // { src, tag, scale } — 가운데에 선 적. showFoe() 가 다룹니다
 let CUR_SPEAKER = null; // { src, tag } — 왼쪽에 선 말하는 사람의 초상. showSpeaker() 가 다룹니다
+let CUR_SIDE = null;    // { src, tag } — 전투 중 오른쪽에 서는 초상(sideImg). 전투가 열릴 때 세우고 끝나면 걷습니다
 let CUR_CUT  = null;    // { src, tag } — 칸을 통째로 덮은 컷신. showCut() 가 다룹니다
 
 /* 배경은 새 그림을 줄 때만 갈립니다.
@@ -3502,6 +3747,10 @@ function renderStage() {
               '<img id="figure" src="' + assetURL(CUR_FOE.src) + '" alt="' + (CUR_FOE.tag || "") + '"' + st + ' ' +
               'onerror="this.style.display=\'none\'"></div>';
   }
+  if (CUR_SIDE)
+    html += '<div class="figwrap right">' +
+              '<img src="' + assetURL(CUR_SIDE.src) + '" alt="' + (CUR_SIDE.tag || "") + '" ' +
+              'onerror="this.style.display=\'none\'"></div>';
   if (CUR_SPEAKER)
     html += '<div class="figwrap left">' +
               '<img src="' + assetURL(CUR_SPEAKER.src) + '" alt="' + (CUR_SPEAKER.tag || "") + '" ' +
@@ -3523,7 +3772,7 @@ function renderStage() {
 /* 무대를 아예 접는다 — 지금은 출입 코드 화면에서만 씁니다 */
 function hideStage() {
   $stage.className = ""; $stage.innerHTML = "";
-  CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null; CUR_CUT = null;
+  CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null; CUR_CUT = null; CUR_SIDE = null;
 }
 
 /* ── 컷신 ──────────────────────────────────────────────────────
@@ -3903,7 +4152,7 @@ function renderParty() {
      * 사는 것이라, 걸어 놓고도 걸렸는지 알 수 없으면 안 쓴 것과 같다. */
     /* 광역 공격 턴은 노려지는 한 사람이 없고 전원이 맞으므로, 전원에게 노려짐을 켠다.
      * 여파가 있는 버티기 깨기(breakSplash)도 웅크리든 말든 전원이 맞으므로 같습니다. */
-    const 판전체 = !!(b && (b.aoe || (b.foeBreak && (b.breakSplash || (FOES[b.id] || {}).breakSplash))));
+    const 판전체 = !!(b && (b.aoe || (b.foeBreak && (b.breakSplash || foeDef(b).breakSplash))));
     const aimed  = !!(b && hp > 0 && (판전체 || b.aim === who));
     const acting = !!(b && b.cur === who && hp > 0);
     const ready  = !!(cmd && !acting && hp > 0);
@@ -3935,9 +4184,20 @@ function renderParty() {
       }
     }
     const stack = passiveStackCount(who);
-    if (stack !== null) mark += ' <span class="stacktag">' + UNIQUE_SKILLS[who].name + ' ' + stack + '</span>';
+    /* short 를 단 것은 좁은 화면에서 그 글자로 줄여 섭니다(격노 → 💢 · 염화 → 🔥) —
+     * 고유 능력 패시브와 인격 스택이 함께 서면 두 줄로 넘어가서 */
+    const stackLabel = o => o.short
+      ? '<span class="skfull">' + o.name + '</span><span class="skshort">' + o.short + '</span>'
+      : o.name;
+    if (stack !== null) mark += ' <span class="stacktag">' + stackLabel(UNIQUE_SKILLS[who]) + ' ' + stack + '</span>';
+    /* 히트 · 염화 — 그 시너지가 켜져 있는 동안 (stackRulesFor) */
+    stackRulesFor(who).forEach(r => {
+      const n = (S.arc && S.arc.stacks && S.arc.stacks[r.stack.key] && S.arc.stacks[r.stack.key][who]) || 0;
+      mark += ' <span class="stacktag">' + stackLabel(r.stack) + ' ' + n + '</span>';
+    });
     if (sup)  mark += ' <span class="suptag">지원</span>';
     if (ally) mark += ' <span class="allytag">조력</span>';
+    const hideNum = !!ally && !ally.showStats;
     /* 조력자는 이름을 제 색으로 강조하고, 별 자리에는 idText 를 적습니다
      * (베르렐리우스라면 「길잡이 짧은시선」). data/allies.js 참고. */
     const nameHTML = ally
@@ -3958,14 +4218,15 @@ function renderParty() {
       '<div class="nm">' + icHTML + nameHTML + mark + '</div>' +
       '<div class="id">' + idHTML + '</div>' +
       /* 조력자는 수치를 감춥니다 — 실제로는 그대로 쓰이지만 화면에는 ??? 로.
-       * 얼마나 센지 모르는 편이 «와 준 사람» 답습니다. */
-      '<div class="hpbar"><i style="width:' + (ally ? 100 : Math.round(hp / mx * 100)) + '%"></i></div>' +
+       * 얼마나 센지 모르는 편이 «와 준 사람» 답습니다. 다만 showStats 를 단 조력자
+       * (8장 아멜리아 — 지켜야 하는 사람)는 수치를 그대로 보입니다(사용자 지침 2026-10-25). */
+      '<div class="hpbar"><i style="width:' + (hideNum ? 100 : Math.round(hp / mx * 100)) + '%"></i></div>' +
       /* 좁은 화면에서는 ostat(공·방)을 감춥니다 — 체력만 남깁니다 */
       /* 고른 명령은 이름 옆 «공격»·«방어» 로 이미 보입니다.
        * 아래에 줄을 하나 더 붙이면 카드 높이가 들쭉날쭉해져 눌리는 자리가 흔들립니다. */
-      '<div class="st"><span class="hpnum">' + (ally ? "??? / ???" : hp + ' / ' + mx) + '</span>' +
-        '<span class="ostat">　공 ' + (ally ? "???" : st.atk) +
-          '　방 ' + (ally ? "???" : st.def) + '</span></div>';
+      '<div class="st"><span class="hpnum">' + (hideNum ? "??? / ???" : hp + ' / ' + mx) + '</span>' +
+        '<span class="ostat">　공 ' + (hideNum ? "???" : st.atk) +
+          '　방 ' + (hideNum ? "???" : st.def) + '</span></div>';
     $party.appendChild(div);
   });
 }
@@ -4139,9 +4400,9 @@ let GIFT_ROW_INFO = [];
 function renderGifts() {
   const box = document.getElementById("gifts");
   if (!box) return;
-  const list = equippedGifts(), perks = packPerks();
+  const list = equippedGifts(), perks = activePerks();
   GIFT_ROW_INFO = list.map(gf => ({ name: stars(gf.star) + ' ' + giftLabel(gf), desc: gf.desc || "" }))
-    .concat(perks.map(p => ({ name: "테마팩 특전 · " + p.name, desc: p.desc || "" })));
+    .concat(perks.map(p => ({ name: (S.mirror ? "테마팩 특전 · " : "특전 · ") + p.name, desc: p.desc || "" })));
   const esc = t => String(t || "").replace(/<[^>]*>/g, "").replace(/"/g, "&quot;");
   box.innerHTML = (list.length || perks.length)
     ? '<span class="rowlabel">E.G.O 기프트</span><span class="rowbar">|</span>' +
@@ -4336,6 +4597,7 @@ function startChapter(i) {
    * 논리입니다. 이 중간 저장은 패배했을 때 돌아갈 자리로만 씁니다
    * (defeat() 참고). */
   S.storySave = null;
+  S.storyPerks = [];   // 이야기 특전은 그 장 안에서만 (storyPerks 머리말)
 
   /* 들어가기 전에 편성부터 확인한다 */
   const miss = chapterMissing(c);
@@ -4482,6 +4744,31 @@ function playExtras(s) {
  * 한 번짜리 기믹은 여기 등록하는 식으로 풉니다. 두루 쓰일 것이면 case 를 그냥 더하십시오. */
 const SCENE_EXT = {};
 
+/* 본편 중간 저장 — 이 장면 자리를 «패배하면 돌아올 곳» 으로 남깁니다(defeat() 의 storyCP).
+ * { t:"party" } 와 { t:"save" } 가 부릅니다. 편성 · 장착 · 체력 · 표(flags — 카드 갈림길 상태도 여기) ·
+ * 강제 편성 · 금지 · 이야기 특전 · 이어 갈 관리력 · 그때의 배경을 통째로 담습니다.
+ * 조력자도 S.party 에 서 있으므로 함께 담깁니다. 거울 안에서는 남기지 않습니다. */
+function storyCheckpoint() {
+  if (S.mirror) return;
+  const c = curChapter();
+  if (!c) return;
+  S.storySave = {
+    chId: c.id, sc: S.sc - 1,
+    party: S.party.slice(), equip: Object.assign({}, S.equip),
+    hp: Object.assign({}, S.hp), flags: Object.assign({}, S.flags),
+    partyStack: S.partyStack.slice(), partyBan: S.partyBan.slice(),
+    battleForced: S.battleForced,
+    storyPerks: (S.storyPerks || []).slice(),   // 이야기 특전 — 돌아오면 그때 들고 있던 것으로
+    carryManage: S.carryManage,                 // 단계 전투(keepManage)가 이어 받을 관리력
+    /* 그때 깔려 있던 배경도 함께 담습니다 — 돌아갔을 때 진 자리의
+     * 배경(교장실)이 그대로 남아 있으면 «어디로 돌아온 건지» 가
+     * 어긋납니다. CUR_BG 는 판이 살아 있는 동안 그대로 남는 값이라
+     * 되돌리지 않으면 안 바뀝니다. */
+    bg: CUR_BG || null, bgName: CUR_NAME || null
+  };
+  saveVault();
+}
+
 function play(s) {
   /* 화면을 흔듭니다. shake: true 는 가볍게, "hard" 면 크게.
    * 어느 장면에나 붙일 수 있습니다 — 포격을 맞는 대목 같은 데 씁니다. */
@@ -4506,6 +4793,17 @@ function play(s) {
     case "flash":
       flashScreen(s.ms);
       shakeScreen(true);
+      if (s.text) say(s.text, s.cls || "n");
+      return cont();
+
+    /* 암전 — 무대를 검게 덮습니다(8장 8-3 끝 「불이 꺼졌다」). 보스 등장 연출의 암전 칸을 그대로 씁니다.
+     * 다음에 무대를 다시 그리는 장면(장소 · 대사하는 사람 · 전투)이 오면 저절로 걷힙니다.
+     * sound 를 적으면 그 소리를 한 번 틉니다(8-5 종소리). 대사 초상도 함께 내립니다. */
+    case "dark":
+      dropSpeaker();
+      $stage.className = "on";
+      $stage.innerHTML = '<div class="scenebox blackout"></div>';
+      if (s.sound) playSound(s.sound);
       if (s.text) say(s.text, s.cls || "n");
       return cont();
 
@@ -4582,7 +4880,7 @@ function play(s) {
        * 장면에 적힌 본래 사람(길잡이)이 그대로 나옵니다. */
       const rsp = (S.mirror && mirrorRuleNow().group === "rail")
         ? railSpeaker(mirrorRuleNow()) : null;
-      if (rsp && rsp.advisor) speak(rsp.name, railLine(rsp), rsp.portrait);
+      if (rsp && rsp.advisor) speak(rsp.name, railLine(rsp, false, mirrorRuleNow()), rsp.portrait);
       else if (s.who) speak(s.who, s.say);
       S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 쓰러진 사람도 함께 일어납니다
       S.restManage = true;                                     // 다음 전투는 관리력을 가득 채우고 연다
@@ -4605,6 +4903,12 @@ function play(s) {
       grantAdvisor(s);
       return cont();
 
+    /* 이야기 특전 — { t:"perk", id } 또는 { t:"perk", ids:[…] } (storyPerks 머리말) */
+    case "perk":
+      grantStoryPerk(s.ids || [s.id]);
+      render();
+      return cont();
+
     /* s.ban / s.unban — banParty/unbanParty 참고. s.require 를 적으면
      * (배열 또는 한 명) 그 사람이 편성에 들 때까지 "이대로 진행"을 감추고
      * 편성 창을 다시 띄웁니다 — 장 전체의 require 와 달리 이 장면 하나만
@@ -4615,24 +4919,7 @@ function play(s) {
       /* 장이 길어질수록(7장부터) 편성을 고치는 자리마다 조용히 중간 저장을
        * 남겨 둡니다(S.storySave) — 이 장에서 패배하면 처음부터나 그 전투를
        * 그대로 다시 하는 대신 이 자리로 돌아갑니다(defeat() 참고). */
-      if (!S.mirror) {
-        const c = curChapter();
-        if (c) {
-          S.storySave = {
-            chId: c.id, sc: S.sc - 1,
-            party: S.party.slice(), equip: Object.assign({}, S.equip),
-            hp: Object.assign({}, S.hp), flags: Object.assign({}, S.flags),
-            partyStack: S.partyStack.slice(), partyBan: S.partyBan.slice(),
-            battleForced: S.battleForced,
-            /* 그때 깔려 있던 배경도 함께 담습니다 — 돌아갔을 때 진 자리의
-             * 배경(교장실)이 그대로 남아 있으면 «어디로 돌아온 건지» 가
-             * 어긋납니다. CUR_BG 는 판이 살아 있는 동안 그대로 남는 값이라
-             * 되돌리지 않으면 안 바뀝니다. */
-            bg: CUR_BG || null, bgName: CUR_NAME || null
-          };
-          saveVault();
-        }
-      }
+      storyCheckpoint();
       say(s.text || "편성을 조정하십시오.", "sys");
       S.waiting = true;
       const need = s.require ? (Array.isArray(s.require) ? s.require : [s.require]) : [];
@@ -4658,6 +4945,14 @@ function play(s) {
       ].filter(Boolean));
       return askParty();
     }
+
+    /* 중간 저장만 — 편성 화면 없이 그 자리를 «돌아올 곳» 으로 남깁니다(storyCheckpoint).
+     * { t:"save" } 또는 { t:"save", text:"…" }. 조력자가 곁에 선 채로 저장해야 하는 자리처럼,
+     * 편성을 다시 짜게 하면 안 되는 곳에 씁니다(8장 8-2 — A · B 전투 뒤). */
+    case "save":
+      storyCheckpoint();
+      if (s.text !== "") say(s.text || "— 여기까지를 마음에 새겨 둔다. (중간 저장)", "sys");
+      return cont();
 
     /* 조력자 — 이야기에서만 옆에 서 주는 사람 (data/allies.js) */
     case "ally":
@@ -5166,7 +5461,8 @@ function startBattleFight(scene, f) {
     storyFrom: scene.storyFrom || 0,
     /* 길잡이가 다녀간 뒤라면 관리력을 가득 채우고 엽니다 (t:"rest" 참고) */
     manage: (S.restManage || perkSum().manageFull) ? manageCap()
-                         : RULE.manageStart + advisorEffect().manage,
+          : (scene.keepManage && S.carryManage != null) ? Math.min(manageCap(), S.carryManage)
+          : RULE.manageStart + advisorEffect().manage,
     turn: 0, cmds: {}, cur: null, mods: {},
     /* 고유 능력(액티브) 사용 횟수 — 이 전투(=이 적 개체) 동안만 삽니다.
      * 매번 새 S.battle 을 만드므로, 같은 적이 다시 나오면(거울 던전 반복 등장
@@ -5187,7 +5483,8 @@ function startBattleFight(scene, f) {
    *      { t:"battle", foe:"…", aoeEvery: 9, aoeFlat: 1000, aoeLine: "…" }
    *
    *  hp 를 적으면 최대 체력도 함께 맞춥니다. */
-  ["hp", "atk", "def", "noHeavy", "heavyLine",
+  ["hp", "atk", "def", "noHeavy", "heavyLine", "heavyEvery", "phases",
+   "lockTurns", "lockKillAtk", "aoeMult", "aoeMultStep", "aoeAtkGain",
    "aoeEvery", "aoeFrom", "aoeFlat", "aoeLine", "aoeWarn",
    "healEvery", "healFrom", "healAtk", "healLine", "healWarn",
    "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
@@ -5208,6 +5505,8 @@ function startBattleFight(scene, f) {
   S.battle.atk0 = S.battle.atk;
   S.restManage = false;
   const b = S.battle;            // 딜레이가 끝났을 때 같은 전투인지 확인용
+  /* 오른쪽 초상(sideImg) — 이 전투 동안만 섭니다(battleOver 가 걷습니다) */
+  CUR_SIDE = scene.sideImg ? { src: scene.sideImg, tag: scene.sideName || "" } : null;
 
   /* startBossCine 을 거쳐 온 전투는 등장 연출에서 이미 판을 비우고 등장 대사·음성까지
    * 냈습니다 — 여기서 또 지우거나 되풀이하면 방금 본 대사가 사라지거나 음성이 겹칩니다. */
@@ -5249,8 +5548,106 @@ function startBattleFight(scene, f) {
   } else openingVolley(beginTurn);
 }
 
+/* ── 페이즈 (8장~, 사용자 지침 2026-10-25) ──────────────────────────
+ *  FOES 나 전투 장면에 이렇게 적습니다.
+ *
+ *      phases: [ { at: 0.5, warn: "…", line: "…", aoeEvery: 3, noHeavy: true, … } ]
+ *
+ *  적 체력이 at(0.5 = 50%) 아래로 내려가면, 다음 턴 머리에서 그 페이즈로 넘어갑니다.
+ *  넘어갈 때 «턴 행동 기믹»(아래 FOE_CYCLE_KEYS — 광역 · 회복 · 선공 · 데려가기 · 되받아치기 ·
+ *  버티기 깨기 · 회피 · 강타 주기 · 몰아친다 · 격분) 을 «통째로» 갈아 끼웁니다 — 앞 페이즈의
+ *  것은 하나도 남지 않고, 그 페이즈에 적은 것만 섭니다. 대사 · 그림(aoeLine · heavyImg …)은
+ *  페이즈에 적으면 그것이, 안 적으면 본래 것이 그대로 씁니다.
+ *
+ *  ■ 주기는 «그 페이즈에 들어선 턴부터» 셉니다(사용자 지침) — 들어선 턴이 그 페이즈의 1턴입니다.
+ *    aoeEvery: 6, aoeFrom: 3 이면 페이즈 3 · 9 · 15 턴째. 화면의 턴 번호는 전투 처음부터 그대로 셉니다.
+ *  ■ 여럿이면 차례대로 — at 이 큰 것부터 적습니다. 한 대로 두 턱을 넘으면 깊은 쪽으로 곧장 갑니다.
+ *  ■ warn 은 나레이션, line 은 적이 하는 말입니다. img 를 적으면 그 페이즈의 바탕 그림이 됩니다.
+ *  ■ 격분(rageAt)과 함께 쓸 수 있습니다 — 격분도 턴 행동 기믹이라 페이즈마다 따로 적습니다.
+ *  ■ heavyEvery — 강타 주기(안 적으면 3턴). 페이즈가 아니어도 FOES 에 적을 수 있습니다. */
+const FOE_CYCLE_KEYS = [
+  "noHeavy", "heavyEvery", "lockTurns", "lockKillAtk",
+  "aoeEvery", "aoeFrom", "aoeFlat", "aoeMult", "aoeMultStep", "aoeAtkGain",
+  "healEvery", "healFrom", "healAtk",
+  "counterEvery", "counterFrom", "counterMult",
+  "evadeEvery", "evadeFrom",
+  "takeEvery", "takeFrom", "takeOnce",
+  "breakEvery", "breakFrom", "breakMult", "breakSplash",
+  "rampEvery", "rampPct", "rampMax",
+  "heavyRampPct", "heavyRampMax",
+  "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct",
+  "firstEvery", "firstFrom", "firstHeavy",
+  "firstAoeEvery", "firstAoeFrom", "firstAoeFlat"
+];
+/* 지금 이 전투가 읽을 적 정의 — 페이즈에 들어섰으면 그 페이즈를 얹은 사본, 아니면 FOES 그대로 */
+function foeDef(b) { return (b && b.phaseDef) || (b && FOES[b.id]) || {}; }
+function checkPhase(b) {
+  const list = b.phases || (FOES[b.id] || {}).phases;
+  if (!list || !list.length) return;
+  let n = b.phaseNo || 0;
+  while (n < list.length && b.hp <= b.maxhp * list[n].at) n++;
+  if (n === (b.phaseNo || 0)) return;
+  const ph = list[n - 1];
+  const def = Object.assign({}, FOES[b.id] || {});
+  FOE_CYCLE_KEYS.forEach(k => { delete def[k]; delete b[k]; });   // 장면에서 덮어쓴 값도 함께 걷습니다
+  delete def.phases;
+  b.phaseDef = Object.assign(def, ph);
+  b.phaseNo = n;
+  b.phaseStart = b.turn;
+  b.raged = false;
+  if (ph.img) b.img = ph.img;
+  shakeScreen(true);
+  say("▶ " + withJosa(b.name, "이") + " " + (ph.warn || "결이 바뀌었다."), "heavy");
+  if (ph.line) {
+    const w = document.createElement("p");
+    w.className = "who";
+    w.textContent = b.name;
+    $log.appendChild(w);
+    say(ph.line, "d");
+  }
+}
+
+/* ── 표적 고정 · 광역 배수 · 광역마다 공격 증가 (8장, 사용자 지침 2026-10-25) ──────
+ *  lockTurns · lockKillAtk  표적 고정 — beginTurn 의 «표적 고정» 머리말
+ *  aoeMult · aoeMultStep   광역 한 대의 배수를 aoeMult 에서 시작해 쓸 때마다 aoeMultStep 씩 올립니다
+ *                          (안 적으면 늘 1.2 — 8장 쥬공티렉스 0.5 + 0.1)
+ *  aoeAtkGain              광역을 쓸 때마다 공격력 +n (그 전투 끝까지 — 8장 이창수 2페이즈 +10)
+ *  올린 공격력은 b.atk0(몰아친다 · 격분이 셈을 시작하는 바탕)에 얹습니다 — 다음 턴에 되돌아가지 않게. */
+function addFoeAtk(b, n) {
+  b.atk0 = (b.atk0 != null ? b.atk0 : b.atk) + n;
+  b.atk += n;
+}
+function lockKillCheck(b, t) {
+  if (!b.lock || t !== b.lock.who || alive(t)) return;
+  b.lock.left = 0;                       // 쓰러뜨렸으면 다음 턴에 새 표적
+  const gain = b.lockKillAtk || foeDef(b).lockKillAtk || 0;
+  if (!gain) return;
+  addFoeAtk(b, gain);
+  say("▶ " + b.name + " — 노리던 표적을 쓰러뜨렸다.  공격 +" + gain + "　(지금 " + b.atk + ")", "heavy");
+}
+function aoeMultNow(b) {
+  const f = foeDef(b);
+  const base = b.aoeMult != null ? b.aoeMult : f.aoeMult;
+  if (base == null) return 1.2;
+  return base + (b.aoeMultStep || f.aoeMultStep || 0) * (b.aoeUses || 0);
+}
+function afterAoe(b) {
+  const f = foeDef(b);
+  b.aoeUses = (b.aoeUses || 0) + 1;
+  const gain = b.aoeAtkGain || f.aoeAtkGain || 0;
+  if (gain) {
+    addFoeAtk(b, gain);
+    say("▷ " + withJosa(b.name, "이") + " 더 달아오른다.  공격 +" + gain + "　(지금 " + b.atk + ")", "bad");
+  }
+}
+
 function beginTurn() {
   const b = S.battle;
+  /* 편도(4호선) — 쓰러진 사람이 있으면 턱 머리에서 대체 인력을 세웁니다(rail4Swap) */
+  if (railGraveRule() && b && S.party.some(w => w && !isAlly(w) && !alive(w)))
+    return rail4Swap(() => beginTurn());
+  /* 설득 전투 foeLast — 마지막 턴의 적 차례까지 마친 뒤, 다음 턴 머리에서 끝냅니다(afterAllies 참고) */
+  if (b.scene.persuade && b.scene.persuade.foeLast && b.turn >= b.scene.persuade.turns) return persuadeEnd();
   /* 「제3발톱 의리사슬」류(effect.defToAtkGuardMult) 가 볼 «지난 차례에 방어를
    * 골랐는가» 를 여기서 옮겨 적습니다 — b.cmds 는 바로 아래에서 비워지므로,
    * 비우기 전이어야 합니다. giftConvertFor() 가 이걸 읽습니다. */
@@ -5266,7 +5663,7 @@ function beginTurn() {
   clearSpeaker();
   b.manage = Math.min(manageCap(), b.manage + (b.turn > 1 ? RULE.manageGain + advisorEffect().gain : 0));
   divider();
-  say("── " + b.turn + "턴 ──  " + b.name + "  " + b.hp + "/" + b.maxhp, "sys");
+  say("── " + (b.turn + ((b.scene && b.scene.turnBase) || 0)) + "턴 ──  " + b.name + "  " + b.hp + "/" + b.maxhp, "sys");
   {
     /* 테마팩 특전 healEvery — 그 턴 머리에 서 있는 전원이 조금 되찹니다 */
     const ps = perkSum();
@@ -5303,11 +5700,14 @@ function beginTurn() {
    *
    *  광역·회복·되받아치기는 겨누는 데가 «전원»·«저 자신»·«그때 가 봐야 아는
    *  하나» 라 미리 노려지는 사람이 없습니다. 그래서 aim 을 비웁니다. */
-  const fnow = FOES[b.id] || {};
+  checkPhase(b);                 // 페이즈 턱을 넘었으면 이 턴부터 기믹 묶음을 갈아 끼웁니다
+  const fnow = foeDef(b);
+  /* 주기는 페이즈에 들어선 턴부터 셉니다(checkPhase 머리말) — 페이즈가 없으면 전투 처음부터 */
+  const tt = b.phaseStart ? b.turn - b.phaseStart + 1 : b.turn;
   const 주기 = (every, from) => {
     if (!every) return false;
     const f = (from != null) ? from : every;
-    return b.turn >= f && (b.turn - f) % every === 0;
+    return tt >= f && (tt - f) % every === 0;
   };
   const aoeEvery = b.aoeEvery || fnow.aoeEvery || 0;
   const aoeFrom  = (b.aoeFrom != null) ? b.aoeFrom : fnow.aoeFrom;
@@ -5347,7 +5747,7 @@ function beginTurn() {
     say("▶ " + withJosa(b.name, "이") + " " + (b.rageWarn || fnow.rageWarn ||
         "지금까지와 다른 소리를 낸다.  결이 바뀌었다."), "heavy");
   }
-  const rageHeavy = b.raged ? (b.rageHeavyEvery || fnow.rageHeavyEvery || 2) : 3;
+  const rageHeavy = b.raged ? (b.rageHeavyEvery || fnow.rageHeavyEvery || 2) : (b.heavyEvery || fnow.heavyEvery || 3);
   const rageAoe   = b.raged ? (b.rageAoeEvery || fnow.rageAoeEvery || 0) : 0;
 
   /* ── 몰아친다 — 오래 끌수록 세집니다 ─────────────────────────
@@ -5365,7 +5765,7 @@ function beginTurn() {
   if (rampPct) {
     const every = b.rampEvery || fnow.rampEvery || 1;
     const max   = (b.rampMax != null) ? b.rampMax : fnow.rampMax;
-    rampK = 1 + rampPct * Math.floor(Math.max(0, b.turn - 1) / every);
+    rampK = 1 + rampPct * Math.floor(Math.max(0, tt - 1) / every);
     if (max) rampK = Math.min(rampK, max);
   }
   b.rampK = rampK;
@@ -5435,11 +5835,33 @@ function beginTurn() {
                !!(b.boss && 주기(eEvery, eFrom));
   b.heavy   = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter && !b.foeBreak &&
               !b.foeEvade &&
-              !(b.noHeavy || fnow.noHeavy) && !!(b.boss && b.turn % rageHeavy === 0);
+              !(b.noHeavy || fnow.noHeavy) && !!(b.boss && tt % rageHeavy === 0);
   /* 데려가기는 «한 사람» 을 집는 것이라 노려진 사람이 있습니다.
    * 버티기 깨기는 웅크린 사람들이 대상이라 미리 정해진 하나가 없습니다. */
   b.aim     = (b.aoe || b.foeHeal || b.counter || b.foeBreak) ? null
                                    : (standing.length ? standing[rnd(standing.length)] : null);
+
+  /* ── 표적 고정 (8장 이창수, 사용자 지침 2026-10-25) ─────────────────
+   *  lockTurns: 3 이면 한 사람을 골라 3턴 동안 그 사람만 «상시 강타» 로 칩니다.
+   *  그 사람을 쓰러뜨리면 공격력 +lockKillAtk(그 전투 끝까지), 쓰러뜨렸거나 3턴이 지나면
+   *  다음 사람을 고릅니다 — 서 있는 사람이 둘 이상이면 방금 노리던 사람은 빼고 고릅니다.
+   *  광역 · 회복 · 되받아치기 · 버티기 깨기 · 데려가기 턴에는 그 짓이 이기고, 고정은 그대로 남습니다.
+   *  선공 · 회피 턴에는 표적만 고정하고 강타는 하지 않습니다. */
+  const lockTurns = b.lockTurns || fnow.lockTurns || 0;
+  if (!lockTurns) b.lock = null;
+  else if (b.boss && b.aim && !b.take) {
+    const L = b.lock;
+    if (!L || L.left <= 0 || !alive(L.who) || S.party.indexOf(L.who) < 0) {
+      const others = standing.filter(w => !L || w !== L.who);
+      const who = (others.length ? others : standing)[rnd((others.length ? others : standing).length)];
+      b.lock = { who: who, left: lockTurns };
+      say("▷ " + withJosa(b.name, "이") + " " + memberName(who) + "에게 눈을 고정했다.  " +
+          lockTurns + "턴 동안 이 사람만 노린다.", "bad");
+    }
+    b.aim = b.lock.who;
+    b.lock.left--;
+    b.heavy = !b.foeFirst && !b.foeEvade;
+  }
 
   /* ── 설득 전투 — 정해진 차례가 지나면 적을 무대에서 내립니다 ──────
    *  { t:"battle", …, persuade: { turns: 10, hideFoeAfter: 8, lines: {…} } }
@@ -5466,7 +5888,7 @@ function beginTurn() {
    * (2026-10-18, 7.5장 코드레드 이서진). 안 적으면 광역은 heavyImg 를 그대로 씁니다.
    * 강타로 치는 선공(firstHeavy)도 강타 그림을 씁니다. */
   if (!b.foeHidden) {
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     /* 난입한 것이 있으면 그쪽 그림이 이깁니다 (b.img · b.heavyImg · b.imgScale) */
     /* 격분한 뒤로는 바탕 그림 자체가 갈립니다 — rageImg 를 적은 적만 */
     const nowImg   = (b.raged && (b.rageImg || f.rageImg)) || b.img || f.img || null;
@@ -5493,7 +5915,7 @@ function beginTurn() {
     /* 선공 — 이번 차례는 적이 먼저 칩니다. 무엇으로 치는지(판 전체냐 하나냐)와
      * 함께, «차례가 뒤집힌다» 는 것을 못박아 알립니다. 방어를 깔지, 그래도
      * 치고 볼지를 고르는 자리라 알려 주지 않으면 고를 수가 없습니다. */
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.aoe
           ? (b.firstAoeWarn || f.firstAoeWarn ||
              "판 전체를 한 번에 훑는다.  이쪽이 손쓰기 전에 쓸어버릴 자세다.")
@@ -5505,27 +5927,28 @@ function beginTurn() {
   } else if (b.foeHeal) {
     /* 이번 턴엔 때리지 않고 저를 되붙입니다 — 그 전에 얼마든 깎아 두라는 뜻으로
      * 미리 알립니다. 노려지는 사람은 없습니다. */
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.healWarn || f.healWarn ||
         "흩어진 것을 그러모은다.  스스로를 되붙이려는 듯하다."), "bad");
   } else if (b.aoe) {
     /* 노려지는 사람이 없으므로 «누구를 노린다» 대신 판 전체를 겨눈다고 알립니다.
      * 미리 알려 주어야 방어를 깔든 교정을 걸든 손쓸 자리가 생깁니다. */
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.aoeWarn || f.aoeWarn ||
-        "숨을 크게 들이쉰다.  광역 공격을 준비하는 듯하다."), "bad");
+        "숨을 크게 들이쉰다.  광역 공격을 준비하는 듯하다.") +
+        ((b.aoeMult != null || f.aoeMult != null) ? "　(광역 ×" + aoeMultNow(b).toFixed(1) + ")" : ""), "bad");
   } else if (b.counter) {
     /* 되받아치기 — «지금 치면 돌아온다» 는 말을 반드시 미리 해 둡니다.
      * 이 턴에 무엇을 할지(치느냐 참느냐)가 곧 이 기믹이므로, 알려 주지
      * 않으면 고르는 것이 아니라 찍는 것이 됩니다 (사용자 지침 2026-09-12). */
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.counterWarn || f.counterWarn ||
         "몸을 웅크린 채 이쪽을 본다.  되받아칠 준비를 하고 있다."), "bad");
     say("　지금 공격하는 것은 위험할 것 같다.", "bad");
   } else if (b.take) {
     /* 데려가기 — 막을 길이 있는 짓이라 반드시 미리, 누구인지까지 알립니다.
      * 교정으로 지켜 두거나 그 사람이 회피를 고르면 놓칩니다 (foeTurn 참고). */
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.takeWarn || f.takeWarn ||
         "한 사람 위로 그림자가 좁아진다.  집어 올릴 자세다."), "bad");
     if (b.aim)
@@ -5534,7 +5957,7 @@ function beginTurn() {
   } else if (b.foeBreak) {
     /* 버티기 깨기 — 되받아치기와 반대로 «웅크리지 말라» 고 알립니다.
      * 이 턴에 방어를 고를지가 곧 이 기믹이므로 미리 알리지 않으면 찍는 것이 됩니다. */
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.breakWarn || f.breakWarn ||
         "내리칠 자리를 고른다.  웅크린 사람을 노릴 자세다."), "bad");
     say("　이번 차례에 웅크리는 것은 위험할 것 같다." +
@@ -5555,7 +5978,7 @@ function beginTurn() {
    * 여럿이면 배열로 — 그중 하나가 무작위로 나옵니다. */
   if (b.aoe || b.foeHeal || b.counter || b.foeEvade || b.foeFirst || b.take || b.foeBreak ||
       b.rageSay || (b.heavy && b.aim)) {
-    const f = FOES[b.id] || {};
+    const f = foeDef(b);
     /* 난입한 것이 있으면 그쪽 대사가 이깁니다 (b.heavyLine) */
     let line = b.rageSay ? (b.rageLine || f.rageLine)
              : b.foeFirst ? (b.aoe ? (b.firstAoeLine || f.firstAoeLine)
@@ -5648,7 +6071,7 @@ function battleSay(who, text, portraitSrc) {
    * 지금 그 적으로 걸려 있는 그림과 같은지. 마지막 것이 있어서 이름을
    * 또 다르게 적더라도(별칭·강타 그림 중이더라도) 겹쳐 그리지 않습니다. */
   const pt = portraitSrc || portraitOf(who);
-  const f  = FOES[S.battle.id] || {};
+  const f  = foeDef(S.battle);
   const 적본인 = who === S.battle.id ||
                  who === S.battle.name ||
                  nameOf(who) === S.battle.name ||
@@ -6095,11 +6518,11 @@ function askNext() {
   const cRevive  = skillCost(2);
   const cCorrect = skillCost(1);
   const cPush    = skillCost(1);
-  const downed = S.party.filter(w => w && !alive(w));
+  const downed = S.party.filter(w => w && !alive(w) && !allyLoseOnDown(w));   // 작성위원이 아닌 조력자는 첨삭으로 못 일으킵니다
 
   list.push({
     label: "첨삭 (" + cRevive + ")", cls: "ghost", key: "e",
-    disabled: b.manage < cRevive || !downed.length,
+    disabled: b.manage < cRevive || !downed.length || railGraveNoRevive(),   // 편도(4호선)에서는 잠깁니다
     fn: () => {
       const t = downed[0];
       b.manage -= cRevive;
@@ -6296,6 +6719,8 @@ function checkAchievements(foeName, cleared) {
         if (sp.note) say("(" + sp.note + ")", "sys");
       } else say("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")", "todo");
     }
+    /* E.G.O 기프트 — 이름으로. 우편과 같은 자리(giveApply)를 씁니다 — 이미 지녔으면 원고료로 (8장 업적 기프트) */
+    if (g.gift) giveApply({ gift: g.gift }).forEach(t => say(t + " 획득.", "gain"));
     if (g.money) { S.money += g.money; say(CURRENCY + " " + g.money + " 획득.", "gain"); }
     if (g.codex) { S.codex += g.codex; say("황금교본 " + g.codex + "권 획득.", "gain"); }
     if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket);
@@ -6457,7 +6882,8 @@ function resolveTurn() {
     const target = pool[rnd(pool.length)];
 
     const call = Array.isArray(ls.callLines) ? ls.callLines[rnd(ls.callLines.length)] : ls.callLines;
-    const reply = (ls.replyLines && ls.replyLines[target]) || ls.defaultReply;
+    let reply = (ls.replyLines && ls.replyLines[target]) || ls.defaultReply;
+    if (Array.isArray(reply)) reply = reply[rnd(reply.length)];     // 여럿이면 하나를 골라 (8장 이한범 「혈천하, 계무난도!」 · 「혈전, 염화!」)
     /* 선창 → (대기) → 대답 → (대기) → 실제 추가타 — 대사가 한꺼번에
      * 쏟아지지 않도록 한 줄씩 끊어 보여 줍니다(사용자 지침 2026-09-02). */
     if (call) battleSay(ls.who, call);
@@ -6469,8 +6895,7 @@ function resolveTurn() {
       setTimeout(() => {
         if (!same()) return;
         const st = effStats(target);
-        const arrestCut = Math.min(0.9, RULE.arrestCut + advisorEffect().arrest);
-        const fdef = b.mods.arrest ? Math.round(b.def * (1 - arrestCut)) : b.def;
+        const fdef = foeDefNow(b);
         /* 흑수들의 왕 시너지가 3명 이상으로 걸려 있으면, 유아인이 보복으로
          * 지금 받고 있는 공격력 상승률을 이 추가타를 치는 사람에게도
          * 그대로 얹습니다(사용자 지침 2026-09-02) — 기본 need(2명)보다
@@ -6479,6 +6904,7 @@ function resolveTurn() {
         const retribBonus = (heuksuSyn && heuksuSyn.count >= 3)
           ? (passiveSkillBonus("yu_ain", 0).atk || 0) : 0;
         let dmg = st.atk * (1 + retribBonus) + rnd(4) - fdef;
+        dmg *= 1 + perkSum().linkBoost;          // 연계 추가타 피해 — 특전 linkBoost(만화경)
         const crit = Math.random() < critRate();
         if (crit) dmg *= critMultFor(target) * critDmgMult();
         dmg = Math.max(1, Math.floor(dmg));
@@ -6489,6 +6915,7 @@ function resolveTurn() {
             (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : ""),
             crit ? "crit" : "hit");
         foeHit(0, dmg, crit);
+        stackAfterHit(target);     // 연계 추가타도 «공격» — 히트 · 염화가 쌓입니다(원작 «원호공격으로 인한 발동에도»)
         checkJoinIn();
         render();
         if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
@@ -6521,17 +6948,15 @@ function resolveTurn() {
     const st = effStats(who);
     /* 체포는 이번 턴 «적 방어» 를 깎습니다. 뺄셈 피해라 방어 한 점이 크게 먹히므로,
      * 방어가 두꺼운 상대에게 걸수록 효과가 큽니다. */
-    const arrestCut = Math.min(0.9, RULE.arrestCut + advisorEffect().arrest);
-    const fdef = b.mods.arrest
-      ? Math.round(b.def * (1 - arrestCut))
-      : b.def;
+    const fdef = foeDefNow(b);       // 체포 · 이야기 특전의 보스 방어 감소까지 (foeDefNow)
     /* 강공·겹살 — 공격력 배율. 연계 효과 — LINK_SKILLS 가 건 별도 배율.
      * 제1발톱 — 이번 차례에 공격을 골랐고, 그게 턴 머리에서 무작위로
      * 내려온 지령 그대로였다면 이 공격에만 배율이 붙는다(claw1SynergyBonus
      * 참고). 셋 다 걸리면 곱해집니다. 회피 보상 — 지난 턴에 걸어 둔
      * 확정 치명타 */
     const skillMult = b.mods[who + "_atkMult"] || 1;
-    const linkMult  = b.mods[who + "_linkMult"] || 1;
+    /* 연계 효과의 몫(배율 − 1)을 특전 linkBoost 만큼 키웁니다(8장 「만화경」 — 1 이면 2배) */
+    const linkMult  = 1 + ((b.mods[who + "_linkMult"] || 1) - 1) * (1 + perkSum().linkBoost);
     /* 흡혈로 넘친 회복(다 찬 뒤로도 남은 몫)을 다음 공격력에 플랫로 얹는다 —
      * 그 공격 한 번에만 쓰고 지운다(아래 evadeBonus와 같은 결). */
     const vampBonus = b.persist[who + "_vampBonus"] || 0;
@@ -6544,6 +6969,7 @@ function resolveTurn() {
       const line = claw1LineFor(who);
       if (line) battleSay(who, line);
     }
+    { const sl = stackLineFor(who); if (sl) battleSay(who, sl); }   // 스택이 문턱을 넘은 채 칠 때 한마디 (stackLine)
     const evadeBonus = b.persist[who + "_evadeBonus"];
     /* 연계 호령(LINK_ORDERS effect.crit) — 이번 차례 확정 치명타. 회피
      * 보상과 달리 배율은 품지 않고 평소 치명타 배율을 그대로 씁니다.
@@ -6583,6 +7009,7 @@ function resolveTurn() {
     }
 
     { const hh = perkSum().hitHeal; if (hh) setHp(who, curHp(who) + maxHp(who) * hh); }   // 테마팩 특전 hitHeal
+    stackAfterHit(who);            // 히트 · 염화 — 공격을 마칠 때마다 (stackRulesFor 머리말)
 
     foeHit(0, dmg, crit);
     checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
@@ -6607,6 +7034,9 @@ function resolveTurn() {
      * 날아갑니다(7장 4층 차민준 설득전 — 2026-09-11 확인). 체력이 바닥나도
      * 1 로 붙들어 두고 이어 갑니다. 깎는 맛은 그대로 남고, 끝내는 것은
      * 턴수뿐입니다. */
+    /* 각본 마무리 일격 — 쓰러뜨리기 «전에» 봅니다. 한 대로 0 아래까지 넘어가도 쓰러지지 않고
+     * 마무리 일격으로 갑니다(finishBlow 참고). */
+    if (finishReached(b)) return finishBlow();
     if (b.hp <= 0) {
       if (b.scene.persuade) b.hp = 1;
       else return victory();
@@ -6617,12 +7047,14 @@ function resolveTurn() {
      * 싸움이 끊깁니다(victory 의 spare 갈래). lose:"story" 와 달리 전멸하면 그대로 패배입니다 —
      * «거기까지는 깎아야만» 넘어갑니다. */
     if (b.scene.spare && b.scene.endAt && b.hp <= b.maxhp * b.scene.endAt) return victory();
-    if (b.scene.persuade && b.turn >= b.scene.persuade.turns) return persuadeEnd();
+    /* 설득은 보통 마지막 턴의 «아군 차례» 뒤에 끝납니다 — 그 턴 적은 선공일 때만 칩니다.
+     * persuade.foeLast 를 적으면 마지막 턴의 적 차례까지 마치고 끝납니다(8장 지와 3단계 「10턴째 광역」). */
+    if (b.scene.persuade && !b.scene.persuade.foeLast && b.turn >= b.scene.persuade.turns) return persuadeEnd();
 
     /* 선공 턴이면 적은 이 턴에 이미 쳤습니다 — 여기서 또 치게 두면 한 턴에
      * 두 번 맞습니다. 아군 차례까지 끝난 것이므로 그대로 턴 머리로 갑니다. */
     if (b.foeFirst) {
-      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
     }
 
@@ -6669,7 +7101,7 @@ function resolveTurn() {
      *  배수가 오르면 회복량도 저절로 따라 오릅니다.
      *  최대 체력을 넘겨 차지는 않습니다. */
     if (b.foeHeal) {
-      const f = FOES[b.id] || {};
+      const f = foeDef(b);
       const k = b.healAtk || f.healAtk || 0;
       const heal = Math.max(1, Math.round(b.atk * k));
       const before = b.hp;
@@ -6700,14 +7132,15 @@ function resolveTurn() {
        * 9턴마다 평범한 광역(aoeEvery) + 21턴에 확정 전멸(firstAoeEvery ·
        * firstAoeFlat). 선공 광역은 aoeEvery 가 걸리지 않는 턴에만 서므로
        * (beginTurn 의 선공광역 조건) 둘이 겹칠 일도 없습니다. */
-      const fdef = FOES[b.id] || {};
+      const fdef = foeDef(b);
       const flatAoe = (b.foeFirst ? (b.firstAoeFlat || fdef.firstAoeFlat) : 0) ||
                       b.aoeFlat || fdef.aoeFlat || 0;
       if (flatAoe) b.mods._scriptedHit = true;   // «반드시 전멸» — 되살리는 기프트가 듣지 않습니다 (reviveFirstDown)
+      const aoeK = aoeMultNow(b);
       const hitOne = t => {
         if (flatAoe) return flatAoe;
         const st = effStats(t);
-        let dmg = b.atk * 1.2 + rnd(4) - st.def;
+        let dmg = b.atk * aoeK + rnd(4) - st.def;
         {
           const ps = perkSum();                                  // 테마팩 특전 — 광역·선공 경감
           if (ps.aoeCut) dmg *= (1 - ps.aoeCut);
@@ -6747,12 +7180,14 @@ function resolveTurn() {
               (b.mods[t + "_immune"] ? " (갑주)" : "") +
               (b.mods[t + "_fragile"] ? " (강공)" : ""), "heavy");
           if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+          lockKillCheck(b, t);
         });
       }
       render();
       /* 못박은 광역(aoeFlat)은 «반드시 전멸» 자리라 강타처럼 세게 보여 줍니다 */
       hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: h.tag, heavy: !!flatAoe, blue: h.blue }));
-      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      afterAoe(b);                    // 광역 배수 증가 · 광역마다 공격 증가
+      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
@@ -6772,7 +7207,7 @@ function resolveTurn() {
      *  일으킨다» 이지만, 쓰러진 사람이 돌아오지 않는 갈래에서는 그대로
      *  «내렸다» 가 됩니다. */
     if (b.take) {
-      const f = FOES[b.id] || {};
+      const f = foeDef(b);
       let t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
       if (hero && t !== hero) t = hero;          // 책임 — 대신 끌려간다
       if (b.mods[t + "_guard"] || b.mods[t + "_evadeActive"]) {
@@ -6803,7 +7238,7 @@ function resolveTurn() {
       } else {
         say(withJosa(memberName(t), "이") + " 그 입에서 빠져나왔다.", "good");
       }
-      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
@@ -6826,14 +7261,14 @@ function resolveTurn() {
      *  (2026-10-24, 사용자 지침). 회피·책임은 광역처럼 안 걸립니다. */
     if (b.foeBreak) {
       const 웅크린 = targets.filter(t => b.cmds[t] === "guard" || b.mods[t + "_guard"]);
-      const splash = b.breakSplash || (FOES[b.id] || {}).breakSplash || 0;
+      const splash = b.breakSplash || foeDef(b).breakSplash || 0;
       const 선사람 = splash ? targets.filter(t => 웅크린.indexOf(t) < 0) : [];
       if (!웅크린.length && !선사람.length) {
         say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
         render();
         return setTimeout(afterFoe, RULE.turnGapMs);
       }
-      const mult = b.breakMult || (FOES[b.id] || {}).breakMult || RULE.breakMult;
+      const mult = b.breakMult || foeDef(b).breakMult || RULE.breakMult;
       shakeScreen(true);
       say("▶ " + withJosa(b.name, "이") + " " + (웅크린.length ? "웅크린 자리를 그대로 뚫는다!" : "판 전체를 내리친다!"), "heavy");
       const hits = [];
@@ -6854,7 +7289,7 @@ function resolveTurn() {
       });
       render();
       hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: !h.splash, tag: h.splash ? "여파" : "버티기 깨기" }));
-      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
@@ -6884,7 +7319,16 @@ function resolveTurn() {
     let t = (b.aim && targets.indexOf(b.aim) >= 0) ? b.aim : targets[rnd(targets.length)];
 
     /* 책임 — 노려진 게 누구든 추민수가 대신 받는다 */
+    const aimed = t;
     if (hero && t !== hero) t = hero;
+    /* 대신 받기(8장 흑수 갑) — 책임이 없는 턴, 되받아치기가 아닌 한 사람 공격만 (coverFor 머리말) */
+    let covered = null;
+    if (!hero && !되받음) {
+      covered = coverFor(t);
+      if (covered) { if (covered.line) battleSay(covered.who, covered.line); t = covered.who; }
+    }
+    /* 남의 몫을 대신 맞았는가 — E.G.O 기프트 coverCut(울퉁불퉁의 가호)이 이때 피해를 덜어 줍니다 */
+    const tookFor = (covered || (hero && aimed !== hero)) ? giftCoverCut() : 0;
 
     /* 회피 — 노려진 사람이 회피를 골랐으면 이번 공격은 완전히 피한다.
      * 다음 공격에 걸릴 확정 치명타는 b.persist 에 넣어 턴이 넘어가도 남긴다. */
@@ -6893,14 +7337,14 @@ function resolveTurn() {
       b.persist[t + "_evadeBonus"] = b.mods[t + "_evadeActive"];
       render();
       allyHitFx(t, 0, { miss: true });
-      if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
       return setTimeout(afterFoe, RULE.turnGapMs);
     }
 
     const st = effStats(t);
     /* 되받아치기는 강타(1.7)보다 셉니다 — 적마다 counterMult 로 따로 적을 수
      * 있고, 안 적으면 RULE.counterMult 를 씁니다. */
-    const 배수 = 되받음 ? (b.counterMult || (FOES[b.id] || {}).counterMult || RULE.counterMult)
+    const 배수 = 되받음 ? (b.counterMult || foeDef(b).counterMult || RULE.counterMult)
                : heavy  ? 1.7 * (b.heavyK || 1) : 1;
     let dmg = b.atk * 배수 + rnd(4) - st.def;
     /* 반격(김하주) 몫의 바탕 — 방어·교정·도발·갑주·강공 등 «경감»이 걸리기
@@ -6914,6 +7358,7 @@ function resolveTurn() {
     if (b.mods[t + "_immune"]) dmg *= (1 - b.mods[t + "_immune"]);
     if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
     if (t === hero && heroPct) dmg *= (1 - heroPct / 100);
+    if (tookFor) dmg *= (1 - tookFor);
     dmg = Math.max(1, Math.floor(dmg));
     setHp(t, curHp(t) - dmg);
 
@@ -6930,9 +7375,12 @@ function resolveTurn() {
         (b.mods[t + "_taunt"] ? " (도발)" : "") +
         (b.mods[t + "_immune"] ? " (갑주)" : "") +
         (b.mods[t + "_fragile"] ? " (강공)" : "") +
-        (t === hero && heroPct ? " (책임)" : ""), heavy ? "heavy" : "bad");
+        (t === hero && heroPct ? " (책임)" : "") +
+        (covered ? " (대신 받음)" : "") +
+        (tookFor ? " (−" + Math.round(tookFor * 100) + "%)" : ""), heavy ? "heavy" : "bad");
 
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+    lockKillCheck(b, t);
     render();
     /* 작은 글씨 — 강타면 「강타」, 그리고 무엇이 피해를 덜었는지 하나(교정 > 방어 > 책임).
      * 교정으로 덜었으면 숫자를 파랗게 — 파티 카드의 교정 딱지(.corrtag)와 같은 결의
@@ -6953,10 +7401,11 @@ function resolveTurn() {
       foeHit(0, cdmg, false);
       checkJoinIn();
       render();
+      if (finishReached(b)) return setTimeout(finishBlow, RULE.turnGapMs);   // 반격으로 턱을 넘어도 마무리 일격
       if (b.hp <= 0) return setTimeout(victory, RULE.turnGapMs);
     }
 
-    if (!S.party.some(alive)) return setTimeout(defeat, RULE.turnGapMs);
+    if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
     setTimeout(afterFoe, RULE.turnGapMs);
   };
 
@@ -6979,6 +7428,8 @@ function resolveTurn() {
 
 function victory() {
   const b = S.battle;
+  battleOver(b);
+  battleSuccess(b);
   /* 거울굴절철도 결과 카드에 적을 총 턴수 — 이긴 전투의 턴만 더합니다.
    * 지고 다시 도전하면 b.turn 이 0부터 다시 세므로(startBattleFight), 그 턴은 안 셉니다. */
   if (S.mirror) S.mirrorRunTurns = (S.mirrorRunTurns || 0) + b.turn;
@@ -7021,7 +7472,7 @@ function victory() {
   else say("이미 지나온 길이다. " + CURRENCY + "는 나오지 않는다.", "sys");
   checkAchievements(b.name);
   saveVault();
-  healParty(Math.max(RULE.winHeal, perkSum().winHeal), "숨을 고른다.");
+  healParty(winHealRatio(b, Math.max(RULE.winHeal, perkSum().winHeal)), "숨을 고른다.");
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   if (spare) {                      // persuadeEnd 와 같은 결 — 쓰러지는 연출 없이 자리만 비웁니다
     dropSpeaker();
@@ -7038,9 +7489,37 @@ function victory() {
   foeFalls(() => { S.waiting = false; cont(); });
 }
 
+/* ── 단계 전투 (8장 지와, 사용자 지침 2026-10-25) ─────────────────────
+ *  한 싸움을 여러 전투 장면으로 끊어 그 사이에 대화를 넣을 때 씁니다. 전투 장면에 적습니다.
+ *
+ *    keepManage: true   앞 전투가 끝났을 때의 관리력을 그대로 이어받아 엽니다
+ *                       (안 적으면 늘 처음 관리력 — 앞 전투가 하나도 없었으면 그것도 처음 값)
+ *    noWinHeal: true    이 전투가 끝나도 «숨을 고른다» 회복을 하지 않습니다 — 체력이 그대로 다음 단계로
+ *    turnBase: 10       화면의 턴 번호에만 더합니다(11턴 · 12턴 …). 기믹 주기 · 설득 대사는 이 전투의 턴으로 셉니다
+ *    sideImg / sideName 전투 동안 무대 오른쪽에 서는 초상(난입이 아님 — 그림만). 끝나면 걷힙니다
+ *
+ *  battleOver 는 전투가 끝나는 모든 자리(승리 · 각본 결말 · 설득 · 마무리 일격 · 패배)에서 불립니다. */
+function battleOver(b) {
+  if (b) S.carryManage = b.manage;
+  if (CUR_SIDE) { CUR_SIDE = null; renderStage(); }
+}
+/* ── 전투를 «넘겼을 때» 의 업적 사건 (2026-10-25, 8장) ─────────────────
+ *  승리 · 각본 결말 · 설득 · 마무리 일격 — 지지 않고 이야기가 이어진 자리에서 부릅니다.
+ *  페이즈를 가진 전투라면, 아무도 안 쓰러진 페이즈마다 «phaseClean:n»(n 은 1부터)을 업적에 알립니다.
+ *      when: { clear: "phaseClean:1", kill: "이창수", where: "story" }   ← 1페이즈를 아무도 잃지 않고
+ *  쓰러지면 지는 조력자가 쓰러진 패배는 defeat 가 «allyDown:이름» 으로 알립니다. */
+function battleSuccess(b) {
+  if (!b || !(b.phases || (FOES[b.id] || {}).phases)) return;
+  for (let k = 0; k <= (b.phaseNo || 0); k++)
+    if (!(b.downIn && b.downIn[k])) checkAchievements(b.name, "phaseClean:" + (k + 1));
+}
+function winHealRatio(b, ratio) { return (b && b.scene && b.scene.noWinHeal) ? 0 : ratio; }
+
 /* 각본상 결말이 정해진 전투 — 적이 물러나고 이야기가 이어진다 */
 function scriptedEnd() {
   const b = S.battle;
+  battleOver(b);
+  battleSuccess(b);
   divider();
   say(b.scene.endText || (withJosa(b.name, "은") + " 더 상대하지 않고 물러난다."), "sys");
   /* scriptedAchieve — 이 각본 결말에 닿은 것 자체를 업적 조건으로 쓰는 자리
@@ -7050,7 +7529,7 @@ function scriptedEnd() {
    * 버티기만 해도 되는 전투를 «굳이 눌러서» 끝냈을 때의 숨은 보상 —
    * 7.5장 권모술수의 로단이 그 첫 자리입니다. */
   if (b.scene.scriptedAchieve) checkAchievements(b.name, b.scene.scriptedAchieve);
-  healParty(RULE.winHeal, null);
+  healParty(winHealRatio(b, RULE.winHeal), null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
   S.waiting = true;
@@ -7059,12 +7538,84 @@ function scriptedEnd() {
   foeFalls(() => { S.waiting = false; cont(); });
 }
 
+/* ── 각본 마무리 일격 (8장 이창수, 사용자 지침 2026-10-25) ─────────────
+ *  { t:"battle", foe:"…", finishAt: 0.1, finishLine: "…", finishFlat: 500, endText: "…" }
+ *
+ *  적 체력이 finishAt(0.1 = 10%) 아래로 내려가는 순간, 적이 finishLine 을 말하고
+ *  판 전체에 finishFlat 만큼 «못박은» 피해를 줍니다 — 방어·교정·갑주·되살리는 기프트가 듣지 않습니다
+ *  (aoeFlat 과 같은 결). 그러고는 이야기로 넘어갑니다. 이 전투는 «지는 것이 각본» 입니다.
+ *
+ *  lose:"story" 와 반대입니다 — 그쪽은 «전멸해도 넘어감»이지만, 여기서는 그 턱에 닿기 전에
+ *  전멸하면 진짜 패배입니다(중간 저장 지점으로). «거기까지는 깎아야만» 넘어갑니다.
+ *  7.5장 로단(storyFrom — 버티면 넘어감)과도 다릅니다 — 이쪽은 깎아야 넘어갑니다.
+ *
+ *  scriptedAchieve 를 함께 적으면 이 결말에 닿은 것을 업적 조건으로 씁니다(scriptedEnd 와 같은 길).
+ *  넘어간 뒤 작성위원들은 체력 30% 로 섭니다(각본 패배 갈래와 같습니다). */
+function finishReached(b) {
+  const at = b && b.scene && b.scene.finishAt;
+  return !!at && !b.finished && b.hp <= b.maxhp * at;
+}
+function finishBlow() {
+  const b = S.battle;
+  if (!b || b.finished) return;
+  b.finished = true;
+  battleOver(b);
+  battleSuccess(b);
+  b.hp = Math.max(1, b.hp);           // 쓰러뜨린 것이 아닙니다 — 무대에서 쓰러지는 연출도 없습니다
+  S.waiting = true;
+  render();
+  buttons([{ label: "…", cls: "primary", disabled: true }]);
+  divider();
+  const line = b.scene.finishLine;
+  if (line) {
+    const w = document.createElement("p");
+    w.className = "who";
+    w.textContent = b.name;
+    $log.appendChild(w);
+    say(line, "d");
+  }
+  const showImg = b.aoeImg || foeDef(b).aoeImg || b.heavyImg || foeDef(b).heavyImg;
+  if (showImg) showFoe(showImg, b.name, b.imgScale || foeDef(b).imgScale || null);
+  setTimeout(() => {
+    if (S.battle !== b) return;
+    shakeScreen(true);
+    const flat = b.scene.finishFlat || 0;
+    b.mods._scriptedHit = true;        // 되살리는 기프트가 듣지 않습니다 (reviveFirstDown)
+    say("▶ " + b.name + "의 마무리 일격!", "heavy");
+    const hits = [];
+    S.party.filter(w => w && alive(w)).forEach(t => {
+      setHp(t, curHp(t) - flat);
+      hits.push(t);
+      say("　" + memberName(t) + "에게 " + flat + " 피해", "heavy");
+      if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+    });
+    render();
+    hits.forEach(t => allyHitFx(t, flat, { heavy: true, tag: "마무리" }));
+    setTimeout(() => {
+      if (S.battle !== b) return;
+      divider();
+      if (b.scene.endText) say(b.scene.endText, "sys");
+      if (b.scene.scriptedAchieve) checkAchievements(b.name, b.scene.scriptedAchieve);
+      S.party.forEach(w => { if (w) S.hp[w] = Math.max(curHp(w), Math.floor(maxHp(w) * 0.3), 1); });
+      if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
+      showFoe(null, null, null);
+      clearSpeaker();
+      S.battle = null;
+      S.waiting = false;
+      render();
+      cont();
+    }, RULE.turnGapMs);
+  }, RULE.dialogueGapMs);
+}
+
 /* 설득으로 끝나는 전투 — 정해진 턴수를 버텨 이긴 것으로 칩니다.
  * scriptedEnd 와 달리 foeFalls() 를 부르지 않습니다 — 적이 쓰러져 사라지는
  * 연출 없이, 화면에 그대로 선 채로 다음 이야기(설득 성공 대사 자체가
  * persuade.lines 마지막 턴에 이미 나온 뒤입니다)로 곧장 이어집니다. */
 function persuadeEnd() {
   const b = S.battle;
+  battleOver(b);
+  battleSuccess(b);
   flushBattleLines();
   /* 설득이 끝나면 무대 가운데에 선 적을 치웁니다(사용자 지침 2026-09-11).
    * 쓰러뜨려 이긴 것이 아니라 «설득된» 것이라 foeFalls 같은 쓰러지는 연출은
@@ -7074,7 +7625,7 @@ function persuadeEnd() {
    * 마지막 설득 대사의 초상이 새 무대에 그대로 다시 그려집니다. */
   dropSpeaker();
   showFoe(null, null, null);
-  healParty(RULE.winHeal, null);
+  healParty(winHealRatio(b, RULE.winHeal), null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
   S.waiting = false;
@@ -7094,14 +7645,43 @@ function healParty(ratio, msg) {
 }
 
 function defeat() {
+  /* 편도(4호선) — 전원이 쓰러져도 세울 사람이 남아 있으면 패배가 아닙니다.
+   * 더 세울 사람이 없으면 그때가 진짜 패배입니다. 쉼표를 지났으면 아래의 「쉼표주인에게로」로
+   * 가고(그 장면이 저장해 둔 모습으로 되돌립니다), 쉼표 전이면 돌아갈 곳이 없으니 **선로를
+   * 처음부터 다시** 갑니다(사용자 지침 2026-10-23 — rail4DefeatToStart). 예전처럼 「다시 도전」
+   * (그 적만 다시)으로 보내면 앞서 넘긴 적은 그대로 둔 채 내린 사람만 풀려 «공짜 되감기» 가 됩니다. */
+  if (railGraveRule() && S.battle) {
+    rail4MarkFallen();
+    /* 작성위원 열둘이 다 내렸으면 대체 없이 확정 패배입니다 (사용자 지침) */
+    if (!rail4AllSinnersDown() && rail4Bench().length) {
+      divider();
+      say("서 있는 사람이 없다 — 남은 사람을 올려 보낸다.", "bad");
+      render();
+      return openRail4Replace(() => beginTurn());
+    }
+    const 쉼표로 = S.mirrorCheckpoint != null && S.sc - 1 > S.mirrorCheckpoint;
+    if (!쉼표로) return rail4DefeatToStart();
+    if (rail4AllSinnersDown()) {
+      divider();
+      say("작성위원 열둘이 모두 내렸다. 이 선로는 여기서 끝이다.", "bad");
+    }
+  }
   const b = S.battle;
+  battleOver(b);
   divider();
-  say("작성위원 전원이 쓰러졌다.", "bad");
+  /* 쓰러지면 지는 조력자(loseOnDown)가 쓰러진 패배는 각본 전투라도 넘어가지 않습니다 —
+   * «이 사람을 지키는» 자리이므로 언제나 진짜 패배입니다. */
+  const keyAlly = fallenKeyAlly();
+  if (keyAlly) {
+    say(withJosa(memberName(keyAlly), "이") + " 쓰러졌다.  더는 싸움을 이어 갈 수 없다.", "bad");
+    checkAchievements(b.name, "allyDown:" + memberName(keyAlly));   // 업적 — when: { clear: "allyDown:아멜리아" }
+  }
+  else say("작성위원 전원이 쓰러졌다.", "bad");
   /* 각본 전투라도 storyFrom 이 적혀 있으면, 그 턴까지 버텼을 때만
    * 이야기가 이어집니다 — 그 전에 쓰러진 것은 진짜 패배라 아래 평범한
    * 패배 갈래로 내려갑니다 (사용자 지침 2026-09-23).
    * 적을 20%까지 깎아 끝내는 각본 결말(scriptedEnd)은 그대로 삽니다. */
-  if (b.loseOk && b.turn >= b.storyFrom) {
+  if (b.loseOk && b.turn >= b.storyFrom && !keyAlly) {
     say("…하지만 이야기는 멈추지 않는다.", "sys");
     S.party.forEach(w => { if (w) S.hp[w] = Math.max(1, Math.floor(maxHp(w) * 0.3)); });
     if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
@@ -7185,6 +7765,8 @@ function defeat() {
             S.partyStack = (storyCP.partyStack || []).slice();
             S.partyBan = (storyCP.partyBan || []).slice();
             S.battleForced = !!storyCP.battleForced;
+            S.storyPerks = (storyCP.storyPerks || []).slice();
+            S.carryManage = storyCP.carryManage;
             S.sc = storyCP.sc;
             next();
           } }]);
@@ -7214,16 +7796,30 @@ function chapterEnd() {
   /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — mirrorClear()가
    * S.railSave 를 지우는 것과 같은 논리입니다. */
   S.storySave = null;
+  S.storyPerks = [];   // 이야기 특전은 그 장을 마치면 사라집니다
   if (!S.cleared) S.cleared = {};
   /* «처음» 마쳤는지는 표시를 남기기 전에 봐 두어야 합니다 */
   const first = !S.cleared[c.id];
   S.cleared[c.id] = true;
   say("── " + c.no + " 종료 ──", "place");
-  /* 마칠 때 주는 원고료 — 처음 마칠 때만. 장에 clearPay 를 적으면 그것이 이깁니다. */
-  const pay = (typeof c.clearPay === "number") ? c.clearPay : RULE.clearPay;
+  /* 장 묶음 — 마지막 부분을 마치면 묶음 자체도 마친 것으로 칩니다(partOf 머리말).
+   * 아래 «처음 마쳤을 때» 알림들은 이 장 id 와 묶음 id 를 함께 봅니다(newly) —
+   * SLOT_RULE·SYNC_RULE 처럼 "ch8" 을 가리키는 표가 마지막 부분에서 걸리게 하려는 것입니다. */
+  const gid = partOf(c);
+  const groupDone = !!gid && isLastPart(c);
+  const firstGroup = groupDone && !S.cleared[gid];
+  if (groupDone) {
+    S.cleared[gid] = true;
+    say("── " + groupMeta(gid).no + " 종료 ──", "place");
+  }
+  const newly = [first ? c.id : null, firstGroup ? gid : null].filter(Boolean);
+  /* 마칠 때 주는 원고료 — 처음 마칠 때만. 장에 clearPay 를 적으면 그것이 이깁니다.
+   * 묶음의 부분은 마지막 부분에서만 줍니다. */
+  const pay = (typeof c.clearPay === "number") ? c.clearPay
+            : (gid && !groupDone) ? 0 : RULE.clearPay;
   if (first && pay > 0) {
     S.money += pay;
-    say(c.no + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
+    say((groupDone ? groupMeta(gid).no : c.no) + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
   }
   /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
    * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
@@ -7237,14 +7833,14 @@ function chapterEnd() {
    * 여기서 상점을 한 번 열어 보지 않으면 인격이 하나도 없는 채로 1장에 갑니다. */
   /* 동기화가 열리는 장을 «처음» 마쳤을 때만 한 번 알립니다.
    * 이미 마쳤던 장을 다시 밟으면 first 가 거짓이라 두 번 나오지 않습니다. */
-  if (first && c.id === SYNC_UNLOCK_CH) {
+  if (newly.indexOf(SYNC_UNLOCK_CH) >= 0) {
     divider();
     sayBold("'동기화' 기능이 해금되었습니다!", "good");
     say("[편성] 맨 위의 [동기화] 에서 인격 파편으로 작성위원의 동기화 단계를 올릴 수 있습니다.", "sys");
   }
   /* 기프트 강화 단계가 열리는 장(GIFT_UP_RULE.tiers)을 처음 마쳤을 때 — 같은 모양으로. */
-  if (first && typeof GIFT_UP_RULE !== "undefined") {
-    const r = (GIFT_UP_RULE.tiers || []).find(x => x.needCleared === c.id);
+  if (newly.length && typeof GIFT_UP_RULE !== "undefined") {
+    const r = (GIFT_UP_RULE.tiers || []).find(x => newly.indexOf(x.needCleared) >= 0);
     if (r) {
       divider();
       sayBold("'E.G.O 기프트 강화' " + (r.lv === 1 ? "기능이 해금되었습니다!" : "— " + "+".repeat(r.lv) + " 단계가 열렸습니다!"), "good");
@@ -7256,7 +7852,7 @@ function chapterEnd() {
   }
   /* 기프트 합성이 열리는 장(GIFT_FUSE_RULE.needCleared)을 처음 마쳤을 때 — 같은 모양으로.
    * 7장은 ++ 와 합성이 함께 열리므로, 강화 다음에 합성 순으로 섭니다. */
-  if (first && typeof GIFT_FUSE_RULE !== "undefined" && GIFT_FUSE_RULE.needCleared === c.id) {
+  if (typeof GIFT_FUSE_RULE !== "undefined" && newly.indexOf(GIFT_FUSE_RULE.needCleared) >= 0) {
     divider();
     sayBold("'E.G.O 기프트 합성' 기능이 해금되었습니다!", "good");
     say("[보관함] 의 E.G.O 기프트 칸 아래 [E.G.O 기프트 합성] 에서 지닌 기프트 여럿과 황금교본을 들여 하나로 합치면 ★★★★ 기프트가 됩니다. " +
@@ -7277,16 +7873,16 @@ function chapterEnd() {
    *  S.cleared[c.id] 는 위에서 이미 켜 두었으므로 slotCount() 가 늘어난
    *  뒤의 수를 돌려줍니다. first 로 걸러 두어 다회차로 같은 장을 다시
    *  마쳐도 두 번 뜨지 않습니다 — '동기화' 쪽과 같은 규칙입니다. */
-  if (first) {
+  if (newly.length) {
     const 칸이름 = { gift: "E.G.O 기프트", advisor: "보조 교육위원" };
     const 어디서 = { gift: "편성", advisor: "편성" };
     for (const kind in SLOT_RULE) {
-      const r = (SLOT_RULE[kind] || []).find(x => x.needCleared === c.id);
+      const r = (SLOT_RULE[kind] || []).find(x => newly.indexOf(x.needCleared) >= 0);
       if (!r) continue;
       const n = slotCount(kind);
       divider();
       sayBold(칸이름[kind] + " 장착 칸이 하나 더 열렸습니다!", "good");
-      say("[" + 어디서[kind] + "] 에서 " + 칸이름[kind] + "을 " + n +
+      say("[" + 어디서[kind] + "] 에서 " + withJosa(칸이름[kind], "을") + " " + n +
           "개까지 세울 수 있습니다.", "sys");
     }
   }
@@ -7301,7 +7897,8 @@ function chapterEnd() {
 
   buttons([
     firstEver ? { label: "상점 — 인격 배정받기", cls: "primary", fn: () => openShop(() => chapterEnd()) } : null,
-    hasNext ? { label: "다음 장으로", cls: firstEver ? "" : "primary",
+    hasNext ? { label: (gid && CHAPTERS[S.ch + 1].part === gid) ? "다음 부분으로" : "다음 장으로",
+                cls: firstEver ? "" : "primary",
                 fn: () => startChapter(S.ch + 1) } : null,
     { label: "편성", fn: () => openParty(() => {}) },
     firstEver ? null : { label: "상점", fn: () => openShop(() => {}) },
@@ -7509,6 +8106,13 @@ function openParty(done) {
                  '<div><div class="lock">' + sp.name + '</div>' +
                  '<div class="sub">' + withJosa(advBlock, "을") +
                  ' 교육위원으로 세운 동안은 지원으로 함께할 수 없습니다.</div></div></div>';
+            return;
+          }
+          /* 지금 편성할 수 없는 사람 — 작성위원 칸과 같게 S.partyBan 을 봅니다(banParty 참고) */
+          if (sel < 0 && S.partyBan && S.partyBan.indexOf(id) >= 0) {
+            h += '<div class="slot hasic">' + iconHTML(supportIconName(sp), { dim: true }) +
+                 '<div><div class="lock">' + sp.name + '</div>' +
+                 '<div class="sub">지금은 함께할 수 없습니다</div></div></div>';
             return;
           }
           /* 별 위치는 작성위원 칸과 같게 — 이름줄이 아니라 인격줄 앞에 붙습니다 */
@@ -9290,7 +9894,7 @@ function save(silent) {
  *  버려, 지금은 못 골라야 할 사람을 다시 고를 수 있게 됩니다. */
 const SAVE_KEEPS = ["ch", "sc", "flags", "hp", "party", "equip",
                     "mirror", "mirrorHard", "mirrorTier", "ended",
-                    "partyStack", "partyBan", "battleForced"];
+                    "partyStack", "partyBan", "battleForced", "storyPerks", "carryManage"];
 
 /* ── 이어하기로 돌아왔을 때 무대 되살리기 ────────────────────────
  *  기록에 담기는 것은 «어디까지 읽었나»(S.sc)뿐입니다. 지금 깔려 있던
@@ -9375,7 +9979,55 @@ function load() {
  *  CHAPTERS 안에서는 읽는 차례대로 두면 됩니다 — 3장, 3.5장, 4장 순으로.
  */
 function isSide(c) { return !!(c && c.side); }
-function mainChapters() { return CHAPTERS.filter(c => !isSide(c)); }
+
+/* ── 장 묶음 (8장~) ──────────────────────────────────────────
+ *  한 장이 너무 길어 부분으로 나눌 때 씁니다 — 부분마다 part: "ch8" 처럼 묶음 id 를 답니다
+ *  (사용자 지침 2026-10-25). CHAPTERS 안에서는 부분을 차례대로 붙여 둡니다 — 8-1, 8-2, ….
+ *
+ *    · 운전석에는 묶음 한 칸만 섭니다. 누르면 부분들이 서는 화면이 뜹니다(openPartSelect)
+ *    · 앞 부분을 마쳐야 다음 부분이 열립니다 — chapterUnlocked 가 원래 «앞의 본편» 을
+ *      보므로 손댈 것이 없습니다. 첫 부분은 묶음 앞의 본편을 봅니다
+ *    · 마지막 부분을 마치면 S.cleared[묶음 id] 가 섭니다 — SYNC_RULE·SLOT_RULE 의 "ch8" 은
+ *      이것을 봅니다. 클리어 수(mainChapters)에도 묶음은 한 장으로 셉니다
+ *    · 원고료는 마지막 부분에서만(부분에 clearPay 를 적으면 그것이 이깁니다),
+ *      이벤트 재화는 한 장 몫을 부분 수로 나눠 부분마다 (eventStoryGain)
+ *    · 황금교본은 데이터 몫입니다 — { t:"codex" } 를 마지막 부분에만 둡니다
+ *
+ *  묶음의 이름·그림·소개는 첫 부분에 group 으로 적습니다.
+ *      group: { no: "8장", title: "…", subtitle: "…", img, banner, summary, pitch, glassNote }
+ *  안 적은 칸은 첫 부분의 것을 빌립니다. */
+function partOf(c) { return (c && c.part) || null; }
+function groupParts(gid) {
+  const out = [];
+  CHAPTERS.forEach((c, i) => { if (c.part === gid) out.push(i); });
+  return out;
+}
+function groupMeta(gid) {
+  const idx = groupParts(gid);
+  const first = CHAPTERS[idx[0]] || {};
+  const g = (idx.map(i => CHAPTERS[i]).find(c => c.group) || {}).group || {};
+  return { id: gid, no: g.no || first.no || gid, title: g.title || "", subtitle: g.subtitle || null,
+           img: g.img || first.img || null, banner: g.banner || chapterBanner(first),
+           summary: g.summary || null, pitch: g.pitch || null, glassNote: g.glassNote || null,
+           parts: idx };
+}
+function isLastPart(c) {
+  const idx = c && c.part ? groupParts(c.part) : [];
+  return !!idx.length && CHAPTERS[idx[idx.length - 1]] === c;
+}
+/* 클리어 수에 세는 «본편» — 곁가지는 빼고, 묶음은 groupMeta 한 덩이로 셉니다.
+ * 받는 쪽은 id 만 보고 S.cleared 를 찾으므로, 묶음 덩이의 id(= 묶음 id)로 그대로 됩니다. */
+function mainChapters() {
+  const out = [], seen = {};
+  CHAPTERS.forEach(c => {
+    if (isSide(c)) return;
+    if (!c.part) { out.push(c); return; }
+    if (seen[c.part]) return;
+    seen[c.part] = true;
+    out.push(groupMeta(c.part));
+  });
+  return out;
+}
 
 function chapterUnlocked(i) {
   /* 앞쪽에서 가장 가까운 «본편» 을 찾는다. 곁가지는 건너뛴다. */
@@ -9398,7 +10050,7 @@ let CS_OPEN = {};
 /* 지금 «다음으로 할 만한» 것 셋. 없는 자리는 건너뜁니다.
  *
  *    본편        아직 안 마친 첫 본편
- *    그밖의 이야기 아직 안 마친 곁가지 중 «가장 나중 것»
+ *    그밖의 이야기 아직 안 마친 곁가지 중 «가장 먼저 나온 것»
  *    거울·철도    한 번도 완주하지 않은 갈래 중 «가장 낮은 급»
  *
  *  셋 다 «지금 들어갈 수 있는 것» 만 고릅니다. 잠긴 것을 추천 자리에 세우면
@@ -9408,14 +10060,45 @@ let CS_OPEN = {};
  *  아직 안 마친 본편이 있으면 그것은 반드시 열려 있고(앞 장을 마쳐야 열리므로),
  *  본편을 다 마쳤으면 곁가지도 거울도 남김없이 열려 있기 때문입니다.
  */
+/* 장 번호를 수로 — 「7.5장」 → 7.5. 목록에 어디까지 보일지 재는 데 씁니다. */
+function chapterNo(c) { return parseFloat(String((c && c.no) || "0")) || 0; }
+
+/* ── 운전석 목록에 보일 데까지 (사용자 지침 2026-10-27) ────────
+ *  «지금 할 장과 그다음» 까지입니다 — 아직 한참 뒤의 장이 잠긴 채로 줄을
+ *  채우면, 막 시작한 사람에게는 운전석이 할 일 목록이 아니라 벽이 됩니다.
+ *
+ *      1장을 마쳤으면  →  지금 할 것은 2장, 한도는 3장
+ *      5장을 마쳤으면  →  지금 할 것은 6장, 한도는 7장
+ *
+ *  곁가지도 같은 자로 잽니다. 번호가 7.5 라, 6장을 마치면(한도 8) 7.5장까지
+ *  보입니다 — 아직 안 열렸어도 «곧 열릴 것» 으로 눈에 둡니다.
+ *  본편을 다 마쳤으면 한도가 없습니다(Infinity).
+ */
+function chapterPeek() {
+  const 안마친 = mainChapters().find(c => !(S.cleared && S.cleared[c.id]));
+  return 안마친 ? chapterNo(안마친) + 1 : Infinity;
+}
+
 function chapterPicks() {
   const 마쳤나 = c => !!(S.cleared && S.cleared[c.id]);
   const out = { main: -1, side: -1, mirror: null };
 
+  /* ── 곁가지는 «나온 차례대로» 입니다 (사용자 지침 2026-10-27) ──────
+   *  예전에는 아직 안 마친 곁가지 가운데 «가장 나중 것» 을 세웠습니다. 그래서
+   *  7.5장 둘이 다 안 끝난 사람에게 나중에 나온 코드레드가 먼저 떴고, 먼저 나온
+   *  권모술수가 가려졌습니다. 이제 «먼저 나온 것» 부터 세웁니다 — 본편이
+   *  «가장 이른 것» 을 세우는 것과 같은 결이고, 하나를 마치면 그다음 것이
+   *  저절로 올라옵니다.
+   *
+   *  ⚠ CHAPTERS 에 적힌 차례가 곧 나온 차례입니다 — 3.5장 영덕의 밤 →
+   *    5.5장 육참골탄 → 6.5장 괴수살인괴수 → 6.5장 부산행 →
+   *    7.5장 권모술수가 난무하는 → 7.5장 코드레드.
+   *    새 곁가지는 반드시 배열 «끝» 에 붙이십시오. 가운데 끼워 넣으면
+   *    추천 차례가 어긋납니다. */
   CHAPTERS.forEach((c, i) => {
     if (마쳤나(c) || !chapterUnlocked(i)) return;
-    if (isSide(c)) out.side = i;                      // 곁가지는 «가장 나중 것»
-    else if (out.main < 0) out.main = i;              // 본편은 «가장 이른 것»
+    if (isSide(c)) { if (out.side < 0) out.side = i; }  // 곁가지는 «먼저 나온 것»
+    else if (out.main < 0) out.main = i;                // 본편은 «가장 이른 것»
   });
 
   out.mirror = MIRROR_TIERS.find(r =>
@@ -9477,6 +10160,36 @@ function openChapterSelect(back) {
            '</div>';
   };
 
+  /* 장 묶음 한 칸 — 부분 여럿을 한 칸으로 세웁니다(partOf 머리말). 누르면 openPartSelect.
+   * 열림은 첫 부분, 「편성 필요」 는 아직 안 마친 첫 부분의 것을 보입니다. */
+  const groupSlot = (gid, rich) => {
+    const m = groupMeta(gid);
+    const parts = m.parts.map(i => CHAPTERS[i]);
+    const done  = S.cleared && S.cleared[gid];
+    const open  = chapterUnlocked(m.parts[0]);
+    const n     = parts.filter(c => S.cleared && S.cleared[c.id]).length;
+    const nextP = parts.find(c => !(S.cleared && S.cleared[c.id])) || parts[0];
+    const needs = chapterNeeds(nextP), miss = chapterMissing(nextP);
+    return '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-group="' + gid + '"' : '') + '>' +
+             slotStrip(open ? m.banner : null) +
+             '<div class="' + (open ? 'nm' : 'lock') + '">' + m.no +
+               (m.subtitle ? '　' + m.subtitle : (m.title ? '　' + m.title : '')) + '</div>' +
+             '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능　·　' + n + ' / ' + parts.length + ' 부분')
+                                        : '잠김') + '</div>' +
+             (rich && chapPitch(m).length
+               ? '<div class="csum">' + chapPitch(m).map(x => '<span>' + x + '</span>').join('') + '</div>'
+               : '') +
+             (open && needs.length
+               ? '<div class="sub"' + (miss.length ? ' style="color:var(--red)"' : '') + '>' +
+                   nameList(needs) + ' 편성 필요' +
+                   (miss.length ? '　— 지금은 빠져 있습니다' : '　— 확인됨') + '</div>'
+               : '') +
+           '</div>';
+  };
+  /* 본편 목록의 한 자리 — 묶음은 첫 부분 자리에 한 칸, 나머지 부분 자리는 비웁니다 */
+  const mainSlot = (c, i, rich) => !c.part ? chapSlot(c, i, rich)
+    : (groupParts(c.part)[0] === i || rich) ? groupSlot(c.part, rich) : "";
+
   /* 거울 던전 — 보통과 하드가 나란히 섭니다 */
   const enkNow = enkCount();
   const slot = (rule, attr) => {
@@ -9503,7 +10216,7 @@ function openChapterSelect(back) {
              '<div class="msub">' + rule.sub + '</div>' +
              /* 갈래를 «고를 때» 필요한 것만 눈금 셋으로. 자세한 것은 들어가기 전 화면이 말합니다 */
              '<div class="mstats">' +
-               chip("세기", f.세기) +
+               chip("난이도", f.난이도) +
                chip(f.상대라벨, f.상대) +
                chip("입장", ENK_RULE.name + ' ' + rule.cost, !canGo) +
              '</div>' +
@@ -9530,7 +10243,7 @@ function openChapterSelect(back) {
   const mainChap = pick.main >= 0 ? CHAPTERS[pick.main] : null;
   const sideChap = pick.side >= 0 ? CHAPTERS[pick.side] : null;
   const rec = []
-    .concat(mainChap ? [chapSlot(mainChap, pick.main, true)] : [])
+    .concat(mainChap ? [mainSlot(mainChap, pick.main, true)] : [])
     .concat(sideChap ? [chapSlot(sideChap, pick.side, true)] : [])
     .concat(pick.mirror ? [slot(pick.mirror, 'data-mirror="' + pick.mirror.key + '"')] : []);
 
@@ -9542,17 +10255,34 @@ function openChapterSelect(back) {
              '출시된 모든 컨텐츠를 충실하게 즐기셨군요!</div>') +
        '</div>';
 
+  /* ── 목록은 «지금 할 장과 그다음» 까지만 ─────────────────────
+   *  1장만 민 사람에게도 8장까지 줄이 늘어서, 한참 뒤의 것이 잠긴 채로 화면을
+   *  채우고 있었습니다 (사용자 지침 2026-10-27). 한도는 chapterPeek() 이 잽니다 —
+   *  1장을 마쳤으면 3장까지, 5장을 마쳤으면 7장까지. 곁가지도 같은 자로 재므로
+   *  6장을 마치면 7.5장까지 보입니다. 본편을 다 마쳤으면 한도가 없습니다.
+   *
+   *  감춘 것이 있으면 그 수를 한 줄로 적어 둡니다 — 아무 말 없이 줄이 끊기면
+   *  «여기가 끝인가» 로 읽힙니다. */
+  const 한도 = chapterPeek();
+  const 보임 = c => chapterNo(c) <= 한도;
+  const 감춘수 = list => list.filter(c => !보임(c)).length;
+  /* 「하나장」이 아니라 「한 장」 — 뒤에 세는 말이 붙으므로 countBefore 입니다.
+   * 수는 «아직 감춰 둔 것 전부» 이고, 앞 장을 마칠 때마다 하나씩 열립니다 —
+   * 「다음 장을 마치면 일곱 장이 열린다」로 읽히지 않게 그렇게 적습니다. */
+  const 더있음 = n => n ? '<div class="csmore">아직 ' + countBefore(n) +
+                          ' 장이 더 있습니다 — 앞 장을 마칠 때마다 하나씩 열립니다</div>' : '';
+
   h += sec("main", "본편", "라슈 컴퍼니의 메인 여정을 따라가 보세요",
            '<div class="grid">' +
-             CHAPTERS.map((c, i) => isSide(c) ? "" : chapSlot(c, i)).join('') +
-           '</div>');
+             CHAPTERS.map((c, i) => (isSide(c) || !보임(c)) ? "" : mainSlot(c, i)).join('') +
+           '</div>' + 더있음(감춘수(mainChapters())));
 
   /* 곁가지 이야기 — 본편 아래에 따로 섭니다 */
-  if (sideList.length)
+  if (sideList.length && sideList.some(보임))
     h += sec("side", "그밖의 이야기", "본편 곁에서 벌어진 짧은 이야기들을 만나 보세요",
              '<div class="grid">' +
-               CHAPTERS.map((c, i) => isSide(c) ? chapSlot(c, i) : "").join('') +
-             '</div>');
+               CHAPTERS.map((c, i) => (isSide(c) && 보임(c)) ? chapSlot(c, i) : "").join('') +
+             '</div>' + 더있음(감춘수(sideList)));
 
   h += sec("mirror", "거울 던전", "더 세져서 돌아온 것들과 겨뤄 보세요",
            '<div class="grid">' +
@@ -9585,12 +10315,48 @@ function openChapterSelect(back) {
   $sheet.querySelectorAll(".slot[data-i]").forEach(el => {
     el.onclick = () => { closeModal(); startChapter(+el.dataset.i); };
   });
+  $sheet.querySelectorAll(".slot[data-group]").forEach(el => {
+    el.onclick = () => openPartSelect(el.dataset.group, back);
+  });
   const rs = $sheet.querySelector(".slot[data-resume]");
   if (rs) rs.onclick = () => { closeModal(); if (!load()) { glass(); say("기록이 손상되었다.", "todo"); } };
   $sheet.querySelectorAll(".slot[data-mirror]").forEach(el => {
     el.onclick = () => { openMirrorGate(el.dataset.mirror, () => openChapterSelect(back)); };
   });
   document.getElementById("csclose").onclick = () => { closeModal(); if (back) back(); };
+}
+
+/* 장 묶음의 부분 고르기 — 운전석의 묶음 칸을 누르면 뜹니다(partOf 머리말).
+ * 부분마다 한 칸, 앞 부분을 마쳐야 열립니다. 이어하기는 운전석 맨 위 카드 하나가 맡습니다. */
+function openPartSelect(gid, back) {
+  const m = groupMeta(gid);
+  $modal.classList.add("on");
+  let h = '<h2>' + m.no + (m.title ? '　' + m.title : '') + '</h2>' +
+          '<div class="hint">' + (m.subtitle ? '— ' + m.subtitle + ' —<br>' : '') +
+            '앞 부분을 마쳐야 다음 부분이 열립니다.</div><div class="grid">';
+  m.parts.forEach(i => {
+    const c = CHAPTERS[i];
+    const done = S.cleared && S.cleared[c.id];
+    const open = chapterUnlocked(i);
+    const needs = chapterNeeds(c), miss = chapterMissing(c);
+    h += '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-i="' + i + '"' : '') + '>' +
+           slotStrip(open ? chapterBanner(c) : null) +
+           '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no + (c.title ? '　' + c.title : '') + '</div>' +
+           '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능') : '잠김') + '</div>' +
+           (open && c.subtitle ? '<div class="sub">' + c.subtitle + '</div>' : '') +
+           (open && needs.length
+             ? '<div class="sub"' + (miss.length ? ' style="color:var(--red)"' : '') + '>' +
+                 nameList(needs) + ' 편성 필요' +
+                 (miss.length ? '　— 지금은 빠져 있습니다' : '　— 확인됨') + '</div>'
+             : '') +
+         '</div>';
+  });
+  h += '</div><div class="modalfoot"><button id="psback" class="ghost">운전석으로</button></div>';
+  $sheet.innerHTML = h;
+  $sheet.querySelectorAll(".slot[data-i]").forEach(el => {
+    el.onclick = () => { closeModal(); startChapter(+el.dataset.i); };
+  });
+  document.getElementById("psback").onclick = () => openChapterSelect(back);
 }
 
 /* ── 거울 던전 ────────────────────────────────────────────────
@@ -9736,7 +10502,12 @@ const MIRROR_RAIL1 = {
   maxNormal: 1,     // 잡졸은 맨 앞 한 번만
   bossChance: 1.0,  // 보스가 반드시 섞입니다
   finalFoe: "ju3pino",   // 종점 — 만나 봐야 압니다
-  needCleared: 5,
+
+  /* 본편 4장을 마쳐야 열립니다 (사용자 지침 2026-10-27 — 네 호선을 4·5·6·7장으로
+   * 한 장씩 벌려 놓음). 예전에는 «본편을 다섯 장 마쳤는가»(needCleared: 5)로 셌는데,
+   * 그 셈은 곁가지(.5장)까지 함께 세어 본편 넷만 마치고도 열렸습니다 —
+   * 2·3호선처럼 장을 콕 집는 쪽으로 맞췄습니다. */
+  needChapter: "ch4",
   cost: ENK_RULE.costRail,
 
   /* 들어가기 전(openMirrorGate) 맨 위에 붉게 뜨는 경고. 값을 안 적으면 아무것도 안 뜬다 —
@@ -9804,9 +10575,10 @@ const MIRROR_RAIL2 = {
   finalBg:  "assets/scene/거울굴절철도2호선종착역.jpg",
   finalName: "거울굴절철도 2호선 종착역",
 
-  /* 본편 6장을 마쳐야 열립니다. 다른 갈래처럼 «몇 장을 마쳤나» 로 세지 않고
-   * 그 장을 콕 집습니다 — 곁가지(.5장)도 클리어 수에 들어가기 때문입니다. */
-  needChapter: "ch6",
+  /* 본편 5장을 마쳐야 열립니다 (사용자 지침 2026-10-27 — 6장에서 한 장 내림).
+   * 다른 갈래처럼 «몇 장을 마쳤나» 로 세지 않고 그 장을 콕 집습니다 —
+   * 곁가지(.5장)도 클리어 수에 들어가기 때문입니다. */
+  needChapter: "ch5",
 
   warn: "1호선보다 길고 셉니다. 순환을 셋 돌아야 종착역이 열리고, 그 사이 쉼표는 " +
         "순환과 순환 사이뿐입니다. 도중에 유리창으로 나가면 처음부터입니다.",
@@ -9987,9 +10759,10 @@ const MIRROR_RAIL3 = {
   fragBoxSelect: 25,
   cost: ENK_RULE.costRail,
 
-  /* 본편 7장을 마쳐야 열립니다. 2호선(ch6)과 같은 결로 장을 콕 집습니다 —
-   * 클리어 수로 세면 곁가지(.5장)까지 함께 세어 버립니다. */
-  needChapter: "ch7",
+  /* 본편 6장을 마쳐야 열립니다 (사용자 지침 2026-10-27 — 7장에서 한 장 내림).
+   * 2호선과 같은 결로 장을 콕 집습니다 — 클리어 수로 세면 곁가지(.5장)까지
+   * 함께 세어 버립니다. */
+  needChapter: "ch6",
 
   warn: "지금까지 중 가장 센 갈래입니다. 역을 지나칠수록 남은 것들이 세지고, " +
         "쉼표는 중간역 하나뿐입니다.",
@@ -10214,7 +10987,7 @@ SCENE_EXT.railExpressRest = function () {
    * 「되돌아왔을 때」 몫의 말을 합니다(RAIL_LINES_BACK). */
   const sp = railSpeaker(rule);
   const 되돌아옴 = !!(S.railSave && S.railSave.key === rule.key);
-  if (sp.advisor) speak(sp.name, railLine(sp, 되돌아옴), sp.portrait);
+  if (sp.advisor) speak(sp.name, railLine(sp, 되돌아옴, rule), sp.portrait);
   else if (rule.rest.who) speak(rule.rest.who, rule.rest.say);
 
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 쓰러진 사람도 함께 일어납니다
@@ -10347,16 +11120,16 @@ function expressFacts(r, o) {
   o.첫몫 = 남은.length ? "계단 삯 " + countBare(남은.length) + " 남음" : "계단 삯 모두 받음";
   o.첫몫받음 = !남은.length;
   o.자세히 =
-    "역이 " + countBare(r.count) + "입니다. 역마다 정차할지 통과할지 고르고, " +
-    "한 역을 통과할 때마다 남은 것들이 " + r.skipStep.toFixed(1) + "씩 세집니다 — " +
+    "역이 " + countBare(r.count) + "입니다. 역마다 <b>정차할지 통과할지</b> 고르고, " +
+    "한 역을 통과할 때마다 <b>남은 것들이 " + r.skipStep.toFixed(1) + "씩 세집니다</b> — " +
     "여섯을 다 지나치면 " + railScaleText(최대) + "입니다. " +
-    "중간역과 종착역에는 급행도 섭니다. 중간역을 넘기면 " +
-    withJosa(r.rest.who, "이") + " 한 번 들러 체력과 관리력을 채워 줍니다. " +
-    "완주 삯은 어느 배수로 끝냈는지로 갈려, 끝난 뒤 「분실물 보관함」에서 받습니다 — " +
+    "<b>중간역과 종착역에는 급행도 섭니다.</b> 중간역을 넘기면 " +
+    withJosa(r.rest.who, "이") + " 한 번 들러 <b>체력과 관리력을 채워 줍니다.</b> " +
+    "완주 삯은 <b>어느 배수로 끝냈는지</b>로 갈려, 끝난 뒤 「분실물 보관함」에서 받습니다 — " +
     RAIL3_PRIZES.map(p => railScaleText(p.k) + " " + rail3PrizeText(p) +
                           (rail3PrizeTaken(p) ? " (받음)" : "")).join("　/　") +
-    ". 한 번씩만 받고, 높은 배수로 끝내면 아직 안 받은 아래 몫도 함께 받습니다. " +
-    "선로 위에서는 적을 잡아도 " + CURRENCY + "가 나오지 않습니다.";
+    ". <b>한 번씩만</b> 받고, 높은 배수로 끝내면 아직 안 받은 아래 몫도 함께 받습니다. " +
+    "선로 위에서는 <b>적을 잡아도 " + CURRENCY + "가 나오지 않습니다.</b>";
   return o;
 }
 
@@ -10403,6 +11176,29 @@ function mirrorUnlocked(rule) {
  *
  *  둘을 한 함수에서 지어야, 한쪽만 고쳐 놓고 다른 쪽이 옛말을 하는 일이 없습니다.
  */
+/* ── 난이도 한 마디 (사용자 지침 2026-10-27) ──────────────────
+ *  예전에는 이 자리에 «세기» 를 «×3.5» 처럼 배수로 적었습니다. v2.16.0 에서
+ *  거울의 적이 본편 수치에 배수를 곱하지 않고 제 계단 표로 서게 되면서,
+ *  그 배수는 더 이상 «무엇의 몇 배» 를 뜻하지 않게 되었습니다 — 화면에
+ *  남겨 두면 읽는 사람만 헷갈립니다. 그래서 말로 적습니다.
+ *
+ *      거울 던전 노말      보통
+ *      하드               어려움
+ *      익스트림            매우 어려움
+ *      거울굴절철도 전부    매우 어려움
+ *
+ *  갈래에 diff 를 적어 두면 그것이 이깁니다 — 새 갈래(거울 심층처럼 익스트림
+ *  위로 더 올라가는 것)는 제 말을 직접 적으십시오.
+ *  배수 자체는 없어지지 않았습니다 — 「이 갈래는 어떻게 굴러가나」(자세히)와
+ *  2·3호선의 순환·통과 셈에는 그대로 나옵니다. */
+function mirrorDiffText(r) {
+  if (r && r.diff) return r.diff;
+  if (r && r.group === "rail") return "매우 어려움";
+  if (r === MIRROR_EXTREME) return "매우 어려움";
+  if (r === MIRROR_HARD)    return "어려움";
+  return "보통";
+}
+
 function mirrorFacts(rule) {
   const r = rule || MIRROR_RULE;
   const 몫 = ['황금교본 ' + r.codex]
@@ -10412,16 +11208,26 @@ function mirrorFacts(rule) {
   const 받았나 = !!(S.mirrorDone && S.mirrorDone[r.key]);
   const o = {
     상대라벨: '상대',
+    난이도: mirrorDiffText(r),
     보상: 몫.join('　·　'),
     첫몫: r.bonus ? (받았나 ? CURRENCY + ' ' + r.bonus + ' 받음'
                             : '첫 완주 ' + CURRENCY + ' ' + r.bonus) : "",
-    첫몫받음: 받았나
+    첫몫받음: 받았나,
+    /* ── 아이콘으로 세울 몫 (2026-10-27) ──────────────────────────
+     *  위의 보상·첫몫은 «글줄» 입니다(운전석 칸이 그 꼴로 씁니다). 돌입 준비
+     *  화면은 같은 것을 아이콘으로 세우므로, 쪼개 둔 것을 함께 돌려줍니다 —
+     *  한쪽만 고치고 다른 쪽이 옛말을 하는 일이 없도록 여기서 같이 짓습니다.
+     *  재화·물건 이름이 곧 아이콘 이름입니다(assets/icon/<이름>.png). */
+    몫들: [{ ic: '황금교본', nm: '황금교본', n: r.codex }]
+      .concat(r.fragBoxSelect ? [{ ic: '인격 파편 상자 (선택)', nm: '파편 상자', n: r.fragBoxSelect }] : [])
+      .concat((openEvent() && r.event) ? [{ ic: eventCurName(), nm: eventCurName(), n: r.event }] : []),
+    첫몫칸: r.bonus ? { ic: CURRENCY, nm: CURRENCY, n: r.bonus, 받음: 받았나 } : null
   };
 
   /* 처치 원고료가 안 나오는 갈래(굴절철도)는 그 사실을 «들어가기 전에» 말해 둡니다.
    * 다 돌고 나서야 알면 속은 기분이 듭니다 — 첫 완주 삯이 그만큼 큰 것도 함께 적습니다. */
   const 처치몫없음 = r.noKillPay
-    ? ' 선로 위에서는 적을 잡아도 ' + CURRENCY + '가 나오지 않습니다 — 대신 첫 완주 삯이 ' +
+    ? ' 선로 위에서는 <b>적을 잡아도 ' + CURRENCY + '가 나오지 않습니다</b> — 대신 첫 완주 삯이 ' +
       '거울 던전보다 훨씬 큽니다.'
     : '';
 
@@ -10435,9 +11241,9 @@ function mirrorFacts(rule) {
     o.상대 = '보스 ' + (r.loopFoes ? r.loopFoes.length : r.loop.foes);
     o.자세히 = (r.loopFoes ? '정해진 보스 ' : '이미 만난 보스 ') +
                countWord(r.loopFoes ? r.loopFoes.length : r.loop.foes) + ' 한 순환으로 묶어, ' +
-               '순환마다 다시 만납니다. 세기는 순환마다 ' + r.loop.step.toFixed(1) + '씩 올라, ' +
-               countBefore(r.loop.free) + ' 순환을 돌면 종착역으로 가는 문이 열립니다. ' +
-               '그 뒤로는 순환을 더 돌지 종착역으로 갈지 고를 수 있습니다.' + 처치몫없음;
+               '<b>순환마다 다시 만납니다.</b> 세기는 순환마다 ' + r.loop.step.toFixed(1) +
+               '씩 올라, <b>' + countBefore(r.loop.free) + ' 순환</b>을 돌면 종착역으로 가는 문이 ' +
+               '열립니다. 그 뒤로는 <b>순환을 더 돌지 종착역으로 갈지</b> 고를 수 있습니다.' + 처치몫없음;
     return o;
   }
 
@@ -10445,13 +11251,15 @@ function mirrorFacts(rule) {
   if (r.packRounds) {
     o.세기 = mirrorLayerText(r);
     o.상대라벨 = '테마팩';
-    o.상대 = countBare(r.packRounds) + '번';
-    o.자세히 = '들어가면 「테마팩」(잡졸 하나·보스 둘) 셋을 보여 주고, 그중 하나를 골라' +
-               ' 상대합니다. ' + (r.packRounds > 1 ? countBefore(r.packRounds) +
-               ' 번 연달아 고릅니다 — 한 번 고른 자리부터 다시 이어할 수 있습니다.'
+    /* 「셋번」이 아니라 「세 번」 — 뒤에 세는 말이 붙으므로 countBefore 입니다
+     * (2026-10-27, 돌입 준비 화면을 다시 짜며 눈에 걸려 고쳤습니다). */
+    o.상대 = countBefore(r.packRounds) + ' 번';
+    o.자세히 = '들어가면 「테마팩」(잡졸 하나·보스 둘) 셋을 보여 주고, <b>그중 하나를 골라</b>' +
+               ' 상대합니다. ' + (r.packRounds > 1 ? '<b>' + countBefore(r.packRounds) +
+               ' 번 연달아</b> 고릅니다 — <b>한 번 고른 자리부터 다시 이어할 수 있습니다.</b>'
                : '') +
                (r.guaranteeRailPackOnFinalRound
-                 ? ' 마지막 선택에서는 거울굴절철도 팩(1호선·2호선 중 하나)이 반드시 섞입니다.'
+                 ? ' 마지막 선택에서는 <b>거울굴절철도 팩</b>(1호선·2호선 중 하나)이 반드시 섞입니다.'
                  : '');
     return o;
   }
@@ -10461,13 +11269,16 @@ function mirrorFacts(rule) {
   const n = r.foes ? (r.foes.length + (r.finalFoe ? 1 : 0)) : Math.min(r.count, metCount());
   o.세기 = railScaleText(r.scale);
   o.상대 = '적 ' + n;
-  o.자세히 = (r.foes ? '정해진 적 ' : '이미 만난 적 ') + countWord(n) + ' 연달아 상대합니다.' +
-             (r.maxNormal === 1 ? ' 맨 앞 하나를 빼면 모두 보스이고, 맨 뒤는 종점입니다.'
-              : r.maxBoss >= r.count ? ' 모두 보스일 수 있습니다.'
-              : r.maxBoss > 1 ? ' 보스가 ' + countBare(r.maxBoss) + '까지 섞입니다.' : '') +
-             (r.rest ? ' ' + countBefore(r.rest.after) + ' 번째를 넘기면 ' +
-                       withJosa(r.rest.who, "이") + ' 한 번 들러 체력과 관리력을 채워 줍니다.' : '') +
+  o.자세히 = (r.foes ? '정해진 적 ' : '이미 만난 적 ') + '<b>' + countWord(n) +
+             ' 연달아</b> 상대합니다.' +
+             (r.maxNormal === 1 ? ' 맨 앞 하나를 빼면 <b>모두 보스</b>이고, 맨 뒤는 <b>종점</b>입니다.'
+              : r.maxBoss >= r.count ? ' <b>모두 보스</b>일 수 있습니다.'
+              : r.maxBoss > 1 ? ' 보스가 <b>' + countBare(r.maxBoss) + '까지</b> 섞입니다.' : '') +
+             (r.rest ? ' <b>' + countBefore(r.rest.after) + ' 번째를 넘기면</b> ' +
+                       withJosa(r.rest.who, "이") + ' 한 번 들러 <b>체력과 관리력을 채워 줍니다.</b>' : '') +
              처치몫없음;
+  /* 편도 갈래(4호선) — 세기 · 상대는 그대로 두고 설명만 제 것으로 */
+  if (r.grave) return graveFacts(r, o);
   return o;
 }
 
@@ -10689,6 +11500,7 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     firstFrom: f.firstFrom != null ? f.firstFrom : null,
     firstLine: f.firstLine || null,
     firstWarn: f.firstWarn || null,
+    firstHeavy: !!f.firstHeavy,          // 강타 선공 — 빠뜨리면 거울에서 보통 선공이 됩니다(흑수 구 · 8장 짹G)
     firstAoeEvery: f.firstAoeEvery || 0,
     firstAoeFrom: f.firstAoeFrom != null ? f.firstAoeFrom : null,
     firstAoeLine: f.firstAoeLine || null,
@@ -10724,6 +11536,16 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     rageLine: f.rageLine || null,
     rageWarn: f.rageWarn || null,
     rageImg: f.rageImg || null,
+    /* 강타 주기 · 페이즈 — 페이즈는 체력 «비율» 턱이라 배수와 상관없이 그대로 갑니다 */
+    heavyEvery: f.heavyEvery || 0,
+    phases: f.phases || null,
+    /* 표적 고정 · 광역 배수 · 광역마다 공격 증가 — 배수는 그대로, 더하는 공격력은
+     * 본편 값 그대로 옮깁니다(거울 수치가 커도 «쌓이는 맛» 은 같은 결로) */
+    lockTurns: f.lockTurns || 0,
+    lockKillAtk: f.lockKillAtk || 0,
+    aoeMult: f.aoeMult != null ? f.aoeMult : null,
+    aoeMultStep: f.aoeMultStep || 0,
+    aoeAtkGain: f.aoeAtkGain || 0,
     desc: base ? "유리창에 비쳐 나온 것. 본래와는 다른 세기로 서 있다."
                : "유리창에 비쳐 나온 것. 본래보다 " + Math.round((k - 1) * 100) + "% 강하다."
   };
@@ -10779,7 +11601,7 @@ function railBase(r, src, i, k) {
   return { hp: b.hp * rel, atk: b.atk * rel, def: b.def };
 }
 
-/* ── 거울 던전에 들어가기 전 ──────────────────────────────────
+/* ── 거울 던전 돌입 준비 ──────────────────────────────────────
  *  엔케팔린을 쓰기 «전» 에 할 수 있는 일들입니다. 여기서 무엇을 해도
  *  아직 던전에 들어간 것이 아니므로 엔케팔린은 그대로입니다.
  *
@@ -10792,6 +11614,10 @@ const MIRROR_SCOUT_COST = 3;    // 적 관측에 드는 황금교본
  * 그 갈래를 다시 관측해야 합니다. MIRROR 처럼 보관함에는 담기지 않는
  * 값이라, 새로고침하면 사라집니다 (다시 관측하면 됩니다). */
 let MIRROR_SCOUT = null;   // { tier: rule.key, ids: [...] }
+
+/* 돌입 준비 화면의 「이 갈래는 어떻게 굴러가나」를 펴 두었는가 (2026-10-27).
+ * 창을 다시 그려도(할 수 있는 일을 쓴 뒤 등) 편 자리를 지킵니다. */
+let MG_MORE = false;
 
 function mirrorScouted(rule) {
   return (MIRROR_SCOUT && MIRROR_SCOUT.tier === rule.key) ? MIRROR_SCOUT.ids : null;
@@ -10818,34 +11644,96 @@ function openMirrorGate(tier, back) {
     const saved = (S.railSave && S.railSave.key === rule.key) ? S.railSave : null;
 
     const f = mirrorFacts(rule);
-    let h = '<h2>' + rule.name + ' — 들어가기 전</h2>' +
-      /* 갈래가 어떻게 굴러가는지는 여기서 다 말합니다. 운전석 칸에는 눈금만 서고,
-       * 풀어 쓴 말은 이 자리 몫입니다 (mirrorFacts 의 주석 참고). */
-      '<div class="hint">' + rule.sub + '.　' + f.자세히 + '</div>' +
-      '<div class="hint"><b>세기</b> ' + f.세기 + '　·　<b>' + f.상대라벨 + '</b> ' + f.상대 +
-        '　·　<b>완주 보상</b> ' + f.보상 + (f.첫몫 ? '　(' + f.첫몫 + ')' : '') + '</div>';
+
+    /* ── 눈금 셋 — 세기 · 상대 · 입장 ───────────────────────────
+     *  예전에는 이 셋이 「세기 ×3.5　·　상대 7　·　완주 보상 …」처럼 한 글줄에
+     *  모여 있어, 정작 고를 때 보는 수가 글 속에 묻혔습니다. 값을 크게 세우고
+     *  이름표를 작게 내려 «수부터 읽히도록» 바꿨습니다 (사용자 지침 2026-10-27). */
+    /* 아이콘은 수와 «같은 줄» 에 둡니다 — 위에 따로 얹으면 아이콘이 있는 칸만
+     * 수가 한 줄 아래로 밀려, 셋이 나란히 안 보입니다. */
+    const tile = (label, val, ic, bad) =>
+      '<div class="mgtile' + (bad ? ' bad' : '') + '">' +
+        '<b>' + (ic ? iconMini(ic) : '') + val + '</b>' +
+        '<span>' + label + '</span></div>';
+
+    /* ── 몫 한 칸 — 아이콘 + 수 ─────────────────────────────── */
+    const rew = (x, done) =>
+      '<span class="mgrw' + (done ? ' done' : '') + '">' + iconMini(x.ic) +
+        x.nm + ' <b>' + x.n + '</b></span>';
+
+    let h = '<h2>' + rule.name + ' — 돌입 준비</h2>' +
+      '<div class="mgsub">' + rule.sub + '</div>' +
+      '<div class="mggrid">' +
+        tile('난이도', f.난이도) +
+        tile(f.상대라벨, f.상대) +
+        tile('입장', rule.cost, ENK_RULE.name, !canGo) +
+      '</div>';
+
+    /* 완주 보상 — 아이콘으로 늘어놓습니다. 첫 완주 몫은 한 번뿐이라 따로,
+     * 이미 받았으면 흐리게(done) 세웁니다. */
+    h += '<div class="mgrewrow"><span class="mgrewhead">완주 보상</span>' +
+           (f.몫들 || []).map(x => rew(x)).join('') +
+           (f.첫몫칸 ? rew({ ic: f.첫몫칸.ic, nm: '첫 완주 ' + f.첫몫칸.nm, n: f.첫몫칸.n },
+                            f.첫몫칸.받음)
+             : (f.첫몫 ? '<span class="mgrw' + (f.첫몫받음 ? ' done' : '') + '">' +
+                         f.첫몫 + '</span>' : '')) +
+         '</div>';
+
+    /* 보유한 엔케팔린 — 유리창·운전석 아래에 붙는 눈금 막대를 그대로 씁니다
+     * (사용자 지침 2026-10-27 — 게이지로). 수만 적는 것보다 «몇 칸 남았나» 가
+     * 한눈에 들어오고, 세 화면이 같은 꼴을 쓰니 따로 익힐 것이 없습니다.
+     * 모자랄 때만 그 아래에 붉게 한 줄 더합니다 — 입장 칸도 함께 붉어집니다. */
+    h += '<div class="mgenk">' + enkBarHTML() + '</div>';
+    if (!canGo)
+      h += '<div class="mgnote red">' + ENK_RULE.name + '이 모자랍니다 — ' +
+           '이 갈래는 ' + rule.cost + ', 지금 ' + enkCount() + '.</div>';
 
     if (saved)
-      h += '<div class="hint" style="color:var(--gold)">저장해 둔 자리가 있습니다. ' +
-           '<b>이어하기</b>를 누르면 엔케팔린 없이 그 자리부터, <b>입장</b>을 누르면 ' +
-           '처음부터 다시 시작합니다 — 이때 저장해 둔 자리는 사라집니다.</div>';
+      h += '<div class="mgnote gold">' + iconMini("거울굴절철도 정기권") +
+           '<b>저장해 둔 자리가 있습니다.</b>　[이어하기] 는 ' + ENK_RULE.name +
+           ' 없이 그 자리부터, [입장] 은 처음부터 — 이때 저장해 둔 자리는 사라집니다.</div>';
 
     /* 갈래에 warn 을 적어 두었으면 여기, 관측(적 관측)보다 먼저 보이는 자리에 붉게 띄웁니다. */
     if (rule.warn)
-      h += '<div class="hint" style="color:var(--red);font-weight:700">' + rule.warn + '</div>';
+      h += '<div class="mgnote red">' + rule.warn + '</div>';
 
-    if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
+    if (msg) h += '<div class="mgnote gold">' + msg + '</div>';
+
+    /* ── 풀어 쓴 설명은 접어 둡니다 ─────────────────────────────
+     *  이 갈래가 어떻게 굴러가는지는 한 번 읽으면 되는 글인데, 길이가 대여섯
+     *  줄이라 맨 위에 펼쳐 두면 그 아래 수·보상·경고가 전부 밀렸습니다.
+     *  설정의 색 테마 칸(setpal)과 같은 꼴로 접습니다 — 기본은 접힘,
+     *  편 자리는 창을 다시 그려도 그대로 둡니다(MG_MORE). */
+    /* 한 덩이로 붙여 두면 대여섯 줄이 벽처럼 서서 어디가 어디인지 안 보입니다.
+     * 「…습니다.」로 끝나는 자리마다 끊어 한 줄씩 세웁니다 (사용자 지침 2026-10-27).
+     * 갈래마다 자세히를 글줄로 짓고 있어(wip 꾸러미까지), 데이터 꼴을 바꾸는 대신
+     * 여기서 끊는 쪽을 골랐습니다 — 새 갈래를 더해도 저절로 끊깁니다.
+     * 뒤돌아보기(lookbehind)는 옛 사파리에서 안 되므로 쓰지 않습니다. */
+    /* 문장 끝이 「…다.」 이거나 「…다.</b>」 입니다 — 굵게 한 자리가 문장 끝에
+     * 걸리면 닫는 태그가 뒤에 붙기 때문입니다. 둘 다 보고 끊습니다. */
+    const 자세히줄 = String(f.자세히 || "")
+      .replace(/다\.(<\/b>)?\s+/g, (m, close) => "다." + (close || "") + "\u0001")
+      .split("\u0001")
+      .map(t => t.trim())
+      .filter(Boolean);
+    h += '<details class="mgmore"' + (MG_MORE ? ' open' : '') + ' id="mgmore">' +
+           '<summary>이 갈래는 어떻게 굴러가나</summary>' +
+           '<div class="mgbody">' +
+             자세히줄.map(t => '<p>' + t + '</p>').join('') +
+           '</div>' +
+         '</details>';
 
     if (MIRROR_PREP_ACTIONS.length) {
-      h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">할 수 있는 일</div>' +
+      h += '<div class="mghead">할 수 있는 일</div>' +
            '<div class="grid">';
       MIRROR_PREP_ACTIONS.forEach(a => {
         const ok = a.can(rule);
-        h += '<div class="slot"' + (ok ? ' data-act="' + a.id + '"' : '') + '>' +
+        h += '<div class="slot hasic"' + (ok ? ' data-act="' + a.id + '"' : '') + '>' +
+               iconHTML(a.icon || "황금교본", { dim: !ok }) + '<div>' +
                '<div class="' + (ok ? 'nm' : 'lock') + '">' + a.name + '</div>' +
                '<div class="sub">' + a.desc + '</div>' +
                '<div class="sub"' + (ok ? '' : ' style="color:var(--red)"') + '>' + a.need(rule) + '</div>' +
-             '</div>';
+             '</div></div>';
       });
       h += '</div>';
     }
@@ -10853,7 +11741,7 @@ function openMirrorGate(tier, back) {
     if (scouted) {
       /* 누구인지는 알려 주지 않습니다 — 이름·수치 대신 «새어나오는 소리»(intro) 만 들려줍니다.
        * intro 가 없는 잡졸은 그만큼 낌새도 흐릿하다는 뜻으로 둡니다. */
-      h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">새어나오는 소리</div>' +
+      h += '<div class="mghead">새어나오는 소리</div>' +
            '<div class="grid one">' +
            scouted.map((id, i) => {
              const f = FOES[id];
@@ -10875,7 +11763,10 @@ function openMirrorGate(tier, back) {
            (saved ? '<button id="mgresume" class="primary">이어하기</button>' : '') +
            '<button id="mgenter"' + (saved ? ' class="ghost"' : ' class="primary"') +
              (canGo ? '' : ' disabled') + '>' +
-             '입장　(' + ENK_RULE.name + ' ' + rule.cost + (canGo ? '' : '　— 모자랍니다') + ')</button>' +
+             /* 이름 대신 아이콘 — 눈금 막대·입장 칸과 같은 그림이라 한눈에 이어집니다
+              * (사용자 지침 2026-10-27) */
+             '입장　(' + iconMini(ENK_RULE.name) + rule.cost +
+               (canGo ? '' : '　— 모자랍니다') + ')</button>' +
          '</div>';
     $sheet.innerHTML = h;
 
@@ -10888,6 +11779,8 @@ function openMirrorGate(tier, back) {
         draw(said);
       };
     });
+    const more = document.getElementById("mgmore");
+    if (more) more.ontoggle = () => { MG_MORE = more.open; };
     document.getElementById("mgback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
     const enterBtn = document.getElementById("mgenter");
     if (canGo) enterBtn.onclick = () => { closeModal(); startMirror(rule.key, scouted); };
@@ -10907,6 +11800,8 @@ function openMirrorGate(tier, back) {
 function buildMirrorRunScenes(rule, ids) {
   /* 급행 갈래(3호선)는 역마다 정차/통과를 고르는 문이 끼므로 따로 짓습니다 */
   if (rule.express) return buildExpressScenes(rule, ids);
+  /* 편도 갈래(4호선)는 쉼표가 저장만 하고, 끝에 «몇 턴 · 몇 명» 보고가 낍니다 */
+  if (rule.grave) return buildGraveScenes(rule, ids);
   const 첫줄 = rule === MIRROR_EXTREME
     ? "유리창이 터진다. 조각 하나하나가 저마다 다른 것을 비추고 있다."
     : rule === MIRROR_HARD
@@ -11177,6 +12072,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
 }
 
 function startMirror(tier, preIds) {
+  rail4Release();                     // 새 판에 들어설 때는 지난 편도(4호선)의 금지를 풀고 0부터
   const rule = mirrorTier(tier);
   const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
 
@@ -11266,6 +12162,9 @@ function startMirror(tier, preIds) {
   say(ENK_RULE.name + " " + rule.cost + " 소모.  (남은 것 " + enkCount() +
       " / " + ENK_RULE.max + ")", "sys");
   divider();
+  /* 편도(4호선) — 들어설 때의 편성을 적어 둡니다. 쉼표 전에 아주 막혀 버렸을 때
+   * 되돌릴 자리입니다(rail4DefeatToStart). */
+  if (rule.grave) rail4State().entry = { party: ownParty().slice() };
   render();
   next();
 }
@@ -11493,7 +12392,7 @@ SCENE_EXT.railCamp = function (s) {
 
   const 처음 = (r2.picks.length < s.cycle);   // 이 순환의 몫을 아직 안 골랐는가
   if (처음) {
-    if (sp.advisor) speak(sp.name, railLine(sp), sp.portrait);
+    if (sp.advisor) speak(sp.name, railLine(sp, false, rule), sp.portrait);
     else speak(rule.camp.who, s.cycle === 1
       ? "여기에 베이스캠프를 세워 뒀습니다. 선로가 돌아오는 자리니까요."
       : "또 오셨군요. 캠프는 그대로 있습니다.");
@@ -11504,7 +12403,7 @@ SCENE_EXT.railCamp = function (s) {
     return railBonusPick(rule, s.cycle);
   }
   /* 져서 되돌아온 자리입니다. 몫은 이미 받았으니 다시 주지 않습니다. */
-  if (sp.advisor) speak(sp.name, railLine(sp, true), sp.portrait);
+  if (sp.advisor) speak(sp.name, railLine(sp, true, rule), sp.portrait);
   else speak(rule.camp.who, "돌아오셨습니까. 캠프는 그대로입니다. 다시 나가시죠.");
   railCampHeal(sp.name);
   return railFork(rule, s.cycle);
@@ -11548,10 +12447,21 @@ function railSpeaker(rule) {
  * back 이 참이면 «졌다가 되돌아온 자리» 몫(RAIL_LINES_BACK)을 먼저 보고,
  * 그 사람 몫이 없으면 처음 닿았을 때의 말을 그대로 씁니다.
  * 아무것도 없으면 "TODO" — speak() 가 «(대사 미작성)» 으로 흐리게 찍습니다. */
-function railLine(sp, back) {
+function railLine(sp, back, rule) {
   const pick = v => Array.isArray(v) ? (v[rnd(v.length)] || "TODO") : v;
   let v = null;
-  if (back && typeof RAIL_LINES_BACK !== "undefined") {
+  /* 호선별 — 그 갈래에서만 하는 말입니다. 다른 어느 표보다 먼저 걸립니다
+   * (2026-10-27). 4호선처럼 쉼표가 «해 줄 수 없는 자리» 인 갈래는, 같은 사람이
+   * 1·2·3호선에서 하던 말을 그대로 하면 앞뒤가 안 맞습니다 — 그렇다고
+   * RAIL_LINES 를 고치면 다른 호선까지 갈립니다. 안에 back 을 두면 졌다가
+   * 되돌아온 자리 몫을 따로 적을 수 있고, 안 적으면 그 갈래의 처음 말을 씁니다. */
+  const tier = (rule && rule.key && typeof RAIL_LINES_BY_TIER !== "undefined")
+    ? RAIL_LINES_BY_TIER[rule.key] : null;
+  if (tier) {
+    if (back && tier.back) v = tier.back[sp.id] || tier.back[sp.name];
+    if (!v) v = (sp.id && tier[sp.id]) || tier[sp.name];
+  }
+  if (!v && back && typeof RAIL_LINES_BACK !== "undefined") {
     if (sp.id && RAIL_LINES_BACK[sp.id]) v = RAIL_LINES_BACK[sp.id];
     if (!v && RAIL_LINES_BACK[sp.name]) v = RAIL_LINES_BACK[sp.name];
   }
@@ -11663,6 +12573,7 @@ function mirrorRecordBuild(rule, packIds) {
     cycles: (S.rail2 && S.rail2.done) || null,       // 1호선 등 순환 없는 갈래는 null
     skips: rule.express ? ((S.rail3 && S.rail3.skipped) || 0) : null,   // 3호선 — 지나친 역 수
     railK: rule.express ? railExpressScale(rule) : null,               // 3호선 — 끝낸 배수
+    fallen: rule.grave ? rail4State().fallen.length : null,            // 4호선 — 이 선로에서 내린 사람 수
     party, advisors, gifts, picks, synergies, packs, perks, packCards
   };
 }
@@ -11703,6 +12614,7 @@ function mirrorRecordText(rec) {
   const lines = [
     "「라슈 컴퍼니」 " + rec.name + " 클리어",
     "턴수 " + rec.turns + "턴" + (rec.cycles ? "　(" + rec.cycles + "순환)" : ""),
+    ...(rec.fallen != null ? ["이 선로에서 내린 사람 " + rec.fallen + "명"] : []),
     ...(rec.railK != null ? ["운행 " + railScaleText(rec.railK) + "　(지나친 역 " + (rec.skips || 0) + ")"] : []),
     "편성 " + partyStr,
     "교육위원 " + advStr,
@@ -11931,6 +12843,9 @@ function mirrorClear() {
   /* 순환 보너스는 여기서 사라집니다 — 이 2호선 한 판 안에서만 살던 것입니다.
    * 「굴레」로 부풀렸던 체력 상한이 도로 줄어드니, 넘치는 몫을 깎아 맞춥니다. */
   S.rail2 = null;
+  /* 편도(4호선) — 완주하면 막아 둔 사람이 전부 풀립니다 (사용자 지침 — "클리어하거나 도전을 멈추기 전까지").
+   * 결과 카드의 «내린 사람» 은 위에서 이미 떠 두었습니다. */
+  if (rule.grave) rail4Release();
   S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
   MIRROR = null;
   S.ended = true;
@@ -13696,9 +14611,17 @@ function glassBgGroups() {
                       imgs: [mirrorBG(r), r.finalBg || null]
                               .filter((p, i, a) => p && a.indexOf(p) === i) });
   const list = (src, make) => src.map(make).filter(x => x.imgs.length);
+  /* 장 묶음은 한 묶음으로 — 마친 부분의 배경만 모읍니다(아직 안 읽은 부분이 «어디인지» 를 말하지 않게) */
+  const grp = m => {
+    const imgs = [];
+    m.parts.map(i => CHAPTERS[i]).filter(c => done(c.id))
+      .forEach(c => chapterBGs(c).forEach(p => { if (imgs.indexOf(p) < 0) imgs.push(p); }));
+    return { key: m.id, name: m.no + "  " + (m.subtitle || m.title || ""), short: m.no, imgs: imgs };
+  };
   return [
     { id: "main", cat: "주요 이야기",
-      items: list(CHAPTERS.filter(c => !isSide(c) && done(c.id)), ch) },
+      items: mainChapters().map(m => m.parts ? grp(m) : (done(m.id) ? ch(m) : null))
+               .filter(x => x && x.imgs.length) },
     { id: "side", cat: "곁가지 이야기",
       items: list(CHAPTERS.filter(c => isSide(c) && done(c.id)), ch) },
     { id: "etc", cat: "그 외", note: "거울 던전 · 거울굴절철도",
@@ -13715,7 +14638,7 @@ function glassBgItem(key) { return key ? (glassBgItems().find(x => x.key === key
 function glassBgDefaultKey() {
   for (let i = CHAPTERS.length - 1; i >= 0; i--) {
     const c = CHAPTERS[i];
-    if (S.cleared && S.cleared[c.id] && chapterBGs(c).length) return c.id;
+    if (S.cleared && S.cleared[c.id] && chapterBGs(c).length) return c.part || c.id;
   }
   return null;
 }
@@ -13746,6 +14669,7 @@ function glassNote() {
     const r = MIRROR_TIERS.find(x => x.key === k.slice(7));
     return (r && r.glassNote) || null;
   }
+  if (groupParts(k).length) return groupMeta(k).glassNote;   // 장 묶음
   const c = CHAPTERS.find(x => x.id === k);
   return (c && c.glassNote) || null;
 }
@@ -14571,6 +15495,7 @@ function vaultLockScreen() {
 }
 
 function glass() {
+  if (!S || !S.mirror) rail4Release();   // 유리창으로 나오면 편도(4호선) 도전은 멈춘 것 — 막아 둔 것을 풉니다
   VAULT_LOCK = null;       // 다시 읽으므로 판단도 다시 합니다
   S = newState();          // 보관함에서 다시 읽어 온다
   SCENES = [];
@@ -14993,6 +15918,679 @@ function boot() {
  *  바로 넣으십시오 — 여기는 «그 장 하나만을 위한» 자리입니다.
  */
 /* @wip anchor: EXT */
+
+/* ── 거울굴절철도 4호선 · 편도 ─────────────────────────────────
+ *  1호선은 한 줄, 2호선은 순환, 3호선은 급행, 4호선은 «돌아오지 못하는
+ *  선로» 입니다.
+ *
+ *  ■ 어떻게 가는가
+ *    짜임은 1호선 그대로입니다 — 정해진 일곱을 차례로, 넷을 넘기면 쉼표
+ *    한 번. 수치도 1호선처럼 철도 표(RAIL_STEPS)에서 나옵니다 — 다만 넷째
+ *    (케찰코아틀루스)는 midFoe 라 «종점» 줄입니다. 달라지는 것은 «사람» 입니다.
+ *
+ *  ■ 사람이 줄어든다 (grave)
+ *    grave: true 가 붙은 갈래에서는 —
+ *      · 첨삭 손잡이가 잠깁니다 (buttons 감싸기 · railGraveNoRevive).
+ *      · 누가 쓰러지면 그 턱에 바로 「대체 인력」 창이 뜹니다
+ *        (rail4Swap · openRail4Replace). 전원이 쓰러져도, 세울 사람이
+ *        남아 있는 한 패배가 아닙니다 (defeat 감싸기). 다만 **작성위원
+ *        열둘이 모두 내리면 대체 없이 확정 패배** 입니다 — 지원 작성위원만
+ *        남은 채로 선로를 이어 가지는 못합니다 (사용자 지침 2026-10-19).
+ *      · 「대체 인력」 창에서 [중간 저장 지점으로] · [포기하고 유리창으로]
+ *        로 빠질 수 있습니다. 둘 다 쉼표에 저장해 둔 모습까지만 남습니다.
+ *      · 쓰러진 사람은 S.rail4.fallen 에 personKey 로 적혀, 이 선로를
+ *        벗어나기 전까지 다시 서지 못합니다. 작성위원·지원 작성위원을
+ *        가리지 않고, 이름이 겹치는 사람(이정빈=하축론)도 함께 막힙니다.
+ *      · 지원 작성위원은 쓰러질 때마다 새로 불러올 수 있습니다. 한꺼번에
+ *        세울 수 있는 수(supportMax)는 평소 그대로 1명이고, 한 판에 내릴 수
+ *        있는 수는 supportCalls(셋)까지입니다 — 셋째가 내리면 더는 안 부릅니다
+ *        (사용자 지침 2026-10-21 — 다 모은 사람이 서른 명 가까이 거쳐 가던 것).
+ *
+ *  ■ 쉼표 (railGraveRest)
+ *    아무도 일어나지 않고 아무것도 회복되지 않습니다. 하는 일은 저장
+ *    하나뿐입니다 — 편성·체력·쓰러진 사람을 그대로 얼려 둡니다.
+ *    져서 돌아오거나 창을 닫았다 다시 열면 그 자리의 모습 그대로입니다.
+ *
+ *  ■ 저장은 거기 하나뿐입니다
+ *    사람을 갈아 끼우는 창은 저장을 겸하지 않습니다 (사용자 지침
+ *    2026-10-19). 그래서 openRail4Replace 는 S.railSave 도 saveVault 도
+ *    건드리지 않습니다 — 창을 닫고 다시 열면 쉼표에 얼려 둔 모습으로
+ *    돌아갑니다.
+ */
+const MIRROR_RAIL4 = {
+  key:  "railLine4",
+  group: "rail",
+  grave: true,          // 편도 — 이 표가 붙은 갈래는 쓰러진 사람이 돌아오지 않습니다
+  name: "거울굴절철도 4호선",
+  sub:  "돌아오지 못하는 선로",
+  glassNote: "한 번 내린 사람은 다시 타지 못한다.",
+
+  /* 배경 넷 (2026-10-24) — 선로가 흘러가는 차례대로 갈립니다(buildGraveScenes).
+   *   bg       초입 — 눈 덮인 고가 선로. 들어서서 앞 셋
+   *   midBg    중간 보스 — 눈 내린 승강장. 케찰코아틀루스와 바로 뒤 쉼표(이어하기도 여기서)
+   *   backBg   진입 — 선로 위. 쉼표를 떠나 뒤 둘
+   *   finalBg  종점 — 댐 앞 종점역. 디렉스 */
+  bg:       "assets/scene/거울굴절철도4호선초입.jpg",
+  midBg:    "assets/scene/거울굴절철도4호선중간보스.jpg",
+  midName:  "거울굴절철도 4호선 중간역",
+  backBg:   "assets/scene/거울굴절철도4호선진입.jpg",
+  finalBg:  "assets/scene/거울굴절철도4호선종점.jpg",
+  finalName: "거울굴절철도 4호선 종점",
+  prefix: "굴절된 ",
+
+  count:  7,        // 1호선과 같게 — 종점을 포함한 일곱
+  scale:  3.5,      // 1호선과 같게 — 화면 눈금일 뿐, 수치는 철도 표(RAIL_STEPS)에서 나옵니다
+  defScale: 0,      // 1·2·3호선과 같게 — 방어는 본편 그대로 (2026-09-11 DEF_SCALE 머리말)
+
+  /* ── 고정 편성 (사용자 지침 2026-10-19, 2026-10-21 다시 짬) ──────────
+   *  1·2·3호선과 같게 «정해진 조합» 입니다. 코드레드(7.5장)의 얼굴로 앞뒤를
+   *  채웠습니다 — 4호선은 코드레드 다음 주에 나가므로, 그때는 그 장의 적이
+   *  이미 본편에 있습니다. 2·3호선과 겹치는 얼굴은 없습니다.
+   *
+   *      뮤타돈 → 박상원 → 흑수 구
+   *        → [중간 보스] 케찰코아틀루스 → [쉼표]
+   *        → 기가노토사우루스 → 제3발톱 큰형님 이서진 → [종점] 디렉스
+   *
+   *  수치는 철도 표에서 나옵니다(v2.16.0 — data/mirrorpacks.js 머리말 「■ 철도」):
+   *      잡졸 800 · 앞 보스 1500 ×2 · 중간 보스(midFoe → 종점 줄) 2600
+   *      · 뒤 보스 1900 ×2 · 종점 2600 — 합 12,800 (±변조로 12,600~12,700 언저리)
+   *  1호선(800 · 1500 ×3 · 1900 ×2 · 2600 = 11,700)보다 중간 보스 몫만큼 무겁습니다.
+   *
+   *  ■ 큰 둘(이서진 · 기가노토사우루스)을 다시 넣었습니다 (2026-10-21)
+   *    본편 × 3.5 시절에는 8,750 · 9,800 이라 뺐는데, 이제 수치가 표에서
+   *    나오므로 «뒤 보스» 1900 줄로 섭니다. 기믹(이서진 되받아치기 3턴 · 광역 6턴,
+   *    기가노토 광역 6턴)은 그대로라 쉼표 뒤가 가장 무겁습니다. 그 자리를
+   *    내준 것은 김희재(7장)와 로단(7.5장 권모술수)입니다.
+   *
+   *  ■ 2번 자리를 박상원으로 바꿨습니다 (2026-10-27)
+   *    분탕을 원하는 여자가 서 있던 자리입니다. 그 사람은 `boss` 판정이 없어
+   *    강타조차 안 썼고(기믹은 전부 b.boss 를 봅니다), 앞 구간이 잡졸 → 강타 없는
+   *    것 → 선공 으로 이어져 결이 늦게 꺾였습니다. 박상원은 보스라 강타가 서고,
+   *    무엇보다 **5턴마다 제 몸을 되붙입니다**(healEvery: 5 · healAtk: 1.5).
+   *    회복을 쓰는 적은 네 호선 어디에도 없었습니다 — 이쪽은 첨삭도 퇴고도
+   *    못 쓰는데 저쪽만 낫는 자리라, 이 갈래와 정면으로 맞서는 결입니다.
+   *    7장 얼굴이라 2·3호선과 겹치지 않는 것도 그대로입니다.
+   *    (데스리퍼를 먼저 보았는데, 2·3호선에 이미 둘 다 서고 기믹도 강타뿐이라
+   *     바꾸는 뜻이 없었습니다 — 2026-10-27 사용자와 견준 끝에 박상원으로.)
+   *
+   *  뮤타돈은 `boss` 판정이 없지만 맨 앞 잡졸 자리에 섭니다.
+   *  고정 편성에서는 maxNormal·maxBoss·bossChance 를 아예 안 봅니다
+   *  (그것들은 무작위로 뽑을 때만 쓰는 값입니다 — buildMirrorFoes 참고). */
+  foes: [
+    "mutadon",             // 7.5장 코드레드 · 뮤타돈 (잡졸)
+    "baksangwon",          // 7장          · 신해수랜드 보건선생님 박상원 (회복 5턴)
+    "heuksu_gu",           // 7.5장 코드레드 · 흑수 · 구(鉤)
+    "rail4_quetzal",       // 중간 보스     · 눈보라의 주인 케찰코아틀루스
+    /* ↑ 넷을 넘기면 쉼표가 섭니다 (rest.after) */
+    "giganotosaurus",      // 7.5장 코드레드 · 기가노토사우루스
+    "lee_seojin_codered"   // 7.5장 코드레드 · 제3발톱 큰형님 이서진
+  ],
+
+  /* 중간 보스 — railRole 이 midFoe 를 «종점» 줄로 올립니다. 급행(express)이 아니므로
+   * 3호선의 중간역 장면(buildExpressScenes)과는 상관없습니다. */
+  midFoe: "rail4_quetzal",
+
+  /* 한 판에 내릴 수 있는 지원 작성위원 수 (사용자 지침 2026-10-21).
+   * 이만큼 쓰러지면 대체 인력 창에 지원 작성위원이 더는 안 뜹니다 — rail4Bench. */
+  supportCalls: 3,
+
+  finalFoe: "rail4_dirrex",   // 종점 — 만나 봐야 압니다
+
+  /* 1·2·3호선과 같게 — 선로 위에서는 처치 원고료가 안 나옵니다(victory 참고). */
+  noKillPay: true,
+  bonus:  5000,     // 2호선과 같게 (7000 에서 내림 — 사용자 지침 2026-10-24)
+  codex:  10,
+  event:  300,
+  fragBoxSelect: 25,
+  maxBoss: 5,
+  maxNormal: 1,
+  bossChance: 1.0,
+  cost: ENK_RULE.costRail,
+
+  /* 본편 7장을 마쳐야 열립니다 (사용자 지침 2026-10-27 — 네 호선을 4·5·6·7장으로
+   * 한 장씩 벌려 놓음: 1호선 ch4 · 2호선 ch5 · 3호선 ch6 · 4호선 ch7).
+   * 곁가지(.5장)까지 세는 클리어 수 대신 장을 콕 집습니다.
+   *
+   * ⚠ 코드레드(7.5장)를 마쳐야 열리게 두었던 것을 7장으로 내렸습니다. 그래서
+   *   **코드레드를 안 치르고도 이 선로에 들어올 수 있습니다** — 선로에 서는
+   *   다섯(뮤타돈 · 흑수 구 · 기가노토사우루스 · 이서진, 그리고 팩의 분탕을
+   *   원하는 여자)이 그 장의 얼굴이라, 7장만 마친 사람에게는 처음 보는 것이
+   *   됩니다. 거울은 본래 «무엇이 비쳐 나올지는 부딪쳐 봐야 안다» 는 자리라
+   *   그대로 두었습니다(3호선도 5.5장 오르토제노스를 같은 식으로 세웁니다 —
+   *   2026-09-12 「곁가지에서 한 번 마주친 얼굴이 섞이는 것도 그대로 둡니다»).
+   *   이름이 미리 새는 것이 걸리면 여기만 ch7_5_codered 로 되돌리면 됩니다. */
+  needChapter: "ch7",
+
+  warn: "쓰러진 사람은 돌아오지 않습니다. 첨삭이 통하지 않고, 쉼표에서도 " +
+        "아무도 일어나지 않습니다 — 그 자리에서 대체 인력을 세워 가며 끝까지 가야 합니다.",
+
+  /* 넷을 넘기면 서는 자리. 회복하지 않습니다 — 저장만 합니다.
+   * party 를 안 답니다: 편성은 사람이 쓰러질 때 그 자리에서 고칩니다. */
+  rest: {
+    after: 4,
+    who:  "베르렐리우스",
+    say:  "여기서 한 번 적어 두겠습니다. 일으켜 드릴 수는 없습니다.",
+    text: "지나온 자리가 적혔다. 아무도 일어나지 않았다."
+  }
+};
+MIRROR_TIERS.push(MIRROR_RAIL4);
+
+/* ── 턱 ──────────────────────────────────────────────────────
+ *  「몇 턴에 끝냈는가」 로 걸리는 업적입니다. 받는 몫은 업적 쪽에 있고,
+ *  여기서는 열쇠만 셉니다.
+ *  ⚠ 임시 수치입니다 (NOTES.md 「굴려 봐야 아는 것」).
+ */
+const RAIL4_TURN_MARKS = [
+  { id: "t100", turns: 100 }
+];
+/* «몇 명이 내렸는가» 턱 — 이하이면 걸립니다. 아무도 안 내린 것(nofall)은 따로 셉니다. */
+const RAIL4_FALL_MARKS = [
+  { id: "few3", fallen: 3 }
+];
+
+/* ── 이 갈래인가 ─────────────────────────────────────────────── */
+function railGraveRule() {
+  if (!S || !S.mirror) return null;
+  const r = mirrorRuleNow();
+  return (r && r.grave) ? r : null;
+}
+/* 첨삭이 막혔는가 — buttons 감싸기와, 옮겨 붙인 뒤의 askNext 가 함께 봅니다 */
+function railGraveNoRevive() { return !!railGraveRule(); }
+
+function rail4State() {
+  if (!S.rail4) S.rail4 = { fallen: [] };
+  if (!S.rail4.fallen) S.rail4.fallen = [];
+  return S.rail4;
+}
+/* 쓰러진 사람은 «사람» 으로 셉니다 — personKey 라 이정빈(교육위원)과
+ * 하축론(지원 작성위원)처럼 이름이 겹치는 한 사람은 한 번만 적히고,
+ * 한쪽이 쓰러지면 다른 쪽도 함께 막힙니다
+ * (사용자 지침 2026-10-19 — "이름이 겹치는 경우 포함"). */
+function rail4Key(w) { return w ? personKey(memberName(w)) : null; }
+function rail4IsFallen(w) {
+  const k = rail4Key(w);
+  return !!k && rail4State().fallen.indexOf(k) >= 0;
+}
+
+/* 작성위원 쪽은 평소 편성 화면도 함께 막습니다 — openParty 가 S.partyBan 을
+ * 이미 보고 있어서, 여기 적어 두면 «지금은 함께할 수 없습니다» 로 흐려집니다.
+ * (지원 작성위원 칸은 S.partyBan 을 안 봅니다 — NOTES.md 「옮겨 붙일 때」 참고.
+ *  이 갈래에서는 아래 openRail4Replace 가 그 몫을 대신합니다.)
+ *
+ *  ⚠ 넣기만 하면 안 됩니다 — 저장해 둔 자리로 되돌아오면 그 뒤에 쓰러진
+ *    사람이 되살아나므로, 그때 걸어 둔 금지도 함께 풀어야 합니다. 그래서
+ *    «내가 건 것»(S.rail4.banned)을 따로 들고 다니며 그것만 거두고 다시
+ *    겁니다 — 이야기가 건 금지(banParty)는 건드리지 않습니다. */
+function rail4SyncBan() {
+  const st = rail4State();
+  if (!S.partyBan) S.partyBan = [];
+  if (!st.banned) st.banned = [];
+  /* 내가 걸어 둔 것을 먼저 거둡니다 */
+  S.partyBan = S.partyBan.filter(w => st.banned.indexOf(w) < 0);
+  st.banned = [];
+  /* 지금 쓰러져 있는 사람으로 다시 겁니다 */
+  Object.keys(SINNERS).forEach(w => {
+    if (st.fallen.indexOf(personKey(SINNERS[w].name)) < 0) return;
+    st.banned.push(w);
+    if (S.partyBan.indexOf(w) < 0) S.partyBan.push(w);
+  });
+}
+/* 선로를 벗어날 때 — 막아 둔 것을 전부 풉니다 */
+function rail4Release() {
+  if (!S) return;
+  const st = S.rail4;
+  if (st && st.banned && st.banned.length && S.partyBan)
+    S.partyBan = S.partyBan.filter(w => st.banned.indexOf(w) < 0);
+  S.rail4 = null;
+}
+
+/* ── 세울 수 있는 사람 ────────────────────────────────────────
+ *  작성위원 열둘 + 얻어 둔 지원 작성위원 전부. 빠지는 사람은 —
+ *    · 이번 선로에서 이미 쓰러진 사람 (이름이 겹치는 사람까지)
+ *    · 지금 편성에 서 있는 사람, 또는 그 사람과 같은 사람
+ *    · 지원 작성위원인데 그 사람이 이미 교육위원으로 서 있는 경우
+ *    · 지원 작성위원인데 이미 한 명이 서 있는 경우 — «한 전투에 1명»
+ *      (supportMax)은 평소 그대로 지킵니다 (사용자 지침 2026-10-19).
+ *  칸 제한(supportSlot — 3번째 칸에만)은 이 창에서 보지 않습니다: 1번 칸이
+ *  비었는데 후보가 지원뿐이면 아무도 못 세우는 막다른 자리가 생기기
+ *  때문입니다. 혼자 정한 몫입니다(NOTES.md).
+ */
+function rail4Bench() {
+  const st = rail4State();
+  const 선사람 = S.party.filter(Boolean);
+  const 막힌사람 = n => st.fallen.indexOf(personKey(n)) >= 0;
+  const 이미섰나 = n => 선사람.some(x => samePerson(memberName(x), n));
+  const out = [];
+  Object.keys(SINNERS).forEach(w => {
+    if (선사람.indexOf(w) >= 0) return;
+    if (막힌사람(SINNERS[w].name) || 이미섰나(SINNERS[w].name)) return;
+    out.push(w);
+  });
+  /* 한 전투에 설 수 있는 지원 작성위원 수는 평소 그대로입니다
+   * (사용자 지침 2026-10-19 — "지원 작성위원 편성을 1명으로 제한하는 것은 유지").
+   * 한 판 동안 새 지원을 불러올 수 있는 몫은 supportCalls(셋)까지입니다 —
+   * 그만큼 내리면 더는 안 뜹니다(rail4SupportsLeft, 사용자 지침 2026-10-21). */
+  if (선사람.filter(isSupport).length < supportMax() && rail4SupportsLeft() > 0)
+    supportList().forEach(sp => {
+      if (!supportOwned(sp)) return;
+      const id = supportId(sp);
+      if (선사람.indexOf(id) >= 0) return;
+      if (막힌사람(sp.name) || 이미섰나(sp.name)) return;
+      if (supportBlockedByAdvisor(sp)) return;
+      out.push(id);
+    });
+  return out;
+}
+
+/* 이번 판에 더 내릴 수 있는 지원 작성위원 수 (supportCalls — 사용자 지침 2026-10-21).
+ * 따로 세지 않고 «내린 사람» 목록에서 셉니다 — 쉼표로 되돌아오면 그 목록이 함께
+ * 되감기므로(rail4Restore) 센 수도 저절로 맞습니다. 작성위원 열둘과 이름이 겹치는
+ * 지원은 작성위원으로 칩니다(지원 몫에서 빼지 않습니다). */
+function rail4SupportsFallen() {
+  const 작성위원 = Object.keys(SINNERS).map(w => personKey(SINNERS[w].name));
+  const st = rail4State();
+  return supportList().filter(sp => {
+    const k = personKey(sp.name);
+    return st.fallen.indexOf(k) >= 0 && 작성위원.indexOf(k) < 0;
+  }).length;
+}
+function rail4SupportsLeft() {
+  const cap = MIRROR_RAIL4.supportCalls;
+  return cap == null ? Infinity : Math.max(0, cap - rail4SupportsFallen());
+}
+
+/* 작성위원 열둘이 모두 내렸는가 — 그러면 더는 대체하지 않고 패배입니다
+ * (사용자 지침 2026-10-19). 지원 작성위원은 «한 번 더 버티는 손» 이지
+ * 열둘을 대신해 끝까지 가는 자리가 아닙니다. */
+function rail4AllSinnersDown() {
+  const st = rail4State();
+  return Object.keys(SINNERS).every(w => st.fallen.indexOf(personKey(SINNERS[w].name)) >= 0);
+}
+/* 편성이 바뀌면 체력 상한도 함께 바뀝니다 — 시너지·편성 효과가 다시 셈해지기
+ * 때문입니다. 상한이 내려갔는데 지금 체력이 그대로면 「71 / 56」 처럼 넘칩니다.
+ * 2호선이 순환 보너스를 걷을 때 쓰는 셈(dropRail2IfIdle)과 같은 한 줄입니다. */
+function rail4ClampHp() {
+  S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+}
+
+/* 비어 있는 편성 칸 (조력자 자리는 빼고) */
+function rail4EmptySlots() {
+  const out = [];
+  for (let i = 0; i < 3; i++) if (!S.party[i] || isAlly(S.party[i])) out.push(i);
+  return out;
+}
+
+/* ── 쓰러진 사람을 적고 편성에서 뺀다 ─────────────────────────
+ *  돌려주는 것은 «이번에 새로 쓰러진 사람» 목록입니다.
+ */
+function rail4MarkFallen() {
+  const st = rail4State();
+  const 새로 = [];
+  for (let i = 0; i < S.party.length; i++) {
+    const w = S.party[i];
+    if (!w || isAlly(w) || alive(w)) continue;
+    const k = rail4Key(w);
+    if (k && st.fallen.indexOf(k) < 0) st.fallen.push(k);
+    새로.push(w);
+    S.party[i] = null;          // 칸은 비워 둡니다 — 자리까지 밀면 차례가 어긋납니다
+  }
+  if (새로.length) { rail4SyncBan(); rail4ClampHp(); }
+  return 새로;
+}
+
+/* 작성위원·지원 작성위원을 가리지 않고 아이콘 이름을 돌려줍니다 —
+ * memberIconName 은 작성위원만 보므로 한 겹 씌웁니다. */
+function rail4IconName(w) {
+  if (isSupport(w)) { const sp = supportBy(w); return sp ? supportIconName(sp) : ""; }
+  return SINNERS[w] ? memberIconName(w) : "";
+}
+
+/* ── 대체 인력 창 ─────────────────────────────────────────────
+ *  ⚠ 여기서는 저장하지 않습니다 (사용자 지침 2026-10-19) — S.railSave 도
+ *    saveVault() 도 부르지 않습니다. 저장되는 자리는 쉼표 하나뿐입니다.
+ */
+function openRail4Replace(done) {
+  $modal.classList.add("on");
+
+  const draw = () => {
+    const 빈칸 = rail4EmptySlots();
+    const bench = rail4Bench();
+    const st = rail4State();
+
+    let h = '<h2>대체 인력</h2>';
+    h += '<div class="hint">쓰러진 사람은 이 선로를 벗어나기 전까지 다시 서지 못합니다. ' +
+         (MIRROR_RAIL4.supportCalls == null ? '지원 작성위원은 수에 제한이 없습니다. '
+           : '지원 작성위원은 이 선로에서 <b>' + MIRROR_RAIL4.supportCalls + '명</b>까지 내릴 수 있습니다' +
+             '(남은 몫 ' + rail4SupportsLeft() + '). ') +
+         '<b>이 창은 저장하지 않습니다 — 저장은 쉼표에서만 합니다.</b></div>';
+
+    /* 지금 서 있는 사람 */
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">지금 편성</div>' +
+         '<div class="grid">';
+    for (let i = 0; i < 3; i++) {
+      const w = S.party[i];
+      if (!w || isAlly(w)) {
+        h += '<div class="slot"><div class="lock">' + (i + 1) + '. 빈 자리</div>' +
+             '<div class="sub">세울 사람을 고르십시오</div></div>';
+        continue;
+      }
+      h += '<div class="slot hasic sel">' + iconHTML(rail4IconName(w)) + '<div>' +
+             '<div class="nm">' + (i + 1) + '. ' + memberName(w) + '</div>' +
+             '<div class="sub">체력 ' + Math.max(0, curHp(w)) + ' / ' + maxHp(w) + '</div>' +
+           '</div></div>';
+    }
+    h += '</div>';
+
+    /* 이 선로에서 내린 사람 */
+    if (st.fallen.length)
+      h += '<div class="hint" style="margin-top:14px">이 선로에서 내린 사람 ' +
+           st.fallen.length + '명 — ' +
+           st.fallen.map(k => (CREW[k] ? CREW[k].name : k)).join('　·　') + '</div>';
+
+    /* 세울 수 있는 사람 */
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">세울 수 있는 사람</div>';
+    if (!bench.length) {
+      h += '<div class="hint">더 세울 사람이 없습니다.</div>';
+    } else {
+      h += '<div class="grid">';
+      bench.forEach(w => {
+        const sp = isSupport(w) ? supportBy(w) : null;
+        const id = sp ? null : idByKey(S.equip[w]);
+        h += '<div class="slot hasic" data-pick="' + w + '">' +
+               iconHTML(rail4IconName(w)) + '<div>' +
+               '<div class="nm">' + memberName(w) +
+                 (sp ? ' <span class="sub">지원</span>' : '') + '</div>' +
+               '<div class="sub"><span class="star">' +
+                 (sp ? stars(sp.star) : (id ? stars(id.star) : '')) + '</span> ' +
+                 (sp ? sp.title : (id ? id.title : '인격 없음')) + '</div>' +
+               '<div class="sub">체력 ' + maxHp(w) + '</div>' +
+             '</div></div>';
+      });
+      h += '</div>';
+    }
+
+    /* 나가는 길 둘 — 저장해 둔 자리가 있을 때만 섭니다 (사용자 지침 2026-10-19).
+     * 둘 다 «쉼표까지만» 남습니다. 쉼표를 아직 안 지났으면 돌아갈 자리가 없으니
+     * 손잡이도 세우지 않습니다 — 그때는 그냥 싸우거나 지는 수밖에 없습니다. */
+    const 저장있나 = !!(S.railSave && S.railSave.key === mirrorRuleNow().key);
+    const 더세울수있나 = 빈칸.length > 0 && bench.length > 0;
+    h += '<div class="modalfoot">' +
+         '<button id="r4done"' + (더세울수있나 ? ' class="ghost"' : '') + '>' +
+         (더세울수있나 ? '이대로 간다' : '계속') + '</button>' +
+         (저장있나 ? '<button id="r4back" class="ghost">중간 저장 지점으로</button>' +
+                     '<button id="r4out" class="ghost">포기하고 유리창으로</button>'
+                   : '') +
+         '</div>';
+    $sheet.innerHTML = h;
+
+    $sheet.querySelectorAll(".slot[data-pick]").forEach(el => {
+      el.onclick = () => {
+        const w = el.dataset.pick;
+        const at = rail4EmptySlots()[0];
+        if (at == null) return;
+        /* 조력자가 그 칸에 들어 있으면 뒤로 밀고 사람을 세웁니다 */
+        if (S.party[at] && isAlly(S.party[at])) S.party.push(S.party[at]);
+        S.party[at] = w;
+        S.hp[w] = maxHp(w);      // 새로 타는 사람은 온전한 몸으로 옵니다
+        rail4ClampHp();          // 바뀐 편성으로 상한을 다시 맞춥니다
+        say(withJosa(memberName(w), "이") + " 빈 자리에 선다.", "gain");
+        render();
+        draw();
+      };
+    });
+    document.getElementById("r4done").onclick = () => {
+      closeModal(); render();
+      if (done) done();
+    };
+
+    /* 중간 저장 지점으로 — 쉼표 장면을 다시 밟습니다. 그 장면이 저장해 둔
+     * 편성·체력·내린 사람으로 되돌리므로, 여기서는 되돌릴 것이 없습니다. */
+    const back = document.getElementById("r4back");
+    if (back) back.onclick = () => {
+      closeModal();
+      S.battle = null; S.waiting = false;
+      S.sc = S.mirrorCheckpoint;
+      clearLog();
+      say("선로를 되감는다 — 저장해 둔 자리로.", "n");
+      render();
+      next();
+    };
+
+    /* 포기하고 유리창으로 — 저장은 쉼표까지만 남습니다. 지금 갈아 끼운 것도,
+     * 쉼표 뒤에 내린 사람도 남지 않습니다. 다시 들어오면 그 자리에서 이어합니다. */
+    const out = document.getElementById("r4out");
+    if (out) out.onclick = () => {
+      closeModal();
+      S.battle = null; S.waiting = false; S.mirror = false;
+      /* 보관함에 남는 것은 «쉼표까지» 입니다 — 저장해 둔 모습으로 되돌려 놓고
+       * 담급니다. glass() 가 S = newState() 로 보관함을 다시 읽으므로, 여기서
+       * 담근 것이 곧 밖으로 들고 나가는 모습이 됩니다. 쉼표 뒤에 내린 사람도,
+       * 방금 갈아 끼운 것도 남지 않습니다. S.railSave 는 그대로 두어 다시
+       * 들어오면 그 자리에서 이어합니다. */
+      rail4Restore(S.railSave && S.railSave.rail4);
+      rail4Release();                 // 이 도전은 멈춘 것 — 막아 둔 것을 풉니다
+      saveVault();
+      glass();
+    };
+  };
+  draw();
+}
+
+/* ── 쓰러진 자리를 메우고 이어 간다 ───────────────────────────
+ *  세울 사람이 없으면 창을 띄우지 않고 그냥 넘어갑니다 — 빈 자리인 채로
+ *  싸우다가, 아무도 안 남으면 그때가 진짜 패배입니다.
+ */
+function rail4Swap(after) {
+  const 새로 = rail4MarkFallen();
+  if (!새로.length) return after();
+  divider();
+  say(withJosa(nameList(새로), "이") + " 이 선로에서 내렸다 — 다시 타지 못한다.", "bad");
+  if (rail4AllSinnersDown()) {
+    say("작성위원 열둘이 모두 내렸다. 더 부를 사람이 없다.", "bad");
+    render();
+    return after();
+  }
+  if (!rail4Bench().length) {
+    say("세울 사람이 더 없다.", "sys");
+    render();
+    return after();
+  }
+  render();
+  openRail4Replace(after);
+}
+
+/* ── 쉼표 — 저장만 하는 자리 ──────────────────────────────────
+ *  1호선의 case "rest" 자리를 대신합니다. 회복·부활이 없고, 편성을 여는
+ *  손잡이도 없습니다(사람은 쓰러질 때 그 자리에서 갑니다).
+ *
+ *  저장해 두는 것 — 편성 · 체력 · 이 선로에서 내린 사람.
+ *  져서 돌아오거나 창을 닫았다 다시 열면 이 모습 그대로 되돌립니다.
+ */
+function rail4Snapshot() {
+  const hp = {};
+  ownParty().forEach(w => { if (w) hp[w] = curHp(w); });
+  return { fallen: rail4State().fallen.slice(),
+           party:  ownParty().slice(),
+           hp:     hp };
+}
+function rail4Restore(s) {
+  if (!s) return;
+  /* 지금까지 «내가 걸어 둔 금지» 는 들고 갑니다 — 저장 뒤에 쓰러진 사람이
+   * 여기서 되살아나므로, 그 사람 몫의 금지를 거두려면 무엇을 걸었는지
+   * 알고 있어야 합니다 (rail4SyncBan 이 그걸로 거둡니다). */
+  const 전에건것 = (S.rail4 && S.rail4.banned) || [];
+  const 들어설때 = S.rail4 && S.rail4.entry;
+  S.rail4 = { fallen: (s.fallen || []).slice(), banned: 전에건것.slice(), entry: 들어설때 };
+  if (s.party) S.party = s.party.slice().concat(alliesOn());
+  if (s.hp) Object.keys(s.hp).forEach(w => { S.hp[w] = s.hp[w]; });
+  rail4SyncBan();
+  /* 저장해 둔 뒤 밖에서 교육위원·기프트를 바꿨으면 상한이 달라져 있습니다 —
+   * 그대로 두면 「125 / 124」 처럼 넘칩니다(2.18.0 봇 점검에서 찾음). */
+  rail4ClampHp();
+}
+
+SCENE_EXT.railGraveRest = function () {
+  const rule = mirrorRuleNow();
+  S.mirrorCheckpoint = S.sc - 1;             // 이 장면이 «져도 돌아오는 자리»
+
+  /* 이미 저장이 있으면 돌아온 것입니다 — 그때 모습 그대로 되돌립니다.
+   * (resumeMirror 가 들어오면서 체력을 가득 채워 두는데, 여기서 다시
+   *  덮어씁니다 — 이 갈래는 회복하지 않습니다.) */
+  const 되돌아옴 = !!(S.railSave && S.railSave.key === rule.key);
+  /* 넷째를 넘기던 그 턴에 쓰러진 사람이 있으면, 적어 두기 전에 그 자리부터 메웁니다.
+   * 그냥 두면 체력 0 인 채로 «아직 안 내린 사람» 으로 저장되어 「내린 사람 0명」 이라고
+   * 잘못 셉니다(2.18.0 봇 점검에서 찾음). 대체 인력 창을 거친 뒤 이 장면을 다시 밟습니다. */
+  if (!되돌아옴 && S.party.some(w => w && !isAlly(w) && !alive(w)))
+    return rail4Swap(() => SCENE_EXT.railGraveRest());
+  if (되돌아옴) rail4Restore(S.railSave.rail4);
+  /* 턴 수도 쉼표 때 값으로 되돌립니다 (사용자 지침 2026-10-23) — 창을 닫았다 이어할 때
+   * (resumeMirror 가 railSave.turns 를 읽음)와 게임 안에서 되감을 때(쉼표주인에게로 ·
+   * 중간 저장 지점으로)가 같게 셉니다. 「정시 운행」(100턴)이 되감는 길에 따라 갈리지 않게. */
+  if (되돌아옴) S.mirrorRunTurns = S.railSave.turns || 0;
+
+  divider();
+  setBackdrop(rule.midBg || mirrorBG(rule), rule.midName || rule.name);   // 중간 보스를 넘은 그 승강장
+  say("── 쉼표 ──", "place");
+
+  const sp = railSpeaker(rule);
+  if (sp.advisor) speak(sp.name, railLine(sp, 되돌아옴, rule), sp.portrait);
+  else if (rule.rest.who) speak(rule.rest.who, rule.rest.say);
+
+  /* 회복하지 않습니다 (사용자 지침 2026-10-19) — 체력도, 쓰러진 사람도
+   * 그대로입니다. 다음 전투의 관리력을 채워 주는 S.restManage 도
+   * 세우지 않습니다. */
+  say(rule.rest.text, "sys");
+  say("여기까지 내린 사람 " + rail4State().fallen.length + "명.　선 사람 " +
+      ownParty().filter(w => w && alive(w)).length + "명.", "sys");
+  say("이 선로에서 저장되는 자리는 여기뿐이다 — 창을 닫아도 여기서 이어한다. " +
+      "사람을 갈아 끼운 것은 저장되지 않는다.", "good");
+
+  S.railSave = { key: rule.key, picked: ((MIRROR && MIRROR.foeSrc) || []).slice(),
+                 checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0, arc: arcCopy(S.arc),
+                 rail4: rail4Snapshot() };
+  saveVault();
+  render();
+  return cont();
+};
+
+/* 소리 없이 배경만 갈아 끼웁니다 — 쉼표를 떠나 다시 달리는 자리(«▶ 이름» 줄 없이) */
+SCENE_EXT.railGraveBg = function (s) {
+  setBackdrop(s.img, s.name);
+  return cont();
+};
+
+/* ── 완주 직전 — 몇 턴에 왔는가 ───────────────────────────────
+ *  mirrorClear 바로 앞에 섭니다. 턱을 넘긴 것만 업적 조건으로 넘깁니다.
+ */
+SCENE_EXT.railGraveReport = function () {
+  const turns = S.mirrorRunTurns || 0;
+  divider();
+  say("종점에 닿았다. 걸린 턴 " + turns + ".　이 선로에서 내린 사람 " +
+      rail4State().fallen.length + "명.", "sys");
+  RAIL4_TURN_MARKS.forEach(m => {
+    if (turns <= m.turns) checkAchievements(null, MIRROR_RAIL4.key + ":" + m.id);
+  });
+  RAIL4_FALL_MARKS.forEach(m => {
+    if (rail4State().fallen.length <= m.fallen) checkAchievements(null, MIRROR_RAIL4.key + ":" + m.id);
+  });
+  /* 아무도 안 내렸으면 그것도 한 몫입니다 */
+  if (!rail4State().fallen.length)
+    checkAchievements(null, MIRROR_RAIL4.key + ":nofall");
+  render();
+  return cont();
+};
+
+/* ── 장면을 짓는다 ───────────────────────────────────────────
+ *  1호선과 같되 쉼표가 railGraveRest 이고, 끝에 railGraveReport 가 한 장
+ *  더 낍니다. 열쇠(__mirror_0…)는 1호선과 같게 두어, 이어하기가 되짚어
+ *  다시 지을 때 차례가 어긋나지 않습니다.
+ */
+function buildGraveScenes(rule, ids) {
+  const scenes = [
+    { t: "place", img: mirrorBG(rule), name: rule.name },
+    { t: "n", text: "유리창이 한쪽으로만 열린다. 들어선 자리로는 돌아 나갈 수 없다." },
+    { t: "n", text: "쉴 틈은 없다. " + countWord(ids.length) + " 연달아 상대해야 한다. " +
+                    "쓰러진 사람은 여기서 내린다 — 다시 타지 못한다." }
+  ];
+  let checkpoint = null;
+  /* 배경이 갈리는 자리 — ids 는 거울 사본 열쇠라 «몇 번째» 로 짚습니다 */
+  const midAt  = rule.midFoe ? (rule.foes || []).indexOf(rule.midFoe) : -1;
+  const backAt = rule.rest ? rule.rest.after : -1;
+  const lastAt = ids.length - 1;
+  ids.forEach((id, i) => {
+    if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
+    if (i === midAt && rule.midBg)        scenes.push({ t: "place", img: rule.midBg, name: rule.midName || rule.name });
+    else if (i === lastAt && rule.finalBg) scenes.push({ t: "place", img: rule.finalBg, name: rule.finalName || rule.name });
+    else if (i === backAt && rule.backBg)  scenes.push({ t: "railGraveBg", img: rule.backBg, name: rule.name });
+    const rail = { no: i + 1, total: ids.length, k: rule.scale };
+    scenes.push(FOES[id] && FOES[id].cineEntrance
+      ? { t: "bossCine", foe: id, rail: rail } : { t: "battle", foe: id, rail: rail });
+    if (rule.rest && i + 1 === rule.rest.after && i + 1 < ids.length) {
+      checkpoint = scenes.length;
+      scenes.push({ t: "railGraveRest" });
+    }
+  });
+  scenes.push({ t: "railGraveReport" });
+  scenes.push({ t: "mirrorClear" });
+  return { scenes: scenes, checkpoint: checkpoint };
+}
+
+/* ── 들어가기 전·운전석 칸에 적을 말 ────────────────────────── */
+function graveFacts(r, o) {
+  /* 굵게 하는 것은 «이 선로에서만 다른 것» 뿐입니다 (사용자 지침 2026-10-27) —
+   * 줄마다 한두 마디만 짚어야 그것부터 읽힙니다. 다 굵게 하면 아무것도 안 굵습니다. */
+  o.자세히 =
+    "정해진 " + countBare(r.count) + "을 차례로 상대합니다. 짜임은 1호선과 같지만, " +
+    "이 선로에서는 <b>쓰러진 사람이 돌아오지 않습니다</b> — <b>첨삭이 통하지 않고</b>, " +
+    "쉼표에서도 <b>아무도 일어나지 않으며 체력도 차지 않습니다.</b> " +
+    "누가 쓰러지면 그 자리에서 <b>바로 대체 인력을 세웁니다.</b> " +
+    "지원 작성위원은 쓰러질 때마다 새로 불러올 수 있습니다(한 전투에 1명은 그대로" +
+    (r.supportCalls != null ? ", <b>이 선로에서 " + r.supportCalls + "명까지</b>" : "") + "). " +
+    "<b>한 번 내린 사람은 이 선로를 벗어나기 전까지 다시 서지 못합니다.</b> " +
+    "저장되는 자리는 <b>" + r.rest.after + "번째를 넘긴 뒤의 쉼표 하나뿐</b>입니다 — " +
+    "<b>사람을 갈아 끼운 것은 저장되지 않습니다.</b> " +
+    "선로 위에서는 <b>적을 잡아도 " + CURRENCY + "가 나오지 않습니다.</b>";
+  return o;
+}
+
+/* 쉼표 전에 아주 막혔다 — 들어설 때의 편성으로 되돌리고, 선로 첫머리부터 다시 갑니다 */
+function rail4DefeatToStart() {
+  const e = S.rail4 && S.rail4.entry;
+  divider();
+  say("작성위원 전원이 쓰러졌다.", "bad");
+  if (rail4AllSinnersDown()) say("작성위원 열둘이 모두 내렸다. 이 선로는 여기서 끝이다.", "bad");
+  say("아직 쉼표에 닿지 못했다 — 적어 둔 자리가 없으니 선로의 처음으로 돌아간다.", "sys");
+  S.battle = null;
+  dropSpeaker();
+  rail4Release();
+  if (e) S.party = e.party.slice().concat(alliesOn());
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  render();
+  buttons([
+    { label: "처음부터 다시", cls: "primary", fn: () => { S.waiting = false; rail4Restart(); } },
+    { label: "편성 바꾸기", fn: () => openParty(() => { S.waiting = false; rail4Restart(); }) },
+    { label: "상점", fn: () => openShop(() => {}) },
+    { label: "보관함", cls: "ghost", fn: openVault },
+    { label: "유리창", cls: "ghost", fn: () => { S.waiting = false; glass(); } }
+  ]);
+}
+/* 선로 첫머리부터 — 지어 둔 장면(SCENES)을 0번부터 다시 밟습니다. 들어설 때의 편성을
+ * 다시 적어 두므로 몇 번을 되풀이해도 돌아갈 편성이 남습니다. */
+function rail4Restart() {
+  rail4Release();
+  rail4State().entry = { party: ownParty().slice() };
+  S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  S.mirrorRunTurns = 0;
+  S.arc = { kills: 0, retribution: {} };
+  S.mirrorCheckpoint = null;
+  S.ended = false;
+  clearLog();
+  S.sc = 0;
+  render();
+  next();
+}
+
+
 
 
 boot();   // 코드를 통과하면 유리창부터

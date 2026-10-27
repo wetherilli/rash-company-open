@@ -62,6 +62,17 @@ const STARTER_ID = { who: "lee_hanbeom", star: 2, title: "L사 비포팀" };
 /* 뽑기 재화 이름 — 마음에 안 드시면 여기만 고치세요 */
 const CURRENCY = "원고료";
 
+/* ── 이야기 특전 (8장~) ───────────────────────────────────────
+ *  장 안에서 얻어 그 장(묶음이면 그 부분) 동안만 듣는 특전입니다.
+ *  열쇠 하나에 { name, desc, effect } — effect 는 테마팩 특전과 같은 칸을 씁니다
+ *  (engine.js 의 packPerks · storyPerks 머리말). 아이콘은 assets/icon/<name>.png.
+ *  장면에서는 { t:"perk", id:"열쇠" } · { t:"perk", ids:[…] } 로 줍니다.
+ *
+ *  준비 중인 장의 특전은 wip/<장>/package.js 에 「@wip into: data/story.js · STORY_PERKS」 로.
+ */
+const STORY_PERKS = {
+};
+
 /* ── 적 ───────────────────────────────────────────────────────
  *  적(FOES)은 data/foes.js 로 따로 나갔습니다. 이야기 쪽에서는
  *  { t:"battle", foe:"열쇠" } 처럼 열쇠 글자로만 부릅니다.

@@ -15,7 +15,7 @@
  *
  *  다른 주소(콘첸트라트 서버 · 글꼴)는 건드리지 않습니다.
  * ===================================================================== */
-const CACHE = "rash-company-v2.16.4";
+const CACHE = "rash-company-v2.18.0";
 
 self.addEventListener("install", () => self.skipWaiting());
 
