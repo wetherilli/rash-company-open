@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.24.0";
+const VERSION = "2.24.1";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2689,7 +2689,7 @@ function eventGiveApply(g) {
       const cur = idByKey(S.equip[p.who]);
       if (!cur || cur.star < p.id.star) {
         S.equip[p.who] = p.key;
-        if (S.party.indexOf(p.who) >= 0) S.hp[p.who] = maxHp(p.who);
+        equipHp(p.who);
       }
       got.push(stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name);
     } else {
@@ -3112,6 +3112,12 @@ function ownedIds(who) {
 }
 function maxHp(who) { return effStats(who).hp; }
 function curHp(who) { return S.hp[who] != null ? S.hp[who] : maxHp(who); }
+/* 인격을 갈아 끼우면 시너지가 꺼지거나 켜져 «동료» 의 체력 상한도 바뀝니다 —
+ * 새로 낀 사람은 가득 채우고, 나머지는 넘치는 몫만 깎아 맞춥니다 */
+function equipHp(who) {
+  if (S.party.indexOf(who) >= 0) S.hp[who] = maxHp(who);
+  S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+}
 function setHp(who, v) {
   const wasAlive = curHp(who) > 0;
   S.hp[who] = Math.max(0, Math.min(maxHp(who), Math.round(v)));
@@ -5238,7 +5244,7 @@ function grant(who, star, title) {
     if (id.note) say("(" + id.note + ")", "sys");
     if (!S.equip[who] || (idByKey(S.equip[who]) || {}).star < star) {
       S.equip[who] = key;
-      if (S.party.indexOf(who) >= 0) S.hp[who] = maxHp(who);
+      equipHp(who);
       say(withJosa(s.name, "이") + " 새 인격을 장착했다.", "sys");
     }
   }
@@ -6875,7 +6881,7 @@ function checkAchievements(foeName, cleared) {
           const cur = idByKey(S.equip[p.who]);
           if (!cur || cur.star < p.id.star) {
             S.equip[p.who] = p.key;
-            if (S.party.indexOf(p.who) >= 0) S.hp[p.who] = maxHp(p.who);
+            equipHp(p.who);
           }
           say("인격 획득 — " + stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name, "gain");
           if (p.id.note) say("(" + p.id.note + ")", "sys");
@@ -8143,6 +8149,27 @@ function liftSheetFoot() {
 }
 new MutationObserver(liftSheetFoot).observe($sheet, { childList: true });
 
+/* ── 창 안의 누르는 칸을 키보드로도 (UI 검토 2026-10-28) ───────────
+ *  창의 칸(.slot · .eqhead …)은 div 에 onclick 을 단 것이라 Tab 으로 갈 수 없었습니다.
+ *  창이 새로 그려질 때마다 onclick 이 달린 div · span 에 tabindex 와 role="button" 을 붙이고,
+ *  초점이 선 칸에서 Enter · Space 를 누르면 그 칸을 누른 것으로 칩니다.
+ *  onclick 은 innerHTML 뒤에 묶이므로, 관찰자는 그 줄이 다 돈 뒤(마이크로태스크)에 봅니다. */
+function markSheetPressables() {
+  $sheet.querySelectorAll("div, span").forEach(el => {
+    if (typeof el.onclick !== "function" || el.hasAttribute("tabindex")) return;
+    el.tabIndex = 0;
+    el.setAttribute("role", "button");
+  });
+}
+new MutationObserver(markSheetPressables).observe($sheet, { childList: true, subtree: true });
+$sheet.addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const t = e.target;
+  if (t.getAttribute("role") !== "button" || t.tagName === "BUTTON") return;
+  e.preventDefault();
+  t.click();
+});
+
 /* ── Esc 로 창 닫기 (사용자 지침 2026-10-16) ───────────────────────
  *  창이 떠 있을 때 Esc 를 누르면 맨 위 손잡이 줄(.sheettop)에서 «나가는» 손잡이를 대신 누릅니다.
  *  고르는 차례 — 닫기 · 돌아가기 · 뒤로 · 그만두기 · 저장하지 않고 나가기 · 아니오 처럼 «아무것도 안 하고 나가는» 것이 먼저.
@@ -8244,6 +8271,32 @@ function openParty(done) {
            tool("psync", "동기화",   "인격 파편으로 작성위원의 동기화 단계를 올립니다.", syncUnlocked(), syncLockText()) +
            tool("psave", "편성 저장", "지금 편성을 세 칸 가운데 하나에 담아 둡니다.", true) +
          '</div>';
+
+    /* ── 지금 편성 (UI 검토 2026-10-28) ─────────────────────────────
+     *  고른 셋이 아래 열세 칸 사이에 흩어져 있어, 누가 몇 번에 섰는지 훑어봐야 했습니다.
+     *  맨 위에 1 · 2 · 3번 칸과 그 편성으로 켜지는 시너지를 모읍니다. 칸을 누르면 그 사람의 인격 장착으로. */
+    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">지금 편성</div>' +
+         '<div class="grid teamstrip">';
+    for (let i = 0; i < 3; i++) {
+      const w = picking[i];
+      if (!w) { h += '<div class="slot"><div class="lock">' + (i + 1) + '번　비어 있음</div></div>'; continue; }
+      const sp = isSupport(w) ? supportBy(w) : null;
+      const id = sp ? null : idByKey(S.equip[w]);
+      h += '<div class="slot hasic idcard"' + (sp ? '' : ' data-team="' + w + '"') + '>' +
+             iconHTML(sp ? supportIconName(sp) : memberIconName(w)) + '<div>' +
+               '<div class="nm"><span class="teamno">' + (i + 1) + '</span> ' + memberName(w) + '</div>' +
+               '<div class="sub"><span class="star">' + stars(sp ? sp.star : id ? id.star : 1) + '</span> ' +
+                 (sp ? sp.title + ' · 지원' : id ? id.title : '') + '</div>' +
+             '</div>' + atkTypeIconHTML(atkTypeOf(w)) +
+           '</div>';
+    }
+    h += '</div>';
+    {
+      const syn = activeSynergies(picking.filter(Boolean));
+      h += '<div class="hint teamsyn">시너지　' + (syn.length
+        ? syn.map(x => '<b>' + x.name + '</b> ' + x.count + '명' + (x.count >= 3 ? ' 완전' : '')).join('　·　')
+        : '없음 — 비슷한 이름의 인격끼리 편성') + '</div>';
+    }
 
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">작성위원</div>' +
          '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다. ' +
@@ -8402,6 +8455,9 @@ function openParty(done) {
       if (done) done();
     };
     document.getElementById("pids").onclick = () => openEquip(() => draw());
+    $sheet.querySelectorAll(".slot[data-team]").forEach(el => {
+      el.onclick = () => openEquip(() => draw(), el.dataset.team);
+    });
     bindLoadoutSlots(() => draw());
     /* 동기화 창은 닫을 때 창을 내리고 back 을 부릅니다 — 편성 창을 도로 띄웁니다 */
     const psync = document.getElementById("psync");
@@ -8448,6 +8504,31 @@ function onLongPress(el, fn, ms) {
   });
   ["pointerup", "pointerleave", "pointercancel"].forEach(t => el.addEventListener(t, stop));
   el.addEventListener("contextmenu", (e) => e.preventDefault());   // 폰에서 꾹 누를 때 뜨는 메뉴
+}
+
+/* 인격 장착 칸의 «지금 낀 것 대비» (UI 검토 2026-10-28) — 기본 수치끼리 견줍니다(시너지 · 기프트는 빼고).
+ * 낀 것 자신이나 같은 값이면 아무것도 붙이지 않습니다. */
+function eqDelta(v, cur, on) {
+  if (on || cur == null || v === cur) return "";
+  const d = v - cur;
+  return '<span class="eqd ' + (d > 0 ? 'up' : 'down') + '">(' + (d > 0 ? '+' : '−') + Math.abs(d) + ')</span>';
+}
+/* 편성에 든 사람이면, 이 인격으로 바꿔 끼었을 때 켜지고 꺼지는 시너지를 한 줄로.
+ * activeSynergies 는 S.equip 을 읽으므로 잠깐 바꿔 끼워 보고 되돌립니다. */
+function eqSynDelta(who, key) {
+  const names = () => activeSynergies().map(x => x.name + (x.count >= 3 ? " 완전" : ""));
+  const before = names();
+  const keep = S.equip[who];
+  S.equip[who] = key;
+  let after;
+  try { after = names(); } finally { S.equip[who] = keep; }
+  const on  = after.filter(n => before.indexOf(n) < 0);
+  const off = before.filter(n => after.indexOf(n) < 0);
+  if (!on.length && !off.length) return "";
+  return '<div class="sub eqsyn">시너지 ' +
+           on.map(n => '<span class="eqd up">+' + n + '</span>').join(" ") + (on.length && off.length ? " " : "") +
+           off.map(n => '<span class="eqd down">−' + n + '</span>').join(" ") +
+         '</div>';
 }
 
 /* focus — 그 사람만 펴서 엽니다(편성 칸을 꾹 눌러 들어올 때) */
@@ -8502,6 +8583,7 @@ function openEquip(back, focus) {
     if (!open) return;
 
     let shown = 0;
+    const curSt = S.equip[who] ? statsOf(S.equip[who]) : null;   // 바꿔 끼면 얼마나 달라지나 — eqDelta
     let body = '<div class="grid eqbody">';
     s.ids.forEach(id => {
       const key = idKey(who, id);
@@ -8525,7 +8607,10 @@ function openEquip(back, focus) {
                 '<div class="' + (has ? 'nm' : 'lock') + '">' +
                   '<span class="star">' + stars(id.star) + '</span> ' + id.title +
                   (on ? ' <span class="sub">· 장착</span>' : '') + '</div>' +
-                '<div class="sub">' + (has ? ('공 ' + st.atk + '　방 ' + st.def + '　체 ' + st.hp) : '미보유') + '</div>' +
+                '<div class="sub">' + (has ? ('공 ' + st.atk + eqDelta(st.atk, curSt && curSt.atk, on) +
+                                              '　방 ' + st.def + eqDelta(st.def, curSt && curSt.def, on) +
+                                              '　체 ' + st.hp  + eqDelta(st.hp,  curSt && curSt.hp,  on)) : '미보유') + '</div>' +
+                (has && !on && S.party.indexOf(who) >= 0 ? eqSynDelta(who, key) : '') +
                 (has && id.note ? '<div class="sub">' + id.note + '</div>' : '') +
               '</div>';
     });
@@ -8562,6 +8647,7 @@ function openEquip(back, focus) {
       const who = parseKey(key).who;
       S.equip[who] = key;
       S.hp[who] = maxHp(who);
+      equipHp(who);
       saveVault();
       openEquip(back);
     };
@@ -9243,7 +9329,7 @@ const SHOP_TRADES = [
 
 /* ── 상점 알림 ──────────────────────────────────────────────────
  *  내용은 data/notice.js 의 SHOP_NOTICE 에 적습니다.
- *  상점에 들어갈 때 한 번 뜨고, 「이번 판에서는 다시 보지 않음」을 누르면
+ *  유리창에 들어올 때 한 번 뜨고, [닫기] · [상점으로] 어느 쪽으로 닫든
  *  그 판에 한해 안 뜹니다. 판이 올라가면 다시 뜹니다 — 패치 노트와 같은 방식입니다.
  */
 const NOTICE_SEEN_KEY = "rash_company_notice_seen";
@@ -9304,10 +9390,12 @@ function openNotice(then) {
     (n.tail ? '<div class="mailnote ok" style="margin-top:12px">' + n.tail + '</div>' : '') +
     '<div class="modalfoot">' +
       '<button id="ntgo" class="primary">상점으로</button>' +
-      '<button id="nthide" class="ghost">이번 판에서는 다시 보지 않음</button>' +
+      '<button id="ntclose" class="ghost">닫기</button>' +
     '</div>';
-  document.getElementById("ntgo").onclick   = () => then();
-  document.getElementById("nthide").onclick = () => { noticeHide(); then(); };
+  /* 어느 손잡이로 닫든 이번 판에서는 본 것입니다(아래 glass 참고). [상점으로] 는 정말 상점을 엽니다 —
+   * 예전에는 이름만 상점이고 유리창으로 돌아갔습니다. [닫기] 가 있어 Esc 도 듣습니다. */
+  document.getElementById("ntgo").onclick    = () => then("shop");
+  document.getElementById("ntclose").onclick = () => then();
 }
 
 function openShop(back) {
@@ -9315,6 +9403,8 @@ function openShop(back) {
   $modal.classList.add("on");
 
   const draw = (msg) => {
+    /* 배정 · 교환 창은 닫으면서 이 draw 로 돌아옵니다 — 창이 닫힌 채 그려지면 유리창이 드러나니 다시 엽니다 */
+    $modal.classList.add("on");
     let h = '<h2>상 점</h2>' +
             '<div class="hint">보유 ' + iconMini("원고료") + CURRENCY + ' <b>' + S.money + '</b>' +
             '　·　' + iconMini("황금교본") + '황금교본 <b>' + S.codex + '</b>' +
@@ -9745,10 +9835,10 @@ function openGacha(done, pk, deal) {
          (deal
            ? '<button id="gdeal" class="primary"' +
                ((S.money < cost || newbieLeft() <= 0) ? ' disabled' : '') + '>' +
-               deal.pulls + '회 배정　(' + cost + ' ' + CURRENCY + ')</button>'
-           : '<button id="g1" class="primary"' + (S.money < cost ? ' disabled' : '') + '>1회 배정</button>' +
+               deal.pulls + '회 배정　(' + CURRENCY + ' ' + cost + ')</button>'
+           : '<button id="g1" class="primary"' + (S.money < cost ? ' disabled' : '') + '>1회 배정　(' + CURRENCY + ' ' + cost + ')</button>' +
              '<button id="g10"' + (S.money < cost * RULE.guaranteePulls ? ' disabled' : '') + '>' +
-               RULE.guaranteePulls + '회 배정</button>') +
+               RULE.guaranteePulls + '회 배정　(' + CURRENCY + ' ' + cost * RULE.guaranteePulls + ')</button>') +
          '<button id="gclose" class="ghost">닫기</button></div>';
     $sheet.innerHTML = h;
 
@@ -9773,7 +9863,7 @@ function openGacha(done, pk, deal) {
         const cur = idByKey(S.equip[pick.who]);
         if (!cur || cur.star < pick.id.star) {
           S.equip[pick.who] = key;
-          if (S.party.indexOf(pick.who) >= 0) S.hp[pick.who] = maxHp(pick.who);
+          equipHp(pick.who);
         }
       } else addFrag(pick.who, dupRefund(pick.id.star));
       return { kind: "id", who: pick.who, id: pick.id, isNew };
@@ -9838,7 +9928,9 @@ function openGacha(done, pk, deal) {
     const g5 = document.getElementById("g10");
     if (g1 && !g1.disabled) g1.onclick = () => pull(1);
     if (g5 && !g5.disabled) g5.onclick = () => pull(RULE.guaranteePulls);
-    document.getElementById("gclose").onclick = () => { closeModal(); if (done) done(); };
+    /* 상점에서 열었으면 상점으로 한 칸만 돌아갑니다 — 창을 닫고 나서 done() 을 부르면
+     * 상점은 닫힌 창 안에 그려져 유리창이 드러납니다 */
+    document.getElementById("gclose").onclick = () => { if (done) done(); else closeModal(); };
   };
   draw(null);
 }
@@ -9920,9 +10012,9 @@ function openStockGacha(kind, done) {
     }
 
     h += '<div class="modalfoot">' +
-         '<button id="s1" class="primary"' + (S.codex < cost ? ' disabled' : '') + '>1회 배정</button>' +
+         '<button id="s1" class="primary"' + (S.codex < cost ? ' disabled' : '') + '>1회 배정　(황금교본 ' + cost + ')</button>' +
          '<button id="s5"' + (S.codex < cost * multi ? ' disabled' : '') + '>' +
-           multi + '회 배정</button>' +
+           multi + '회 배정　(황금교본 ' + cost * multi + ')</button>' +
          '<button id="sclose" class="ghost">닫기</button></div>';
     $sheet.innerHTML = h;
 
@@ -10038,7 +10130,7 @@ function openExchangePick(who, back) {
         const cur = idByKey(S.equip[who]);
         if (!cur || cur.star < id.star) {
           S.equip[who] = key;
-          if (S.party.indexOf(who) >= 0) S.hp[who] = maxHp(who);
+          equipHp(who);
         }
         saveVault();
         render();
@@ -14320,7 +14412,7 @@ function openSync(back) {
              (skill
                ? '<div class="sub"><span class="uskill"><b>' + skill.name + '</b> ' +
                    (lv >= 1 ? skill.desc(skillTierValue(skill, lv))
-                            : '<span style="color:var(--off)">동기화 1단계에서 열립니다.</span>') +
+                            : '<span style="color:var(--dim)">동기화 1단계에서 열립니다.</span>') +
                  '</span></div>'
                : '') +
              '<div class="act">' +
@@ -15907,9 +15999,13 @@ function glass() {
      * 이 알림은 원래 상점에서 열리던 것이라, 닫으면 상점을 다시 그리는 것으로
      * 끝났습니다. 그런데 유리창에서 열면 닫는 길이 glass() 를 다시 부르고,
      * 그러면 noticeDue() 가 여전히 참이라 알림이 곧바로 다시 뜹니다 —
-     * 「이번 판에서는 다시 보지 않음」을 누르지 않는 한 빠져나갈 수가 없었습니다.
+     * 「이번 판에서는 다시 보지 않음」(지금은 없는 손잡이)을 누르지 않는 한 빠져나갈 수가 없었습니다.
      * 여기서 열리는 것은 이제 유리창뿐이므로, 어느 손잡이로 닫든 한 번 본 것으로 봅니다. */
-    return openNotice(() => { noticeHide(); closeModal(); glass(); });
+    return openNotice(go => {
+      noticeHide();
+      if (go === "shop") return openShop(() => glass());
+      closeModal(); glass();
+    });
   }
   /* 오늘 출석을 아직 안 받았으면 출석 창을 띄웁니다 — 알림이 있으면 알림을 닫은 뒤에 */
   if (!INSTALL_ASKING && rewardAutoDue()) {

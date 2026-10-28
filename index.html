@@ -69,7 +69,7 @@
     --text-2:#d6d3ce;
     --text-3:#a9a49e;
     --muted:#8b8681;
-    --dim:#6e6a66;
+    --dim:#837f7a;
     --off:#55524e;
     --gold:#d8b26a;
     --gold-hi:#f0d79c;
@@ -83,7 +83,7 @@
     --b-btn:#1e1214; --b-btn-hi:#2a1a1c; --b-bar:#2c191b;
     --b-line-soft:#3d1f22; --b-line:#4a2226; --b-line-hi:#7a2b28; --b-line-pri:#9c3a34;
     --b-text:#d8c8c4; --b-text-2:#cbbdb9; --b-text-3:#b09490; --b-text-pri:#f0b8b2;
-    --b-muted:#9c8480; --b-dim:#8a706c;
+    --b-muted:#9c8480; --b-dim:#907773;
     --b-accent:#e05048; --b-hp:#b04a42; --b-heavy:#ff6a5e;
   }
   *{box-sizing:border-box;}
@@ -132,7 +132,7 @@
   #foehp.on{display:block;}
   #foehp .row{display:flex;justify-content:space-between;align-items:baseline;margin-top:3px;}
   #foehp .nm{color:var(--text-2);font-weight:700;font-size:12.5px;}
-  #foehp .stat{color:var(--muted);font-size:11.5px;}
+  #foehp .stat{color:var(--muted);font-size:12.5px;}
   body.battling #foehp .nm{color:var(--b-text);}
   /* 거울굴절철도 2호선 — 지금이 몇 순환의 몇 번째인가. 다른 갈래에서는 뜨지 않습니다. */
   #foehp .railtag{
@@ -500,7 +500,7 @@
     letter-spacing:.03em;padding:1px 7px;border-radius:3px;
   }
   .eqhead .wearing{color:var(--muted);font-size:12px;}
-  .eqhead .cnt{margin-left:auto;color:var(--dim);font-size:11.5px;}
+  .eqhead .cnt{margin-left:auto;color:var(--dim);font-size:12.5px;}
   .eqbody{margin-top:6px;}
 
   /* ── 동기화 — 작성위원마다 한 줄 ─────────── */
@@ -510,7 +510,7 @@
   .syncgrid .slot .lv{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:.04em;line-height:1;}
   .syncgrid .slot .lv.zero{color:var(--off);font-weight:400;}
   .syncgrid .slot.max .lv{color:var(--gold-hi);}
-  .syncgrid .slot .fr{color:var(--dim);font-size:11px;}
+  .syncgrid .slot .fr{color:var(--dim);font-size:12px;}
   .syncgrid .slot .icmini{width:36px;height:36px;margin:0;}   /* 작성위원 아이콘 — 18px 그림의 2배 */
   @media (max-width:640px){ .syncgrid{gap:6px;} .syncgrid .slot{padding:9px 4px;font-size:12px;} .syncgrid .slot .lv{font-size:18px;} }
   /* 고른 사람의 설명 칸 — 칸 아래에 하나만 */
@@ -526,11 +526,11 @@
   .syncrow button{flex:none;white-space:nowrap;order:2;}
   .syncrow .body{flex:1;min-width:0;order:1;}
   .syncrow .nm{color:var(--text);font-weight:700;}
-  .syncrow .sub{color:var(--muted);font-size:11.5px;margin-top:2px;}
+  .syncrow .sub{color:var(--muted);font-size:12.5px;margin-top:2px;}
 
   .pcard .nm{color:var(--text);font-weight:700;}
-  .pcard .id{color:var(--muted);font-size:11.5px;margin:1px 0 5px;}
-  .pcard .st{color:var(--dim);font-size:11.5px;}
+  .pcard .id{color:var(--muted);font-size:12.5px;margin:1px 0 5px;}
+  .pcard .st{color:var(--dim);font-size:12.5px;}
   .pcard .cmd{color:var(--gold);font-size:11.5px;}
   .pcard.cmd-attack .cmd{color:#e07aa8;}
   .pcard.cmd-guard  .cmd{color:#5aa8e0;}
@@ -547,7 +547,7 @@
     padding:6px 10px;font-size:12.5px;cursor:default;border-radius:8px;
   }
   .acard .nm{color:var(--text);font-weight:700;display:flex;align-items:center;gap:2px;flex-wrap:wrap;}
-  .acard .id{color:var(--muted);font-size:11.5px;margin-top:1px;}
+  .acard .id{color:var(--muted);font-size:12.5px;margin-top:1px;}
 
   /* ── 머리 달린 딱지 줄 — 「E.G.O 기프트 |」(테마팩 특전도 이 줄에 다른 색으로) · 「활성화된 시너지 |」
    *    (engine.js renderGifts · renderSynergy). 머리 색은 딱지 색을 따릅니다 ── */
@@ -959,9 +959,21 @@
   /* 가로로 통째를 차지하는 칸 — 상점 맨 위 기념 배정에 씁니다 */
   .slot.wide{grid-column:1 / -1;}
   .slot.wide .pkline{margin:-2px 0 8px;height:150px;}
+  /* 키보드로 옮겨 다닐 때만 보이는 초점 테두리 — 누르는 칸은 engine.js markSheetPressables 가 초점을 받게 합니다 */
+  button:focus-visible, [role="button"]:focus-visible, summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
   .slot .nm{color:var(--text);font-weight:700;}
-  .slot .sub{color:var(--muted);font-size:11.5px;}
-  .slot .lock{color:var(--off);font-size:11.5px;}
+  /* 편성 창 맨 위 «지금 편성» — 몇 번째 칸인지 동그라미 숫자로 (engine.js openParty) */
+  .teamstrip .teamno{display:inline-block;min-width:18px;height:18px;line-height:18px;border-radius:9px;text-align:center;
+                     background:var(--gold);color:var(--bg);font-size:11.5px;font-weight:800;margin-right:2px;}
+  .teamsyn{margin:6px 0 0;}
+  /* 인격 장착 — 지금 낀 것 대비 (engine.js eqDelta · eqSynDelta). 색만이 아니라 +/− 글자로도 갈립니다 */
+  .eqd{margin-left:2px;font-size:11.5px;}
+  .eqd.up{color:#7fa86a;}
+  :root[data-tone="light"] .eqd.up{color:#3f7a2c;}
+  .eqd.down{color:var(--red);}
+  .teamsyn b{color:var(--gold);}
+  .slot .sub{color:var(--muted);font-size:12.5px;}
+  .slot .lock{color:var(--dim);font-size:12.5px;}
   /* 캡처만 하고 누르지는 않는 칸 — 결과 카드 화면(.mrcard)이 씁니다 */
   /* ── 업적 목록 — 한 줄에 하나씩 (engine.js openAchieve) ── */
   .achrow{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:var(--panel);
@@ -970,9 +982,9 @@
   .achrow .mark{flex:none;width:16px;text-align:center;color:var(--gold);font-weight:800;}
   .achrow .body{flex:1;min-width:0;}
   .achrow .nm{color:var(--text);font-weight:700;}
-  .achrow .lock{color:var(--off);font-size:13px;font-weight:700;}
-  .achrow .sub{color:var(--muted);font-size:11.5px;}
-  .achrow .rw{flex:none;max-width:42%;text-align:right;color:var(--muted);font-size:11.5px;}
+  .achrow .lock{color:var(--dim);font-size:13px;font-weight:700;}
+  .achrow .sub{color:var(--muted);font-size:12.5px;}
+  .achrow .rw{flex:none;max-width:42%;text-align:right;color:var(--muted);font-size:12.5px;}
   .achrow.got .rw{color:#cfc6b0;}
   @media (max-width:640px){
     .achrow{flex-wrap:wrap;gap:4px 10px;}
@@ -1449,19 +1461,19 @@
    *  테마를 더하려면 여기에 한 덩이, engine.js 의 PALETTES 에 한 줄. */
   :root[data-palette="sea"]{   /* 심해 */
     --bg:#0a121d; --sheet:#0c1522; --panel:#121d2c; --panel-2:#192739; --line:#243449; --line-2:#33496a; 
-    --text:#e4edf8; --text-2:#cfdcec; --text-3:#a9bbd0; --muted:#93a5bb; --dim:#6f8299; --off:#4d5d73; 
+    --text:#e4edf8; --text-2:#cfdcec; --text-3:#a9bbd0; --muted:#93a5bb; --dim:#7c8fa5; --off:#4d5d73; 
     --gold:#6db8f2; --gold-hi:#b9defc; --gold-mid:#4f8ec4; --gold-bg:#10243a; --gold-line:#1f4466; --gold-line-2:#2f679a; 
     --red:#f08b82; --hi:#ffffff;
   }
   :root[data-palette="blossom"]{   /* 분홍 */
     --bg:#170b11; --sheet:#1c0e15; --panel:#26131d; --panel-2:#321a27; --line:#442234; --line-2:#5e3048; 
-    --text:#fce9f1; --text-2:#efd3df; --text-3:#d9b3c3; --muted:#c99aad; --dim:#9a7385; --off:#6e4f5d; 
+    --text:#fce9f1; --text-2:#efd3df; --text-3:#d9b3c3; --muted:#c99aad; --dim:#a67d8f; --off:#6e4f5d; 
     --gold:#ff8db5; --gold-hi:#ffd0e1; --gold-mid:#c4658c; --gold-bg:#3a1628; --gold-line:#5e2643; --gold-line-2:#8f3a66; 
     --red:#ff6f8f; --hi:#ffffff;
   }
   :root[data-palette="amber"]{   /* 호박 */
     --bg:#110d09; --sheet:#15100b; --panel:#1f1711; --panel-2:#2a2018; --line:#3b2e22; --line-2:#524030; 
-    --text:#f4e9d8; --text-2:#e3d5bf; --text-3:#c9b79c; --muted:#b8a389; --dim:#8c7a64; --off:#635545; 
+    --text:#f4e9d8; --text-2:#e3d5bf; --text-3:#c9b79c; --muted:#b8a389; --dim:#99866f; --off:#635545; 
     --gold:#dbb45e; --gold-hi:#eed7a6; --gold-mid:#96793a; --gold-bg:#2a2012; --gold-line:#4f3d1c; --gold-line-2:#7a5c22; 
     --red:#d9705f; --hi:#ffffff;
   }
@@ -1476,37 +1488,37 @@
    *  (sheet · line-2 · text-2·3 · dim · off · gold 무리는 그 사이를 섞어 얻습니다). */
   :root[data-palette="rouge"]{   /* 오르크튀르 루르주 — 콘첸트라트 같은 이름 테마의 배색 */
     --bg:#fdf2ec; --sheet:#fef6f2; --panel:#fffaf7; --panel-2:#f8e3d8; --line:#eed8cc; --line-2:#d3bcb1;
-    --text:#3a1f18; --text-2:#472a22; --text-3:#604135; --muted:#7a5749; --dim:#a1867a; --off:#bca59b;
+    --text:#3a1f18; --text-2:#472a22; --text-3:#604135; --muted:#7a5749; --dim:#826053; --off:#bca59b;
     --gold:#c62828; --gold-hi:#951e1e; --gold-mid:#9c2523; --gold-bg:#f6dad4; --gold-line:#eaaba7; --gold-line-2:#dc7976;
     --red:#a8231d; --hi:#000000;
   }
   :root[data-palette="sakura"]{   /* 벚꽃놀이 — 콘첸트라트 같은 이름 테마의 배색 */
     --bg:#fff5f8; --sheet:#fffafc; --panel:#ffffff; --panel-2:#fde7ee; --line:#f5d6e1; --line-2:#d9b9c5;
-    --text:#3b1627; --text-2:#4b2536; --text-3:#6c4455; --muted:#8d6273; --dim:#af8e9b; --off:#c6acb6;
+    --text:#3b1627; --text-2:#4b2536; --text-3:#6c4455; --muted:#8a5f70; --dim:#8a5f70; --off:#c6acb6;
     --gold:#e0457b; --gold-hi:#a8345c; --gold-mid:#ae3762; --gold-bg:#fbe0e9; --gold-line:#f4b7cc; --gold-line-2:#ec8bad;
     --red:#b52459; --hi:#000000;
   }
   :root[data-palette="sorna"]{   /* 여전히 살아있다 — 콘첸트라트 같은 이름 테마의 배색 */
     --bg:#f2edfa; --sheet:#f9f6fd; --panel:#ffffff; --panel-2:#dcebf7; --line:#ded3ee; --line-2:#c2b8d2;
-    --text:#241d33; --text-2:#322b42; --text-3:#4f4861; --muted:#6b6480; --dim:#948da5; --off:#afa9bd;
+    --text:#241d33; --text-2:#322b42; --text-3:#4f4861; --muted:#6b6480; --dim:#6c6581; --off:#afa9bd;
     --gold:#55627a; --gold-hi:#404a5c; --gold-mid:#464d65; --gold-bg:#dfdceb; --gold-line:#bbbccd; --gold-line-2:#949aad;
     --red:#9a3a5a; --hi:#000000;
   }
   :root[data-palette="noir"]{   /* 블랙 — 콘첸트라트 같은 이름 테마의 배색 */
     --bg:#0a0a0a; --sheet:#0f0f0f; --panel:#141414; --panel-2:#1e1e1e; --line:#2b2b2b; --line-2:#484848;
-    --text:#efefed; --text-2:#dededc; --text-3:#bdbdb9; --muted:#9c9c97; --dim:#70706d; --off:#535351;
+    --text:#efefed; --text-2:#dededc; --text-3:#bdbdb9; --muted:#9c9c97; --dim:#858581; --off:#535351;
     --gold:#e8e8e4; --gold-hi:#f2f2f0; --gold-mid:#9a9a98; --gold-bg:#252524; --gold-line:#585856; --gold-line-2:#8f8f8d;
     --red:#d9534a; --hi:#ffffff;
   }
   :root[data-palette="sewer"]{   /* 하수구를 바라보는 검은 눈 — 콘첸트라트 같은 이름 테마의 배색 */
     --bg:#1e1234; --sheet:#23163c; --panel:#281a44; --panel-2:#3a3016; --line:#3d2f5c; --line-2:#584b74;
-    --text:#f0e8fb; --text-2:#e5dcf2; --text-3:#cfc3df; --muted:#b9abcc; --dim:#8b7d9e; --off:#6c5f80;
+    --text:#f0e8fb; --text-2:#e5dcf2; --text-3:#cfc3df; --muted:#b9abcc; --dim:#a193b4; --off:#6c5f80;
     --gold:#b6f23a; --gold-hi:#d7f893; --gold-mid:#81a438; --gold-bg:#302d35; --gold-line:#536036; --gold-line-2:#799838;
     --red:#ff6f8f; --hi:#ffffff;
   }
   :root[data-palette="boom"]{   /* 붐은 온다 — 콘첸트라트 같은 이름 테마의 배색 */
     --bg:#4a0e0b; --sheet:#53120f; --panel:#5c1512; --panel-2:#170f0e; --line:#6e241e; --line-2:#84423c;
-    --text:#ffeae5; --text-2:#f9ded9; --text-3:#eec7c0; --muted:#e2b0a7; --dim:#b47f78; --off:#965f59;
+    --text:#ffeae5; --text-2:#f9ded9; --text-3:#eec7c0; --muted:#e2b0a7; --dim:#be8a82; --off:#965f59;
     --gold:#ffd83d; --gold-hi:#ffea94; --gold-mid:#c0912c; --gold-bg:#602611; --gold-line:#89551d; --gold-line-2:#b78729;
     --red:#ff8a5c; --hi:#ffffff;
   }
@@ -1609,24 +1621,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.24.0"></script>
-<script src="data/vault.js?v=2.24.0"></script>
-<script src="data/characters.js?v=2.24.0"></script>
-<script src="data/skills.js?v=2.24.0"></script>
-<script src="data/allies.js?v=2.24.0"></script>
-<script src="data/gifts.js?v=2.24.0"></script>
-<script src="data/pickup.js?v=2.24.0"></script>
-<script src="data/achievements.js?v=2.24.0"></script>
-<script src="data/mail.js?v=2.24.0"></script>
-<script src="data/notice.js?v=2.24.0"></script>
-<script src="data/patch.js?v=2.24.0"></script>
-<script src="data/event.js?v=2.24.0"></script>
-<script src="data/reward.js?v=2.24.0"></script>
-<script src="data/tutorial.js?v=2.24.0"></script>
-<script src="data/foes.js?v=2.24.0"></script>
-<script src="data/story.js?v=2.24.0"></script>
-<script src="data/mirrorpacks.js?v=2.24.0"></script>
-<script src="engine.js?v=2.24.0"></script>
+<script src="data/access.js?v=2.24.1"></script>
+<script src="data/vault.js?v=2.24.1"></script>
+<script src="data/characters.js?v=2.24.1"></script>
+<script src="data/skills.js?v=2.24.1"></script>
+<script src="data/allies.js?v=2.24.1"></script>
+<script src="data/gifts.js?v=2.24.1"></script>
+<script src="data/pickup.js?v=2.24.1"></script>
+<script src="data/achievements.js?v=2.24.1"></script>
+<script src="data/mail.js?v=2.24.1"></script>
+<script src="data/notice.js?v=2.24.1"></script>
+<script src="data/patch.js?v=2.24.1"></script>
+<script src="data/event.js?v=2.24.1"></script>
+<script src="data/reward.js?v=2.24.1"></script>
+<script src="data/tutorial.js?v=2.24.1"></script>
+<script src="data/foes.js?v=2.24.1"></script>
+<script src="data/story.js?v=2.24.1"></script>
+<script src="data/mirrorpacks.js?v=2.24.1"></script>
+<script src="engine.js?v=2.24.1"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
