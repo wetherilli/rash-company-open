@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.23.1";
+const VERSION = "2.24.0";
 const VERSION_NAME = "거울굴절철도 4호선";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2010,7 +2010,7 @@ function packPerks() {
   return ids.map(id => {
     const p = MIRROR_PACKS.find(x => x.id === id);
     return p && p.perk;
-  }).filter(Boolean);
+  }).filter(Boolean).concat(emberReady() ? [MIRROR_EMBER_PERK] : []);   // 「불씨」 가호 — 쓰기 전까지만
 }
 
 /* ── 이야기 특전 (8장~, 사용자 지침 2026-10-25) ───────────────────
@@ -2174,7 +2174,8 @@ function atkTypeHit(b, w) {
   const t = atkTypeOf(w);
   if (!t) return { type: null, mult: 1, tag: "" };
   const ft = foeTypeTable(b);
-  if (ft.weak.indexOf(t) >= 0)   return { type: t, mult: ATK_TYPE_RULE.weakMult,   tag: " (약점 · " + ATK_TYPES[t].name + ")" };
+  /* 「불스아이」 가호 — 약점 피해를 그만큼 더(×1.5 → ×1.8) */
+  if (ft.weak.indexOf(t) >= 0)   return { type: t, mult: ATK_TYPE_RULE.weakMult * (1 + boonWeakDmg()), tag: " (약점 · " + ATK_TYPES[t].name + ")" };
   if (ft.resist.indexOf(t) >= 0) return { type: t, mult: ATK_TYPE_RULE.resistMult, tag: " (내성 · " + ATK_TYPES[t].name + ")" };
   return { type: t, mult: 1, tag: "" };
 }
@@ -3115,7 +3116,7 @@ function setHp(who, v) {
   const wasAlive = curHp(who) > 0;
   S.hp[who] = Math.max(0, Math.min(maxHp(who), Math.round(v)));
   if (wasAlive && S.hp[who] <= 0 && stackGuardSave(who)) return;   // 스택을 태워 버팀 (stackGuard)
-  if (wasAlive && S.hp[who] <= 0) { onAllyDown(who); reviveFirstDown(who); }
+  if (wasAlive && S.hp[who] <= 0) { onAllyDown(who); reviveFirstDown(who); emberRevive(who); }
 }
 
 /* E.G.O 기프트 effect.reviveFirst (사용자 지침 2026-10-14).
@@ -5049,7 +5050,8 @@ function play(s) {
       /* 마지막 라운드까지 다 깼어도 방금 깬 팩을 S.railSave 에 먼저 실어 둡니다 —
        * mirrorClear() 가 결과 카드(고른 테마팩 목록)를 지을 때 이걸 읽습니다. */
       /* 특전은 팩을 고를 때 이미 얻었습니다(enterPack) — 깬 팩 목록에 실리면서 굳습니다 */
-      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared, arc: arcCopy(S.arc) };
+      S.railSave = { key: rule.key, round: nextRound, clearedPacks: cleared, arc: arcCopy(S.arc),
+                     boons: (S.railSave && S.railSave.boons) || null };   // 가호는 판 끝까지 갑니다
       if (nextRound > rule.packRounds) return mirrorClear();
       saveVault();
       openPackGate(rule, nextRound, cleared);
@@ -11839,11 +11841,83 @@ function mirrorScouted(rule) {
 const MIRROR_PREP_ACTIONS = [
 ];
 
+/* ── 가호 (사용자 지침 2026-10-28) ─────────────────────────────
+ *  거울 던전을 진행하는 동안 받는 보너스입니다. 돌입 준비 화면에서 켜고 끄고,
+ *  «고른 상태로 [입장] 을 눌렀을 때» 값(황금교본)을 냅니다 — 켜는 순간에는 안 냅니다.
+ *  황금교본이 모자라면 입장을 막습니다. [이어하기] 는 값을 내지 않고, 그 판에서 고른 가호가 그대로 갑니다.
+ *
+ *  테마팩 갈래(packRounds — 노말·하드·익스트림)에만 섭니다. 고른 것은 S.railSave.boons 에 실려
+ *  판이 끝날 때까지 갑니다(팩을 넘길 때 railSave 를 새로 지으면서 함께 옮깁니다 — mirrorPackDone).
+ *
+ *  icon 은 assets/icon/<icon>.png — 배포 거르개가 글자 그대로 찾으므로 이름을 조립하지 않습니다. */
+const MIRROR_BOONS = [
+  { id: "guide",    name: "길잡이의 도움", icon: "가호 - 길잡이의 도움", cost: 1,
+    desc: "갈래 선택 새로고침(다른 길로) 횟수 +2.", reroll: 2 },
+  { id: "ember",    name: "불씨",         icon: "부화하지 않은 불씨",   cost: 1,
+    desc: "특전 「부화하지 않은 불씨」 획득 — 작성위원이 한 번 체력 100%로 부활합니다(찰랑이는 연료통과 별개로 발동)." },
+  { id: "bullseye", name: "불스아이",     icon: "가호 - 불스아이",     cost: 1,
+    desc: "약점 공격 피해 +20%.", weakDmg: 0.20 }
+];
+/* 「불씨」 가호가 주는 특전 — 지닌 특전 줄에 서고, 쓰면 빠집니다(packPerks).
+ * 한 판에 한 번입니다 — 그 전투를 져서 다시 해도 돌아오지 않습니다. */
+const MIRROR_EMBER_PERK = {
+  name: "부화하지 않은 불씨",
+  desc: "작성위원이 쓰러지는 순간, 이번 판에 한 번 체력 100%로 다시 일어선다. 찰랑이는 연료통과 따로 듣는다.",
+  effect: {}
+};
+/* 돌입 준비 화면에서 켜 둔 가호 — 창을 닫았다 열어도 남고, 새로고침하면 다 꺼집니다 */
+let MIRROR_BOON_PICK = {};
+
+function boonDef(id) { return MIRROR_BOONS.find(x => x.id === id) || null; }
+/* 지금 판에서 켜진 가호인가 — 거울 안이고, 이 갈래의 진행(railSave)에 실렸을 때만 */
+function boonOn(id) {
+  if (!S || !S.mirror || !S.railSave || !S.railSave.boons) return false;
+  const rule = mirrorRuleNow();
+  return !!(rule && S.railSave.key === rule.key && S.railSave.boons.ids.indexOf(id) >= 0);
+}
+function boonPickedIds() { return MIRROR_BOONS.filter(x => MIRROR_BOON_PICK[x.id]).map(x => x.id); }
+function boonPickedCost() { return boonPickedIds().reduce((t, id) => t + boonDef(id).cost, 0); }
+/* 한 갈림길에서 다른 길로 — 「길잡이의 도움」 이면 그만큼 더 */
+function mirrorRerollMax() {
+  return MIRROR_REROLL_MAX + (boonOn("guide") ? boonDef("guide").reroll : 0);
+}
+/* 약점을 찌를 때 더 붙는 몫 — 「불스아이」 (atkTypeHit) */
+function boonWeakDmg() { return boonOn("bullseye") ? boonDef("bullseye").weakDmg : 0; }
+function emberReady() { return boonOn("ember") && !S.railSave.boons.emberUsed; }
+
+/* 「부화하지 않은 불씨」 — 연료통(reviveFirstDown) 다음에 봅니다. 연료통이 일으켰으면 아껴 둡니다.
+ * 못박은 광역(_scriptedHit)과 쓰러지면 지는 조력자에게는 연료통처럼 듣지 않습니다. */
+function emberRevive(who) {
+  const b = S.battle;
+  if (!b || alive(who) || !emberReady()) return;
+  if (b.mods && b.mods._scriptedHit) return;
+  if (allyLoseOnDown(who)) return;
+  S.railSave.boons.emberUsed = true;
+  S.hp[who] = maxHp(who);
+  const hp = S.hp[who];
+  setTimeout(() => {
+    if (S.battle !== b) return;
+    say(memberName(who) + " — 꺼져 가던 불씨가 깨어난다. 체력 " + hp + " (" + MIRROR_EMBER_PERK.name + ")", "good");
+    render();
+  }, 0);
+}
+
+/* [입장] 을 누른 자리 — 황금교본을 내고 진행에 싣습니다(startMirror 가 railSave 를 지은 뒤 부릅니다) */
+function boonApply(ids) {
+  if (!ids || !ids.length || !S.railSave) return;
+  const cost = ids.reduce((t, id) => t + boonDef(id).cost, 0);
+  S.codex -= cost;
+  S.railSave.boons = { ids: ids.slice(), emberUsed: false };
+  say("가호 — " + ids.map(id => "「" + boonDef(id).name + "」").join(" · ") +
+      "　(황금교본 " + cost + "권)", "gain");
+  if (ids.indexOf("ember") >= 0) say("▶ 특전 「" + MIRROR_EMBER_PERK.name + "」을 얻었다.", "gain");
+}
+
 function openMirrorGate(tier, back) {
   const rule = mirrorTier(tier);
   $modal.classList.add("on");
 
-  const draw = (msg) => {
+  const draw = (msg, boonMsg) => {
     const scouted = mirrorScouted(rule);
     const canGo = enkCount() >= rule.cost;
     /* 저장해 둔 이어하기 자리 — 체크포인트를 실제로 밟았을 때만 생깁니다
@@ -11930,6 +12004,27 @@ function openMirrorGate(tier, back) {
            '</div>' +
          '</details>';
 
+    /* 가호 — 갈래 설명 바로 아래. 카드를 누르면 켜고 끕니다(값은 입장할 때) */
+    if (rule.packRounds) {
+      const boonCost = boonPickedCost();
+      h += '<div class="mghead">가호</div>' +
+           '<div class="mgboonsub">거울 던전을 진행하는 동안 받을 수 있는 유용한 보너스 효과입니다. 고른 채로 입장하면 황금교본을 냅니다.</div>' +
+           '<div class="grid mgboons">' +
+           MIRROR_BOONS.map(x => {
+             const on = !!MIRROR_BOON_PICK[x.id];
+             return '<div class="slot hasic boon' + (on ? ' sel' : '') + '" data-boon="' + x.id + '">' +
+                      iconHTML(x.icon, { dim: !on }) + '<div>' +
+                      '<div class="nm">' + x.name + '<span class="boonsw' + (on ? ' on' : '') + '">' + (on ? 'ON' : 'OFF') + '</span></div>' +
+                      '<div class="sub">' + x.desc + '</div>' +
+                      '<div class="sub boonc">비용: ' + iconMini("황금교본") + '황금교본 ' + x.cost + '개</div>' +
+                    '</div></div>';
+           }).join('') +
+           '</div>' +
+           (boonCost ? '<div class="mgnote">' + iconMini("황금교본") + '고른 가호 <b>황금교본 ' + boonCost +
+                       '</b>　·　지닌 것 ' + S.codex + '</div>' : '');
+      if (boonMsg) h += '<div class="mgnote red">' + boonMsg + '</div>';
+    }
+
     if (MIRROR_PREP_ACTIONS.length) {
       h += '<div class="mghead">할 수 있는 일</div>' +
            '<div class="grid">';
@@ -11973,6 +12068,7 @@ function openMirrorGate(tier, back) {
              /* 이름 대신 아이콘 — 눈금 막대·입장 칸과 같은 그림이라 한눈에 이어집니다
               * (사용자 지침 2026-10-27) */
              '입장　(' + iconMini(ENK_RULE.name) + rule.cost +
+               (rule.packRounds && boonPickedCost() ? '　' + iconMini("황금교본") + boonPickedCost() : '') +
                (canGo ? '' : '　— 모자랍니다') + ')</button>' +
          '</div>';
     $sheet.innerHTML = h;
@@ -11986,11 +12082,23 @@ function openMirrorGate(tier, back) {
         draw(said);
       };
     });
+    $sheet.querySelectorAll(".slot[data-boon]").forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.boon;
+        MIRROR_BOON_PICK[id] = !MIRROR_BOON_PICK[id];
+        draw(null);
+      };
+    });
     const more = document.getElementById("mgmore");
     if (more) more.ontoggle = () => { MG_MORE = more.open; };
     document.getElementById("mgback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
     const enterBtn = document.getElementById("mgenter");
-    if (canGo) enterBtn.onclick = () => { closeModal(); startMirror(rule.key, scouted); };
+    if (canGo) enterBtn.onclick = () => {
+      /* 가호 값은 여기서 봅니다 — 모자라면 입장을 막고 창에 붉게 알립니다 */
+      const boons = rule.packRounds ? boonPickedIds() : [];
+      if (boons.length && S.codex < boonPickedCost()) { draw(null, "황금교본이 부족합니다."); return; }
+      closeModal(); startMirror(rule.key, scouted, boons);
+    };
     if (saved) document.getElementById("mgresume").onclick = () => { closeModal(); resumeMirror(); };
   };
   draw(null);
@@ -12235,7 +12343,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
   S.waiting = true;
   g = g || { round: round, shown: shown.map(p => p.id), heard: heardId, sound: 0, reroll: 0 };
   const soundLeft  = Math.max(0, MIRROR_SOUND_MAX - (g.sound || 0));
-  const rerollLeft = Math.max(0, MIRROR_REROLL_MAX - (g.reroll || 0));
+  const rerollLeft = Math.max(0, mirrorRerollMax() - (g.reroll || 0));
   const canSound  = !picking && !heardId && soundLeft > 0;
   const canReroll = !picking && rerollLeft > 0;
 
@@ -12262,7 +12370,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
   buttons(([
     { label: "소리 듣기 (" + soundLeft + "/" + MIRROR_SOUND_MAX + ")", cls: "ghost", disabled: !canSound,
       fn: () => { say("→ 소리 듣기.", "sys"); packGateChoices(rule, round, clearedPacks, shown, heardId, true, g); } },
-    { label: "다른 길로 (" + rerollLeft + "/" + MIRROR_REROLL_MAX + ")", cls: "ghost", disabled: !canReroll,
+    { label: "다른 길로 (" + rerollLeft + "/" + mirrorRerollMax() + ")", cls: "ghost", disabled: !canReroll,
       fn: () => {
         const fresh = drawPackChoices(rule, round, clearedPacks);
         g.reroll = (g.reroll || 0) + 1;
@@ -12278,7 +12386,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
       fn: () => packGateChoices(rule, round, clearedPacks, shown, heardId, false, g) }] : []));
 }
 
-function startMirror(tier, preIds) {
+function startMirror(tier, preIds, boons) {
   rail4Release();                     // 새 판에 들어설 때는 지난 편도(4호선)의 금지를 풀고 0부터
   const rule = mirrorTier(tier);
   const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
@@ -12315,6 +12423,9 @@ function startMirror(tier, preIds) {
     S.ended = false;
     S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
     S.railSave = { key: rule.key, round: 1, clearedPacks: [], arc: arcCopy(S.arc) };
+    /* 가호는 엔케팔린을 낸 뒤에 냅니다 — 들어서지 못하면 황금교본도 그대로입니다 */
+    const boonIds = (boons || []).filter(id => boonDef(id));
+    const boonOk = boonIds.length && S.codex >= boonIds.reduce((t, id) => t + boonDef(id).cost, 0);
     saveVault();
     clearLog();
     $log.classList.remove("recalling");
@@ -12324,6 +12435,7 @@ function startMirror(tier, preIds) {
     say("— " + rule.sub + " —", "sys");
     say(ENK_RULE.name + " " + rule.cost + " 소모.  (남은 것 " + enkCount() +
         " / " + ENK_RULE.max + ")", "sys");
+    if (boonOk) { boonApply(boonIds); saveVault(); }
     divider();
     render();
     openPackGate(rule, 1, []);

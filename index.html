@@ -1154,6 +1154,16 @@
   .mgnote.gold b{color:var(--gold);}
   .mgnote.red{border-color:#5e2a28;background:#1c1214;color:#d9705f;font-weight:700;}
   .mgnote .icmini{flex:none;}
+  /* 가호 — 켜고 끄는 카드 셋 (2026-10-28). 켠 카드는 .slot.sel 의 금빛 테두리 */
+  .mgboonsub{margin:-2px 0 8px;font-size:12px;color:var(--muted);line-height:1.5;}
+  .mgboons{margin-bottom:8px;}
+  .mgboons .slot.boon{cursor:pointer;user-select:none;}
+  .mgboons .nm{display:flex;align-items:center;gap:6px;}
+  .boonsw{margin-left:auto;padding:0 6px;border:1px solid var(--line);border-radius:9px;
+          font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--off);line-height:16px;}
+  .boonsw.on{border-color:var(--gold-line);background:var(--gold-bg);color:var(--gold);}
+  .mgboons .boonc{margin-top:3px;}
+  .mgboons .boonc .icmini{vertical-align:-4px;}
   /* 자세히 — 기본 접힘 */
   .mgmore{margin:2px 0 10px;border:1px solid var(--line);background:var(--sheet);border-radius:3px;}
   .mgmore > summary{
@@ -1599,24 +1609,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.23.1"></script>
-<script src="data/vault.js?v=2.23.1"></script>
-<script src="data/characters.js?v=2.23.1"></script>
-<script src="data/skills.js?v=2.23.1"></script>
-<script src="data/allies.js?v=2.23.1"></script>
-<script src="data/gifts.js?v=2.23.1"></script>
-<script src="data/pickup.js?v=2.23.1"></script>
-<script src="data/achievements.js?v=2.23.1"></script>
-<script src="data/mail.js?v=2.23.1"></script>
-<script src="data/notice.js?v=2.23.1"></script>
-<script src="data/patch.js?v=2.23.1"></script>
-<script src="data/event.js?v=2.23.1"></script>
-<script src="data/reward.js?v=2.23.1"></script>
-<script src="data/tutorial.js?v=2.23.1"></script>
-<script src="data/foes.js?v=2.23.1"></script>
-<script src="data/story.js?v=2.23.1"></script>
-<script src="data/mirrorpacks.js?v=2.23.1"></script>
-<script src="engine.js?v=2.23.1"></script>
+<script src="data/access.js?v=2.24.0"></script>
+<script src="data/vault.js?v=2.24.0"></script>
+<script src="data/characters.js?v=2.24.0"></script>
+<script src="data/skills.js?v=2.24.0"></script>
+<script src="data/allies.js?v=2.24.0"></script>
+<script src="data/gifts.js?v=2.24.0"></script>
+<script src="data/pickup.js?v=2.24.0"></script>
+<script src="data/achievements.js?v=2.24.0"></script>
+<script src="data/mail.js?v=2.24.0"></script>
+<script src="data/notice.js?v=2.24.0"></script>
+<script src="data/patch.js?v=2.24.0"></script>
+<script src="data/event.js?v=2.24.0"></script>
+<script src="data/reward.js?v=2.24.0"></script>
+<script src="data/tutorial.js?v=2.24.0"></script>
+<script src="data/foes.js?v=2.24.0"></script>
+<script src="data/story.js?v=2.24.0"></script>
+<script src="data/mirrorpacks.js?v=2.24.0"></script>
+<script src="engine.js?v=2.24.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
