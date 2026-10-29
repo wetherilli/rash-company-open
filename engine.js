@@ -10488,9 +10488,11 @@ function openChapterSelect(back) {
   const mainSlot = (c, i, rich) => !c.part ? chapSlot(c, i, rich)
     : (groupParts(c.part)[0] === i || rich) ? groupSlot(c.part, rich) : "";
 
-  /* 거울 던전 — 보통과 하드가 나란히 섭니다 */
+  /* 거울 던전 — 보통과 하드가 나란히 섭니다.
+   * wide 를 세우면 그 칸이 줄 하나를 다 씁니다(상점 기념 배정과 같은 .slot.wide) — 갈래에 wide: true 를 단 것이
+   * 제 무리 목록에 설 때만 넘깁니다. 「다음으로 추천」에서는 다른 칸과 나란히 한 칸입니다. */
   const enkNow = enkCount();
-  const slot = (rule, attr) => {
+  const slot = (rule, attr, wide) => {
     const open  = mirrorUnlocked(rule);
     const canGo = open && enkNow >= rule.cost;
     const f = mirrorFacts(rule);
@@ -10498,7 +10500,7 @@ function openChapterSelect(back) {
     /* 잠긴 갈래는 «무엇을 해야 열리는가» 한 줄이면 됩니다.
      * 세기도 보상도, 열기 전에는 고를 수 없는 것이라 적어 봐야 눈만 어지럽습니다. */
     if (!open)
-      return '<div class="slot">' +
+      return '<div class="slot' + (wide ? ' wide' : '') + '">' +
                slotStrip(null, rule.name) +
                '<div class="lock">' + mirrorNeedText(rule) + '</div>' +
              '</div>';
@@ -10506,7 +10508,7 @@ function openChapterSelect(back) {
     const chip = (label, value, bad) =>
       '<b' + (bad ? ' class="bad"' : '') + '><i>' + label + '</i>' + value + '</b>';
 
-    return '<div class="slot mslot' + (canGo ? '' : ' sel') + '"' +
+    return '<div class="slot mslot' + (canGo ? '' : ' sel') + (wide ? ' wide' : '') + '"' +
              (canGo ? ' ' + attr : '') + '>' +
              /* 이름은 띠 안에 넣습니다 — 「익스트림 거울 던전 산산이 부서진…」이
               * 한 줄에 안 들어가 줄이 갈리던 것을 없애려는 것입니다. */
@@ -10584,7 +10586,7 @@ function openChapterSelect(back) {
 
   h += sec("mirror", "거울 던전", "더 세져서 돌아온 것들과 겨뤄 보세요",
            '<div class="grid">' +
-             mirrorOnly.map(r => slot(r, 'data-mirror="' + r.key + '"')).join('') +
+             mirrorOnly.map(r => slot(r, 'data-mirror="' + r.key + '"', r.wide)).join('') +
            '</div>');
 
   /* 거울굴절철도 — 거울 아래 제 줄에 섭니다. 호선이 늘면 이 줄이 그대로 늘어납니다. */
