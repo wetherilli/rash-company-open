@@ -29,6 +29,8 @@
  *                    "phaseClean:n"    페이즈를 가진 전투를 넘겼고(승리 · 각본 결말 · 설득 · 마무리 일격),
  *                                      n 페이즈에서 아무도 쓰러지지 않았다. kill · where 와 함께 적어
  *                                      어느 적인지 가릅니다 — { clear: "phaseClean:1", kill: "이창수", where: "story" }
+ *      «하드 난이도 이상» 은 ["mirrorHard", "mirrorExtreme", "mirrorDeep"], «익스트림 난이도 이상» 은
+ *      ["mirrorExtreme", "mirrorDeep"] 로 적습니다 — 어비스 거울 던전(v2.25.0)도 같은 조건으로 칩니다(사용자 지침 2026-10-30).
  *      where       "story" 본편 · "mirror" 거울 던전(하드·익스트림 포함)
  *                  · "mirrorHard" 하드만 · "mirrorExtreme" 익스트림만
  *                  여럿을 배열로 적으면 그중 하나만 맞으면 됩니다 —
@@ -71,9 +73,9 @@ const ACHIEVEMENTS = [
   },
   {
     name: "우생회의 거울",
-    desc: "김태성을 편성한 채로, 하드 거울 던전에서 김준성을 쓰러뜨린다.",
+    desc: "김태성을 편성한 채로, 하드 난이도 이상의 거울 던전에서 김준성을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 쥐는 자 김준성",
-    when: { kill: "김준성", where: "mirrorHard", party: "kim_taeseong" },
+    when: { kill: "김준성", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"], party: "kim_taeseong" },
     give: { support: "쥐는 자|김준성" }
   },
   {
@@ -85,16 +87,16 @@ const ACHIEVEMENTS = [
   },
   {
     name: "산산이 부서진",
-    desc: "익스트림 거울 던전을 끝까지 돈다.",
+    desc: "익스트림 난이도 이상의 거울 던전을 끝까지 돈다.",
     reward: "지원 작성위원 ★★★ L사 비포팀 정윤하",
-    when: { clear: "mirrorExtreme" },
+    when: { clear: ["mirrorExtreme", "mirrorDeep"] },
     give: { support: "L사 비포팀|정윤하" }
   },
   {
     name: "번개는 이제 그만!",
-    desc: "하드 또는 익스트림 거울 던전에서 머리 없는 드래곤 케빈을 쓰러뜨린다.",
+    desc: "하드 난이도 이상의 거울 던전에서 머리 없는 드래곤 케빈을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 모나크 버틀러 오은성",
-    when: { kill: "케빈", where: ["mirrorHard", "mirrorExtreme"] },
+    when: { kill: "케빈", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"] },
     give: { support: "모나크 버틀러|오은성" }
   },
   {
@@ -106,10 +108,10 @@ const ACHIEVEMENTS = [
   },
   {
     name: "괴물들의 밤",
-    desc: "I사 시너지가 발동한 채로, 하드 거울 던전에서 데스리퍼를 쓰러뜨린다.",
+    desc: "I사 시너지가 발동한 채로, 하드 난이도 이상의 거울 던전에서 데스리퍼를 쓰러뜨린다.",
     reward: "지원 작성위원 ★★ I사 선봉3팀 이유건",
     /* synergy 는 시너지의 «이름» 으로 찾습니다. I사 태그의 이름은 「우주정복의 의지」입니다. */
-    when: { kill: "데스리퍼", where: "mirrorHard", synergy: "우주정복의 의지" },
+    when: { kill: "데스리퍼", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"], synergy: "우주정복의 의지" },
     give: { support: "I사 선봉3팀|이유건" }
   },
   {
@@ -132,24 +134,24 @@ const ACHIEVEMENTS = [
   },
   {
     name: "망해버린 시리즈",
-    desc: "가면라이더 시너지가 발동한 채로, 하드 또는 익스트림 거울 던전에서 타나콘다를 쓰러뜨린다.",
+    desc: "가면라이더 시너지가 발동한 채로, 하드 난이도 이상의 거울 던전에서 타나콘다를 쓰러뜨린다.",
     reward: "지원 작성위원 ★★ G사 촬영전문가 박준정",
     /* synergy 는 시너지의 «이름» 으로 찾습니다 — data/characters.js SYNERGIES 의 "가면라이더 연계기" */
-    when: { kill: "타나콘다", where: ["mirrorHard", "mirrorExtreme"], synergy: "가면라이더 연계기" },
+    when: { kill: "타나콘다", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"], synergy: "가면라이더 연계기" },
     give: { support: "G사 촬영전문가|박준정" }
   },
   {
     name: "실험은 계속된다",
-    desc: "하드 또는 익스트림 거울 던전에서 김연준을 쓰러뜨린다.",
+    desc: "하드 난이도 이상의 거울 던전에서 김연준을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 개화 E.G.O :: 스테고우로스 하축론",
-    when: { kill: "김연준", where: ["mirrorHard", "mirrorExtreme"] },
+    when: { kill: "김연준", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"] },
     give: { support: "개화 E.G.O :: 스테고우로스|하축론" }
   },
   {
     name: "아픈 사람은 보건실로",
-    desc: "하드 또는 익스트림 거울 던전에서 신해수랜드 보건선생님 박상원을 쓰러뜨린다.",
+    desc: "하드 난이도 이상의 거울 던전에서 신해수랜드 보건선생님 박상원을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 신해수랜드 보건선생님 박상원",
-    when: { kill: "박상원", where: ["mirrorHard", "mirrorExtreme"] },
+    when: { kill: "박상원", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"] },
     give: { support: "신해수랜드 보건선생님|박상원" }
   },
   {
@@ -164,9 +166,9 @@ const ACHIEVEMENTS = [
      * «숨은 인격» 이소정으로 갈았습니다(위 SINNERS.lee_sojeong 참고) —
      * 신해수는 아래 「교장실에서는 정숙」이 대신 맡습니다. */
     name: "퍼레이드를 끝내러 왔다",
-    desc: "「퍼레이드의 열기」(신해수랜드 시너지)가 발동한 채로, 익스트림 거울 던전에서 신해수랜드의 여왕 G안을 쓰러뜨린다.",
+    desc: "「퍼레이드의 열기」(신해수랜드 시너지)가 발동한 채로, 익스트림 난이도 이상의 거울 던전에서 신해수랜드의 여왕 G안을 쓰러뜨린다.",
     reward: "★★★ P사 익룡무리 타격대 이소정",
-    when: { kill: "G안", where: "mirrorExtreme", synergy: "퍼레이드의 열기" },
+    when: { kill: "G안", where: ["mirrorExtreme", "mirrorDeep"], synergy: "퍼레이드의 열기" },
     give: { id: { who: "lee_sojeong", star: 3, title: "P사 익룡무리 타격대" } }
   },
   {
@@ -221,16 +223,16 @@ const ACHIEVEMENTS = [
   },
   {
     name: "꺾여버린 날개",
-    desc: "하드 또는 익스트림 거울 던전에서 로단을 쓰러뜨린다.",
+    desc: "하드 난이도 이상의 거울 던전에서 로단을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ N사 E.G.O :: 불꽃날개 윤지호",
-    when: { kill: "로단", where: ["mirrorHard", "mirrorExtreme"] },
+    when: { kill: "로단", where: ["mirrorHard", "mirrorExtreme", "mirrorDeep"] },
     give: { support: "N사 E.G.O :: 불꽃날개|윤지호" }
   },
   {
     name: "도시의 별까지",
-    desc: "제1발톱 대행자 김하주를 편성한 채로, 하드 또는 익스트림 거울 던전을 완주한다.",
+    desc: "제1발톱 대행자 김하주를 편성한 채로, 하드 난이도 이상의 거울 던전을 완주한다.",
     reward: "지원 작성위원 ★★★ 제1발톱 수행자 장원준",
-    when: { clear: ["mirrorHard", "mirrorExtreme"], party: "kim_haju", titleHas: "제1발톱" },
+    when: { clear: ["mirrorHard", "mirrorExtreme", "mirrorDeep"], party: "kim_haju", titleHas: "제1발톱" },
     give: { support: "제1발톱 수행자|장원준" }
   },
   /* ── 숨은 업적 (사용자 지침 2026-09-23) ────────────────────────
@@ -259,16 +261,16 @@ const ACHIEVEMENTS = [
   },
   {
     name: "어둠 속의 눈동자",
-    desc: "익스트림 거울 던전에서 기가노토사우루스를 쓰러뜨린다.",
+    desc: "익스트림 난이도 이상의 거울 던전에서 기가노토사우루스를 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 흑수 구 필두 짹G",
-    when: { kill: "기가노토사우루스", where: "mirrorExtreme" },
+    when: { kill: "기가노토사우루스", where: ["mirrorExtreme", "mirrorDeep"] },
     give: { support: "흑수 구 필두|짹G" }
   },
   {
     name: "돔배기 회먹기",
-    desc: "김두현과 이한범을 편성한 채로, 익스트림 거울 던전에서 제3발톱 큰형님 이서진을 쓰러뜨린다.",
+    desc: "김두현과 이한범을 편성한 채로, 익스트림 난이도 이상의 거울 던전에서 제3발톱 큰형님 이서진을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 제2발톱 솔다토 김승채",
-    when: { kill: "제3발톱 큰형님 이서진", where: "mirrorExtreme", party: ["kim_duhyeon", "lee_hanbeom"] },
+    when: { kill: "제3발톱 큰형님 이서진", where: ["mirrorExtreme", "mirrorDeep"], party: ["kim_duhyeon", "lee_hanbeom"] },
     give: { support: "제2발톱 솔다토|김승채" }
   },
   {
@@ -303,5 +305,22 @@ const ACHIEVEMENTS = [
     reward: "보조 교육위원 선택권 1개",
     when: { clear: "railLine4:nofall" },
     give: { advisorTicket: 1 }
+  },
+  {
+    name: "바닥에 닿는 소리",
+    desc: "어비스 거울 던전을 다섯 층까지 끝까지 내려간다.",
+    reward: "보조 교육위원 선택권 1개 · E.G.O 기프트 선택권 1개",
+    when: { clear: "mirrorDeep" },
+    give: { advisorTicket: 1, giftTicket: 1 }
+  },
+  {
+    /* 어비스 안에서 넘긴 거울굴절철도 팩을 판을 넘어 셉니다(S.mirrorDone 「mirrorDeep:rail:팩id」).
+     * 한 판에 철도 팩은 많아야 셋(3층 · 4층 · 5층)이라 적어도 두 판입니다.
+     * engine.js SCENE_EXT.deepPackDone 이 넷째에 checkAchievements(null, "mirrorDeep:rails4") 를 부릅니다. */
+    name: "거울에 비친 철도",
+    desc: "어비스 거울 던전에서 서로 다른 거울굴절철도 테마팩을 네 가지 이상 넘는다.",
+    reward: "E.G.O 기프트 ★★★ 깨끗한 비늘 브러쉬",
+    when: { clear: "mirrorDeep:rails4" },
+    give: { gift: "깨끗한 비늘 브러쉬" }
   }
 ];

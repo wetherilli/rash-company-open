@@ -122,6 +122,14 @@
  *    모든 갈래의 적이 똑같은 수치로 서면 만듦새가 떨어져 보입니다). 체력은 일의 자리에서
  *    반올림해 10 단위, 공격·방어는 정수입니다. 고정값이 아니므로 이어하기로 돌아오면
  *    다시 굴립니다.
+ *
+ *  ■ 심층 — 어비스 거울 던전의 4·5층 (사용자 지침 2026-10-23 · 이름 2026-10-30)
+ *    1~3층은 익스트림 그대로(MIRROR_STEPS 1~9계단). 4·5층은 DEEP_STEPS 두 줄이고,
+ *    거울굴절철도 팩도 거기서는 이 표를 탑니다(RAIL_PACK_ROLES 를 안 봅니다).
+ *    «뒤섞인» 강화 선택지 — 1~3층은 계단 값에 DEEP_ENH_STAT 을 얹고, 기믹을
+ *    DEEP_MIX_COUNT 만큼 빌려 입으며, 특전은 DEEP_ENH_PERK 로 키웁니다.
+ *    층을 넘길 때마다 DEEP_PAY, 완주 삯은 engine.js 의 MIRROR_DEEP 이 정합니다.
+ *    deepOnly: true 팩은 4·5층 갈림길에만 섭니다.
  * ===================================================================== */
 "use strict";
 
@@ -154,6 +162,31 @@ const RAIL_PACK_ROLES = ["grunt", "back", "final"];
 
 /* 변조 폭 — hp·atk 는 비율(±), def 는 정수(±) */
 const MIRROR_VARY = { hp: 0.10, atk: 0.08, def: 1 };
+
+/* ── 어비스 거울 던전(심층) — 「■ 심층」 참고 ── */
+/* 4·5층 — 익스트림 상층부(MIRROR_STEPS 7~9계단) 위로 이어 적은 표(사용자 지침 2026-10-23).
+ * 이은 법 — 체력은 계단 사이 늘어나는 폭을 한 칸씩 더 키우고(잡졸 +200·+250 → +300·+350,
+ * 보스 +350·+500 → +650·+800, 큰보스 +500·+700 → +900·+1100), 공격은 상층부 때의 폭
+ * (+18 · +20 · +24)을 그대로 두 번, 방어는 +3 대신 +2 씩(방어가 벽이 되지 않게).
+ * 거울굴절철도 팩도 4·5층에서는 이 표를 탑니다(RAIL_PACK_ROLES 를 안 봅니다). */
+const DEEP_STEPS = [
+  /*  잡졸                          보스                            큰보스 */
+  [ { hp: 1050, atk:  82, def: 14 }, { hp: 2150, atk:  94, def: 15 }, { hp: 3000, atk: 110, def: 16 } ],   // 4층
+  [ { hp: 1400, atk: 100, def: 16 }, { hp: 2950, atk: 114, def: 17 }, { hp: 4100, atk: 134, def: 18 } ]    // 5층
+];
+/* 1~3층 강화 선택지의 «조금 더 세게» — 그 계단 값에 곱하고(체력·공격) 더합니다(방어) */
+const DEEP_ENH_STAT = { hp: 1.2, atk: 1.1, def: 1 };
+/* 강화 선택지가 빌려 입는 기믹 수 — 1~3층 · 4·5층 */
+const DEEP_MIX_COUNT = { upper: 1, deep: 2 };
+/* 강화 선택지의 특전 — 비율은 이만큼 곱하고, 횟수·칸은 1 더합니다(deepEnhancePerk) */
+const DEEP_ENH_PERK = { mult: 1.5, plus: 1 };
+/* 층을 넘길 때마다 받는 몫. firstMoney 는 «그 층에 처음 닿았을 때만» 나옵니다.
+ * 완주 삯은 MIRROR_DEEP 의 bonus · codex · fragBoxSelect · event (mirrorClear 가 줍니다). */
+const DEEP_PAY = {
+  codex:      1,
+  fragBox:    2,
+  firstMoney: 100
+};
 
 const MIRROR_PACKS = [
   { id: "pack01", name: "이름 없는 자들", bg: "assets/scene/구C사 지하실.jpg",
@@ -250,4 +283,16 @@ const MIRROR_PACKS = [
     bg: "assets/scene/거울굴절철도4호선종점.jpg",
     foes: ["duel_challenger", "giganotosaurus", "rail4_dirrex"],
     perk: { name: "망치를 든 구조대", desc: "N사 인격의 공격력 +100%.", effect: { tagged: { tag: "N사", atk: 1.00 } } } },
+  /* ── 어비스 거울 던전 전용 — 심층 4·5층 갈림길에만 섭니다(deepOnly) ── */
+  { id: "deep01", name: "다른 세계의 마왕", deepOnly: true, bg: "assets/scene/모나크 저택 옥상.jpg",
+    foes: ["zombie_horde", "rodan_toy", "deep_mawang_lee"],
+    perk: { name: "입에 담지 못할 이름", desc: "전원의 공격력 +40%.", effect: { all: { atk: 0.40 } } } },
+  { id: "deep02", name: "호감이 끝나는", deepOnly: true, bg: "assets/scene/신해수랜드 4층.jpg",
+    foes: ["kim_yeonjun_busan", "shinhaesuland_gan", "deep_cha_minjun"],
+    perk: { name: "붉게 물든 랜스", desc: "전원의 치명타 확률 +25%p, 보스에게 주는 치명타 피해 +50%.",
+            effect: { crit: 0.25, bossCritDmg: 0.50 } } },
+  { id: "deep03", name: "방과 후의 교무실", deepOnly: true, bg: "assets/scene/신해수랜드 교장실.jpg",
+    foes: ["hyeolgwi", "baksangwon", "shinhaesu_principal"],
+    perk: { name: "보건실 열쇠", desc: "공격할 때마다 자기 최대 체력의 6%를 회복하고, 전투에 이기면 60%를 회복한다.",
+            effect: { hitHeal: 0.06, winHeal: 0.60 } } }
 ];

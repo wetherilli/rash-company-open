@@ -631,6 +631,8 @@
   .packgate .pgpath{color:var(--gold);font-size:11px;letter-spacing:.14em;margin-bottom:3px;}
   .packgate .pgcard .nm{font-size:15px;margin-bottom:9px;}
   .packgate .pgperk{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding-top:9px;}
+  .packgate .pgcard.enh{border-color:var(--red);}   /* 어비스 거울 던전 — «뒤섞인» 강화 선택지 */
+  .packgate .pgcard.enh .pgpath,.packgate .pgcard.enh .nm,.packgate .pgcard.enh .pgname{color:var(--red);}
   .packgate .pgname{color:var(--text-2);font-weight:700;font-size:12.5px;margin-bottom:2px;}
   .packgate .pgperk .sub{font-size:12px;line-height:1.45;}
   .packgate .pgic{display:none;}             /* 좁은 화면에서만 — 아래 @media */
@@ -956,7 +958,7 @@
   /* 인격 카드 오른쪽 위의 공격 유형 아이콘 (engine.js atkTypeIconHTML) — 이름줄이 밑으로 파고들지 않게 오른쪽을 비웁니다 */
   .slot.idcard{position:relative;padding-right:32px;}
   .slot .atkic{position:absolute;top:7px;right:7px;width:20px;height:20px;image-rendering:pixelated;}
-  /* 가로로 통째를 차지하는 칸 — 상점 맨 위 기념 배정, 운전석 거울 던전 무리의 wide 갈래(거울 심층)에 씁니다 */
+  /* 가로로 통째를 차지하는 칸 — 상점 맨 위 기념 배정, 운전석 거울 던전 무리의 wide 갈래(어비스 거울 던전)에 씁니다 */
   .slot.wide{grid-column:1 / -1;}
   .slot.wide .pkline{margin:-2px 0 8px;height:150px;}
   /* 키보드로 옮겨 다닐 때만 보이는 초점 테두리 — 누르는 칸은 engine.js markSheetPressables 가 초점을 받게 합니다 */
@@ -1621,24 +1623,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.24.1"></script>
-<script src="data/vault.js?v=2.24.1"></script>
-<script src="data/characters.js?v=2.24.1"></script>
-<script src="data/skills.js?v=2.24.1"></script>
-<script src="data/allies.js?v=2.24.1"></script>
-<script src="data/gifts.js?v=2.24.1"></script>
-<script src="data/pickup.js?v=2.24.1"></script>
-<script src="data/achievements.js?v=2.24.1"></script>
-<script src="data/mail.js?v=2.24.1"></script>
-<script src="data/notice.js?v=2.24.1"></script>
-<script src="data/patch.js?v=2.24.1"></script>
-<script src="data/event.js?v=2.24.1"></script>
-<script src="data/reward.js?v=2.24.1"></script>
-<script src="data/tutorial.js?v=2.24.1"></script>
-<script src="data/foes.js?v=2.24.1"></script>
-<script src="data/story.js?v=2.24.1"></script>
-<script src="data/mirrorpacks.js?v=2.24.1"></script>
-<script src="engine.js?v=2.24.1"></script>
+<script src="data/access.js?v=2.25.0"></script>
+<script src="data/vault.js?v=2.25.0"></script>
+<script src="data/characters.js?v=2.25.0"></script>
+<script src="data/skills.js?v=2.25.0"></script>
+<script src="data/allies.js?v=2.25.0"></script>
+<script src="data/gifts.js?v=2.25.0"></script>
+<script src="data/pickup.js?v=2.25.0"></script>
+<script src="data/achievements.js?v=2.25.0"></script>
+<script src="data/mail.js?v=2.25.0"></script>
+<script src="data/notice.js?v=2.25.0"></script>
+<script src="data/patch.js?v=2.25.0"></script>
+<script src="data/event.js?v=2.25.0"></script>
+<script src="data/reward.js?v=2.25.0"></script>
+<script src="data/tutorial.js?v=2.25.0"></script>
+<script src="data/foes.js?v=2.25.0"></script>
+<script src="data/story.js?v=2.25.0"></script>
+<script src="data/mirrorpacks.js?v=2.25.0"></script>
+<script src="engine.js?v=2.25.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

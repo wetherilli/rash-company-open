@@ -139,6 +139,8 @@
  *    cineEntrance  암전 → 등장 대사 → 흔들리며 등장
  *    mirrorName    거울 던전에서 쓸 이름 (「거울의 」 같은 접두사 대신)
  *    noMirror      거울 던전 뽑기 풀에서 뺍니다
+ *    seenIn        «본편에서 만났는가» 를 그 장을 깼는가로 봅니다(장 id) — 본편에 서지 않는 거울 전용 적
+ *                  (어비스 거울 던전의 deep_mawang_lee · deep_cha_minjun). engine.js deepPackUnlocked 가 읽습니다
  *    weak · resist 공격 유형의 약점 · 내성 — "pierce"(관통) · "slash"(참격) · "blunt"(타격)를 배열로.
  *                  weak: ["pierce"] 면 관통에 ×1.5, resist: ["blunt"] 면 타격에 ×0.75
  *                  (engine.js ATK_TYPES · ATK_TYPE_RULE, 사용자 지침 2026-10-27). 거울 사본에도 그대로 옮겨집니다.
@@ -1123,6 +1125,44 @@ const FOES = {
     breakMult: 1.35,
     breakSplash: 0.23,
     heavyRampPct: 0.10
-  }
+  },
 
+
+  /* ── 어비스 거울 던전 전용 (2026-10-23) ─────────────────────────────
+   *  격분 — 체력이 절반 아래로 내려가면 강타가 2턴마다, 광역이 4턴마다 열리고
+   *  공격력이 25% 오릅니다. 앞 절반은 여느 보스, 뒤 절반이 마왕입니다. */
+  deep_mawang_lee: {
+    weak: ["slash"], resist: ["blunt"],   // 공격 유형 — 본편 mawang_lee 와 같게
+    name: "마왕 이경원", hp: 3000, atk: 110, def: 16, boss: true, noMirror: true,
+    seenIn: "ch6",
+    img: "assets/enemy/마왕 이경원(인게임).png",
+    heavyImg: "assets/enemy/마왕 이경원 강타.png",
+    desc: "다른 세계의 이경원. 세리자와의 유언이 불러낸 것.",
+    intro: "번개가 멎는다. 그 자리에 이경원이 서 있다. 우리 쪽 이경원이 아니다.",
+    heavyLine: "괴수물이라는 걸 입에 담아서도 안돼….",
+    rageAt: 0.5,
+    rageHeavyEvery: 2,
+    rageAoeEvery: 4,
+    rageAtkPct: 0.25,
+    rageLine: "멎었던 번개가 한꺼번에 쏟아진다. 마왕이 더는 참지 않는다.",
+    rageWarn: "공기가 타는 냄새가 난다.",
+    aoeLine: "번개가 판 전체를 덮친다.",
+    aoeWarn: "하늘이 하얗게 질린다.  광역 공격을 준비하는 듯하다."
+  },
+
+  /* 버티기 깨기 — 4턴마다 방어·교정으로 웅크린 사람을 전부 랜스로 꿰뚫습니다.
+   * 강타(3턴)를 막으려 웅크리면 그 다음 차례가 위험한 결입니다. */
+  deep_cha_minjun: {
+    weak: ["blunt"], resist: ["pierce"],   // 공격 유형 — 본편 cha_minjun_bloodfiend 와 같게
+    name: "호감에 도달하지 못한 차민준", hp: 3000, atk: 110, def: 16, boss: true, noMirror: true,
+    seenIn: "ch7",
+    img: "assets/enemy/혈귀화한 차민준.png",
+    heavyImg: "assets/enemy/혈귀화한 차민준(강타).png",
+    desc: "붉게 물든 눈으로 랜스를 다른 작성위원들에게 겨눈다. 완전히 자아를 잃은 모습.",
+    intro: "호감은, 끝나지 않았는가…",
+    heavyLine: "끝나지, 않았는가…!",
+    breakEvery: 4,
+    breakLine: "웅크린 자리를 랜스가 그대로 꿰뚫는다.",
+    breakWarn: "랜스 끝이 웅크린 사람들을 하나씩 겨눈다.  버티기를 깨려는 듯하다."
+  }
 };

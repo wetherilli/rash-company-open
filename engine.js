@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.24.1";
-const VERSION_NAME = "거울굴절철도 4호선";
+const VERSION = "2.25.0";
+const VERSION_NAME = "어비스 거울 던전";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -2009,7 +2009,7 @@ function packPerks() {
   const ids = (S.railSave.clearedPacks || []).concat(S.railSave.current ? [S.railSave.current] : []);
   return ids.map(id => {
     const p = MIRROR_PACKS.find(x => x.id === id);
-    return p && p.perk;
+    return deepPerkOf(p, !!rule.deep && deepPackEnh(id));   // 어비스 — 강화로 고른 팩은 강화된 특전
   }).filter(Boolean).concat(emberReady() ? [MIRROR_EMBER_PERK] : []);   // 「불씨」 가호 — 쓰기 전까지만
 }
 
@@ -2192,7 +2192,8 @@ function foeTypeText(b) {
  * S.railSave.arc 로 떠 둡니다 — 지거나 이어하면 resumeMirror 가 그것으로 되돌립니다. */
 function grantPackPerk(packId) {
   const pack = (typeof MIRROR_PACKS !== "undefined") ? MIRROR_PACKS.find(x => x.id === packId) : null;
-  const p = pack && pack.perk;
+  /* 어비스 거울 던전 — 강화 선택지로 들어섰으면 강화된 특전을 얻습니다 */
+  const p = deepPerkOf(pack, !!(deepRule() && S.railSave && S.railSave.currentEnh));
   if (!p) return;
   const e = p.effect || {};
   if (!S.arc) S.arc = { kills: 0, retribution: {} };
@@ -2218,6 +2219,11 @@ function arcCopy(a) {
  * 위에는 지금 들고 있는 특전을 딱지로 늘어놓습니다. 다시 뽑거나 소리를 들으면 통째로 다시 그립니다.
  * onPick(팩) 은 packGateChoices 가 넘겨줍니다(들어가기 · 소리 듣기 둘 다 그쪽이 가릅니다). */
 function drawPackGate(shown, heardId, picking, onPick) {
+  /* 어비스 거울 던전 — 강화 선택지는 이름 앞에 「뒤섞인」, 붉은 카드(.enh), 강화된 특전으로 보입니다.
+   * 고르면 보이는 사본 그대로 넘깁니다 — enterPack 이 id 로 본래 팩을 다시 찾습니다. */
+  const enhAt = shown.map(p => !!(p && deepRule() && deepGateEnh(p.id)));
+  shown = shown.map((p, i) => enhAt[i]
+    ? Object.assign({}, p, { name: deepEnhName(p), perk: deepPerkOf(p, true) }) : p);
   $log.querySelectorAll(".packgate").forEach(el => el.parentNode.removeChild(el));
   const box = document.createElement("div");
   box.className = "packgate";
@@ -2234,7 +2240,7 @@ function drawPackGate(shown, heardId, picking, onPick) {
     const k = p.perk;
     /* 좁은 화면에서는 세 칸을 나란히 두고 아이콘 · 팩 이름만 가운데로 (사용자 지침 2026-10-16) —
      * .pgic 은 그 자리에서만 보이는 큰 아이콘이고, 길 이름 · 특전 글은 감춥니다(index.html) */
-    h += '<div class="slot pgcard' + (heardId === p.id ? ' heard' : '') + '" data-pg="' + i + '"' + (k ? ' title="' + (k.name + " — " + k.desc).replace(/"/g, "&quot;") + '"' : '') + '>' +
+    h += '<div class="slot pgcard' + (heardId === p.id ? ' heard' : '') + (enhAt[i] ? ' enh' : '') + '" data-pg="' + i + '"' + (k ? ' title="' + (k.name + " — " + k.desc).replace(/"/g, "&quot;") + '"' : '') + '>' +
            (k ? '<div class="pgic">' + iconHTML(k.name) + '</div>' : '') +
            '<div class="pgpath">' + PACK_PATH_NAME[i] + (heardId === p.id ? '　· 들어 봄' : '') + '</div>' +
            '<div class="nm">' + p.name + '</div>' +
@@ -3054,7 +3060,9 @@ function effStats(who) {
   /* 방어의 일부를 공격으로 옮기는 기프트 */
   const conv = giftConvertFor(who);
   /* 인격 스택(히트 · 염화)은 얻은 «수» 그대로 더합니다 — 배수가 아니라서 끝에 얹습니다(stackRulesFor 머리말) */
-  return { atk: atk + Math.round(def * conv) + stackAtk(who), def: def, hp: hp };
+  /* 기프트 skillAtk — 이 전투에서 고유 능력을 쓴 만큼 쌓인 공격력(useUniqueSkill) */
+  const skAtk = (S.battle && S.battle.persist && S.battle.persist[who + "_skillAtk"]) || 0;
+  return { atk: atk + Math.round(def * conv) + stackAtk(who) + skAtk, def: def, hp: hp };
 }
 
 /* 「기세」— 인격 줄에 vary: 0.15 처럼 적으면(data/characters.js 박수오 「동탄
@@ -6649,7 +6657,20 @@ function useUniqueSkill(who) {
       break;
   }
   say(withJosa(memberName(who), "이") + " 「" + skill.name + "」을 쓴다.", "good");
+  /* 기프트 skillAtk(「깨끗한 비늘 브러쉬」) — 쓸 때마다 이 전투가 끝날 때까지 공격력 +n, 겹칩니다.
+   * b.persist 는 턴이 넘어가도 남고 새 전투마다 비므로 «그 전투에서» 가 저절로 됩니다(effStats 가 읽음). */
+  const skAtk = giftSkillAtkFor(who);
+  if (skAtk) {
+    b.persist[who + "_skillAtk"] = (b.persist[who + "_skillAtk"] || 0) + skAtk;
+    say("　공격력 +" + skAtk + "　(이번 전투 +" + b.persist[who + "_skillAtk"] + ")", "gain");
+  }
   askNext();
+}
+/* 지닌 기프트 가운데 who 에게 걸리는 skillAtk 의 합 */
+function giftSkillAtkFor(who) {
+  let n = 0;
+  equippedGifts().forEach(g => { const e = g.effect; if (e && e.skillAtk && giftHits(e, who)) n += e.skillAtk; });
+  return n;
 }
 
 /* 손잡이보다 아래, 화면 맨 아래 — 지금 차례인 사람의 고유 능력 설명만
@@ -10747,6 +10768,33 @@ const MIRROR_EXTREME = {
   guaranteeRailPackOnFinalRound: true
 };
 
+/* ── 어비스 거울 던전 ────────────────────────────────────────────
+ *  익스트림 세 층을 지난 뒤 4·5층을 더 내려갑니다. 흐름과 함수는 이 파일 끝 쪽
+ *  「어비스 거울 던전」 절(deepRule …), 수치 표는 data/mirrorpacks.js 「■ 심층」. */
+const MIRROR_DEEP = {
+  key:  "mirrorDeep",
+  deep: true,
+  /* 운전석 「거울 던전」 무리에서 줄 하나를 다 씁니다 — 노말 · 하드 · 익스트림 셋 아래
+   * 홀로 서면 옆 두 칸이 비어 보여서(사용자 지침 2026-10-29). 「다음으로 추천」에서는 한 칸. */
+  wide: true,
+  /* 난이도 한 마디 (2026-10-27 — mirrorDiffText 참고). 익스트림이 「매우 어려움」
+   * 이고 이 갈래는 그 위의 두 층이라 한 단 더 올려 적었습니다. 임시 문구이니
+   * 더 맞는 말이 있으면 이 한 줄만 고치면 됩니다. */
+  diff: "극히 어려움",
+  name: "어비스 거울 던전",
+  sub:  "바닥이 보이지 않는 유리창",
+  glassNote: "조각이 가라앉는다. 바닥에 닿는 소리가 나지 않는다.",
+  bg:   "assets/scene/어비스거울던전.jpg",   // 블루홀 — 사용자가 준 그림(2026-10-30)
+  prefix: "가라앉은 거울의 ",
+  packRounds: 5,    // 익스트림 셋 + 심층 둘 — 다 넘기면 완주(사용자 지침 2026-10-23)
+  bonus:  1500,     // 처음 완주한 삯 (익스트림 900)
+  codex:  10,       // (익스트림 7)
+  event:  150,      // (익스트림 100)
+  fragBoxSelect: 20,   // (익스트림 15)
+  needMirrorDone: "mirrorExtreme",
+  cost: ENK_RULE.costExtreme
+};
+
 /* ── 거울굴절철도 ──────────────────────────────────────────────
  *  거울 던전과 같은 틀을 쓰되 «선» 으로 이어지는 갈래입니다.
  *  group: "rail" 을 달면 운전석에서 거울 아래 제 줄에 따로 섭니다.
@@ -11434,6 +11482,9 @@ function expressFacts(r, o) {
 }
 
 /* 갈래를 늘리려면 여기에 얹으면 됩니다. 순서가 곧 화면에 서는 순서입니다. */
+/* 차례는 보관함에 «번호» 로 남습니다(S.mirrorTier = MIRROR_TIERS.indexOf(rule)) — 진행 중인 판이
+ * 다른 갈래로 바뀌지 않도록 새 갈래는 늘 끝에 얹습니다(4호선 6 · 어비스 거울 던전 7 — 아래 push 둘).
+ * 운전석에서는 무리(group)마다 이 차례로 섭니다. */
 const MIRROR_TIERS = [MIRROR_RULE, MIRROR_HARD, MIRROR_EXTREME, MIRROR_RAIL1, MIRROR_RAIL2, MIRROR_RAIL3];
 
 /* 갈래를 어떻게 부르든 받아 줍니다 — 번호, key 문자열, 규칙 그 자체,
@@ -11459,6 +11510,8 @@ function mirrorUnlocked(rule) {
    * 클리어 수로 세면 곁가지(.5장)까지 함께 세어 버려, 본편 여섯 장을 마치지 않고도
    * 열리는 일이 생깁니다. 콕 집어야 하는 갈래는 이쪽을 씁니다. */
   if (r.needChapter) return !!(S.cleared && S.cleared[r.needChapter]);
+  /* 어비스 거울 던전 — 익스트림 완주에 더해, 심층 팩의 적을 본편에서 모두 만났는가(deepOpen) */
+  if (r.deep) return deepOpen();
   /* needMirrorDone 을 적은 갈래는 «그 갈래를 완주해 봤는가»(S.mirrorDone) 만
    * 봅니다 — 익스트림(사용자 지침 2026-09-02)이 이 자리입니다. 마지막
    * 라운드에서 거울굴절철도 팩(1호선·2호선)이 반드시 섞이니, 적어도
@@ -11487,7 +11540,7 @@ function mirrorUnlocked(rule) {
  *      익스트림            매우 어려움
  *      거울굴절철도 전부    매우 어려움
  *
- *  갈래에 diff 를 적어 두면 그것이 이깁니다 — 새 갈래(거울 심층처럼 익스트림
+ *  갈래에 diff 를 적어 두면 그것이 이깁니다 — 새 갈래(어비스 거울 던전처럼 익스트림
  *  위로 더 올라가는 것)는 제 말을 직접 적으십시오.
  *  배수 자체는 없어지지 않았습니다 — 「이 갈래는 어떻게 굴러가나」(자세히)와
  *  2·3호선의 순환·통과 셈에는 그대로 나옵니다. */
@@ -11561,6 +11614,7 @@ function mirrorFacts(rule) {
                (r.guaranteeRailPackOnFinalRound
                  ? ' 마지막 선택에서는 <b>거울굴절철도 팩</b>(1호선·2호선 중 하나)이 반드시 섞입니다.'
                  : '');
+    if (r.deep) return deepFacts(r, o);
     return o;
   }
 
@@ -11585,6 +11639,7 @@ function mirrorFacts(rule) {
 /* 아직 안 열린 갈래의 잠금 문구 — 화면과 startMirror 가 같은 말을 하도록 한 군데서 짓습니다 */
 function mirrorNeedText(rule) {
   const r = rule || MIRROR_RULE;
+  if (r.deep) return "익스트림 거울 던전을 완주하고, 어비스 테마팩의 적을 본편에서 모두 만나면 열립니다";
   if (r.needChapter) {
     const c = CHAPTERS.find(x => x.id === r.needChapter);
     return "본편 " + (c ? c.no : r.needChapter) + "을 마치면 열립니다";
@@ -11877,13 +11932,24 @@ function mirrorVary(b) {
 }
 function mirrorStepNo(round, i) { return (round - 1) * 3 + i + 1; }   // 1 ~ 9
 function mirrorStepBase(pack, round, i) {
+  /* 어비스 거울 던전 — 4·5층은 DEEP_STEPS. 1~3층의 «뒤섞인» 강화 선택지는 그 계단 값을 조금 더 세게
+   * (철도 팩은 강화 자리에 안 오므로 평소대로) */
+  const deep = deepRule();
+  if (deep && deepIsDeepFloor(round)) return deepStepBase(round, i);
   if (pack.railOnly) return RAIL_STEPS[RAIL_PACK_ROLES[i]] || RAIL_STEPS.final;
-  return MIRROR_STEPS[Math.min(MIRROR_STEPS.length, mirrorStepNo(round, i)) - 1];
+  const b = MIRROR_STEPS[Math.min(MIRROR_STEPS.length, mirrorStepNo(round, i)) - 1];
+  if (deep && S.railSave && S.railSave.currentEnh)
+    return { hp: Math.round(b.hp * DEEP_ENH_STAT.hp / 10) * 10, atk: Math.round(b.atk * DEEP_ENH_STAT.atk),
+             def: b.def + DEEP_ENH_STAT.def };
+  return b;
 }
 /* 눈금에 적는 말 — 「중층부 5계단」 · 철도 팩은 「상층부 · 철도」 */
 function mirrorStepLabel(pack, round, i) {
+  const deep = deepRule();
+  if (deep && deepIsDeepFloor(round)) return "어비스 " + round + "층 · " + (i + 1) + " / 3";
   const 층 = MIRROR_LAYER_NAMES[Math.min(MIRROR_LAYER_NAMES.length, round) - 1];
-  return pack.railOnly ? 층 + " · 철도" : 층 + " " + mirrorStepNo(round, i) + "계단";
+  const t = pack.railOnly ? 층 + " · 철도" : 층 + " " + mirrorStepNo(round, i) + "계단";
+  return (deep && S.railSave && S.railSave.currentEnh) ? t + " · 뒤섞임" : t;
 }
 /* 갈래 칸의 세기 — 노말 「저층부」, 하드 「저층부 ~ 중층부」, 익스트림 「저층부 ~ 상층부」 */
 function mirrorLayerText(r) {
@@ -12309,6 +12375,8 @@ const PACK_PATH_NAME = ["왼쪽 길", "가운데 길", "오른쪽 길"];
  * 조합에서 풀이 셋보다 적게 남을 수 있습니다(그러면 화면에 둘만 뜹니다
  * — drawPackChoices 참고, 막힌 건 아니지만 확인이 필요할 수 있습니다). */
 function packUnlocked(pack) {
+  /* 심층 전용 팩(deepOnly)은 어비스 거울 던전 4·5층에만 섭니다 — 거기서는 deepPackUnlocked 가 봅니다 */
+  if (pack.deepOnly) return false;
   const met = metFoes();
   return pack.foes.every(f => met[f] || (FOES[f] && FOES[f].noMirror));
 }
@@ -12317,6 +12385,17 @@ function packUnlocked(pack) {
  * clearedPacks — 이번 판(여러 라운드) 안에서 이미 깬 팩 id 목록. 뽑기
  * 풀에서부터 뺍니다(사용자 지침 — 애초에 안 보여 줌). */
 function drawPackChoices(rule, round, clearedPacks) {
+  /* 어비스 거울 던전 — 4·5층은 심층 풀(deepDrawChoices), 1~3층은 익스트림의 뽑기 그대로이되
+   * 3층의 거울굴절철도 한 자리는 셋째(강화 자리)에 오지 않게 앞으로 옮깁니다 */
+  if (rule.deep) {
+    if (deepIsDeepFloor(round)) return deepDrawChoices(clearedPacks);
+    const picks = drawPackChoices(MIRROR_EXTREME, round, clearedPacks);
+    if (picks.length >= 3 && picks[2].railOnly) {
+      const j = picks.findIndex(p => !p.railOnly);
+      if (j >= 0) { const t = picks[2]; picks[2] = picks[j]; picks[j] = t; }
+    }
+    return picks;
+  }
   const pool = MIRROR_PACKS.filter(p =>
     !p.railOnly && packUnlocked(p) && clearedPacks.indexOf(p.id) < 0);
   const bag = pool.slice();
@@ -12368,12 +12447,36 @@ function buildPackRunScenes(rule, pack, round) {
     scenes.push(FOES[id] && FOES[id].cineEntrance
       ? { t: "bossCine", foe: id, rail: rail } : { t: "battle", foe: id, rail: rail });
   });
+  /* 어비스 거울 던전 — 층을 넘기면 deepPackDone. 뒤섞인 거울이면 사본에 빌린 칸을 입히고,
+   * 그 전투 바로 앞에 한 줄 알립니다 */
+  if (rule.deep) {
+    scenes.push({ t: "deepPackDone", packId: pack.id });
+    const mix = deepMixFor(pack, round, !!(S.railSave && S.railSave.currentEnh));
+    if (mix) {
+      for (let i = scenes.length - 1; i >= 0; i--) {
+        const sc = scenes[i];
+        if (!(sc.t === "battle" || sc.t === "bossCine") || !sc.foe) continue;
+        const list = mix[+String(sc.foe).replace("__mirror_", "")];
+        if (!list || !list.length) continue;
+        deepMixApply(sc.foe, list);
+        scenes.splice(i, 0, { t: "n", text: "유리 속에서 다른 것의 그림자가 겹친다 — " + deepMixText(list) + "." });
+      }
+    }
+    return scenes;
+  }
   scenes.push({ t: "mirrorPackDone", packId: pack.id });
   return scenes;
 }
 
 /* 고른 팩으로 실제로 들어갑니다 — startMirror() 의 뒷부분과 같은 결입니다. */
 function enterPack(rule, pack, round) {
+  /* 어비스 거울 던전 — 그 팩이 강화 선택지였는지 적어 둡니다(특전·수치·기믹이 모두 이것을 봅니다).
+   * 강화면 이름도 「뒤섞인 …」 으로 보이게 사본을 씁니다(id·foes 는 같습니다). */
+  if (rule.deep && S.railSave) {
+    const base = MIRROR_PACKS.find(x => x.id === pack.id) || pack;
+    S.railSave.currentEnh = deepGateEnh(base.id);
+    pack = S.railSave.currentEnh ? Object.assign({}, base, { name: deepEnhName(base) }) : base;
+  }
   /* 테마팩 특전 — 고르는 순간 얻습니다(사용자 지침 2026-10-21). 얻기 «전» 의 스택을 떠 두고
    * 지금 팩을 current 로 실어 둡니다 — 지거나 이어하면 openPackGate 가 current 를 지웁니다. */
   if (S.railSave && S.railSave.key === rule.key) {
@@ -12410,6 +12513,14 @@ function enterPack(rule, pack, round) {
 function openPackGate(rule, round, clearedPacks) {
   /* 다 깨지 못한 팩의 특전은 여기서 빠집니다 — 지고 돌아왔거나 나갔다 이어한 자리 (packPerks 머리말) */
   if (S.railSave && S.railSave.current) delete S.railSave.current;
+  if (rule.deep) {
+    if (S.railSave) delete S.railSave.currentEnh;   // 강화 표시도 함께
+    if (deepIsDeepFloor(round)) {
+      divider();
+      say("── 어비스 " + round + "층 ──" + (deepBest() ? "　(최고 기록 " + deepBest() + "층)" : ""), "place");
+      if (round === deepFirstFloor()) say("상층부의 바닥이 깨져 있다. 그 아래로 유리가 끝없이 이어진다.", "sys");
+    }
+  }
   setBackdrop(mirrorBG(rule), rule.name);
   S.waiting = true;
   divider();
@@ -12450,6 +12561,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
       $log.querySelectorAll(".packgate").forEach(el => el.parentNode.removeChild(el));   // 소리 글이 카드 «위» 에 서도록
       say("→ " + p.name + "에서 새어 나오는 소리 —", "sys");
       p.foes.forEach(f => say((FOES[f] && FOES[f].intro) || "낌새가 흐릿하다.", "d"));
+      deepHearMix(p);   // 어비스 거울 던전 — 무엇이 섞였는가
       saveVault();
       render();
       packGateChoices(rule, round, clearedPacks, shown, p.id, false, g);
@@ -16369,6 +16481,356 @@ function boot() {
  */
 /* @wip anchor: EXT */
 
+/* ── 어비스 거울 던전 ─────────────────────────────────────────────────
+ *  익스트림 세 층을 지난 뒤, 4·5층을 더 내려갑니다(사용자 지침 2026-10-23 —
+ *  «사실상 4-5층의 어려움 모드»). 갈림길 하나가 한 층이고, 지면 그 층의 갈림길로 돌아갑니다.
+ *
+ *  ■ 1~3층 — 익스트림의 뽑기(drawPackChoices 에 MIRROR_EXTREME)와 수치 그대로.
+ *    다만 셋째 선택지(gate.shown[2])는 «강화 선택지» 입니다 — 이름 앞에 「뒤섞인」,
+ *    붉은 카드, 적이 기믹 하나를 빌려 입고 DEEP_ENH_STAT 만큼 세게, 특전은 deepEnhancePerk.
+ *    3층의 거울굴절철도 한 자리는 셋째에 오지 않게 자리를 바꿉니다(철도 팩은 평소대로).
+ *  ■ 4·5층 — 심층 전용 팩(deepOnly)과 완주해 본 거울굴절철도 팩. 셋 모두 강화 선택지이고
+ *    기믹은 둘, 수치는 DEEP_STEPS 그대로(사다리가 이미 세므로 더 곱하지 않습니다 — 사용자 지침).
+ *
+ *  ■ 무엇을 들고 있는가 — 다른 테마팩 갈래와 같은 S.railSave 하나입니다.
+ *    round = 지금 서 있는 층 · clearedPacks = 지나온 팩 · enh = 그 가운데 강화로 넘은 팩 ·
+ *    current/currentEnh = 지금 치르는 팩과 그것이 강화인가 · deepMix = 팩마다 섞인 기믹.
+ *    최고 기록은 S.mirrorDone 에 「mirrorDeep:f3」 처럼 닿은 층마다 적습니다 —
+ *    3호선 계단 삯(「railLine3:k40」)과 같은 결이라 보관함·구름 합치기를 손대지 않습니다.
+ */
+
+/* ── 이 갈래인가 ─────────────────────────────────────────────── */
+function deepRule() {
+  if (!S || !S.mirror) return null;
+  const r = mirrorRuleNow();
+  return (r && r.deep) ? r : null;
+}
+/* 지금 서 있는 층 (1 부터) — 갈림길의 round 그대로입니다 */
+function deepFloorNow() { return (S && S.railSave && S.railSave.round) || 1; }
+/* 익스트림 몫이 끝나고 심층이 시작되는 층 — 4 */
+function deepFirstFloor() { return MIRROR_EXTREME.packRounds + 1; }
+function deepIsDeepFloor(n) { return n >= deepFirstFloor(); }
+
+/* 최고 기록 — S.mirrorDone 의 「mirrorDeep:fN」 가운데 가장 큰 N */
+function deepKey(n) { return MIRROR_DEEP.key + ":f" + n; }
+function deepBest() {
+  let best = 0;
+  Object.keys((S && S.mirrorDone) || {}).forEach(k => {
+    const m = k.match(/^mirrorDeep:f(\d+)$/);
+    if (m) best = Math.max(best, +m[1]);
+  });
+  return best;
+}
+
+/* 4·5층 i 번째 자리의 바탕 수치 */
+function deepStepBase(n, i) {
+  const row = DEEP_STEPS[Math.min(DEEP_STEPS.length, n - deepFirstFloor() + 1) - 1];
+  return row[Math.min(2, i)];
+}
+
+/* ── 강화 선택지 ───────────────────────────────────────────────
+ *  지금 갈림길에서 그 팩이 강화 선택지인가 — 4·5층이면 늘, 1~3층이면 셋째 자리.
+ *  자리는 gate.shown 의 차례로 봅니다(다시 뽑으면 셋째가 바뀝니다). */
+function deepGateEnh(id) {
+  const floor = deepFloorNow();
+  if (deepIsDeepFloor(floor)) return true;
+  const g = S.railSave && S.railSave.gate;
+  return !!(g && g.round === floor && (g.shown || []).length >= 3 && g.shown[2] === id);
+}
+/* 이번 판에서 그 팩을 강화로 넘었는가(또는 지금 강화로 치르는가) */
+function deepPackEnh(id) {
+  const rs = S.railSave;
+  if (!rs) return false;
+  if (id === rs.current && rs.currentEnh) return true;
+  return (rs.enh || []).indexOf(id) >= 0;
+}
+function deepEnhName(p) { return "뒤섞인 " + p.name; }
+
+/* 특전을 강화합니다 — 비율은 DEEP_ENH_PERK.mult 배, 횟수·칸은 plus 만큼, 주기는 2턴 당김.
+ * 깎는 몫(방어 -10% 같은 것)은 키우지 않습니다. 이름(= 아이콘)은 그대로, 글은 effect 에서 새로 짓습니다. */
+const _deepEnhCache = {};
+function deepEnhancePerk(k) {
+  if (!k) return k;
+  if (_deepEnhCache[k.name]) return _deepEnhCache[k.name];
+  const m = DEEP_ENH_PERK.mult, plus = DEEP_ENH_PERK.plus;
+  const r = v => v < 0.1 ? Math.round(v * 100) / 100 : Math.round(v * 20) / 20;
+  const e0 = k.effect || {}, e = {};
+  Object.keys(e0).forEach(x => {
+    const v = e0[x];
+    if (x === "all") {
+      e.all = {};
+      Object.keys(v).forEach(y => { e.all[y] = v[y] > 0 ? r(v[y] * m) : v[y]; });
+    }
+    else if (x === "tagged") {
+      e.tagged = { tag: v.tag };
+      ["atk", "def", "hp"].forEach(y => { if (v[y]) e.tagged[y] = v[y] > 0 ? r(v[y] * m) : v[y]; });
+    }
+    else if (["manage", "manageMax", "skillUses", "kills", "retribFloor"].indexOf(x) >= 0) e[x] = v + plus;
+    else if (x === "healEvery") e[x] = Math.max(3, v - 2);
+    /* 스택 배수(8장 「가속탄」 — { heat: 2 })는 «2배 넘는 몫» 을 키워 정수로 — 2 → 3 */
+    else if (x === "stackMult") {
+      e.stackMult = {};
+      Object.keys(v).forEach(y => { e.stackMult[y] = Math.round(1 + (v[y] - 1) * m); });
+    }
+    else if (x === "winHeal") e[x] = Math.min(1, r(v * m));
+    else if (typeof v === "number") e[x] = r(v * m);
+    else e[x] = v;
+  });
+  if (e.manageFull && !e.manageMax) e.manageMax = plus;   // 이미 가득 차는 특전은 칸을 하나 더
+  const o = { name: k.name, desc: deepPerkText(e), effect: e, enhanced: true };
+  _deepEnhCache[k.name] = o;
+  return o;
+}
+/* effect 를 사람이 읽는 글로 — 강화된 특전의 desc 를 짓습니다 */
+function deepPerkText(e) {
+  const pc = v => Math.round(v * 100) + "%";
+  const sg = v => (v >= 0 ? "+" : "") + pc(v);
+  const L = [];
+  if (e.all) {
+    const a = [];
+    if (e.all.atk) a.push("공격력 " + sg(e.all.atk));
+    if (e.all.def) a.push("방어력 " + sg(e.all.def));
+    if (e.all.hp)  a.push("최대 체력 " + sg(e.all.hp));
+    const who = e.whileWho && SINNERS[e.whileWho] ? withJosa(SINNERS[e.whileWho].name, "이") + " 서 있는 동안 " : "";
+    if (a.length) L.push(who + "전원의 " + a.join(", "));
+  }
+  if (e.tagged) {
+    const a = [];
+    if (e.tagged.atk) a.push("공격력 " + sg(e.tagged.atk));
+    if (e.tagged.def) a.push("방어력 " + sg(e.tagged.def));
+    if (e.tagged.hp)  a.push("최대 체력 " + sg(e.tagged.hp));
+    const tags = Array.isArray(e.tagged.tag) ? e.tagged.tag : [e.tagged.tag];
+    if (a.length) L.push(tags.join(" · ") + " 인격의 " + a.join(", "));
+  }
+  if (e.critMult)     L.push("치명타 배율 +" + pc(e.critMult));
+  if (e.bossAtk)      L.push("보스와 싸울 때 공격력 +" + pc(e.bossAtk) +
+                             (e.bossAtkSupport ? "(지원 작성위원은 +" + pc(e.bossAtkSupport) + ")" : ""));
+  if (e.bossDefCut)   L.push("상대 보스의 방어 -" + pc(Math.min(1, e.bossDefCut)));
+  if (e.arrestZero)   L.push("체포를 쓴 턴에는 상대 방어 0");
+  if (e.stackMult)    Object.keys(e.stackMult).forEach(y => L.push(deepStackName(y) + "가 쌓이는 몫 ×" + e.stackMult[y]));
+  if (e.linkBoost)    L.push("연계로 생기는 효과 ×" + (1 + e.linkBoost));
+  if (e.egoSynergy)   L.push("E.G.O 인격이 받는 시너지 효과 ×" + (1 + e.egoSynergy));
+  if (e.fallAtk)      L.push("쓰러진 아군 하나마다 남은 전원의 공격력 +" + pc(e.fallAtk));
+  if (e.firstTurnAtk) L.push("매 전투 1턴에 전원의 공격력 +" + pc(e.firstTurnAtk));
+  if (e.crit)         L.push("전원의 치명타 확률 +" + pc(e.crit) + "p");
+  if (e.bossCritDmg)  L.push("보스에게 주는 치명타 피해 +" + pc(e.bossCritDmg));
+  if (e.push)         L.push("독촉의 배수 +" + e.push);
+  if (e.correct)      L.push("교정으로 줄이는 피해 +" + pc(e.correct) + "p");
+  if (e.manageFull)   L.push("매 전투를 관리력이 가득 찬 채로 시작");
+  if (e.manage)       L.push("전투 시작 관리력 +" + e.manage);
+  if (e.manageMax)    L.push("최대 관리력 +" + e.manageMax);
+  if (e.skillUses)    L.push("고유 능력(액티브) 사용 횟수 +" + e.skillUses);
+  if (e.winHeal)      L.push("전투에 이기면 체력 " + pc(e.winHeal) + " 회복");
+  if (e.healEvery)    L.push(e.healEvery + "턴마다 전원이 체력 " + pc(e.healRatio || 0) + " 회복");
+  if (e.hitHeal)      L.push("공격할 때마다 자기 최대 체력의 " + pc(e.hitHeal) + " 회복");
+  if (e.aoeCut)       L.push("광역 공격으로 받는 피해 -" + pc(e.aoeCut));
+  if (e.aoeGuardCut)  L.push("광역 공격에 방어를 고르면 그 피해를 " + pc(e.aoeGuardCut) + " 더 줄임");
+  if (e.firstCut)     L.push("적의 선공으로 받는 피해 -" + pc(e.firstCut));
+  if (e.kills)        L.push("김태성의 광신 +" + e.kills);
+  if (e.retribFloor)  L.push("유아인의 보복이 " + e.retribFloor + "에서 시작하고, 쓰러져도 그 아래로 안 내려감");
+  return "【강화】 " + L.join(", ") + ".";
+}
+/* 스택 열쇠(heat) → 화면 이름(히트) — 시너지 표의 stack 칸에서 찾습니다 */
+function deepStackName(key) {
+  const sy = (typeof SYNERGIES !== "undefined" ? SYNERGIES : []).find(x => x.stack && x.stack.key === key);
+  return sy ? sy.stack.name : key;
+}
+/* 그 팩이 지금 이 판에서 주는 특전 — 강화로 골랐으면 강화된 것 */
+function deepPerkOf(p, enh) {
+  return p && p.perk ? (enh ? deepEnhancePerk(p.perk) : p.perk) : null;
+}
+
+/* ── 어떤 팩이 서는가 ─────────────────────────────────────────
+ *  심층 전용 팩 — 적 셋을 모두 본편에서 만났으면. 거울 전용 적(seenIn)은 그 장을 깼으면.
+ *  거울굴절철도 팩 — 그 갈래를 완주해 봤으면(익스트림 마지막 갈림길과 같은 문, 사용자 지침 2026-10-23). */
+function deepPackUnlocked(p) {
+  const met = metFoes();
+  return p.foes.every(f => met[f] ||
+    !!(FOES[f] && FOES[f].seenIn && S.cleared && S.cleared[FOES[f].seenIn]));
+}
+function deepRailUnlocked(p) {
+  return !!(p.railOnly && p.tier && S.mirrorDone && S.mirrorDone[p.tier]) && packUnlocked(p);
+}
+function deepPool() {
+  return MIRROR_PACKS.filter(p => p.deepOnly ? deepPackUnlocked(p) : deepRailUnlocked(p));
+}
+function deepDrawChoices(clearedPacks) {
+  const bag = deepPool().filter(p => (clearedPacks || []).indexOf(p.id) < 0);
+  const picks = [];
+  while (picks.length < 3 && bag.length) picks.push(bag.splice(rnd(bag.length), 1)[0]);
+  return picks;
+}
+/* 심층 팩이 다 열려야 엽니다 — 4·5층에서 고를 것이 모자라면 판 가운데서 길이 끊깁니다 */
+function deepOpen() {
+  const all = MIRROR_PACKS.filter(p => p.deepOnly);
+  return !!(S.mirrorDone && S.mirrorDone[MIRROR_DEEP.needMirrorDone]) &&
+         all.length >= MIRROR_DEEP.packRounds - MIRROR_EXTREME.packRounds &&
+         all.every(deepPackUnlocked);
+}
+
+/* ── 뒤섞인 거울 — 강화 선택지의 적이 다른 적의 기믹을 빌려 입습니다 ──
+ *  빌려 주는 쪽 — 1~3층은 익스트림 테마팩의 적(본편에서 만난 팩만), 4·5층은 심층 전용 팩의 적
+ *  (사용자 지침 — «전용 팩에서 빌려오는 기믹»). 철도 종점은 빌려 주지 않습니다(«만나 봐야 안다»).
+ *  제가 이미 가진 기믹은 안 빌립니다. 무엇을 빌릴지는 그 팩을 처음 들여다볼 때(소리 듣기 · 들어가기)
+ *  정해 S.railSave.deepMix 에 적어 둡니다 — 들은 것과 실제로 서는 것이 같고, 나갔다 이어해도 그대로입니다.
+ *
+ *  fields 는 mirrorFoeCopy 가 옮겨 적는 칸 그대로입니다. 그림(aoeImg · counterImg · rageImg)은
+ *  빌리지 않습니다 — 빌려 온 짓을 할 때 빌려 준 적의 그림이 뜨면 안 됩니다.
+ *  대사는 빌려 준 쪽의 것을 그대로 씁니다. «다른 것의 목소리가 섞여 나오는» 것이 이 갈래의 결입니다. */
+const DEEP_MIX_KINDS = [
+  { key: "aoe",      name: "광역",       on: "aoeEvery",
+    fields: ["aoeEvery", "aoeFrom", "aoeLine", "aoeWarn"] },
+  { key: "heal",     name: "회복",       on: "healEvery",
+    fields: ["healEvery", "healFrom", "healAtk", "healLine", "healWarn"] },
+  { key: "counter",  name: "되받아치기", on: "counterEvery",
+    fields: ["counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn"] },
+  { key: "evade",    name: "회피",       on: "evadeEvery",
+    fields: ["evadeEvery", "evadeFrom", "evadeLine", "evadeWarn"] },
+  { key: "first",    name: "선공",       on: "firstEvery",
+    fields: ["firstEvery", "firstFrom", "firstHeavy", "firstLine", "firstWarn"] },
+  { key: "firstAoe", name: "선공 광역",  on: "firstAoeEvery",
+    fields: ["firstAoeEvery", "firstAoeFrom", "firstAoeLine", "firstAoeWarn"] },
+  { key: "take",     name: "데려가기",   on: "takeEvery",
+    fields: ["takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit"] },
+  { key: "break",    name: "버티기 깨기", on: "breakEvery",
+    fields: ["breakEvery", "breakFrom", "breakMult", "breakSplash", "breakLine", "breakWarn"] },
+  { key: "ramp",     name: "몰아친다",   on: "rampEvery",
+    fields: ["rampEvery", "rampPct", "rampMax", "rampLine"] },
+  /* 격분은 광역 주기(rageAoeEvery)가 aoeLine 을 읽으므로 그 대사도 함께 빌립니다
+   * (제가 광역을 이미 가졌으면 제 것을 그대로 둡니다 — deepMixApply) */
+  { key: "rage",     name: "격분",       on: "rageAt",
+    fields: ["rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn"],
+    keepOwn: ["aoeLine", "aoeWarn"] }
+];
+function deepMixDonors(floor) {
+  const out = [];
+  const packs = deepIsDeepFloor(floor)
+    ? MIRROR_PACKS.filter(p => p.deepOnly)
+    : MIRROR_PACKS.filter(p => !p.deepOnly && !p.railOnly && packUnlocked(p));
+  packs.forEach(p => p.foes.forEach(f => { if (out.indexOf(f) < 0 && FOES[f]) out.push(f); }));
+  return out;
+}
+/* src 하나가 빌려 입을 것 n 가지 — [[기믹 key, 빌려 준 적], …] */
+function deepMixPick(src, n, donorList) {
+  const f = FOES[src] || {};
+  const donors = donorList.filter(d => d !== src);
+  const kinds = DEEP_MIX_KINDS.filter(k => !f[k.on] && donors.some(d => FOES[d][k.on]));
+  const out = [];
+  while (out.length < n && kinds.length) {
+    const k = kinds.splice(rnd(kinds.length), 1)[0];
+    const can = donors.filter(d => FOES[d][k.on]);
+    out.push([k.key, can[rnd(can.length)]]);
+  }
+  return out;
+}
+/* 그 층에서 그 팩의 세 자리가 무엇을 빌려 입는가. 강화 선택지가 아니면 null(섞지 않음). */
+function deepMixFor(pack, floor, enh) {
+  if (!pack || !enh || !S.railSave) return null;
+  const rs = S.railSave;
+  if (!rs.deepMix) rs.deepMix = {};
+  const key = floor + ":" + pack.id;
+  if (!rs.deepMix[key]) {
+    const n = deepIsDeepFloor(floor) ? DEEP_MIX_COUNT.deep : DEEP_MIX_COUNT.upper;
+    const donors = deepMixDonors(floor);
+    rs.deepMix[key] = pack.foes.map(src => deepMixPick(src, n, donors));
+  }
+  return rs.deepMix[key];
+}
+function deepMixKind(key) { return DEEP_MIX_KINDS.find(k => k.key === key); }
+/* «광역(기가노토사우루스) · 회복(박상원)» */
+function deepMixText(list) {
+  return (list || []).map(([k, d]) => {
+    const kind = deepMixKind(k);
+    return (kind ? kind.name : k) + "(" + ((FOES[d] && FOES[d].name) || d) + ")";
+  }).join(" · ");
+}
+/* 지어 둔 사본(FOES[id])에 빌린 칸을 덧입힙니다 */
+function deepMixApply(id, list) {
+  const f = FOES[id];
+  if (!f || !list || !list.length) return;
+  list.forEach(([k, d]) => {
+    const kind = deepMixKind(k), src = FOES[d];
+    if (!kind || !src) return;
+    kind.fields.forEach(x => { if (src[x] != null) f[x] = src[x]; });
+    (kind.keepOwn || []).forEach(x => { if (!f[x] && src[x] != null) f[x] = src[x]; });
+  });
+  /* 기믹은 전부 «보스일 때만» 섭니다(beginTurn 의 b.boss). 잡졸이 빌려 입으면 보스 판정을 주되
+   * 강타는 막습니다 — 빌린 짓만 하고, 3턴 강타까지 얹지는 않습니다. */
+  if (!f.boss) { f.boss = true; f.noHeavy = true; }
+  f.deepMix = list.map(x => x.slice());
+  f.desc = "유리창에 비쳐 나온 것. 다른 것의 버릇이 섞여 있다 — " + deepMixText(list) + ".";
+}
+
+/* ── 한 층을 넘겼다 ──────────────────────────────────────────
+ *  { t:"deepPackDone", packId }. buildPackRunScenes 감싸기가 팩 끝의
+ *  mirrorPackDone 을 이것으로 바꿔 끼웁니다. 몫을 주고, 다음 층 갈림길을 엽니다.
+ *  다섯 층째면 mirrorClear 로 넘깁니다(완주 삯은 그쪽이 MIRROR_DEEP 의 값으로 줍니다). */
+SCENE_EXT.deepPackDone = function (s) {
+  const rule = deepRule() || MIRROR_DEEP;
+  const floor = deepFloorNow();
+  const rs = S.railSave || {};
+  const cleared = (rs.clearedPacks || []).slice();
+  cleared.push(s.packId);
+  const enh = (rs.enh || []).slice();
+  if (rs.currentEnh && rs.current === s.packId) enh.push(s.packId);
+  const packDone = MIRROR_PACKS.find(p => p.id === s.packId);
+
+  divider();
+  say((deepIsDeepFloor(floor) ? "어비스 " : "") + floor + "층을 넘었다.", "good");
+  S.codex += DEEP_PAY.codex;
+  addFragBox("select", DEEP_PAY.fragBox);
+  say("황금교본 " + DEEP_PAY.codex + "권 · 인격 파편 상자(선택) " + DEEP_PAY.fragBox + "개.", "gain");
+  if (!S.mirrorDone) S.mirrorDone = {};
+  if (!S.mirrorDone[deepKey(floor)]) {
+    S.mirrorDone[deepKey(floor)] = true;
+    S.money += DEEP_PAY.firstMoney;
+    say("처음 닿은 깊이 — " + CURRENCY + " " + DEEP_PAY.firstMoney + " 획득.", "gain");
+  }
+  /* 업적 「거울에 비친 철도」 — 어비스에서 넘긴 거울굴절철도 팩을 판을 넘어 셉니다 */
+  if (packDone && packDone.railOnly) {
+    S.mirrorDone["mirrorDeep:rail:" + packDone.id] = true;
+    const n = Object.keys(S.mirrorDone).filter(k => k.indexOf("mirrorDeep:rail:") === 0).length;
+    if (n >= 4) checkAchievements(null, "mirrorDeep:rails4");
+  }
+
+  S.railSave = { key: rule.key, round: floor + 1, clearedPacks: cleared, enh: enh, arc: arcCopy(S.arc),
+                 turns: S.mirrorRunTurns || 0, boons: rs.boons || null };   // 가호는 판 끝까지(mirrorPackDone 과 같게)
+  if (floor >= rule.packRounds) return mirrorClear();
+  saveVault();
+  openPackGate(rule, floor + 1, cleared);
+};
+
+/* ── 들어가기 전 화면 · 운전석 칸에 뜨는 말 ─────────────────── */
+function deepFacts(r, o) {
+  const best = deepBest();
+  o.세기 = "익스트림 + 어비스 두 층";
+  if (best) o.첫몫 = (o.첫몫 ? o.첫몫 + "　·　" : "") + "최고 기록 " + best + "층";
+  o.자세히 = "익스트림 거울 던전의 세 층을 지난 뒤, 상층부 아래로 두 층을 더 내려갑니다. " +
+             "1~3층의 셋째 갈래는 «뒤섞인» 갈래입니다 — 적이 다른 것의 버릇을 빌려 입고 조금 더 세게 서지만, 특전도 더 셉니다. " +
+             "4·5층에는 어비스 전용 테마팩과 완주해 본 거울굴절철도의 팩이 서고, 갈래가 모두 «뒤섞인» 갈래입니다(버릇 둘씩). " +
+             "소리를 들어 보면 무엇이 섞였는지 압니다. " +
+             "층을 넘길 때마다 그 자리에서 몫을 받고, 다섯 층을 다 넘기면 완주 삯을 받습니다. " +
+             "지면 그 층의 갈림길로 돌아가 다시 고릅니다. 유리창으로 나가면 다음에 그 층의 갈림길부터 이어합니다.";
+  return o;
+}
+
+/* ── 「소리 듣기」에 섞인 것을 덧붙입니다 ─────────────────────── */
+function deepHearMix(p) {
+  if (!deepRule()) return;
+  const mix = deepMixFor(p, deepFloorNow(), deepGateEnh(p.id));
+  if (!mix) return;
+  say("　유리 너머로 다른 것의 소리가 겹친다 —", "sys");
+  p.foes.forEach((src, i) => {
+    if (mix[i] && mix[i].length)
+      say("　· " + ((FOES[src] && (FOES[src].mirrorName || MIRROR_DEEP.prefix + FOES[src].name)) || src) +
+          " — " + deepMixText(mix[i]), "d");
+  });
+  saveVault();
+}
+
+
+
+
 /* ── 거울굴절철도 4호선 · 편도 ─────────────────────────────────
  *  1호선은 한 줄, 2호선은 순환, 3호선은 급행, 4호선은 «돌아오지 못하는
  *  선로» 입니다.
@@ -16524,6 +16986,7 @@ const MIRROR_RAIL4 = {
   }
 };
 MIRROR_TIERS.push(MIRROR_RAIL4);
+MIRROR_TIERS.push(MIRROR_DEEP);   // 7 — 어비스 거울 던전(v2.25.0). 차례를 바꾸지 마십시오(MIRROR_TIERS 머리 참고)
 
 /* ── 턱 ──────────────────────────────────────────────────────
  *  「몇 턴에 끝냈는가」 로 걸리는 업적입니다. 받는 몫은 업적 쪽에 있고,
