@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.25.0";
+const VERSION = "2.25.1";
 const VERSION_NAME = "어비스 거울 던전";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -5695,7 +5695,7 @@ function startBattleFight(scene, f) {
    "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
    "evadeEvery", "evadeFrom", "evadeLine", "evadeWarn",
    "takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit",
-   "breakEvery", "breakFrom", "breakMult", "breakSplash", "breakLine", "breakWarn",
+   "breakEvery", "breakFrom", "breakAt", "breakMult", "breakSplash", "breakLine", "breakWarn",
    "rampEvery", "rampPct", "rampMax", "rampLine",
    "heavyRampPct", "heavyRampMax",
    "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn", "rageImg",
@@ -5778,7 +5778,7 @@ const FOE_CYCLE_KEYS = [
   "counterEvery", "counterFrom", "counterMult",
   "evadeEvery", "evadeFrom",
   "takeEvery", "takeFrom", "takeOnce",
-  "breakEvery", "breakFrom", "breakMult", "breakSplash",
+  "breakEvery", "breakFrom", "breakAt", "breakMult", "breakSplash",
   "rampEvery", "rampPct", "rampMax",
   "heavyRampPct", "heavyRampMax",
   "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct",
@@ -5931,6 +5931,8 @@ function beginTurn() {
   const tkFrom   = (b.takeFrom != null) ? b.takeFrom : fnow.takeFrom;
   const brEvery  = b.breakEvery || fnow.breakEvery || 0;
   const brFrom   = (b.breakFrom != null) ? b.breakFrom : fnow.breakFrom;
+  /* breakAt — 주기 대신 «이 턴들에» (그 전투 · 그 페이즈의 턴으로). 들쭉날쭉하게 섞을 때(8장 지와) */
+  const brAt     = b.breakAt || fnow.breakAt || null;
 
   /* ── 격분 — 체력이 깎이면 결이 바뀝니다 ──────────────────────
    *  rageAt(0.3 이면 30%) 밑으로 내려가면 그때부터 다른 주기로 갑니다.
@@ -6036,7 +6038,7 @@ function beginTurn() {
                !!(b.boss && 주기(cEvery, cFrom));
   /* 버티기 깨기 — 되받아치기의 거울이라 바로 옆자리입니다 */
   b.foeBreak = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter &&
-               !!(b.boss && 주기(brEvery, brFrom));
+               !!(b.boss && (주기(brEvery, brFrom) || !!(brAt && brAt.indexOf(tt) >= 0)));
   b.foeEvade = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter && !b.foeBreak &&
                !!(b.boss && 주기(eEvery, eFrom));
   b.heavy   = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter && !b.foeBreak &&
@@ -11510,7 +11512,7 @@ function mirrorUnlocked(rule) {
    * 클리어 수로 세면 곁가지(.5장)까지 함께 세어 버려, 본편 여섯 장을 마치지 않고도
    * 열리는 일이 생깁니다. 콕 집어야 하는 갈래는 이쪽을 씁니다. */
   if (r.needChapter) return !!(S.cleared && S.cleared[r.needChapter]);
-  /* 어비스 거울 던전 — 익스트림 완주에 더해, 심층 팩의 적을 본편에서 모두 만났는가(deepOpen) */
+  /* 어비스 거울 던전 — 익스트림 완주에 더해, 가장 마지막에 나온 본편을 마쳤는가(deepOpen) */
   if (r.deep) return deepOpen();
   /* needMirrorDone 을 적은 갈래는 «그 갈래를 완주해 봤는가»(S.mirrorDone) 만
    * 봅니다 — 익스트림(사용자 지침 2026-09-02)이 이 자리입니다. 마지막
@@ -11639,7 +11641,10 @@ function mirrorFacts(rule) {
 /* 아직 안 열린 갈래의 잠금 문구 — 화면과 startMirror 가 같은 말을 하도록 한 군데서 짓습니다 */
 function mirrorNeedText(rule) {
   const r = rule || MIRROR_RULE;
-  if (r.deep) return "익스트림 거울 던전을 완주하고, 어비스 테마팩의 적을 본편에서 모두 만나면 열립니다";
+  if (r.deep) {
+    const last = deepLatestMain();
+    return "익스트림 거울 던전을 완주하고, 본편 " + (last ? last.no : "마지막 장") + "을 마치면 열립니다";
+  }
   if (r.needChapter) {
     const c = CHAPTERS.find(x => x.id === r.needChapter);
     return "본편 " + (c ? c.no : r.needChapter) + "을 마치면 열립니다";
@@ -11873,6 +11878,7 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     takeHit: f.takeHit || null,
     breakEvery: f.breakEvery || 0,
     breakFrom: f.breakFrom != null ? f.breakFrom : null,
+    breakAt: f.breakAt || null,
     breakMult: f.breakMult || 0,
     breakSplash: f.breakSplash || 0,
     breakLine: f.breakLine || null,
@@ -16655,17 +16661,23 @@ function deepPool() {
   return MIRROR_PACKS.filter(p => p.deepOnly ? deepPackUnlocked(p) : deepRailUnlocked(p));
 }
 function deepDrawChoices(clearedPacks) {
-  const bag = deepPool().filter(p => (clearedPacks || []).indexOf(p.id) < 0);
+  const left = p => (clearedPacks || []).indexOf(p.id) < 0;
+  let bag = deepPool().filter(left);
+  /* 고를 것이 하나도 없으면 아직 못 만난 적의 어비스 팩이라도 세웁니다 — 판 가운데서 길이 끊기지 않게.
+   * 열림 조건이 «가장 마지막 본편» 이라(deepOpen) 곁가지(6.5장 · 7.5장)를 건너뛴 사람에게 생길 수 있습니다. */
+  if (!bag.length) bag = MIRROR_PACKS.filter(p => p.deepOnly && left(p));
   const picks = [];
   while (picks.length < 3 && bag.length) picks.push(bag.splice(rnd(bag.length), 1)[0]);
   return picks;
 }
-/* 심층 팩이 다 열려야 엽니다 — 4·5층에서 고를 것이 모자라면 판 가운데서 길이 끊깁니다 */
+/* 열림 — 익스트림을 완주하고, «가장 마지막에 나온 본편» 을 마쳤으면(사용자 지침 2026-10-30).
+ * 지금은 7장, 8장이 들어오면 8장(묶음이면 마지막 부분까지 — S.cleared[묶음 id]) — mainChapters 끝에서 저절로 따라갑니다.
+ * 처음에는 «어비스 팩의 적을 본편에서 다 만났는가» 였는데, 팩이 늘 때마다 이미 열린 사람이 다시 잠기는 일이 생겨 바꿨습니다. */
+function deepLatestMain() { const m = mainChapters(); return m[m.length - 1] || null; }
 function deepOpen() {
-  const all = MIRROR_PACKS.filter(p => p.deepOnly);
+  const last = deepLatestMain();
   return !!(S.mirrorDone && S.mirrorDone[MIRROR_DEEP.needMirrorDone]) &&
-         all.length >= MIRROR_DEEP.packRounds - MIRROR_EXTREME.packRounds &&
-         all.every(deepPackUnlocked);
+         !!(last && S.cleared && S.cleared[last.id]);
 }
 
 /* ── 뒤섞인 거울 — 강화 선택지의 적이 다른 적의 기믹을 빌려 입습니다 ──
