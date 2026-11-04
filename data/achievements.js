@@ -41,6 +41,11 @@
  *      titleHas    편성된 누군가의 인격 이름에 그 말이 들어 있어야 합니다.
  *      synergy     그 이름의 편성 시너지가 지금 발동 중이어야 합니다.
  *
+ *    cat     (적지 않아도 됩니다) 업적 창의 분류 탭 — 편성 · 시너지 · 거울 · 철도 · 기타.
+ *            보통은 when 에서 저절로 정해집니다(engine.js achieveCat): synergy → 시너지,
+ *            party · titleHas · advisor → 편성, clear 가 railLine… → 철도,
+ *            where · clear 가 mirror… → 거울, 그 밖 → 기타. 어색할 때만 cat: "기타" 처럼 덮습니다.
+ *
  *    give    보상으로 주는 것
  *      support   지원 작성위원 — "제목|이름"
  *      id        작성위원의 인격 — { who: "열쇠", star: 3, title: "제목" }

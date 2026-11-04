@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.26.0";
+const VERSION = "2.26.2";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -757,6 +757,7 @@ function vaultMergeOnce(seed) {
     brush:  (da.brush == null && db.brush == null) ? null
                                                    : Math.max(da.brush || 0, db.brush || 0),
     shards: Math.max(da.shards || 0, db.shards || 0),
+    bank:   Math.max(da.bank || 0, db.bank || 0),
     own:    합집합(da.own,  db.own),
     paid:   합집합(da.paid, db.paid),
     team:   now.dig ? db.team : da.team,
@@ -3459,6 +3460,7 @@ function giveIcon(g) {
   if (g.advisorTicket) return "보조 교육위원 선택권";
   if (g.giftTicket)    return "E.G.O 기프트 선택권";
   if (g.syncModule)    return "동기화 모듈";
+  if (g.digBrush)      return "지질망치";
   if (g.enkCap)        return "엔케팔린 캡슐";
   if (g.codex)         return "황금교본";
   if (g.enk)           return "엔케팔린";
@@ -13703,6 +13705,7 @@ function mailGiveText(m) {
   if (g.advisorTicket) out.push(ic("advisorTicket") + "보조 교육위원 선택권 " + g.advisorTicket + "개");
   if (g.giftTicket)    out.push(ic("giftTicket") + "E.G.O 기프트 선택권 " + g.giftTicket + "개");
   if (g.syncModule)    out.push(ic("syncModule") + SYNC_MODULE.name + " " + g.syncModule + "개");
+  if (g.digBrush)      out.push(ic("digBrush") + DIG_BRUSH + " " + g.digBrush + "개");
   if (g.advisor)       { const ad = advisorById(g.advisor); out.push(ic("advisor") + "보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
   if (g.gift)          { const gf = giftById(g.gift); out.push(ic("gift") + "E.G.O 기프트 " + (gf ? stars(gf.star) + " " + gf.name : g.gift)); }
   if (g.support) {
@@ -13721,7 +13724,7 @@ function mailWasted(m) {
   /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
   if (g.money || g.codex || g.event || g.support || g.enkCap ||
       g.fragBoxSelect || g.fragBoxRandom ||
-      g.advisorTicket || g.giftTicket || g.syncModule || g.advisor || g.gift) return false;   // 다른 것이 있으면 버려질 일 없습니다
+      g.advisorTicket || g.giftTicket || g.syncModule || g.digBrush || g.advisor || g.gift) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
   return enkCount() >= ENK_RULE.max;
@@ -13741,6 +13744,14 @@ function giveApply(g) {
   if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
   if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
   if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); }
+  /* 지질망치 — 탐사가 아직 안 열렸으면(첫 몫을 안 받았으면) bank 에 맡겨 두고, 처음 열 때 digSync 가 함께 줍니다.
+   * brush 를 null 에서 숫자로 바꿔 버리면 «처음 열 때 몰아서 받는 몫» 이 사라집니다. */
+  if (g.digBrush) {
+    const d = digState();
+    if (d.brush == null) d.bank = (d.bank || 0) + g.digBrush;
+    else d.brush += g.digBrush;
+    got.push(DIG_BRUSH + " " + g.digBrush + "개");
+  }
   if (g.advisor) {
     const ad = advisorById(g.advisor);
     if (ad) {
@@ -14132,24 +14143,90 @@ function openReward(back, note) {
   };
 }
 
+/* ── 업적 분류 (사용자 지침 2026-11-05 — «업적이 너무 많으니 나눠 볼 수 있게») ──────────
+ *  진행도 줄 바로 아래 탭 한 줄: 전체 · 편성 · 시너지 · 거울 · 철도 · 기타 · 클리어 · 미해결.
+ *  앞의 다섯은 «무엇을 하는 업적인가», 뒤의 둘은 «달성했는가» 로 거릅니다.
+ *
+ *  분류는 업적마다 손으로 적지 않고 조건(when)에서 저절로 정합니다 — 새 장이 업적을 들고
+ *  와도 손댈 데가 없게. 한 업적은 한 분류에만 섭니다. 편성 · 시너지를 갖춘 채로 거울에서
+ *  하는 업적이 많아, 더 까다로운 조건이 먼저 가져갑니다 —
+ *    synergy                        → 시너지
+ *    party · titleHas · advisor      → 편성   (보조 교육위원을 세우는 것도 편성으로 칩니다)
+ *    clear 가 railLine…             → 철도
+ *    where · clear 가 mirror…       → 거울   (어비스 안에서 철도 팩을 넘는 「거울에 비친 철도」 도 여기)
+ *    그 밖                          → 기타   (본편 · 콘첸트라트 · 화석 탐사)
+ *  저절로 정해진 것이 어색하면 그 업적에 cat: "기타" 처럼 분류 이름을 적어 덮습니다. */
+const ACH_CATS = [
+  { key: "party",   name: "편성" },
+  { key: "synergy", name: "시너지" },
+  { key: "mirror",  name: "거울" },
+  { key: "rail",    name: "철도" },
+  { key: "etc",     name: "기타" }
+];
+let ACH_TAB = "all";   // "all" · ACH_CATS 의 key · "done" · "open"
+function achieveCat(a) {
+  if (a.cat) {
+    const hit = ACH_CATS.find(c => c.key === a.cat || c.name === a.cat);
+    if (hit) return hit.key;
+  }
+  const w = a.when || {};
+  const arr = x => x == null ? [] : (Array.isArray(x) ? x : [x]);
+  if (w.synergy) return "synergy";
+  if (w.party || w.titleHas || w.advisor) return "party";
+  const clears = arr(w.clear).map(String);
+  if (clears.some(c => /^railLine/.test(c))) return "rail";
+  if (clears.some(c => /^mirror/.test(c)) || arr(w.where).some(x => /^mirror/.test(String(x)))) return "mirror";
+  return "etc";
+}
+function achieveTabHas(tab, a) {
+  if (tab === "all")  return true;
+  if (tab === "done") return achieved(a);
+  if (tab === "open") return !achieved(a);
+  return achieveCat(a) === tab;
+}
+
 function openAchieve(back) {
   $modal.classList.add("on");
   const all = achieveList();
   const done = all.filter(achieved).length;
+  if (ACH_TAB !== "all" && ACH_TAB !== "done" && ACH_TAB !== "open" &&
+      !ACH_CATS.some(c => c.key === ACH_TAB)) ACH_TAB = "all";
 
   /* 달성도는 맨 위 게이지로 — 보상 창의 주간 과제와 같은 모양(.rwgauge) (사용자 지침 2026-10-16) */
+  /* 「조건을 채우면 그 자리에서 보상이 들어옵니다」 안내 줄은 걷었습니다(사용자 지침 2026-11-05) */
   let h = '<h2>업 적</h2>' +
-          '<div class="hint">조건을 채우면 그 자리에서 보상이 들어옵니다.</div>' +
           '<div class="achgauge"><span class="rwgauge' + (all.length && done >= all.length ? ' full' : '') + '">' +
             '<i style="width:' + (all.length ? Math.round(done / all.length * 100) : 0) + '%"></i></span>' +
-            '<span class="rwgnum">' + done + ' / ' + all.length + '</span></div>';
+            /* 개수 대신 달성도 % (사용자 지침 2026-11-05). 버림 — 다 채우기 전에는 100% 가 안 뜨게.
+             * 몇 개인지는 바로 아래 「전체」 탭에 남아 있습니다. */
+            '<span class="rwgnum">달성도 ' + (all.length ? Math.floor(done / all.length * 100) : 0) + '%</span></div>';
 
   if (!all.length) h += '<div class="box dim">아직 업적이 없습니다.</div>';
+
+  /* 분류 탭 — 진행도 줄 바로 아래. 분류 탭에는 «달성 / 그 분류 전체» 를, 클리어 · 미해결에는 개수를 */
+  /* 클리어 · 미해결은 «분류» 가 아니라 «달성 여부» 로 거르는 손잡이라 색을 달리합니다(.st — index.html) */
+  const tab = (key, name, n) =>
+    '<button data-acht="' + key + '" class="' + (key === "done" || key === "open" ? 'st ' + key + ' ' : '') +
+      (ACH_TAB === key ? 'on' : '') + '">' + name +
+      '<span class="n">' + n + '</span></button>';
+  if (all.length) {
+    h += '<div class="achtabs">' + tab("all", "전체", done + '/' + all.length);
+    ACH_CATS.forEach(c => {
+      const mine = all.filter(a => achieveCat(a) === c.key);
+      if (mine.length) h += tab(c.key, c.name, mine.filter(achieved).length + '/' + mine.length);
+    });
+    h += tab("done", "클리어", done) + tab("open", "미해결", all.length - done) + '</div>';
+  }
+  const shown = all.filter(a => achieveTabHas(ACH_TAB, a));
+  if (all.length && !shown.length)
+    h += '<div class="box dim">' + (ACH_TAB === "done" ? "아직 달성한 업적이 없습니다."
+                                 : ACH_TAB === "open" ? "남은 업적이 없습니다 — 모두 달성했습니다."
+                                 : "이 분류에는 업적이 없습니다.") + '</div>';
 
   /* 한 줄에 하나씩 — 목록형 (사용자 지침 2026-10-11). 왼쪽에 이름과 조건,
    * 오른쪽에 보상. 좁은 화면에서는 보상이 아랫줄로 내려갑니다(.achrow — index.html). */
   h += '<div class="achlist">';
-  all.forEach(a => {
+  shown.forEach(a => {
     const got = achieved(a);
     h += '<div class="achrow' + (got ? ' got' : '') + '">' +
            '<div class="mark">' + (got ? '✓' : '') + '</div>' +
@@ -14163,10 +14240,13 @@ function openAchieve(back) {
   });
   h += '</div>';
 
-  h += '<div class="hint" style="margin-top:14px">' +
-       '보상으로 오는 사람은 손에 넣기 전까지 이름과 수치가 가려집니다.</div>' +
-       '<div class="modalfoot"><button id="acclose">닫기</button></div>';
+  /* 「보상으로 오는 사람은 손에 넣기 전까지…」 안내 줄도 걷었습니다(사용자 지침 2026-11-05) */
+  h += '<div class="modalfoot"><button id="acclose">닫기</button></div>';
   $sheet.innerHTML = h;
+  $sheet.querySelectorAll("[data-acht]").forEach(el => el.onclick = () => {
+    ACH_TAB = el.dataset.acht;
+    openAchieve(back);
+  });
   document.getElementById("acclose").onclick = () => {
     closeModal(); render(); if (back) back();
   };
@@ -16605,9 +16685,13 @@ const DIG_RULE = {
  * gift — 표본을 다 걸면 받는 그 지층의 ★3 기프트(data/gifts.js · GIFTS, fossil — 발굴로만).
  * en   — 학술 문헌에 서는 영문 이름. 화면에서는 한글 이름 옆에 작게 병기합니다
  *        (사용자 지침 2026-11-04 — 라거슈타트 이름은 영문으로 찾아보는 것이라서).
- * at   — [위도, 경도]. 지도에 점을 찍는 자리입니다(digMapXY). */
+ * at   — [위도, 경도]. 지도에 점을 찍는 자리입니다(digMapXY).
+ * soil — 그 현장 흙 타일의 색조 (사용자 지침 2026-11-05 — «현장마다 회색 · 붉은빛 · 녹색 · 황색 · 흑색으로 조금씩»).
+ *        그림(발굴 - 흙 1~4)은 하나를 같이 쓰고, 그 위에 tint 한 겹을 mode(background-blend-mode)로 섞습니다.
+ *        color 는 밝기는 두고 빛깔만, multiply 는 짙게. 칸 안의 글자(탐침 수 · 흔적)는 안 물듭니다. */
 const DIG_SITES = [
   { key: "messel", gift: "다르위니우스", open: "ch4", en: "Messel Pit", at: [49.92, 8.75], name: "메셀 피트", where: "독일 · 에오세 약 4,700만 년 전",
+    soil: { mode: "multiply", tint: "rgba(96,88,84,.45)" },      /* 흑색 — 검은 오일셰일 */
     /* 무른 오일셰일 — 붓이 두 겹씩 들춥니다. 대신 화석 칸을 꼭 0 으로 내려도 금이 갑니다(B2). */
     trait: { name: "무른 오일셰일", note: "붓이 두 겹씩 들춘다. 대신 망치가 화석을 스치기만 해도 금이 간다.",
              brushDepth: 2, hammerCrackOn0: true },
@@ -16620,6 +16704,7 @@ const DIG_SITES = [
       { name: "메셀 비단벌레", star: 2, note: "4,700만 년이 지나도 금속빛 구조색이 그대로." }
     ] },
   { key: "jehol", gift: "시노사우롭테릭스", open: "ch4", en: "Jehol Biota", at: [41.60, 120.78], name: "열하 생물군", where: "중국 랴오닝 · 백악기 전기 약 1억 2,500만 년 전",
+    soil: { mode: "color",    tint: "rgba(128,126,122,.45)" },   /* 회색 — 화산재 */
     /* 화산재 한 겹 — 판 전체가 한 겹씩 얕습니다. 첫 손질이 빠릅니다(B2). */
     trait: { name: "화산재 한 겹", note: "맨 위 한 겹이 재라 얇다. 어디를 파도 한 겹 먼저 들춰져 있다.",
              topThin: true },
@@ -16632,6 +16717,7 @@ const DIG_SITES = [
       { name: "레페노마무스", star: 2, note: "새끼 공룡을 삼킨 채 남은 포유류." }
     ] },
   { key: "solnhofen", gift: "시조새", open: "ch4", en: "Solnhofen", at: [48.90, 11.00], name: "졸른호펜", where: "독일 바이에른 · 쥐라기 후기 약 1억 5,000만 년 전",
+    soil: { mode: "color",    tint: "rgba(220,196,128,.32)" },   /* 옅은 황색 — 크림빛 석회암 석판 */
     /* 석판 — 망치가 십자 대신 가로로 들춥니다. 켜가 결대로 갈라집니다(B2). */
     trait: { name: "석판", note: "켜가 결대로 갈라진다. 망치가 십자가 아니라 가로로 들춘다.",
              hammerRow: true },
@@ -16644,6 +16730,7 @@ const DIG_SITES = [
       { name: "아이게르", star: 1, note: "긴 더듬이의 새우." }
     ] },
   { key: "burgess", gift: "오파비니아", open: "ch5", en: "Burgess Shale", at: [51.43, -116.47], name: "버제스 셰일", where: "캐나다 브리티시컬럼비아 · 캄브리아기 중기 약 5억 800만 년 전",
+    soil: { mode: "color",    tint: "rgba(104,138,88,.32)" },    /* 녹색 — 녹회색 셰일 */
     /* 납작하게 눌린 화석 — 망치 둘레 한 겹에도 금이 갑니다(B2). */
     trait: { name: "납작하게 눌린 화석", note: "눌려 얇다. 망치가 둘레를 스치기만 해도 금이 간다.",
              edgeCrack: true },
@@ -16656,6 +16743,7 @@ const DIG_SITES = [
       { name: "위왁시아", star: 1, note: "비늘과 가시로 덮인 연체동물." }
     ] },
   { key: "chengjiang", gift: "하이코우이크티스", open: "ch6", en: "Chengjiang Biota", at: [24.67, 102.98], name: "청장 생물군", where: "중국 윈난 · 캄브리아기 전기 약 5억 1,800만 년 전",
+    soil: { mode: "color",    tint: "rgba(190,104,52,.32)" },    /* 황토빛 붉은색 — 풍화된 노란 셰일, 쇳물이 배어 */
     /* 풍화된 노란 셰일 — 판이 얕은 대신 화석이 하나 덜 묻혀 있습니다(B2). */
     trait: { name: "풍화된 노란 셰일", note: "오래 풍화되어 얕다. 대신 남은 것도 그만큼 적다.",
              shallow: true, fossilDelta: -1 },
@@ -16668,6 +16756,7 @@ const DIG_SITES = [
       { name: "베툴리콜라", star: 1, note: "몸이 두 토막인 수수께끼 동물." }
     ] },
   { key: "sirius", gift: "티모레베스티아", open: "ch7", en: "Sirius Passet", at: [82.80, -42.00], name: "시리우스 파셋", where: "그린란드 북부 · 캄브리아기 전기 약 5억 1,800만 년 전",
+    soil: { mode: "color",    tint: "rgba(96,124,160,.42)" },    /* 청회색 — 언 땅 */
     /* 언 땅 — 칸마다 첫 손질은 피로가 쌓이지 않습니다. 대신 화석이 하나 더(B2). */
     trait: { name: "언 땅", note: "얼어붙어 손이 많이 간다 — 대신 칸마다 첫 손질은 피로가 쌓이지 않는다. 아무도 건드리지 않아 더 남았다.",
              firstFree: true, fossilDelta: 1 },
@@ -16715,6 +16804,7 @@ function digClean(d) {
   return {
     brush:  typeof d.brush === "number" ? d.brush : null,
     shards: typeof d.shards === "number" ? d.shards : 0,
+    bank:   typeof d.bank === "number" ? d.bank : 0,   // 탐사가 열리기 전에 우편으로 받은 지질망치
     own:    (d.own && typeof d.own === "object") ? d.own : {},
     paid:   (d.paid && typeof d.paid === "object") ? d.paid : {},
     team:   (d.team && typeof d.team === "object")
@@ -16728,8 +16818,10 @@ function digState() { if (!S.dig) S.dig = digClean(null); return S.dig; }
 /* 처음 열었으면 첫 지질망치를 쥐여 줍니다 — 이미 마친 장의 초회 몫까지 함께 */
 function digSync() {
   const d = digState();
-  if (d.brush == null)
-    d.brush = DIG_RULE.brushStart + DIG_RULE.brushStory * CHAPTERS.filter(c => S.cleared && S.cleared[c.id]).length;
+  if (d.brush == null) {
+    d.brush = DIG_RULE.brushStart + DIG_RULE.brushStory * CHAPTERS.filter(c => S.cleared && S.cleared[c.id]).length + (d.bank || 0);
+    d.bank = 0;
+  }
   return d;
 }
 function digMirrorBrush(rule) {
@@ -17184,6 +17276,10 @@ let DIG_PICK = null;     // 표본실에서 눌러 본 표본 이름
     ["#a87c50", "#7d5a38", "#543a23", "#2e1f14"].map((bg, i) =>
       ".diggrid .dc.d" + (i + 1) + ",.diglegend .dc.d" + (i + 1) +
       "{background-color:" + bg + ";background-image:url('" + iconSrc("발굴 - 흙 " + (i + 1)) + "');}").join("") +
+    /* 현장마다 흙 색조 — DIG_SITES 의 soil. 같은 그림 위에 빛깔 한 겹을 섞습니다 (2026-11-05) */
+    DIG_SITES.filter(s => s.soil).map(s => [1, 2, 3, 4].map(n =>
+      ".soil-" + s.key + " .dc.d" + n + "{background-image:linear-gradient(" + s.soil.tint + "," + s.soil.tint + "),url('" +
+        iconSrc("발굴 - 흙 " + n) + "');background-blend-mode:" + s.soil.mode + ",normal;}").join("")).join("") +
     ".diggrid .dc.bone,.diglegend .dc.bone{background-color:#f2e6c8;background-image:url('" + iconSrc("발굴 - 화석") + "');}" +
     ".diggrid .dc.crack,.diglegend .dc.crack{background-color:#c9a89a;background-image:url('" + iconSrc("발굴 - 깨진 화석") + "');}" +
     ".diggrid .dc.d0{background:#cdbb98;cursor:default;}" +
@@ -17609,7 +17705,7 @@ function digSiteHTML() {
          digToolHTML("probe",  b.mode, "발굴 - 탐침", "탐침", DIG_RULE.probe,
            ['파지 않고', '둘레 3×3 셈']) +
        '</span></div>';
-  h += digLegendHTML();
+  h += digLegendHTML(b.site);
   h += '<div class="modalfoot keep"><button id="digend">여기서 마치기</button></div>';
   return h;
 }
@@ -17660,7 +17756,7 @@ function digToolHTML(mode, now, ic, name, cost, desc) {
            '<em>' + 토막.map(t => '<span>' + t + '</span>').join('<i>·</i>') + '</em></button>';
 }
 function digGridHTML(b, all) {
-  let h = '<div class="diggrid">';
+  let h = '<div class="diggrid soil-' + b.site + '">';
   b.cells.forEach((c, i) => {
     let cls = "dc", txt = "", st = "";
     if (c.d > 0) {
@@ -17722,9 +17818,9 @@ function digAimHTML(b) {
  * DIG_LEGEND_OPEN 이 들고 있습니다 — 판은 손댈 때마다 다시 그려져서, <details> 가
  * 제 상태를 스스로 지키지 못합니다. */
 let DIG_LEGEND_OPEN = false;
-function digLegendHTML() {
+function digLegendHTML(site) {
   const k = (cls, mark, text) => '<span class="lg"><i class="dc ' + cls + '">' + mark + '</i>' + text + '</span>';
-  return '<details class="diglegend" data-tut="dig-legend"' + (DIG_LEGEND_OPEN ? ' open' : '') + '>' +
+  return '<details class="diglegend soil-' + (site || '') + '" data-tut="dig-legend"' + (DIG_LEGEND_OPEN ? ' open' : '') + '>' +
     '<summary>' + DIG_SLAB + '을 읽는 법</summary><div class="body">' +
     '<p class="note">손질할 때마다 피로감이 쌓이고, 가득 차면 그 ' + DIG_SLAB + '은 거기서 끝납니다.<br>' +
       '화석을 깨지 않고 흙을 다 걷어내면 표본이 됩니다. 흙이 짙을수록 깊고, ' +

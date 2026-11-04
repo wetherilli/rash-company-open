@@ -948,8 +948,32 @@
   .rwgnum{display:inline-block;width:52px;text-align:right;vertical-align:middle;font-variant-numeric:tabular-nums;}
   /* 업적 창 맨 위 달성도 — 같은 게이지를 조금 굵게 */
   .achgauge{margin:4px 0 12px;color:var(--text-2);font-size:13px;}
-  .achgauge .rwgauge{height:10px;width:calc(100% - 64px);}
-  .achgauge .rwgnum{width:60px;}
+  .achgauge .rwgauge{height:10px;width:calc(100% - 94px);}
+  .achgauge .rwgnum{width:90px;white-space:nowrap;}   /* 「달성도 100%」 가 한 줄에 들어가게 */
+  /* 업적 분류 탭 — 진행도 줄 바로 아래 (engine.js ACH_CATS · 2026-11-05). 좁은 화면에서는 두 줄로 접힙니다 */
+  .achtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;}
+  .achtabs button{padding:5px 10px;font-size:12.5px;}
+  .achtabs button .n{margin-left:5px;color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums;}
+  .achtabs button.on{border-color:var(--gold);color:var(--gold);}
+  .achtabs button.on .n{color:var(--gold);}
+  /* 클리어 · 미해결 — 분류가 아니라 달성 여부로 거르는 손잡이. 클리어는 초록, 미해결은 붉게, 분류 탭과 한 칸 띄웁니다 */
+  .achtabs .st.done{margin-left:8px;color:#7fa86a;border-color:#4f6a42;}
+  .achtabs .st.open{color:#c9776a;border-color:#6e3f37;}
+  .achtabs .st .n{color:inherit;opacity:.75;}
+  .achtabs .st.done.on{background:rgba(127,168,106,.14);border-color:#7fa86a;color:#9cc487;}
+  .achtabs .st.open.on{background:rgba(201,119,106,.14);border-color:#c9776a;color:#e09384;}
+  .achtabs .st.on .n{opacity:1;}
+  :root[data-tone="light"] .achtabs .st.done{color:#3f7a2c;border-color:#8fb37e;}
+  :root[data-tone="light"] .achtabs .st.open{color:#a3433a;border-color:#d39a92;}
+  :root[data-tone="light"] .achtabs .st.done.on{color:#2f6320;border-color:#3f7a2c;}
+  :root[data-tone="light"] .achtabs .st.open.on{color:#8a3027;border-color:#a3433a;}
+  /* 좁은 화면에서는 네 칸씩 두 줄을 꽉 채웁니다 (사용자 지침 2026-11-05) — 줄바꿈에 맡기면 줄 끝이 들쭉날쭉했습니다 */
+  @media (max-width:640px){
+    .achtabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;}
+    .achtabs button{padding:5px 2px;font-size:12px;white-space:nowrap;}
+    .achtabs button .n{margin-left:3px;font-size:11px;}
+    .achtabs .st.done{margin-left:0;}
+  }
   .rwpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
   .rwpick button{display:flex;align-items:center;gap:5px;}
   .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
@@ -1623,24 +1647,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.26.0"></script>
-<script src="data/vault.js?v=2.26.0"></script>
-<script src="data/characters.js?v=2.26.0"></script>
-<script src="data/skills.js?v=2.26.0"></script>
-<script src="data/allies.js?v=2.26.0"></script>
-<script src="data/gifts.js?v=2.26.0"></script>
-<script src="data/pickup.js?v=2.26.0"></script>
-<script src="data/achievements.js?v=2.26.0"></script>
-<script src="data/mail.js?v=2.26.0"></script>
-<script src="data/notice.js?v=2.26.0"></script>
-<script src="data/patch.js?v=2.26.0"></script>
-<script src="data/event.js?v=2.26.0"></script>
-<script src="data/reward.js?v=2.26.0"></script>
-<script src="data/tutorial.js?v=2.26.0"></script>
-<script src="data/foes.js?v=2.26.0"></script>
-<script src="data/story.js?v=2.26.0"></script>
-<script src="data/mirrorpacks.js?v=2.26.0"></script>
-<script src="engine.js?v=2.26.0"></script>
+<script src="data/access.js?v=2.26.2"></script>
+<script src="data/vault.js?v=2.26.2"></script>
+<script src="data/characters.js?v=2.26.2"></script>
+<script src="data/skills.js?v=2.26.2"></script>
+<script src="data/allies.js?v=2.26.2"></script>
+<script src="data/gifts.js?v=2.26.2"></script>
+<script src="data/pickup.js?v=2.26.2"></script>
+<script src="data/achievements.js?v=2.26.2"></script>
+<script src="data/mail.js?v=2.26.2"></script>
+<script src="data/notice.js?v=2.26.2"></script>
+<script src="data/patch.js?v=2.26.2"></script>
+<script src="data/event.js?v=2.26.2"></script>
+<script src="data/reward.js?v=2.26.2"></script>
+<script src="data/tutorial.js?v=2.26.2"></script>
+<script src="data/foes.js?v=2.26.2"></script>
+<script src="data/story.js?v=2.26.2"></script>
+<script src="data/mirrorpacks.js?v=2.26.2"></script>
+<script src="engine.js?v=2.26.2"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
