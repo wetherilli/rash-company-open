@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.26.2";
+const VERSION = "2.26.3";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -17085,7 +17085,10 @@ function digAct(i) {
   } else if (b.mode === "brush") {
     if (b.cells[i].d <= 0 || b.sta < DIG_RULE.brush) return false;
     b.sta -= DIG_RULE.brush;
-    digHit(b, i, t.brushDepth || 1);          /* 무른 오일셰일이면 두 겹 */
+    /* 무른 오일셰일이면 두 겹 — 다만 남은 겹보다 깊이 들추지는 않습니다. 붓은 «안 깨지는» 도구라서,
+     * 한 겹 남은 화석 칸을 두 겹으로 쓸면 0 아래로 내려가 깨지던 것을 막습니다
+     * (사용자 지침 2026-11-05 — «메셀에서 붓으로 해도 깨져버린다»). */
+    digHit(b, i, Math.min(t.brushDepth || 1, b.cells[i].d));
   } else {
     if (b.sta < DIG_RULE.hammer) return false;
     b.sta -= DIG_RULE.hammer;
