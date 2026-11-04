@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.25.1";
-const VERSION_NAME = "어비스 거울 던전";
+const VERSION = "2.26.0";
+const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -337,6 +337,9 @@ function vaultBody() {
      * vaultSig() 에는 넣지 않고, 보관함을 비워도 남깁니다. 비어 있으면 기본값(마지막으로
      * 마친 장)을 씁니다 — 그 값은 S.cleared 에서 알아내므로 여기 적을 것이 없습니다. */
     glassBg:  S.glassBg || null,
+    /* 화석 탐사 — { brush, shards, own, paid, board, team }. vaultSig() 에는 넣지 않습니다 —
+     * 출석처럼 진행 기록이라서요. 합칠 때는 vaultMergeOnce 가 한 번만 받는 것을 묶습니다. */
+    dig:      S.dig || null,
     ver:      VERSION
   };
 }
@@ -391,6 +394,7 @@ function loadVault() {
     font:     v.font || null,
     sfxVol:   v.sfxVol != null ? v.sfxVol : null,
     glassBg:  v.glassBg || null,
+    dig:      v.dig || null,          // 화석 탐사 — newState 의 digClean 이 거릅니다
     ver:      v.ver || null
   };
 }
@@ -738,6 +742,26 @@ function vaultMergeOnce(seed) {
   seed.newbie    = Math.max(Number(seed.newbie) || 0, Number(now.newbie) || 0);
   /* 출석 · 주간 보상도 받은 칸이 되살아나지 않게 */
   seed.reward    = rewardMerge(seed.reward, now.reward);
+  /* 화석 탐사 (2026-11-03) — dig 를 안 보면 한 번만 받는 것이 되살아납니다.
+   *  `paid`(생물군 세트 완성 보상: 그 지층의 화석 기프트)가 비면 다음 digPayCheck 가
+   *  **그걸 한 번 더 줍니다.** 그래서 —
+   *    own · paid      한 번만 받는 표 → 합집합. 어느 쪽에서 받았든 받은 것입니다.
+   *    brush · shards  쌓이는 수 → 큰 쪽. 둘을 더하면 파일을 되들여와 불릴 수 있습니다.
+   *    brush 가 양쪽 다 null 이면 null 로 둡니다 — null 은 «첫 지질망치를 아직 안 쥐여
+   *    줬다» 는 표라, 0 으로 바꾸면 digSync 가 영영 안 줍니다.
+   *    board · team    파다 만 판과 세운 발굴팀 → 이 기기 것(now)을 남깁니다. 지금 눈앞에서
+   *                    파던 쪽을 지우는 편이 더 나쁩니다. */
+  const da = digClean(seed.dig), db = digClean(now.dig);
+  const 합집합 = (x, y) => Object.assign({}, x || {}, y || {});
+  seed.dig = {
+    brush:  (da.brush == null && db.brush == null) ? null
+                                                   : Math.max(da.brush || 0, db.brush || 0),
+    shards: Math.max(da.shards || 0, db.shards || 0),
+    own:    합집합(da.own,  db.own),
+    paid:   합집합(da.paid, db.paid),
+    team:   now.dig ? db.team : da.team,
+    board:  db.board || da.board
+  };
   return seed;
 }
 
@@ -1372,7 +1396,8 @@ function newState() {
     /* 유리창 배경 — 여기서는 거르지 않습니다. 쓸 수 있는 묶음인지는 볼 때마다
      * glassBgKey() 가 보고, 못 쓰면 기본값으로 물러납니다(고른 값은 지우지 않습니다). */
     glassBg: (v && v.glassBg) || null,
-    partyStack: [],          // 강제 편성 — forcePartyPush/Pop 이 씁니다
+    dig: digClean(v && v.dig),   // 화석 탐사 — 못 알아보는 값은 거르고 빈 칸은 채웁니다
+    partyStack: [],         // 강제 편성 — forcePartyPush/Pop 이 씁니다
     partyBan: [],            // 지금은 편성할 수 없는 사람 — banParty/unbanParty 가 씁니다
     battleForced: false,
     /* 「이번 갈래」 — 광신(처치 수)·보복(아군 사망 수, 작성위원별) 이 쌓이는 자리.
@@ -3471,7 +3496,11 @@ function partyIconName(w) {
 /* 글자 앞에 작은 아이콘 — 이름이 null 이면 아무것도 붙이지 않습니다 */
 function iconMiniOr(name) { return name ? iconMini(name) : ""; }
 /* 기프트 한 장의 아이콘 — 강화 사본(giftView)을 넘겨도 이름은 같습니다 */
-function giftIconHTML(g, dim) { return iconHTML(g.name, { star: g.star, dim: !!dim }); }
+function giftIconHTML(g, dim) {
+  const h = iconHTML(g.name, { star: g.star, dim: !!dim });
+  /* 화석 기프트는 아이콘 칸에 호박색 딱지(sf) — 그 칸을 품은 카드도 CSS(:has)가 따라 칠합니다 */
+  return (g && g.fossil) ? h.replace('<span class="ic', '<span class="ic sf') : h;
+}
 function rnd(n) { return Math.floor(Math.random() * n); }
 
 /* ── 지원 작성위원 ────────────────────────────────────────────
@@ -8056,6 +8085,15 @@ function chapterEnd() {
   /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
    * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
   gainEvent(eventStoryGain(c, first));
+  /* 화석 탐사 — 장을 «처음» 마칠 때 지질망치. 탐사가 이 장으로 처음 열리면
+   * digSync 가 이미 마친 장의 초회 몫까지 몰아서 줍니다. */
+  if (first && digOpen()) {
+    const fresh = digState().brush == null;
+    const before = fresh ? 0 : digState().brush;
+    const d = digSync();
+    if (!fresh) d.brush += DIG_RULE.brushStory;
+    say(DIG_BRUSH + " " + (d.brush - before) + " 획득.  (보유 " + d.brush + ")", "gain");
+  }
   saveVault();
   save();
   Cloud.push().catch(() => {});   // 장을 마쳤으니 구름에도 — 못 올리면 다음 기회에
@@ -9288,7 +9326,9 @@ function openNote(back, focus) {
 
 /* ── 상점 ─────────────────────────────────────────────────────
  *  인격 배정(뽑기)과 황금교본 교환이 이곳에 모여 있습니다.
- *  파는 물건을 늘리려면 SHOP_TRADES 에 줄을 더하세요.
+ *  파는 물건을 늘리려면 SHOP_TRADES 에 줄을 더하세요. 아직 열리지 않은 갈래의 줄은
+ *  show() 를 적어 두면 그 갈래가 열리기 전에는 서지 않습니다 — can() 을 false 로 두는
+ *  것과 다릅니다. 그쪽은 «못 누르는 줄» 로 서서 아직 없는 것을 알려 버립니다.
  */
 /* 「인격 배정소」 칸 머리에 얹을 그림 — 특정 배정 칸과 크기를 맞추기 위한 것입니다.
  * 판마다 갈아 끼우고 싶으면 여기만 고치면 됩니다. */
@@ -9547,6 +9587,8 @@ function openShop(back) {
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">교환</div>' +
          '<div class="grid">';
     SHOP_TRADES.forEach(t => {
+      /* 아직 열리지 않은 갈래의 줄은 아예 서지 않습니다 (show 를 안 적은 줄은 늘 섭니다) */
+      if (t.show && !t.show()) return;
       const ok = t.can();
       /* 아이콘은 «받는 것» — SHOP_TRADES 의 icon. 안 적은 줄은 아이콘 없이 섭니다 */
       h += '<div class="slot' + (t.icon ? ' hasic' : '') + '"' + (ok ? ' data-trade="' + t.id + '"' : '') + '>' +
@@ -13356,6 +13398,13 @@ function mirrorClear() {
   }
   /* 이벤트 재화 — 갈래마다 다릅니다. 각 MIRROR_TIERS 줄의 event 를 봅니다. */
   gainEvent(몫(rule.event));
+  /* 화석 탐사 — 거울 완주마다 지질망치(다시 돌아도). 행운의 부적은 곱하지 않습니다. */
+  const digN = digMirrorBrush(rule);
+  if (digN > 0 && digOpen()) {
+    const d = digSync();
+    d.brush += digN;
+    say(DIG_BRUSH + " " + digN + " 획득.  (보유 " + d.brush + ")", "gain");
+  }
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
@@ -13929,6 +13978,11 @@ function rewardTake(what) {
   } else return { ok: false, msg: "알 수 없는 보상입니다." };
 
   const got = giveApply(g);
+  /* 화석 탐사 — 매일 출석에 지질망치 하나. [탐사] 가 열린 뒤의 출석부터 */
+  if (kind === "daily" && digOpen()) {
+    digSync().brush += DIG_RULE.brushDaily;
+    got.push(DIG_BRUSH + " " + DIG_RULE.brushDaily);
+  }
   saveVault();
   divider();
   say("보상을 받았다 — " + label, "gain");
@@ -14003,7 +14057,13 @@ function openReward(back, note) {
            '</div>';
   };
   h += '<div class="rwhead">매일 출석</div><div class="attgrid">' + ATTEND_DAYS.map(cell).join("") + '</div>';
-  if (!todayOpen) h += '<div class="hint" style="margin:6px 0 0">오늘 몫은 받았습니다. 내일 0시에 다음 칸이 열립니다.</div>';
+  /* 화석 탐사가 열렸으면 «출석마다 지질망치 하나» 를 같은 줄에 붙입니다 — 같은 자리에
+   * 흐린 줄이 둘 서면 읽는 눈이 두 번 멈춥니다 (사용자 지침 2026-11-04) */
+  const 망치 = digOpen() ? iconMini(DIG_BRUSH) + '매일 출석할 때마다 ' + DIG_BRUSH + ' ' +
+                           DIG_RULE.brushDaily + '개를 함께 받습니다.' : '';
+  if (!todayOpen) h += '<div class="hint" style="margin:6px 0 0">오늘 몫은 받았습니다. 내일 0시에 다음 칸이 열립니다.' +
+                       (망치 ? '　' + 망치 : '') + '</div>';
+  else if (망치) h += '<div class="hint" style="margin:6px 0 0">' + 망치 + '</div>';
 
   /* ── 이번 주 — 첫 상자 · 누적 출석 ── */
   const row = (key, title, sub, g, state) =>
@@ -16145,6 +16205,8 @@ function glass() {
     { label: "상점",   fn: () => openShop(() => glass()) },
     { label: "노트",   fn: () => openNote(() => glass()) },
     { label: "업적",   fn: () => openAchieve(() => glass()) },
+    /* [탐사] — 4장을 마치면 섭니다(화석 탐사 · DIG_RULE.unlock) */
+    digOpen() ? { label: DIG_DOOR, fn: () => openDig(() => glass()) } : null,
     /* [우편함] · [보상] 은 머리줄 오른쪽의 아이콘 손잡이로 옮겼습니다 (renderHeader · AT_GLASS) */
     /* [강화] 는 쪼개 옮겼습니다 — 동기화는 [편성] 맨 위, 기프트 강화 · 합성은 [보관함] 의 기프트 칸 아래 (사용자 지침 2026-10-16) */
     { label: "보관함", fn: () => openVault(() => glass()) },
@@ -16486,6 +16548,1429 @@ function boot() {
  *  바로 넣으십시오 — 여기는 «그 장 하나만을 위한» 자리입니다.
  */
 /* @wip anchor: EXT */
+/* ── 발굴 현장 · 표본실 ─────────────────────────────────────────
+ *  ■ 저장 — S.dig (보관함에 담깁니다. vaultSig 에는 넣지 않습니다 — 출석처럼 진행 기록이라서)
+ *    { brush: 지질망치(판 하나에 하나) | null(아직 첫 지질망치를 안 받음), shards: 화석 조각,
+ *      own: { 표본 이름: true }, paid: { 현장 key: true }(다섯 다 건 보상), board: 파는 중인 판 | null }
+ *  ■ 판 — { site, sta, max, mode, cells: [{ d: 남은 겹, f: 화석 번호 | -1, c: 깨짐, s: 조각 }],
+ *           fossils: [{ spec, cells: [칸 번호] }], done: 결과 줄 | null }
+ *    판은 «처음 펼칠 때» 굴려 바로 저장합니다 — 나갔다 들어와도 다시 굴려지지 않습니다. */
+const DIG_RULE = {
+  unlock:   "ch4",   // 이 장을 마치면 [발굴 현장] 이 섭니다 — F사 화석 나눔이 4장
+  /* 판은 «지질망치» 하나로 한 판(사용자 제안 2026-10-23 · 붓에서 이름을 바꿈 2026-10-24). 쌓아 둘 수 있습니다.
+   *  판 안의 «붓 · 망치 · 탐침» 은 피로감을 쌓는 손질일 뿐 따로 받는 물건이 아닙니다. */
+  w: 7, h: 6,        // 격자
+  sta:      20,      // 한 판에 견딜 수 있는 «피로감». 속은 «남은 여력»(b.sta)로 셈하고 화면에서 뒤집습니다
+  /* 발굴팀 두 자리 — 작성위원 인격 하나 · 보조 교육위원 하나 (사용자 지침 2026-11-04).
+   * 제목에 「발굴」 이 든 사람만 섭니다. 한 자리에 ★3 은 5, ★2 는 3 만큼 견디는
+   * 피로감을 올려, 둘을 다 ★3 으로 채우면 20 → 30 입니다. */
+  crew: { 2: 3, 3: 5 },
+  brush:    1,       // 붓 한 번
+  hammer:   2,       // 망치 한 번
+  /* 탐침(B1, 2026-11-03) — 파지 않고 둘레 3×3 에 화석 칸이 몇인지만 읽습니다.
+   * 화석이 드러나기 전까지는 순전히 찍기였던 것을 추리로 바꾸는 자리입니다. */
+  probe:    1,       // 탐침 한 번
+  shakeMs:  260,     // 망치질에 판이 들썩이는 시간(ms)
+  fossils:  2,       // 한 판의 화석 수
+  third:    0.35,    // 셋째 화석이 묻혀 있을 확률
+  starW:    [10, 5, 2],  // 표본 성급(★1 · ★2 · ★3)마다 뽑힘 무게
+  shardCells: 4,     // 흩어진 조각 칸 수
+  shardCell:  2,     // 조각 칸 하나에서 나오는 화석 조각
+  /* 아래 셋은 표본 성급(★1 · ★2 · ★3) 차례 */
+  broken:   [3, 6, 12],    // 깨진 표본이 남기는 조각
+  dup:      [5, 10, 25],   // 이미 건 표본이 남기는 조각
+  restore:  [25, 50, 120], // 복원 값
+  /* 상점 교환 줄 — 남아도는 조각의 출구 (사용자 지침 2026-11-04). 표본을 다 건 현장의
+   * 조각은 쓸 데가 없어 쌓이기만 합니다. ★3 복원이 120 조각이니 100 조각은 그보다
+   * 싸게 매겨 «복원이 먼저» 가 되도록 두었습니다. */
+  shardCodex: { shards: 100, codex: 1 },
+  /* 세트 완성 삯은 «그 지층의 화석 기프트» 하나뿐입니다 — 황금교본은 걷었습니다
+   * (사용자 지침 2026-11-04 «굳이 보상으로 황금교본을 줘야할까? 다 빼줘»).
+   * 발굴은 발굴로만 나오는 것을 주는 자리이지, 본편 재화를 더 주는 자리가 아닙니다. */
+  /* ── 지질망치가 들어오는 길 ──────────────────────────────────
+   *  출석만으로는 너무 느려서 스토리 · 거울을 더했고(2026-10-24), 한 판에 표본이
+   *  하나 남짓 나오는 것이 재어져서 **셋을 다 세 배로 올렸습니다**(사용자 지침
+   *  2026-11-03 — «망치 3배로 많이 줘야될 것 같은데»). 서른 장을 모으는 길이
+   *  너무 멀었습니다. 값은 전부 여기 한곳입니다. */
+  brushStart: 9,     // [발굴 현장] 이 처음 열릴 때 쥐여 주는 지질망치 (3 → 9)
+  brushStory: 9,     // 장을 «처음» 마칠 때마다 (3 → 9). 현장이 열리기 전에 마친 장도 처음 열 때 몰아서
+  brushMirror: { mirror: 6, mirrorHard: 9, mirrorExtreme: 12, mirrorDeep: 18 },  // 거울 완주마다 (2·3·4·6 → 세 배)
+  brushRail:  9,     // 거울굴절철도 — 호선 가리지 않고 (3 → 9)
+  brushDaily: 3,     // 매일 출석 (1 → 3). 숫자가 코드에 박혀 있던 것을 여기로 뺐습니다
+};
+
+/* 현장 여섯 — 얕은 곳(젊은 지층)부터. 표본마다 그 이름의 아이콘(assets/icon/<이름>.png).
+ * open — 이 장을 마치면 열립니다(4장에 셋, 5 · 6 · 7장에 하나씩 — 사용자 지침 2026-10-23).
+ * star — 표본 희귀도 ★1~★3. 현장마다 ★3 하나 · ★2 둘 · ★1 둘.
+ * gift — 표본을 다 걸면 받는 그 지층의 ★3 기프트(data/gifts.js · GIFTS, fossil — 발굴로만).
+ * en   — 학술 문헌에 서는 영문 이름. 화면에서는 한글 이름 옆에 작게 병기합니다
+ *        (사용자 지침 2026-11-04 — 라거슈타트 이름은 영문으로 찾아보는 것이라서).
+ * at   — [위도, 경도]. 지도에 점을 찍는 자리입니다(digMapXY). */
+const DIG_SITES = [
+  { key: "messel", gift: "다르위니우스", open: "ch4", en: "Messel Pit", at: [49.92, 8.75], name: "메셀 피트", where: "독일 · 에오세 약 4,700만 년 전",
+    /* 무른 오일셰일 — 붓이 두 겹씩 들춥니다. 대신 화석 칸을 꼭 0 으로 내려도 금이 갑니다(B2). */
+    trait: { name: "무른 오일셰일", note: "붓이 두 겹씩 들춘다. 대신 망치가 화석을 스치기만 해도 금이 간다.",
+             brushDepth: 2, hammerCrackOn0: true },
+    note: "숨 막히는 호수 바닥에 가라앉은 것들이 털 한 올, 위장 속 마지막 끼니까지 남았다.",
+    specs: [
+      { name: "다르위니우스", star: 3, note: "«이다». 거의 온전히 남은 초기 영장류." },
+      { name: "프로팔라이오테리움", star: 2, note: "개만 한 초기 말. 배 속에 포도 잎이 남았다." },
+      { name: "에우로타만두아", star: 1, note: "개미핥기를 닮은 주둥이." },
+      { name: "메셀오르니스", star: 1, note: "땅을 걷던 메셀의 새." },
+      { name: "메셀 비단벌레", star: 2, note: "4,700만 년이 지나도 금속빛 구조색이 그대로." }
+    ] },
+  { key: "jehol", gift: "시노사우롭테릭스", open: "ch4", en: "Jehol Biota", at: [41.60, 120.78], name: "열하 생물군", where: "중국 랴오닝 · 백악기 전기 약 1억 2,500만 년 전",
+    /* 화산재 한 겹 — 판 전체가 한 겹씩 얕습니다. 첫 손질이 빠릅니다(B2). */
+    trait: { name: "화산재 한 겹", note: "맨 위 한 겹이 재라 얇다. 어디를 파도 한 겹 먼저 들춰져 있다.",
+             topThin: true },
+    note: "화산재가 한꺼번에 덮었다. 깃털의 색까지 읽힌다.",
+    specs: [
+      { name: "시노사우롭테릭스", star: 3, note: "처음 확인된 깃털 공룡. 꼬리의 줄무늬 색까지." },
+      { name: "미크로랍토르", star: 2, note: "네 날개로 미끄러지던 작은 공룡." },
+      { name: "공자새", star: 1, note: "이빨 없는 부리를 가진 초기 새." },
+      { name: "프시타코사우루스", star: 1, note: "앵무새 부리의 작은 각룡." },
+      { name: "레페노마무스", star: 2, note: "새끼 공룡을 삼킨 채 남은 포유류." }
+    ] },
+  { key: "solnhofen", gift: "시조새", open: "ch4", en: "Solnhofen", at: [48.90, 11.00], name: "졸른호펜", where: "독일 바이에른 · 쥐라기 후기 약 1억 5,000만 년 전",
+    /* 석판 — 망치가 십자 대신 가로로 들춥니다. 켜가 결대로 갈라집니다(B2). */
+    trait: { name: "석판", note: "켜가 결대로 갈라진다. 망치가 십자가 아니라 가로로 들춘다.",
+             hammerRow: true },
+    note: "짠 석호 바닥의 고운 석회암. 인쇄용 석판으로 캐다가 시조새가 나왔다.",
+    specs: [
+      { name: "시조새", star: 3, note: "공룡과 새 사이 — 깃털이 석판에 찍혀 있다." },
+      { name: "콤프소그나투스", star: 2, note: "닭만 한 육식 공룡." },
+      { name: "람포링쿠스", star: 2, note: "꼬리 끝에 마름모 돛을 단 익룡." },
+      { name: "메소리물루스", star: 1, note: "마지막 발자국 끝에 쓰러진 투구게." },
+      { name: "아이게르", star: 1, note: "긴 더듬이의 새우." }
+    ] },
+  { key: "burgess", gift: "오파비니아", open: "ch5", en: "Burgess Shale", at: [51.43, -116.47], name: "버제스 셰일", where: "캐나다 브리티시컬럼비아 · 캄브리아기 중기 약 5억 800만 년 전",
+    /* 납작하게 눌린 화석 — 망치 둘레 한 겹에도 금이 갑니다(B2). */
+    trait: { name: "납작하게 눌린 화석", note: "눌려 얇다. 망치가 둘레를 스치기만 해도 금이 간다.",
+             edgeCrack: true },
+    note: "진흙 사태가 바다 밑 동물을 통째로 묻었다. 기묘한 것들의 대명사.",
+    specs: [
+      { name: "오파비니아", star: 3, note: "눈 다섯, 코끼리 코 같은 집게." },
+      { name: "할루키게니아", star: 2, note: "한때 위아래를 거꾸로 복원했던 가시 벌레." },
+      { name: "아노말로카리스", star: 2, note: "캄브리아 바다의 큰 포식자." },
+      { name: "마렐라", star: 1, note: "버제스에서 가장 흔한 «레이스 게»." },
+      { name: "위왁시아", star: 1, note: "비늘과 가시로 덮인 연체동물." }
+    ] },
+  { key: "chengjiang", gift: "하이코우이크티스", open: "ch6", en: "Chengjiang Biota", at: [24.67, 102.98], name: "청장 생물군", where: "중국 윈난 · 캄브리아기 전기 약 5억 1,800만 년 전",
+    /* 풍화된 노란 셰일 — 판이 얕은 대신 화석이 하나 덜 묻혀 있습니다(B2). */
+    trait: { name: "풍화된 노란 셰일", note: "오래 풍화되어 얕다. 대신 남은 것도 그만큼 적다.",
+             shallow: true, fossilDelta: -1 },
+    note: "버제스보다 천만 년 앞선 바다. 척추동물의 첫 줄이 여기 있다.",
+    specs: [
+      { name: "하이코우이크티스", star: 3, note: "가장 오래된 물고기 무리 가운데 하나." },
+      { name: "밀로쿤밍기아", star: 2, note: "턱 없는 작은 물고기." },
+      { name: "푸시안후이아", star: 2, note: "뇌의 흔적까지 남은 절지동물." },
+      { name: "나라오이아", star: 1, note: "껍데기가 무른 삼엽충 친척." },
+      { name: "베툴리콜라", star: 1, note: "몸이 두 토막인 수수께끼 동물." }
+    ] },
+  { key: "sirius", gift: "티모레베스티아", open: "ch7", en: "Sirius Passet", at: [82.80, -42.00], name: "시리우스 파셋", where: "그린란드 북부 · 캄브리아기 전기 약 5억 1,800만 년 전",
+    /* 언 땅 — 칸마다 첫 손질은 피로가 쌓이지 않습니다. 대신 화석이 하나 더(B2). */
+    trait: { name: "언 땅", note: "얼어붙어 손이 많이 간다 — 대신 칸마다 첫 손질은 피로가 쌓이지 않는다. 아무도 건드리지 않아 더 남았다.",
+             firstFree: true, fossilDelta: 1 },
+    note: "얼음 너머 가장 먼 현장. 갓 생겨난 포식자들이 이 진흙에 남았다.",
+    specs: [
+      { name: "티모레베스티아", star: 3, note: "«공포의 짐승». 30cm 가까운 화살벌레 무리의 포식자." },
+      { name: "할키에리아", star: 1, note: "앞뒤에 조가비를 단 비늘 갑옷." },
+      { name: "케리그마켈라", star: 2, note: "지느러미와 다리를 함께 가진 절지동물의 조상뻘." },
+      { name: "팜브델루리온", star: 2, note: "커다란 앞다리로 먹이를 붙들던 포식자." },
+      { name: "타미시오카리스", star: 1, note: "앞다리를 체처럼 써 걸러 먹은 아노말로카리스 친척." }
+    ] }
+];
+const DIG_SHARD = "화석 조각";
+
+function digSiteBy(key) { return DIG_SITES.find(s => s.key === key) || null; }
+/* 현장 이름 — 한글 옆에 영문을 작게 병기합니다(사용자 지침 2026-11-04).
+ * 라거슈타트는 영문 이름으로 찾아보는 것이라, 한글만으로는 어디인지 짚기 어렵습니다.
+ * 잠긴 현장은 이름 자체를 감추므로 영문도 안 답니다. */
+function digSiteName(s, show) {
+  if (show === false) return '？？？';
+  return s.name + (s.en ? ' <span class="en">' + s.en + '</span>' : '');
+}
+/* 지도에 점을 찍을 자리 — 정거 원통 도법(assets/scene/세계지도.png 와 짝).
+ * 도법을 바꾸면 그림과 점이 따로 놉니다 — tools/세계지도-굽기.js 머리말 참고. */
+function digMapXY(site) {
+  const at = site && site.at;
+  if (!at) return null;
+  return { x: (at[1] + 180) / 360 * 100, y: (90 - at[0]) / 180 * 100 };
+}
+/* 그 판이 선 현장의 «지층 성격»(B2). 성격을 안 적은 현장은 빈 덩이 — 아무것도 안 바뀝니다. */
+function digTrait(b) {
+  const s = b && digSiteBy(b.site);
+  return (s && s.trait) || {};
+}
+function digSpecBy(name) {
+  for (const s of DIG_SITES) { const p = s.specs.find(x => x.name === name); if (p) return { site: s, spec: p }; }
+  return null;
+}
+function digOpen() { return !!(S && S.cleared && S.cleared[DIG_RULE.unlock]); }
+function digStarIdx(p) { return Math.max(1, Math.min(3, p.star || 1)) - 1; }
+
+/* 보관함에서 읽은 것을 다듬습니다 — 못 알아보는 표본 이름도 지우지 않습니다(vaultBody 와 같은 결) */
+function digClean(d) {
+  d = (d && typeof d === "object") ? d : {};
+  return {
+    brush:  typeof d.brush === "number" ? d.brush : null,
+    shards: typeof d.shards === "number" ? d.shards : 0,
+    own:    (d.own && typeof d.own === "object") ? d.own : {},
+    paid:   (d.paid && typeof d.paid === "object") ? d.paid : {},
+    team:   (d.team && typeof d.team === "object")
+              ? { sinner: d.team.sinner || null, advisor: d.team.advisor || null }
+              : { sinner: null, advisor: null },
+    board:  (d.board && Array.isArray(d.board.cells)) ? d.board : null
+  };
+}
+function digState() { if (!S.dig) S.dig = digClean(null); return S.dig; }
+
+/* 처음 열었으면 첫 지질망치를 쥐여 줍니다 — 이미 마친 장의 초회 몫까지 함께 */
+function digSync() {
+  const d = digState();
+  if (d.brush == null)
+    d.brush = DIG_RULE.brushStart + DIG_RULE.brushStory * CHAPTERS.filter(c => S.cleared && S.cleared[c.id]).length;
+  return d;
+}
+function digMirrorBrush(rule) {
+  if (!rule) return 0;
+  if (rule.group === "rail") return DIG_RULE.brushRail;
+  return DIG_RULE.brushMirror[rule.key] || 0;
+}
+const DIG_BRUSH_WAYS = "장을 처음 마칠 때 · 거울 던전과 거울굴절철도를 완주할 때 · 매일 출석할 때 받습니다.";
+/* 현장에서 떼어 내어 다루는 돌 한 장을 «슬랩» 이라 부릅니다 (사용자 지침 2026-11-04 —
+ * 실제 현장에서 쓰는 말입니다). 화면에 뜨는 말은 이 이름으로 맞춥니다. 코드 안에서는
+ * 그대로 board · 판 이라고 적습니다 — 자료 구조 이름까지 갈아 끼울 일은 아닙니다. */
+const DIG_SLAB = "슬랩";
+/* 유리창 손잡이와 창 제목 (사용자 지침 2026-11-04) — 손잡이는 짧게 「탐사」, 창 안은
+ * 「화석 탐사」. 손잡이 줄에는 [편성] · [상점] · [노트] 처럼 두 글자짜리가 늘어서 있어
+ * 「발굴 현장」 넉 자는 그 줄에서 혼자 길었습니다. */
+const DIG_DOOR  = "탐사";
+const DIG_BRUSH = "지질망치";
+
+function digSpecStar(name) { const h = digSpecBy(name); return h ? (h.spec.star || 1) : 0; }
+function digOwnCount(site) { const d = digState(); return site.specs.filter(p => d.own[p.name]).length; }
+function digSiteOpen(i) { const s = DIG_SITES[i]; return !!(s && S.cleared && S.cleared[s.open]); }
+function digOpenText(s) { const c = CHAPTERS.find(x => x.id === s.open); return (c ? c.no : s.open) + "을 마치면 열립니다"; }
+/* ── 발굴팀 두 자리 (사용자 지침 2026-11-04) ─────────────────────────
+ *  S.dig.team = { sinner: 인격 열쇠 | null, advisor: 교육위원 아이디 | null }
+ *  제목에 「발굴」 이 든 것만, 그리고 지닌 것만 섭니다 — 안 지닌 것이 남아 있으면
+ *  (파편을 쓰거나 보관함을 옮겨 왔을 때) 그 자리는 저절로 빕니다.  */
+function digTeam() {
+  const d = digState();
+  if (!d.team || typeof d.team !== "object") d.team = { sinner: null, advisor: null };
+  return d.team;
+}
+function digTeamBonus(star) { return DIG_RULE.crew[star >= 3 ? 3 : 2] || 0; }
+
+/* 누가 발굴팀에 설 수 있는가 — 제목에 「발굴」 이 들면 저절로 섭니다.
+ * 그 밖에 손으로 적어 두는 사람도 있습니다: 이형우 「대륵도의 환자」 는 제목에 발굴이
+ * 없지만 대륵도 발굴 현장에 함께 있던 사람이라 넣었습니다(사용자 지침 2026-11-04).
+ * **제목을 고쳐 「발굴」 을 넣는 길은 쓰지 않았습니다** — 그러면 data/characters.js 의
+ * 「발굴팀」 시너지(tag: 발굴팀원 · 발굴캠프) 머릿수까지 함께 바뀝니다. */
+const DIG_TEAM_EXTRA = ["대륵도의 환자"];
+function digTeamOk(title) {
+  return /발굴/.test(title || "") || DIG_TEAM_EXTRA.indexOf(title) >= 0;
+}
+
+/* 설 수 있는 작성위원 인격 — 제목에 「발굴」, 그리고 지닌 것 */
+function digTeamSinners() {
+  const out = [];
+  for (const who in SINNERS)
+    (SINNERS[who].ids || []).forEach(id => {
+      if (!digTeamOk(id.title)) return;
+      const key = idKey(who, id);
+      if (S.owned && S.owned[key])
+        out.push({ key: key, star: id.star, name: SINNERS[who].name,
+                   sub: id.title, icon: "작성위원 - " + SINNERS[who].name });
+    });
+  return out;
+}
+/* 설 수 있는 보조 교육위원 */
+function digTeamAdvisors() {
+  return advisorList().filter(a => digTeamOk(a.title) &&
+                                   S.advisorsOwned && S.advisorsOwned[advisorId(a)])
+    .map(a => ({ key: advisorId(a), star: a.star, name: a.name,
+                 sub: a.title, icon: advisorIconName(a) }));
+}
+function digTeamPool(kind) { return kind === "sinner" ? digTeamSinners() : digTeamAdvisors(); }
+/* 그 자리에 선 사람 — 이제 못 세우는 것이면 null (자리는 저절로 빕니다) */
+function digTeamPick(kind) {
+  const key = digTeam()[kind];
+  return key ? (digTeamPool(kind).find(x => x.key === key) || null) : null;
+}
+
+function digMaxSta() {
+  const a = digTeamPick("sinner"), b = digTeamPick("advisor");
+  return DIG_RULE.sta + (a ? digTeamBonus(a.star) : 0) + (b ? digTeamBonus(b.star) : 0);
+}
+/* 파는 도중에 편성을 바꾸면 **견디는 양만** 움직입니다 — 이미 쌓인 피로는 그대로입니다.
+ * (그러지 않으면 사람을 뺐다 꽂는 것으로 피로를 지울 수 있습니다.) */
+function digSyncBoardMax(b) {
+  if (!b || b.done) return;
+  const 쌓인 = b.max - b.sta, max = digMaxSta();
+  if (max === b.max) return;
+  b.max = max;
+  b.sta = Math.max(0, max - 쌓인);
+}
+
+
+/* ── 판 굴리기 ── */
+/* 성급이 높을수록 큰 화석 — ★1 두 칸 · ★2 세 칸 · ★3 네 칸(2×2). 깨뜨리기도 그만큼 쉽습니다. */
+const DIG_SHAPES = [
+  [[[0, 0], [1, 0]], [[0, 0], [0, 1]]],
+  [[[0, 0], [1, 0], [2, 0]], [[0, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [0, 1]], [[0, 0], [1, 0], [1, 1]]],
+  [[[0, 0], [1, 0], [0, 1], [1, 1]]]
+];
+function digPickSpec(site) {
+  const bag = [];
+  site.specs.forEach(p => { for (let i = 0; i < DIG_RULE.starW[digStarIdx(p)]; i++) bag.push(p); });
+  return bag[Math.floor(Math.random() * bag.length)];
+}
+function digNewBoard(site) {
+  const W = DIG_RULE.w, H = DIG_RULE.h, cells = [];
+  const t = (site && site.trait) || {};          /* 지층 성격 (B2) */
+  for (let i = 0; i < W * H; i++) {
+    const r = Math.random();
+    let d = r < 0.3 ? 1 : r < 0.75 ? 2 : 3;
+    if (t.topThin) d = Math.max(1, d - 1);       /* 화산재 한 겹 — 맨 위가 얇다 */
+    if (t.shallow) d = Math.min(2, d);           /* 풍화된 셰일 — 판이 얕다 */
+    cells.push({ d: d, f: -1, c: false, s: false });
+  }
+  const fossils = [];
+  const n = Math.max(1, DIG_RULE.fossils + (t.fossilDelta || 0) +
+                        (Math.random() < DIG_RULE.third ? 1 : 0));
+  for (let k = 0; k < n; k++) {
+    const spec = digPickSpec(site);
+    for (let tries = 0; tries < 60; tries++) {
+      const pool = DIG_SHAPES[digStarIdx(spec)], shape = pool[Math.floor(Math.random() * pool.length)];
+      const mx = Math.max.apply(null, shape.map(p => p[0])), my = Math.max.apply(null, shape.map(p => p[1]));
+      const x0 = Math.floor(Math.random() * (W - mx)), y0 = Math.floor(Math.random() * (H - my));
+      const idx = shape.map(p => (y0 + p[1]) * W + (x0 + p[0]));
+      if (idx.some(i => cells[i].f >= 0)) continue;
+      idx.forEach(i => { cells[i].f = fossils.length; cells[i].d = Math.max(2, cells[i].d) + (Math.random() < 0.5 ? 1 : 0); });
+      fossils.push({ spec: spec.name, cells: idx });
+      break;
+    }
+  }
+  let sh = 0;
+  for (let tries = 0; sh < DIG_RULE.shardCells && tries < 200; tries++) {
+    const i = Math.floor(Math.random() * cells.length);
+    if (cells[i].f >= 0 || cells[i].s) continue;
+    cells[i].s = true; sh++;
+  }
+  const max = digMaxSta();
+  return { site: site.key, sta: max, max: max, mode: "brush", cells: cells, fossils: fossils, done: null };
+}
+
+/* ── 여러 칸에 걸친 화석을 «한 덩이» 로 보이기 (사용자 지침 2026-11-04) ────
+ *  칸마다 같은 그림을 한 장씩 깔았더니, 두 칸짜리 화석이 작은 것 **둘** 로 보였습니다.
+ *  그림 한 장을 화석이 차지한 테두리 상자만큼 늘여 놓고, 칸마다 제 몫의 조각만
+ *  보입니다(background-size · background-position) — 옆 칸과 그림이 이어집니다.
+ *  칸 사이 틈(gap 3px)은 이어진 쪽으로 그림자를 뻗어 메웁니다.
+ *
+ *  ㄱ 자로 굽은 화석도 칸마다 제 조각을 쓰므로, 화석이 아닌 칸은 그냥 흙으로 남습니다 —
+ *  상자 하나를 통째로 얹었다면 그 칸에도 뼈가 그려졌을 것입니다. */
+function digFossilBox(b, f) {
+  const W = DIG_RULE.w, cs = b.fossils[f].cells;
+  const xs = cs.map(i => i % W), ys = cs.map(i => Math.floor(i / W));
+  return { x0: Math.min.apply(null, xs), y0: Math.min.apply(null, ys),
+           x1: Math.max.apply(null, xs), y1: Math.max.apply(null, ys) };
+}
+/* 상자의 꼴에 맞는 그림 — 한 칸이거나 네모면 삼엽충, 길쭉하면 긴 골격을 모로/가로로.
+ * 삼엽충을 3:1 로 늘이면 눌린 벌레가 되어서, 길쭉한 자리는 그림을 갈아 끼웁니다. */
+function digFossilArt(cols, rows) {
+  if (cols > rows) return "발굴 - 긴 화석 가로";
+  if (rows > cols) return "발굴 - 긴 화석 세로";
+  return "발굴 - 화석";
+}
+/* 드러난 화석 칸 하나가 쓸 inline 꼴 — 그림 조각과 틈 메우기 */
+function digBoneStyle(b, i) {
+  const W = DIG_RULE.w, H = DIG_RULE.h, c = b.cells[i];
+  const x = i % W, y = Math.floor(i / W);
+  const box = digFossilBox(b, c.f);
+  const cols = box.x1 - box.x0 + 1, rows = box.y1 - box.y0 + 1;
+  const out = ["background-image:url('" + iconSrc(digFossilArt(cols, rows)) + "')",
+               "background-size:" + cols * 100 + "% " + rows * 100 + "%",
+               "background-position:" + (cols > 1 ? (x - box.x0) / (cols - 1) * 100 : 0) + "% " +
+                                        (rows > 1 ? (y - box.y0) / (rows - 1) * 100 : 0) + "%"];
+  /* 같은 화석의 이웃 칸 — 둘 다 드러나 있고 깨지지 않았을 때만 잇습니다 */
+  const 이웃 = (nx, ny) => {
+    if (nx < 0 || ny < 0 || nx >= W || ny >= H) return false;
+    const o = b.cells[ny * W + nx];
+    return o.f === c.f && o.d <= 0 && !o.c;
+  };
+  const 틈 = [];
+  if (이웃(x + 1, y)) 틈.push("4px 0 0 0 #f2e6c8");
+  if (이웃(x - 1, y)) 틈.push("-4px 0 0 0 #f2e6c8");
+  if (이웃(x, y + 1)) 틈.push("0 4px 0 0 #f2e6c8");
+  if (이웃(x, y - 1)) 틈.push("0 -4px 0 0 #f2e6c8");
+  if (틈.length) out.push("box-shadow:" + 틈.join(","));
+  return out.join(";");
+}
+
+/* 한 화석이 «드러났는가»(칸이 하나라도 0겹) — 그러면 테두리가 보입니다 */
+function digFossilSeen(b, f) { return b.fossils[f].cells.some(i => b.cells[i].d <= 0); }
+function digFossilClear(b, f) { return b.fossils[f].cells.every(i => b.cells[i].d <= 0); }
+function digFossilBroken(b, f) { return b.fossils[f].cells.some(i => b.cells[i].c); }
+
+/* 한 칸을 n 겹 팝니다. 화석 칸을 0 아래로 치면 깨집니다(망치만 그럴 수 있습니다). */
+function digHit(b, i, n, 스쳐도금) {
+  const c = b.cells[i];
+  if (!c) return;
+  /* 평소에는 «0 아래로» 내리쳐야 금이 갑니다. 스쳐도금 이 서면 꼭 0 으로 내려도 금입니다
+   * — 무른 오일셰일의 망치 가운데(hammerCrackOn0), 눌린 화석의 망치 둘레(edgeCrack). */
+  if (c.f >= 0 && c.d > 0 && (스쳐도금 ? c.d - n <= 0 : c.d - n < 0)) c.c = true;
+  c.d = Math.max(0, c.d - n);
+}
+/* 둘레 3×3 에 묻힌 화석 칸이 몇인가 — 탐침이 읽는 수(B1). 누른 칸도 셉니다.
+ * 이미 다 드러난 화석 칸도 그대로 셉니다 — 눈에 보이는 것과 수가 어긋나면 더 헷갈립니다. */
+function digProbeCount(b, i) {
+  const W = DIG_RULE.w, H = DIG_RULE.h, x = i % W, y = Math.floor(i / W);
+  let n = 0;
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+      if (b.cells[ny * W + nx].f >= 0) n++;
+    }
+  return n;
+}
+/* ── 캐낸 순간 · 깨뜨린 순간 (사용자 지침 2026-11-04) ────────────────
+ *  파다가 화석이 온전히 드러나거나 금이 가는 그 순간을 번쩍임으로 보입니다 —
+ *  인격 배정 · 동기화와 같은 연출(flashFx)을 빌려 씁니다. 결과 상자는 슬랩을 다
+ *  마친 뒤의 «요약» 이고, 이쪽은 «그 한 번» 입니다. 둘 다 있어야 파는 맛이 납니다.
+ *
+ *  판(board)에 적지 않고 여기 따로 쌓아 둡니다 — board 는 보관함에 저장되는 것이라,
+ *  아직 안 보여 준 연출이 저장에 섞여 들어가면 창을 닫았다 열 때 다시 터집니다. */
+let DIG_FX = [];
+function digFossilStates(b) {
+  return b.fossils.map((f, k) => ({ clear: digFossilClear(b, k), broken: digFossilBroken(b, k) }));
+}
+/* 쌓인 것을 차례로 보입니다 — 하나를 누르고 넘겨야 다음이 뜹니다 */
+function digPlayFx(b) {
+  const list = DIG_FX;
+  DIG_FX = [];
+  if (!b || !list.length) return;
+  const one = i => {
+    if (i >= list.length) return;
+    const e = list[i], f = b.fossils[e.f];
+    if (!f) { one(i + 1); return; }
+    const hit = digSpecBy(f.spec), star = hit ? hit.spec.star : 1;
+    const next = () => one(i + 1);
+    /* 성급은 제 줄에, 이름은 그 아래로 — 「하이코우이크티스」 처럼 긴 이름이 48px 로
+     * 한 줄에 서면 좁은 화면에서 넘칩니다(digfx 가 글씨를 줄입니다). */
+    if (e.t === "found")
+      flashFx('<span class="st">' + stars(star) + '</span><span class="nm">' + f.spec + '</span>',
+              (hit && hit.spec.note) || null, next, "digfx");
+    else
+      /* 깨진 쪽에는 이름을 안 적습니다 (사용자 지침 2026-11-04) — 무엇이었는지
+       * 알려 주면 잃은 것이 더 또렷해질 뿐이고, 이름은 결과 상자가 어차피 적습니다. */
+      flashFx('<span class="st">깨 졌 다</span>', DIG_SHARD + '만 남았다.', next, "red digfx");
+  };
+  one(0);
+}
+
+/* 손을 댔으면 true — 부르는 쪽이 그때만 소리를 내고 흔듭니다.
+ * 피로감이 줄었는지로 가릴 수가 없습니다 — 언 땅은 첫 손질의 피로를 되물려서
+ * 손을 대고도 피로가 그대로입니다(firstFree). */
+function digAct(i) {
+  const b = digState().board;
+  if (!b || b.done) return false;
+  const W = DIG_RULE.w, H = DIG_RULE.h, x = i % W, y = Math.floor(i / W);
+  const t = digTrait(b);                      /* 지층 성격 (B2) */
+  const 처음손댐 = !b.cells[i].u;
+  const 앞 = digFossilStates(b);              /* 손대기 전의 화석들 */
+  if (b.mode === "probe") {
+    /* 탐침 — 파지 않고 읽기만. 이미 읽은 칸은 체력을 쓰지 않습니다 */
+    if (b.cells[i].p != null || b.sta < DIG_RULE.probe) return false;   /* 이미 읽은 칸은 피로가 안 쌓입니다 */
+    b.sta -= DIG_RULE.probe;
+    b.cells[i].p = digProbeCount(b, i);
+    /* 마지막으로 읽은 자리 — 그 둘레 3×3 에 점선을 두릅니다(사용자 지침 2026-11-04).
+     * 수만 덩그러니 뜨면 «무엇을 센 수인가» 가 안 보였습니다. 판에 남으므로 창을
+     * 닫았다 와도 그대로입니다. */
+    b.probeAt = i;
+  } else if (b.mode === "brush") {
+    if (b.cells[i].d <= 0 || b.sta < DIG_RULE.brush) return false;
+    b.sta -= DIG_RULE.brush;
+    digHit(b, i, t.brushDepth || 1);          /* 무른 오일셰일이면 두 겹 */
+  } else {
+    if (b.sta < DIG_RULE.hammer) return false;
+    b.sta -= DIG_RULE.hammer;
+    digHit(b, i, 2, !!t.hammerCrackOn0);
+    /* 석판은 십자 대신 가로 한 줄(좌우 두 칸씩), 그 밖에는 사방 한 칸 */
+    const 둘레 = t.hammerRow ? [[1, 0], [2, 0], [-1, 0], [-2, 0]]
+                             : [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    둘레.forEach(d => {
+      const nx = x + d[0], ny = y + d[1];
+      if (nx >= 0 && ny >= 0 && nx < W && ny < H)
+        digHit(b, ny * W + nx, 1, !!t.edgeCrack);
+    });
+  }
+  /* 언 땅 — 그 칸을 처음 건드린 피로는 되물립니다(0 아래로는 안 내려갑니다) */
+  b.cells[i].u = true;
+  if (t.firstFree && 처음손댐) b.sta = Math.min(b.max, b.sta + 1);
+  /* 모든 화석이 결판났거나(다 드러남) 피로감이 가득 차면 저절로 마칩니다 */
+  /* 이번 손질로 달라진 화석을 모읍니다. 한 번에 드러나면서 깨졌다면 «깨짐» 쪽만
+   * 보입니다 — 같은 화석을 두 번 띄워 봐야 말이 엇갈립니다. */
+  digFossilStates(b).forEach((st, k) => {
+    const 앞것 = 앞[k];
+    if (st.broken && !앞것.broken) DIG_FX.push({ t: "crack", f: k });
+    else if (st.clear && !앞것.clear && !st.broken) DIG_FX.push({ t: "found", f: k });
+  });
+  const settled = b.fossils.every((f, k) => digFossilClear(b, k));
+  if (settled || b.sta < DIG_RULE.brush) digFinish();
+  return true;
+}
+
+/* ── 도구 소리 · 망치 흔들림 (사용자 지침 2026-11-04) ────────────────
+ *  적 공격음처럼 mp3 를 두지 않고 Web Audio 로 그 자리에서 빚습니다. 셋 다
+ *  «짧은 소음 한 조각» 이라 파일로 둘 값이 없고, 파일이 아니면 내려받은 폴더를
+ *  file:// 로 열어도 납니다 — sfxLoad 는 fetch 를 타서 그런 데서는 막힙니다.
+ *  크기는 설정의 «효과음 크기» 를 playSfx 와 같은 식(제곱)으로 따릅니다. 0 이면 조용합니다. */
+let DIG_NOISE = null;
+function digNoiseBuf(ctx) {
+  if (DIG_NOISE && DIG_NOISE.sampleRate === ctx.sampleRate) return DIG_NOISE;
+  const n = Math.floor(ctx.sampleRate * 0.4), buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const a = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) a[i] = Math.random() * 2 - 1;
+  DIG_NOISE = buf;
+  return buf;
+}
+function digSfx(mode) {
+  const v = sfxVol();
+  if (v <= 0) return;
+  const ctx = sfxCtx();
+  if (!ctx) return;
+  if (ctx.state === "suspended") ctx.resume().catch(() => {});
+  const t = ctx.currentTime, vol = v * v;
+  /* 소음 한 조각 — from → to 로 쓸리는 띠통과, 길이 len */
+  const noise = (from, to, len, peak, type) => {
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = digNoiseBuf(ctx);
+    f.type = type || "bandpass"; f.Q.value = 1.1;
+    f.frequency.setValueAtTime(from, t);
+    f.frequency.exponentialRampToValueAtTime(to, t + len);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol * peak, t + len * 0.18);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src.connect(f); f.connect(g); g.connect(ctx.destination);
+    src.start(t); src.stop(t + len + 0.02);
+  };
+  /* 맑은 소리 한 점 */
+  const tone = (hz, to, len, peak, at, type) => {
+    const o = ctx.createOscillator(), g = ctx.createGain(), t0 = t + (at || 0);
+    o.type = type || "triangle";
+    o.frequency.setValueAtTime(hz, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + len);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol * peak, t0 + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0 + len + 0.02);
+  };
+  if (mode === "brush")       noise(2600, 900, 0.20, 0.30);            /* 쓸리는 소리 */
+  else if (mode === "hammer") { tone(150, 55, 0.18, 0.85, 0, "sine");  /* 둔한 울림 */
+                                noise(3200, 1600, 0.07, 0.45, "highpass"); }  /* 돌 깨지는 결 */
+  else                        { tone(1500, null, 0.05, 0.30);          /* 쇠 탐침이 닿는 소리 */
+                                tone(2250, null, 0.05, 0.22, 0.045); }
+}
+/* 망치질에만 판이 한 번 들썩입니다 — 화면 전체를 흔드는 shakeScreen 과 같은 식 */
+function digShake() {
+  const el = $sheet.querySelector(".diggrid");
+  if (!el) return;
+  el.classList.remove("shake");
+  void el.offsetWidth;
+  el.classList.add("shake");
+  setTimeout(() => el.classList.remove("shake"), DIG_RULE.shakeMs);
+}
+
+/* 판을 마칩니다 — 표본 · 조각을 셈하고 결과 줄을 판에 남깁니다(창을 닫았다 와도 보이게) */
+function digFinish() {
+  const d = digState(), b = d.board;
+  if (!b || b.done) return;
+  const lines = [];
+  let shards = 0;
+  b.fossils.forEach((f, k) => {
+    const hit = digSpecBy(f.spec), ri = hit ? digStarIdx(hit.spec) : 0;
+    if (!digFossilClear(b, k)) {
+      if (digFossilSeen(b, k)) { shards += 1; lines.push({ t: "bad", name: f.spec, text: "다 드러내지 못했다 — 조각 1" }); }
+      /* 끝내 손도 못 댄 화석 — 이름은 안 밝히고 **그림자만** 세웁니다
+       * (사용자 지침 2026-11-04). 무엇이었는지는 끝까지 모르는 채로 두되,
+       * 거기 무언가가 있었다는 것만은 눈에 남깁니다. */
+      else lines.push({ t: "miss", name: null, sil: f.spec, text: "무언가 더 묻혀 있었다." });
+    } else if (digFossilBroken(b, k)) {
+      shards += DIG_RULE.broken[ri];
+      lines.push({ t: "bad", name: f.spec, text: "깨져 버렸다 — 조각 " + DIG_RULE.broken[ri] });
+    } else if (d.own[f.spec]) {
+      shards += DIG_RULE.dup[ri];
+      lines.push({ t: "dup", name: f.spec, text: "이미 진열한 표본 — 조각 " + DIG_RULE.dup[ri] });
+    } else {
+      d.own[f.spec] = true;
+      lines.push({ t: "new", name: f.spec, text: (ri === 2 ? "★3 희귀 표본! " : "새 표본 — ") + "표본실에 걸었다." });
+    }
+  });
+  const loose = b.cells.filter(c => c.s && c.d <= 0).length * DIG_RULE.shardCell;
+  if (loose) { shards += loose; lines.push({ t: "dup", name: DIG_SHARD, text: "흩어진 조각 " + loose }); }
+  d.shards += shards;
+  b.done = { lines: lines, shards: shards, pay: digPayCheck() };
+  saveVault();
+}
+
+/* 생물군 세트 완성 보상 — 그 지층의 화석 기프트 하나, 한 번만 */
+function digPayCheck() {
+  const d = digState(), got = [];
+  DIG_SITES.forEach(s => {
+    if (d.paid[s.key] || digOwnCount(s) < s.specs.length) return;
+    d.paid[s.key] = true;
+    got.push(s.name + " 세트 완성 — " + giveApply({ gift: s.gift }).join(" · "));
+  });
+  if (got.length) digAchieveCheck();
+  return got;
+}
+/* 업적 「라거슈타트 대폭발!」 — 세트 완성 보상을 다섯 가지 받았는가.
+ * 보관함을 합쳐 paid 가 늘어난 경우도 있어 탐사를 열 때도 한 번 봅니다(openDig). */
+function digAchieveCheck() {
+  const n = DIG_SITES.filter(s => digState().paid[s.key]).length;
+  if (n >= 5) checkAchievements(null, "dig:gifts5");
+}
+function digGiftOf(site) { return giftById(site.gift); }
+/* 세트 완성 보상 카드 — 표본실 · 현장 고르기에서 «다 모으면 받는 것» 을 미리 보입니다 */
+function digRewardHTML(site, 표) {
+  const g = digGiftOf(site), paid = !!digState().paid[site.key];
+  if (!g) return "";
+  /* 아직 못 받은 보상은 **이름도 효과도 감춥니다** (사용자 지침 2026-11-04) — 표본과
+   * 같은 결입니다. 성급만 남깁니다: 「발굴로만 나오는 ★3」 이 이 자리의 값이라서,
+   * 그마저 가리면 무엇을 바라고 다섯을 채우는지가 안 보입니다. */
+  return '<div class="digreward' + (paid ? ' got' : '') + '"' +
+           (표 ? ' data-tut="shelf-reward"' : '') + '>' + giftIconHTML(g, !paid) +
+         '<div><div class="sub">' + (paid ? '✓ 받은 생물군 세트 완성 보상' : '생물군 세트 완성 보상') + '</div>' +
+         '<div class="nm"><span class="star">' + stars(g.star) + '</span> ' +
+           (paid ? g.name : '？？？') + '</div>' +
+         '<div class="sub">' + (paid ? g.desc : '표본을 다 걸면 드러납니다.') + '</div></div></div>';
+}
+
+/* ── 화면 ── */
+let DIG_VIEW = "site";   // "site" · "shelf"
+let DIG_PICK = null;     // 표본실에서 눌러 본 표본 이름
+(function () {
+  const st = document.createElement("style");
+  st.textContent =
+    ".digtabs{display:flex;gap:6px;margin-bottom:12px;}" +
+    ".digtabs button.on{border-color:var(--gold);color:var(--gold);}" +
+    ".digsites .slot{display:flex;gap:10px;align-items:center;}" +
+    ".digsites .slot.lockd{opacity:.45;cursor:default;}" +
+    ".digsites .slot .sub{font-size:11.5px;}" +
+    ".digbar{display:flex;align-items:center;gap:8px;margin:6px 0 10px;flex-wrap:wrap;}" +
+    ".digbar .rwgauge{flex:1;min-width:90px;}" +
+    ".digbar .digsta{white-space:nowrap;font-size:13px;}" +
+    ".digmode{display:flex;gap:6px;}" +
+    ".digmode button.on{border-color:var(--gold);color:var(--gold);}" +
+    ".diggrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;max-width:360px;margin:0 auto 10px;}" +
+    /* 판 + 오른쪽 범례 상자 */
+    /* 도구 줄과 판 사이를 한 줄 띄웁니다 (사용자 지침 2026-11-04) — 붙어 있으면
+     * 카드가 판의 첫 줄처럼 보였습니다 */
+    ".digfield{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:center;" +
+      "margin:16px 0 10px;}" +
+    ".digfield .diggrid{flex:1 1 300px;margin:0;}" +
+    ".diggrid .dc{aspect-ratio:1;border:1px solid transparent;display:flex;align-items:center;justify-content:center;" +
+      "font-size:12px;cursor:pointer;user-select:none;-webkit-user-select:none;}" +
+    /* 흙 네 단계 · 화석 · 깨진 화석은 «그림» 입니다 (사용자 지침 2026-11-04) —
+     * 수를 적는 대신 땅 텍스처가 깊을수록 짙어집니다. 도안은 tools/아이콘-도안.js
+     * 의 「발굴 - 흙 1~4 · 화석 · 깨진 화석」, 굽는 것은 node tools/아이콘-굽기.js.
+     * 18×18 도트라 크게 늘여도 결이 살아야 해서 pixelated 로 깝니다. */
+    ".diggrid .dc,.diglegend .dc{background-repeat:no-repeat;background-size:100% 100%;" +
+      "image-rendering:pixelated;image-rendering:crisp-edges;}" +
+    ["#a87c50", "#7d5a38", "#543a23", "#2e1f14"].map((bg, i) =>
+      ".diggrid .dc.d" + (i + 1) + ",.diglegend .dc.d" + (i + 1) +
+      "{background-color:" + bg + ";background-image:url('" + iconSrc("발굴 - 흙 " + (i + 1)) + "');}").join("") +
+    ".diggrid .dc.bone,.diglegend .dc.bone{background-color:#f2e6c8;background-image:url('" + iconSrc("발굴 - 화석") + "');}" +
+    ".diggrid .dc.crack,.diglegend .dc.crack{background-color:#c9a89a;background-image:url('" + iconSrc("발굴 - 깨진 화석") + "');}" +
+    ".diggrid .dc.d0{background:#cdbb98;cursor:default;}" +
+    ".diggrid .dc.seen{border:1px dashed var(--gold);}" +
+    ".diggrid .dc.trace::after{content:'·';color:#f2e6c8;font-size:18px;line-height:1;}" +
+    /* 탐침으로 읽은 수(B1) — 둘레에 화석이 많을수록 뜨겁게. 0 은 흐리게 둡니다 */
+    ".diggrid .dc.probed,.diglegend .dc.probed{font-weight:700;font-variant-numeric:tabular-nums;}" +
+    ".diggrid .dc.probed.p0{color:#9a8a70;} .diggrid .dc.probed.p1{color:#e8dfd0;}" +
+    ".diggrid .dc.probed.p2,.diglegend .dc.probed.p2{color:#f0c86a;}" +
+    ".diggrid .dc.probed.p3,.diggrid .dc.probed.p4{color:#e8905a;}" +
+    ".diggrid .dc.probed.trace::after{content:'';}" +   /* 수가 흔적과 겹쳐 보이지 않게 */
+    /* 판 머리 — 현장 이름 · 시대와 지층 성격을 한 상자에 (2026-11-04) */
+    ".dighead{margin:0 0 10px;padding:7px 10px;border:1px solid var(--gold-line-2);" +
+      "background:var(--gold-bg);border-radius:3px;}" +
+    /* 강조는 «어디를 파고 있는가» 에 겁니다 — 지층 성격 이름에 금빛을 주었더니
+     * 현장 이름보다 그쪽이 먼저 읽혔습니다 (사용자 지침 2026-11-04) */
+    ".dighead .nm{font-size:13px;color:var(--gold);}" +
+    ".dighead .nm .wh{margin-left:12px;font-size:11.5px;color:var(--muted);}" +
+    ".dighead .tr{margin-top:4px;padding-top:4px;border-top:1px dashed var(--gold-line-2);" +
+      "color:var(--text-2);font-size:11.5px;line-height:1.5;}" +
+    ".dighead .tr b{color:var(--text);}" +
+    /* ── 판을 읽히게 (2026-11-04) ──────────────────────────────── */
+    /* 두 줄짜리 안내 상자 — 표본실 머리 (2026-11-04) */
+    ".dignotebox{margin:0 0 12px;padding:7px 10px;border:1px solid var(--line);" +
+      "background:var(--sheet);border-radius:3px;color:var(--muted);font-size:12px;line-height:1.6;}" +
+    ".dignotebox div + div{margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);}" +
+    /* 묻힌 화석 · 캐냄 · 깨짐 — 제 상자에 담습니다 (사용자 지침 2026-11-04).
+     * 바탕 위에 그냥 얹혀 있어 위아래 어느 쪽 이야기인지 붙지 않았습니다. */
+    ".digtally{display:flex;gap:14px;flex-wrap:wrap;margin:0 0 8px;padding:6px 10px;" +
+      "border:1px solid var(--line);background:var(--sheet);border-radius:3px;" +
+      "font-size:12px;color:var(--muted);}" +
+    ".digtally b{color:var(--text);font-variant-numeric:tabular-nums;}" +
+    ".digtally .ok b{color:var(--gold);} .digtally .bad b{color:var(--red);}" +
+    /* 피로감 줄 + 그 오른쪽의 발굴팀 두 자리 (2026-11-04). 눈금 알은 고정 폭이라
+     * 자리가 붙어도 피로감 줄의 가로 크기는 그대로입니다 — 남는 자리만 나눠 씁니다. */
+    ".digcrewrow{display:flex;gap:8px;align-items:stretch;margin-bottom:8px;flex-wrap:wrap;}" +
+    ".digcrewrow .digtired{flex:1 1 auto;margin-bottom:0;}" +
+    /* 두 자리는 **늘 같은 너비** 입니다 (사용자 지침 2026-11-04) — 비어 있을 때와
+     * 채웠을 때 글자 길이가 달라 칸이 들썩이면, 사람을 갈아 끼울 때마다 옆자리가
+     * 따라 움직입니다. 그래서 칸 너비를 격자로 못 박습니다. */
+    ".digteam{display:grid;grid-template-columns:repeat(2,120px);gap:6px;flex:0 0 auto;}" +
+    ".digslot{display:flex;align-items:center;gap:6px;padding:4px 8px;min-width:0;" +
+      "border:1px dashed var(--line-2);background:var(--sheet);cursor:pointer;" +
+      "font-size:11.5px;color:var(--muted);text-align:left;}" +
+    ".digslot.on{border-style:solid;border-color:var(--gold-mid);color:var(--text-2);}" +
+    ".digslot.pick{border-color:var(--gold);}" +
+    ".digslot.none{opacity:.5;}" +
+    ".digslot .ic{width:28px;height:28px;}" +
+    ".digslot .ic img{width:24px;height:24px;}" +
+    ".digslot .ic.empty{display:flex;align-items:center;justify-content:center;" +
+      "border:1px solid var(--line-2);color:var(--dim);font-size:13px;}" +
+    /* 이름이 길어도 칸을 밀지 않습니다 — 넘치면 … 로 줄입니다 */
+    ".digslot .lb{display:flex;flex-direction:column;line-height:1.3;min-width:0;" +
+      "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+    ".digslot .lb b{color:var(--gold);font-variant-numeric:tabular-nums;}" +
+    /* 고르는 줄 */
+    ".digteampick{margin:-4px 0 8px;padding:7px 10px;border:1px solid var(--gold-line-2);" +
+      "background:var(--gold-bg);border-radius:3px;}" +
+    ".digteampick .hd{color:var(--muted);font-size:11px;margin-bottom:6px;}" +
+    /* 고르는 줄의 칸도 다 같은 너비입니다 — 「비움」 만 짧아 혼자 쪼그라들어 있었습니다
+     * (사용자 지침 2026-11-04). 좁아지면 한 줄에 몇 칸이 서는지만 바뀝니다. */
+    ".digteampick .row{display:grid;grid-template-columns:repeat(auto-fill,140px);gap:6px;}" +
+    ".digteampick .one{display:flex;align-items:center;gap:6px;padding:4px 8px;text-align:left;" +
+      "min-width:0;font-size:11.5px;color:var(--text-2);}" +
+    ".digteampick .one.on{border-color:var(--gold);}" +
+    ".digteampick .one .ic{width:28px;height:28px;} .digteampick .one .ic img{width:24px;height:24px;}" +
+    ".digteampick .one .ic.empty{display:flex;align-items:center;justify-content:center;" +
+      "border:1px solid var(--line-2);color:var(--dim);font-size:13px;}" +
+    ".digteampick .one .lb{display:flex;flex-direction:column;line-height:1.3;min-width:0;" +
+      "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+    ".digteampick .one .lb b{color:var(--gold);font-variant-numeric:tabular-nums;}" +
+    ".digteampick .one .lb em{font-style:normal;color:var(--dim);font-size:10.5px;}" +
+    /* 피로감 눈금 — 엔케팔린 눈금(.enkwrap)의 꼴에 색만 갈아 끼웁니다 (2026-11-04) */
+    ".digtired{margin-bottom:8px;}" +
+    /* 알이 서른 개까지 늘어납니다(엔케팔린은 열) — 좁은 화면에서 줄 밖으로 잘리지
+     * 않도록 줄을 바꾸게 하고, 알도 한 끗 좁혔습니다 (사용자 지침 2026-11-04) */
+    ".digtired .enkpips{flex:1 1 auto;min-width:0;flex-wrap:wrap;}" +
+    ".digtired .enkpips i{width:10px;}" +
+    /* 피로감 띠 — 좁은 화면에서만 섭니다(알은 그때 숨습니다) */
+    /* 캐냈을 때 · 깨뜨렸을 때의 번쩍임 — 인격 배정과 같은 연출에 글씨만 줄입니다 */
+    ".flashfx.digfx .txt{font-size:30px;line-height:1.3;padding:0 16px;}" +
+    ".flashfx.digfx .txt .st{display:block;font-size:34px;}" +
+    ".flashfx.digfx .txt .nm{display:block;margin-top:6px;word-break:keep-all;}" +
+    "@media (max-width:640px){.flashfx.digfx .txt{font-size:22px;}" +
+      ".flashfx.digfx .txt .st{font-size:26px;}}" +
+    ".digtired .digbar1{display:none;}" +
+    ".digtired .digbar1 i{background:#8a6a2e;}" +
+    ".digtired.full .digbar1 i{background:var(--red);}" +
+    ".digtired .enknm{color:#a8864a;}" +
+    ".digtired .enkpips i.on{background:#8a6a2e;border-color:#c89a46;}" +
+    ".digtired .enknum{color:#e8d8a8;}" +
+    ".digtired.full .enknm,.digtired.full .enknum{color:var(--red);}" +
+    ".digtired.full .enkpips i.on{background:#6a2430;border-color:var(--red);}" +
+    /* 도구 카드 셋 — 아이콘 · 이름 · 드는 피로감(굵게)을 한 줄에 */
+    ".digmode{flex-wrap:wrap;}" +
+    /* 셋이 줄을 꽉 채우고 크기가 같습니다 — 카드가 글자 길이대로 들쭉날쭉하면
+     * 누르는 자리가 매번 옮겨 다닙니다 (사용자 지침 2026-11-04) */
+    ".digmode{flex:1 1 100%;gap:6px;}" +
+    ".digmode button{flex:1 1 0;min-width:0;display:inline-flex;flex-direction:column;" +
+      "align-items:stretch;gap:3px;text-align:left;line-height:1.25;}" +
+    ".digmode button .hd{display:flex;align-items:center;gap:5px;}" +
+    ".digmode button .icmini{margin:0;}" +
+    ".digmode button .tc{margin-left:auto;padding-left:8px;color:var(--muted);" +
+      "font-variant-numeric:tabular-nums;}" +
+    /* 좁은 화면에서 «안 깨 / 짐» 처럼 낱말 한가운데가 끊기지 않게 (2026-11-04) */
+    ".digmode button em{display:flex;flex-wrap:wrap;gap:0 4px;font-style:normal;" +
+      "color:var(--dim);font-size:10.5px;word-break:keep-all;}" +
+    ".digmode button em i{font-style:normal;}" +
+    ".digmode button.on .tc{color:var(--gold);} .digmode button.on em{color:var(--text-2);}" +
+    ".diggrid .dc{position:relative;}" +
+    /* 망치질에 판이 한 번 들썩입니다 — #app.shake 와 같은 결로 폭만 줄였습니다 */
+    "@keyframes digshake{0%,100%{transform:translate(0,0);}" +
+      "15%{transform:translate(-3px,2px);}  35%{transform:translate(3px,-2px);}" +
+      "55%{transform:translate(-2px,1px);}  75%{transform:translate(2px,-1px);}}" +
+    ".diggrid.shake{animation:digshake " + DIG_RULE.shakeMs + "ms ease-in-out;}" +
+    /* 탐침이 읽은 둘레 3×3 — 점선 상자 하나. 칸 사이 틈(gap 3px)까지 덮도록 조금 넓힙니다 */
+    /* 격자 칸을 밀어내지 않도록 자리에서 띄웁니다 — grid-column/row 로 «어느 칸 위인가»
+     * 만 정하고, position:absolute 가 그 자리를 담는 상자가 됩니다. 띄우지 않으면
+     * 칸 하나로 끼어들어 뒤의 칸들이 3×3 만큼 밀립니다. */
+    ".diggrid{position:relative;}" +
+    ".diggrid .prange{position:absolute;inset:-2px;pointer-events:none;" +
+      "border:2px dotted #7fd0e8;box-shadow:0 0 0 1px rgba(0,0,0,.55);" +
+      "background:rgba(127,208,232,.07);}" +
+    /* 범례 — 판 바로 아래 */
+    ".diglegend{margin:10px 0 0;border:1px solid var(--line);background:var(--panel);" +
+      "font-size:11px;color:var(--muted);line-height:1.45;}" +
+    ".diglegend>summary{cursor:pointer;padding:6px 10px;list-style:none;}" +
+    ".diglegend>summary::-webkit-details-marker{display:none;}" +
+    ".diglegend>summary::before{content:'▸　';}" +
+    ".diglegend[open]>summary::before{content:'▾　';}" +
+    ".diglegend .body{padding:0 10px 8px;}" +
+    ".diglegend .note{margin:0 0 7px;padding-bottom:7px;border-bottom:1px dashed var(--line);" +
+      "line-height:1.6;}" +
+    /* 그림 줄 넷이 줄을 고르게 나눠 가집니다 (사용자 지침 2026-11-04) — 왼쪽에 몰려
+     * 있고 오른쪽이 비면 상자만 길어 보였습니다 */
+    ".diglegend .marks{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;}" +
+    ".diglegend .lg{display:flex;align-items:center;gap:6px;}" +
+    ".diglegend .dc{position:relative;width:18px;height:18px;min-width:18px;border:1px solid transparent;" +
+      "display:inline-flex;align-items:center;justify-content:center;font-size:10px;cursor:default;}" +
+    ".diggrid .dc.shard,.diglegend .dc.shard{background-color:#cdbb98;color:#4a3020;" +
+      "background-image:url('" + iconSrc("발굴 - 조각") + "');}" +
+    ".digres{margin:0 0 12px;padding:8px 10px 10px;border:1px solid var(--gold-line-2);" +
+      "background:var(--gold-bg);border-radius:3px;}" +
+    ".digres .hd{margin-bottom:6px;padding-bottom:6px;border-bottom:1px dashed var(--gold-line-2);" +
+      "color:var(--gold);font-size:11.5px;letter-spacing:.06em;}" +
+    ".digres .row{display:flex;gap:8px;align-items:center;margin:4px 0;font-size:13px;}" +
+    ".digres .row.new{color:var(--gold);} .digres .row.bad{color:var(--red);} .digres .row.miss{color:var(--dim);}" +
+    ".digshelf{border:1px solid var(--line);background:var(--panel);padding:10px;margin-bottom:10px;}" +
+    ".digshelf.lockd{opacity:.45;}" +
+    ".digshelf>summary.hd{display:flex;justify-content:space-between;gap:8px;align-items:baseline;" +
+      "flex-wrap:wrap;cursor:pointer;list-style:none;}" +
+    ".digshelf>summary.hd::-webkit-details-marker{display:none;}" +
+    ".digshelf>summary.hd .nm::before{content:'▸　';color:var(--muted);font-size:11px;}" +
+    ".digshelf>summary.hd .sub{font-size:11.5px;}" +
+    ".digshelf[open]>summary.hd .nm::before{content:'▾　';}" +
+    ".digshelf .specs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px;}" +
+    ".digshelf .sp{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;text-align:center;cursor:pointer;word-break:keep-all;}" +
+    ".digshelf .sp .star{font-size:9px;}" +
+    /* 보상 줄과 «고른 표본» 줄은 같은 자리에 번갈아 섭니다 — 높이가 다르면 누를 때마다
+     * 아래 줄들이 들썩입니다 (사용자 지침 2026-11-04) */
+    ".digreward,.digshelf .digpick{display:flex;gap:10px;align-items:center;margin-top:10px;" +
+      "padding:8px;min-height:62px;box-sizing:border-box;}" +
+    ".digreward{border:1px dashed #8a5a22;}" +
+    ".digreward.got{border-style:solid;}" +
+    ".digshelf .digpick{border:1px solid var(--gold-mid);background:var(--gold-bg);flex-wrap:wrap;}" +
+    /* 좁은 화면에서 글이 「화석 조 / 각으로」 처럼 끊기지 않게. [복원] 은 자리가 모자라면
+     * 제 줄로 내려갑니다 (2026-11-04) */
+    ".digshelf .digpick .body{flex:1 1 150px;min-width:0;word-break:keep-all;}" +
+    ".digshelf .digpick button{flex:0 0 auto;margin-left:auto;}" +
+    ".digshelf .sp.on .ic{border-color:var(--gold);}" +
+    /* 화석 기프트 — ★3 금테 · ★4 붉은 테와 갈리는 호박색 (사용자 지침 2026-10-23) */
+    ".ic.sf{border-color:#d08a2e;background:#24170a;box-shadow:inset 0 0 0 1px #6a4216;}" +
+    ".slot:has(> .ic.sf),.syncrow:has(> .ic.sf){border-color:#8a5a22;background:linear-gradient(90deg,#24170a,var(--panel) 70%);}" +
+    /* ── 현장 화면 — 넓은 화면에서는 왼쪽 지도 · 오른쪽 현장 줄, 고른 현장은
+     *    아래쪽에 펼칩니다 (사용자 지침 2026-11-04, DiaRUGA 의 지도 화면을 본떠).
+     *    좁은 화면에서는 flex-wrap 이 저절로 세로로 쌓습니다. */
+    ".digmap{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px;}" +
+    ".mapstage{flex:2 1 380px;min-width:260px;}" +
+    ".mapstage .face{position:relative;border:1px solid var(--line);background:#12151c;}" +
+    ".mapstage .face>img{display:block;width:100%;height:auto;" +
+      "image-rendering:pixelated;image-rendering:crisp-edges;}" +
+    ".mapnote{margin-top:4px;color:var(--dim);font-size:10.5px;}" +
+    ".mapstage .mk{position:absolute;transform:translate(-50%,-50%);padding:0;border:0;background:none;" +
+      "width:11px;height:11px;cursor:pointer;z-index:1;}" +
+    ".mapstage .mk i{display:block;width:7px;height:7px;margin:2px;border-radius:50%;" +
+      "background:var(--gold);box-shadow:0 0 0 2px rgba(0,0,0,.55);}" +
+    ".mapstage .mk.lockd{cursor:default;} .mapstage .mk.lockd i{background:var(--off);}" +
+    ".mapstage .mk.on{z-index:3;} .mapstage .mk.on i{box-shadow:0 0 0 2px rgba(0,0,0,.55),0 0 0 5px rgba(216,178,106,.35);}" +
+    /* 이름표는 «고른 것» 에만 — 독일의 둘(메셀 · 졸른호펜)은 지도에서 3px 떨어져 있어
+     * 늘 달아 두면 글자끼리 겹칩니다 */
+    ".mapstage .mk .lb{position:absolute;left:14px;top:-3px;white-space:nowrap;font-size:10.5px;" +
+      "color:var(--gold);text-shadow:0 0 3px #000,0 0 3px #000;display:none;}" +
+    ".mapstage .mk.on .lb{display:block;}" +
+    ".mapstage .mk.on.east .lb{left:auto;right:14px;}" +
+    ".maplist{flex:1 1 240px;min-width:220px;}" +
+    ".maplist .rows{display:flex;flex-direction:column;gap:4px;}" +
+    ".maplist .row{display:flex;align-items:center;gap:8px;text-align:left;padding:6px 8px;" +
+      "border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:12.5px;}" +
+    ".maplist .row.on{border-color:var(--gold);background:var(--gold-bg);}" +
+    ".maplist .row.lockd{opacity:.45;cursor:default;}" +
+    ".maplist .row .nm{flex:1;min-width:0;}" +
+    ".maplist .row .ct{color:var(--muted);font-variant-numeric:tabular-nums;font-size:11.5px;}" +
+    ".maplist .row.full .ct{color:var(--gold);}" +
+    ".en{color:var(--dim);font-size:10.5px;letter-spacing:.01em;}" +
+    /* 지도를 줄이지 않고 오른쪽 줄의 세로를 지도에 맞춥니다 — 줄이 넘치면 그 안에서
+     * 구릅니다 (사용자 지침 2026-11-04). 줄 상자는 자리만 잡고(position:relative),
+     * 실제 목록은 그 안에서 띄워 채웁니다 — 그래야 목록이 길어져도 줄 상자가,
+     * 따라서 지도가 함께 늘어나지 않습니다.
+     * 좁은 화면(세로로 쌓이는 쪽)에서는 맞출 지도가 옆에 없으므로 그냥 둡니다. */
+    "@media (min-width:860px){" +
+      ".digmap{align-items:stretch;}" +
+      ".maplist{position:relative;min-height:220px;}" +   /* 혹 줄이 아래로 내려가도 안 접히게 */
+      ".maplist .rows{position:absolute;inset:0;overflow-y:auto;padding-right:2px;}" +
+    "}" +
+    ".digdetail{border:1px solid var(--gold-line-2);background:var(--panel);padding:10px;}" +
+    ".digdetail .hd{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}" +
+    /* 강조는 «어느 현장인가» 에 겁니다 — 지층 성격 이름에 금빛을 주었더니 그쪽이
+     * 먼저 읽혔습니다 (사용자 지침 2026-11-04) */
+    ".digdetail .hd .nm{font-size:14px;color:var(--gold);}" +
+    /* 좁은 화면에서는 시대가 제 줄로 내려갑니다 — 그때 글씨가 이름만큼 커 보이지 않게 */
+    ".digdetail .hd .sub{font-size:11.5px;color:var(--muted);}" +
+    ".digdetail .bd{margin-top:6px;color:var(--text-2);font-size:12px;line-height:1.6;}" +
+    ".digdetail .bd .tr{margin-top:6px;padding-top:6px;border-top:1px dashed var(--gold-line-2);" +
+      "font-size:11.5px;}" +
+    ".digdetail .bd .tr b{color:var(--text);}" +
+    ".digdetail .go{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}" +
+    /* ── 좁은 화면 (사용자 지침 2026-11-04) ─────────────────────────────
+     *  ① 슬랩 머리의 현장 이름과 연대를 두 줄로
+     *  ② 피로감은 알 서른 개 대신 띠 하나로, 한 줄에
+     *  ③ 작성위원 · 교육위원 두 자리가 한 줄을 다 차지하고 세로로 넓게
+     *  ④ 도구 설명은 토막마다 한 줄씩
+     *  ⑤ 표본실 줄의 연대는 감춥니다 */
+    "@media (max-width:640px){" +
+      ".dighead .nm{display:block;}" +
+      ".dighead .nm .wh{display:block;margin-left:0;}" +
+      ".digtired{flex-wrap:nowrap;}" +
+      ".digtired .enkpips{display:none;}" +
+      ".digtired .digbar1{display:inline-block;flex:1 1 auto;min-width:0;width:auto;}" +
+      ".digtired .enknm,.digtired .enknum{flex:0 0 auto;white-space:nowrap;}" +
+      ".digcrewrow .digteam{flex:1 1 100%;width:100%;grid-template-columns:1fr 1fr;}" +
+      ".digslot{min-height:54px;padding:8px;}" +
+      ".digmode button em{flex-direction:column;gap:0;}" +
+      ".digmode button em i{display:none;}" +
+      ".digshelf>summary.hd .wh{display:none;}" +
+    "}" +
+    ".digpick{border:1px solid var(--gold-mid);background:var(--panel);padding:10px;margin-bottom:10px;display:flex;gap:10px;align-items:center;}" +
+    ".digpick .body{flex:1;}";
+  document.head.appendChild(st);
+})();
+
+function openDig(back) {
+  $modal.classList.add("on");
+  const d = digSync();
+  digAchieveCheck();
+  let h = '<h2>화 석　탐 사</h2>' +
+          '<div class="digtabs">' +
+            '<button data-dv="site" class="' + (DIG_VIEW === "site" ? "on" : "") + '">현장</button>' +
+            '<button data-dv="shelf" class="' + (DIG_VIEW === "shelf" ? "on" : "") + '">표본실</button>' +
+            '<span class="sub" style="margin-left:auto;align-self:center">' + iconMini(DIG_BRUSH) + DIG_BRUSH + ' ' + d.brush + '　' + iconMini(DIG_SHARD) + '조각 ' + d.shards + '</span>' +
+          '</div>';
+  h += DIG_VIEW === "shelf" ? digShelfHTML() : digSiteHTML();
+  h += '<div class="modalfoot"><button id="digclose">닫기</button></div>';
+  $sheet.innerHTML = h;
+  const again = () => openDig(back);
+  $sheet.querySelectorAll("[data-dv]").forEach(el => el.onclick = () => { DIG_VIEW = el.dataset.dv; DIG_PICK = null; again(); });
+  document.getElementById("digclose").onclick = () => { closeModal(); render(); if (back) back(); };
+  if (DIG_VIEW === "shelf") digShelfBind(again); else digSiteBind(again);
+  /* 처음 들어섰을 때 한 번 — 화면마다 따로입니다. 현장 고르기 · 슬랩 · 표본실은
+   * 하는 일이 달라서, 하나로 묶으면 그 화면에 없는 데를 짚게 됩니다. */
+  if (DIG_VIEW === "shelf") tutorOnce("digshelf");
+  else if (d.board && !d.board.done) tutorOnce("digslab");
+  else if (!d.board) tutorOnce("dig");
+}
+
+
+/* 지도에서도 줄에서도 «고른 현장» 은 하나입니다 — 열려 있는 첫 현장으로 엽니다.
+ * 잠긴 현장도 고를 수는 있습니다(지도에 점은 찍히고, 아래에 «몇 장을 마치면» 만 뜹니다). */
+let DIG_SITE_PICK = null;
+function digSitePick() {
+  const hit = DIG_SITES.findIndex(s => s.key === DIG_SITE_PICK);
+  if (hit >= 0) return DIG_SITES[hit];
+  const open = DIG_SITES.findIndex((s, i) => digSiteOpen(i));
+  return DIG_SITES[open >= 0 ? open : 0];
+}
+
+/* ── 현장 고르기 — 넓은 화면에서는 왼쪽 지도 · 오른쪽 현장 줄, 고른 현장은 아래쪽에
+ *    (사용자 지침 2026-11-04 — DiaRUGA 의 지도 화면을 본떴습니다).
+ *
+ *    예전에는 현장 카드 여섯이 세로로 늘어서 있었습니다. 카드마다 이름 · 시대 ·
+ *    한 줄 설명 · 지층 성격이 다 펼쳐져 있어 길기만 하고, «여섯이 세계 어디에
+ *    흩어져 있는가» 는 어디에도 안 보였습니다 — 라거슈타트는 그게 절반입니다.
+ *
+ *    지도는 밖에서 받아 오지 않습니다 — assets/scene/세계지도.png 한 장(3.6KB)이고
+ *    점은 정거 원통 도법으로 찍습니다(digMapXY · tools/세계지도-굽기.js).
+ *
+ *    파기 시작은 아래쪽 «여기를 팝니다» 단추가 맡습니다. 예전처럼 카드를 누르면
+ *    바로 지질망치가 나가던 것을 한 칸 떼어 놓았습니다 — 줄은 고르기만 합니다. */
+function digPickHTML(d) {
+  const sel = digSitePick();
+  /* 머리에 있던 안내 한 줄(지질망치가 들어오는 길 · 지닌 수 · 견디는 피로감)은 걷었습니다
+   * (사용자 지침 2026-11-04). 지닌 수는 바로 위 창 머리에 늘 떠 있고, 견디는 피로감은
+   * 판을 펼치면 눈금으로 섭니다 — 셋이 같은 화면에서 두 번씩 적히고 있었습니다.
+   * 지질망치가 없을 때의 안내는 아래 «여기를 팝니다» 곁에 그대로 둡니다. */
+  let h = '<div class="digmap"><div class="mapstage" data-tut="dig-map"><div class="face">' +
+         '<img src="assets/scene/세계지도.png" alt="세계 지도" onerror="this.style.display=\'none\'">';
+  DIG_SITES.forEach((site, i) => {
+    const p = digMapXY(site);
+    if (!p) return;
+    const open = digSiteOpen(i);
+    h += '<button class="mk' + (open ? '' : ' lockd') + (site.key === sel.key ? ' on' : '') +
+           (p.x > 60 ? ' east' : '') + '" data-site="' + site.key + '" type="button" ' +
+           'title="' + (open ? site.name + ' / ' + site.en : '？？？') + '" ' +
+           'style="left:' + p.x.toFixed(2) + '%;top:' + p.y.toFixed(2) + '%"><i></i>' +
+           '<span class="lb">' + (open ? site.name : '？？？') + '</span></button>';
+  });
+  h += '</div><div class="mapnote">정거 원통 도법 · 해안선 Natural Earth 1:110m</div></div>';
+
+  /* 현장 줄 — 넓은 화면에서는 지도와 세로를 맞추고, 넘치면 이 안에서 구릅니다 */
+  h += '<div class="maplist" data-tut="dig-list"><div class="rows">';
+  DIG_SITES.forEach((site, i) => {
+    const open = digSiteOpen(i), got = digOwnCount(site), all = got >= site.specs.length;
+    h += '<button class="row' + (open ? '' : ' lockd') + (all ? ' full' : '') +
+           (site.key === sel.key ? ' on' : '') + '" data-site="' + site.key + '" type="button">' +
+           (digGiftOf(site) ? giftIconHTML(digGiftOf(site), !digState().paid[site.key]) : '') +
+           '<span class="nm">' + digSiteName(site, open) + '</span>' +
+           '<span class="ct">' + got + ' / ' + site.specs.length + '</span></button>';
+  });
+  h += '</div></div></div>';
+
+  /* 고른 현장 — 아래쪽에 펼칩니다 */
+  const open = digSiteOpen(DIG_SITES.indexOf(sel));
+  h += '<div class="digdetail" data-tut="dig-detail">' +
+         '<div class="hd"><span class="nm">' + digSiteName(sel, open) + '</span>' +
+         '<span class="sub">' + (open ? sel.where : digOpenText(sel)) + '</span></div>';
+  if (open) {
+    /* 현장 설명과 지층 성격을 한 덩이로 — 성격만 테두리 상자로 따로 서 있어, 같은
+     * 현장 이야기가 둘로 읽혔습니다 (사용자 지침 2026-11-04 · 슬랩 머리와 같은 결). */
+    const t = sel.trait;
+    h += '<div class="bd">' + sel.note +
+           (t ? '<div class="tr"><b>' + t.name + '</b>　' + t.note + '</div>' : '') +
+         '</div>' + digRewardHTML(sel) +
+         '<div class="go" data-tut="dig-go"><button data-dig-go="' + sel.key + '" class="primary"' +
+           (d.brush > 0 ? '' : ' disabled') + '>' + iconMini(DIG_BRUSH) + '여기를 팝니다</button>' +
+         '<span class="sub">' + (d.brush > 0 ? DIG_BRUSH + ' 1개 소모'
+                                             : '지질망치가 없습니다. ' + DIG_BRUSH_WAYS) + '</span></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function digSiteHTML() {
+  const d = digState(), b = d.board;
+  if (!b) return digPickHTML(d);
+  const site = digSiteBy(b.site);
+  /* 어느 현장을 파고 있는가 + 그 지층의 성격 — 한 상자에 묶습니다 (사용자 지침
+   * 2026-11-04). 흐린 글줄 하나와 테두리 상자 하나가 따로 서 있어, 같은 현장
+   * 이야기인데도 둘로 읽혔습니다. */
+  const t = site.trait;
+  let h = '<div class="dighead">' +
+            '<div class="nm">' + digSiteName(site, true) +
+              '<span class="wh">' + site.where + '</span></div>' +
+            (t ? '<div class="tr"><b>' + t.name + '</b>　' + t.note + '</div>' : '') +
+          '</div>';
+  if (b.done) {
+    /* 결과는 한 상자에 담습니다 (사용자 지침 2026-11-04) — 표본 줄 · 조각 줄 · 완성
+     * 보상 줄이 바탕 위에 그냥 얹혀 있어, 어디까지가 이 슬랩에서 나온 것인지 몰랐습니다. */
+    h += '<div class="digres"><div class="hd">' + DIG_SLAB + '에서 나온 것</div>';
+    b.done.lines.forEach(l => {
+      /* sil 은 «이름 없이 그림자만» — 성급 테두리도 안 두릅니다(그것까지 알려 줄
+       * 셈이 아닙니다). name 이 있는 줄은 예전처럼 제 아이콘으로 섭니다. */
+      const 칸 = l.name ? iconHTML(l.name, { dim: l.t === "bad", star: digSpecStar(l.name) })
+                        : (l.sil ? iconHTML(l.sil, { dim: true }) : '');
+      h += '<div class="row ' + l.t + '">' + 칸 + '<div>' +
+           (l.name && l.name !== DIG_SHARD ? '<b>' + l.name + '</b> — ' : '') + l.text + '</div></div>';
+    });
+    (b.done.pay || []).forEach(t => { h += '<div class="row new">✦ ' + t + '</div>'; });
+    /* 다 판 슬랩은 보이지 않습니다 (사용자 지침 2026-11-04) — 결과를 읽는 자리에
+     * 흙 그림이 또 깔려 있을 까닭이 없습니다. 어디에 뭐가 묻혀 있었는지는 이미
+     * 파면서 다 봤습니다. */
+    h += '</div>' +
+         '<div class="modalfoot keep"><button id="digok" class="primary">확인</button></div>';
+    return h;
+  }
+  /* 눈금은 «쌓인 피로감» 입니다 — 남은 여력(b.sta)을 뒤집어 그립니다.
+   * 꼴은 엔케팔린 눈금과 같습니다(사용자 지침 2026-11-04) — 이름 · 알 · 수가 한 줄에
+   * 선 `.enkwrap`. 알 하나가 손질 한 번이라, 붓질 몇 번이 남았는지가 한눈에 세집니다.
+   * 색만 피로감 쪽으로 바꿉니다(`.digtired`) — 차오르면 호박빛, 가득 차면 붉게. */
+  digSyncBoardMax(b);          /* 편성이 바뀌었으면 견디는 양부터 맞춥니다 */
+  const 피로 = b.max - b.sta, 꽉 = 피로 >= b.max - DIG_RULE.brush;
+  let 알 = "";
+  for (let i = 0; i < b.max; i++) 알 += '<i class="' + (i < 피로 ? 'on' : '') + '"></i>';
+  /* 피로감 줄은 가로 크기를 지킵니다 (사용자 지침 2026-11-04) — 알이 고정 폭이라
+   * 옆에 자리 둘이 붙어도 눈금 자체는 줄지 않습니다. 남는 자리만 나눠 씁니다. */
+  /* 좁은 화면에서는 알 서른 개가 두 줄을 먹습니다 — 그쪽에서는 띠 하나로 보입니다
+   * (사용자 지침 2026-11-04). 둘 다 적어 두고 CSS 가 하나만 세웁니다 — 글이 몇 자
+   * 늘 뿐이고, 폭에 따라 JS 를 달리 돌리는 것보다 틀어질 자리가 적습니다. */
+  h += '<div class="digcrewrow" data-tut="dig-sta">' +
+         '<div class="enkwrap digtired' + (꽉 ? ' full' : '') + '">' +
+           '<span class="enknm">피로감</span>' +
+           '<span class="enkpips">' + 알 + '</span>' +
+           '<span class="rwgauge digbar1"><i style="width:' +
+             Math.round(피로 / b.max * 100) + '%"></i></span>' +
+           '<span class="enknum">' + 피로 + ' / ' + b.max + '</span>' +
+           (꽉 ? '<span class="enksub">가득 찼습니다. 이 ' + DIG_SLAB + '은 여기까지입니다.</span>' : '') +
+         '</div>' +
+         '<div class="digteam" data-tut="dig-team">' + digSlotHTML("sinner") + digSlotHTML("advisor") + '</div>' +
+       '</div>' +
+       digTeamPickHTML() +
+       digAimHTML(b);
+  h += '<div class="digfield" data-tut="dig-grid">' + digGridHTML(b, false) + '</div>';
+  /* 도구 카드 — 아이콘으로 알아보고, 옆에 드는 피로감을 굵은 수로. 하는 일은 그 아래
+   * 한 줄로만 적습니다(예전에는 두 줄이라 판보다 글이 많았습니다).
+   * 자리는 **판 아래** 입니다 (사용자 지침 2026-11-04) — 안내 글과 판 사이에 끼어
+   * 있으면 판을 보려고 그때마다 카드 줄을 건너뛰어야 했습니다. */
+  h += '<div class="digbar" data-tut="dig-tools"><span class="digmode">' +
+         /* 설명은 두 토막입니다 — 넓은 화면에서는 「·」 로 이어 한 줄, 좁은 화면에서는
+          * 토막마다 한 줄씩(사용자 지침 2026-11-04). 글이 제멋대로 접히지 않게 끊는
+          * 자리를 글에서 정해 둡니다. */
+         digToolHTML("brush",  b.mode, "발굴 - 붓",   "붓",   DIG_RULE.brush,
+           ['한 칸 ' + ((digTrait(b).brushDepth || 1) > 1 ? '두 겹' : '한 겹'), '안 깨짐']) +
+         digToolHTML("hammer", b.mode, "발굴 - 망치", "망치", DIG_RULE.hammer,
+           ['두 겹 + ' + (digTrait(b).hammerRow ? '가로' : '둘레') + ' 한 겹', '깨질 수 있음']) +
+         digToolHTML("probe",  b.mode, "발굴 - 탐침", "탐침", DIG_RULE.probe,
+           ['파지 않고', '둘레 3×3 셈']) +
+       '</span></div>';
+  h += digLegendHTML();
+  h += '<div class="modalfoot keep"><button id="digend">여기서 마치기</button></div>';
+  return h;
+}
+/* ── 발굴팀 자리 한 칸 (사용자 지침 2026-11-04) ──────────────────────
+ *  비어 있으면 무엇을 세우는 자리인지 적고, 세워 두면 그 사람과 올려 주는 몫을 적습니다. */
+let DIG_TEAM_OPEN = null;        // 지금 고르는 중인 자리 ("sinner" · "advisor" · null)
+const DIG_SLOT_NAME = { sinner: "작성위원", advisor: "교육위원" };
+function digSlotHTML(kind) {
+  const cur = digTeamPick(kind), pool = digTeamPool(kind);
+  return '<button class="digslot' + (cur ? ' on' : '') + (DIG_TEAM_OPEN === kind ? ' pick' : '') +
+           (pool.length ? '' : ' none') + '" data-team="' + kind + '">' +
+           (cur ? iconHTML(cur.icon, { star: cur.star }) : '<span class="ic empty">＋</span>') +
+           '<span class="lb">' + (cur ? cur.name : DIG_SLOT_NAME[kind]) +
+             (cur ? '<b>+' + digTeamBonus(cur.star) + '</b>' : '') + '</span>' +
+         '</button>';
+}
+/* 고르는 줄 — 자리를 누르면 그 아래에 펼쳐집니다. 창을 또 띄우지 않습니다:
+ * 고를 것이 많아야 서넛이라, 줄 하나면 넉넉합니다. */
+function digTeamPickHTML() {
+  if (!DIG_TEAM_OPEN) return "";
+  const kind = DIG_TEAM_OPEN, pool = digTeamPool(kind), cur = digTeam()[kind];
+  let h = '<div class="digteampick"><div class="hd">' + DIG_SLOT_NAME[kind] +
+          ' — 발굴 현장에 서 본 사람만 세울 수 있습니다</div><div class="row">';
+  if (!pool.length)
+    h += '<div class="sub">아직 세울 사람이 없습니다.</div>';
+  else {
+    h += '<button class="one' + (cur ? '' : ' on') + '" data-team-set="">' +
+           '<span class="ic empty">－</span><span class="lb">비움</span></button>';
+    pool.forEach(p => {
+      h += '<button class="one' + (p.key === cur ? ' on' : '') + '" data-team-set="' + p.key + '">' +
+             iconHTML(p.icon, { star: p.star }) +
+             '<span class="lb">' + p.name + '<b>+' + digTeamBonus(p.star) + '</b>' +
+               '<em>' + p.sub + '</em></span></button>';
+    });
+  }
+  return h + '</div></div>';
+}
+
+/* 도구 카드 한 장 — 머리줄(아이콘 · 이름 · 드는 품)과 그 아래 한 줄 설명.
+ * 설명은 **한 줄** 입니다 — 예전에 두 줄짜리 설명이 카드마다 붙어 판보다 글이
+ * 많았습니다(사용자 지침 2026-11-04). 그렇다고 아주 걷으면 셋이 어떻게 다른지
+ * 알 길이 없어, 한 줄만 남겼습니다. */
+function digToolHTML(mode, now, ic, name, cost, desc) {
+  const 토막 = [].concat(desc);
+  return '<button data-dm="' + mode + '" class="' + (now === mode ? "on" : "") + '">' +
+           '<span class="hd">' + iconMini(ic) + '<span class="tn">' + name + '</span>' +
+           '<b class="tc">+' + cost + '</b></span>' +
+           '<em>' + 토막.map(t => '<span>' + t + '</span>').join('<i>·</i>') + '</em></button>';
+}
+function digGridHTML(b, all) {
+  let h = '<div class="diggrid">';
+  b.cells.forEach((c, i) => {
+    let cls = "dc", txt = "", st = "";
+    if (c.d > 0) {
+      /* 남은 겹은 «땅 그림» 으로 보입니다 — 겹마다 다른 흙 텍스처가 깔리고, 깊을수록
+       * 짙어집니다 (사용자 지침 2026-11-04 — 모서리에 수를 적었더니 판이 숫자판처럼
+       * 보였습니다: «차라리 땅별로 텍스처를 각각 작업해서 점점 더 짙어지는 모양새를»).
+       * 그림은 CSS 가 칸 바탕으로 깝니다(.dc.d1~.d4 → assets/icon/발굴 - 흙 N.png). */
+      cls += " d" + Math.min(4, c.d);
+      if (all && c.f >= 0) cls += " seen";
+      else if (c.f >= 0 && digFossilSeen(b, c.f)) cls += " seen";
+      else if (c.f >= 0 && c.d === 1) cls += " trace";
+      /* 탐침으로 읽어 둔 수 — 파기 전에도 보입니다(B1). 가운데에 크게 */
+      if (c.p != null) { cls += " probed p" + Math.min(4, c.p); txt = String(c.p); }
+    } else if (c.f >= 0) {
+      /* 드러난 화석 · 깨진 화석도 글자(▦ · ✕)가 아니라 그림입니다 — 흙과 한눈에
+       * 갈려야 하고, 깨진 것은 성한 것과 또 갈려야 합니다 (사용자 지침 2026-11-04).
+       * 성한 화석은 여러 칸에 걸쳐 그림 한 장을 나눠 깝니다(digBoneStyle). 깨진 칸은
+       * 칸마다 제 그림을 그대로 씁니다 — 깨졌다는 것이 곧 조각났다는 뜻이라서. */
+      cls += c.c ? " crack" : " bone";
+      if (!c.c) st = digBoneStyle(b, i);
+    }
+    else if (c.s) { cls += " shard"; }   /* ◆ 글자 대신 그림 — 흙 · 화석과 같은 결로 */
+    else cls += " d0";
+    h += '<div class="' + cls + '"' + (st ? ' style="' + st + '"' : '') +
+         ' data-dc="' + i + '">' + txt + '</div>';
+  });
+  /* 탐침이 마지막으로 읽은 둘레 3×3 — 점선 한 겹(사용자 지침 2026-11-04).
+   * 칸마다 테두리를 두르면 안쪽에도 선이 생기니, 격자 위에 상자 하나만 얹습니다.
+   * 드러난 화석의 «점선 테두리»(.seen)와 갈리게 색과 선을 달리했습니다. */
+  if (b.probeAt != null && !all) {
+    const W = DIG_RULE.w, H = DIG_RULE.h;
+    const x = b.probeAt % W, y = Math.floor(b.probeAt / W);
+    const x0 = Math.max(0, x - 1), y0 = Math.max(0, y - 1);
+    const x1 = Math.min(W - 1, x + 1), y1 = Math.min(H - 1, y + 1);
+    h += '<i class="prange" style="grid-column:' + (x0 + 1) + '/span ' + (x1 - x0 + 1) +
+         ';grid-row:' + (y0 + 1) + '/span ' + (y1 - y0 + 1) + '"></i>';
+  }
+  return h + '</div>';
+}
+
+/* ── 판이 무엇을 하는 자리인지 · 기호가 무슨 뜻인지 (2026-11-04) ──
+ *  흙 네 단계와 화석 · 깨진 화석 · ◆ · 점선이 어디에도 안 적혀 있어, 판을 열어도
+ *  규칙을 알 길이 없었습니다 (사용자 지침 — «발굴판 메커니즘이 하나도 이해가 안 된다»).
+ *  목표 한 줄을 판 «위» 로 올리고, 기호는 범례로 묶어 판 바로 아래에 둡니다. */
+function digAimHTML(b) {
+  const 찾음 = b.fossils.filter((f, k) => digFossilClear(b, k) && !digFossilBroken(b, k)).length;
+  const 깨짐 = b.fossils.filter((f, k) => digFossilBroken(b, k)).length;
+  /* 규칙을 적던 두 줄은 아래 «이 판을 읽는 법» 상자로 내려갔습니다 (사용자 지침
+   * 2026-11-04). 여기 남는 것은 지금 몇을 찾았나 하는 수뿐입니다 — 판을 파는 동안
+   * 자꾸 바뀌는 것은 그것뿐이라, 늘 떠 있을 값도 그것뿐입니다. */
+  return '<div class="digtally">' +
+           '<span>묻힌 화석 <b>' + b.fossils.length + '</b></span>' +
+           '<span class="ok">캐냄 <b>' + 찾음 + '</b></span>' +
+           '<span class="bad">깨짐 <b>' + 깨짐 + '</b></span>' +
+         '</div>';
+}
+/* 판 아래 한 줄로, 그리고 **접어 둡니다** (사용자 지침 2026-11-04) — 한 판만 파 보면
+ * 더 볼 일이 없는 글인데 늘 펼쳐져 자리를 차지했습니다. 펼친 채로 두었는지는
+ * DIG_LEGEND_OPEN 이 들고 있습니다 — 판은 손댈 때마다 다시 그려져서, <details> 가
+ * 제 상태를 스스로 지키지 못합니다. */
+let DIG_LEGEND_OPEN = false;
+function digLegendHTML() {
+  const k = (cls, mark, text) => '<span class="lg"><i class="dc ' + cls + '">' + mark + '</i>' + text + '</span>';
+  return '<details class="diglegend" data-tut="dig-legend"' + (DIG_LEGEND_OPEN ? ' open' : '') + '>' +
+    '<summary>' + DIG_SLAB + '을 읽는 법</summary><div class="body">' +
+    '<p class="note">손질할 때마다 피로감이 쌓이고, 가득 차면 그 ' + DIG_SLAB + '은 거기서 끝납니다.<br>' +
+      '화석을 깨지 않고 흙을 다 걷어내면 표본이 됩니다. 흙이 짙을수록 깊고, ' +
+      '옅어지다 다 걷히면 밑이 드러납니다.</p>' +
+    '<div class="marks">' +
+    '<span class="lg"><i class="dc d4"></i><i class="dc d3"></i><i class="dc d2"></i><i class="dc d1"></i>' +
+      '깊은 흙 → 얕은 흙</span>' +
+    k("d1 trace", "", "한 겹 남음 · 화석이면 흔적") +
+    /* 짝이 되는 것끼리 한 줄로 묶습니다 (사용자 지침 2026-11-04) — 성한 화석과 깨진
+     * 화석, 조각과 탐침이 읽은 수. 줄이 여섯이던 것이 넷으로 줄었습니다. */
+    '<span class="lg"><i class="dc bone"></i><i class="dc crack"></i>드러난 화석 / 깨진 화석</span>' +
+    '<span class="lg"><i class="dc shard"></i><i class="dc probed p2">2</i>' +
+      '흩어진 조각 / 탐침 주변 화석 수</span>' +
+  '</div></div></details>';
+}
+function digSiteBind(again) {
+  const d = digState();
+  /* 지도의 점과 오른쪽 줄은 «고르기» 만 합니다 — 잠긴 현장도 눌러 볼 수 있습니다 */
+  $sheet.querySelectorAll("[data-site]").forEach(el => el.onclick = () => {
+    if (d.board) return;
+    DIG_SITE_PICK = el.dataset.site;
+    again();
+  });
+  /* 파기 시작 — 여기서만 지질망치가 나갑니다 */
+  $sheet.querySelectorAll("[data-dig-go]").forEach(el => el.onclick = () => {
+    const s = digSiteBy(el.dataset.digGo);
+    if (!s || d.brush <= 0 || d.board) return;
+    d.brush -= 1;
+    d.board = digNewBoard(s);
+    saveVault();
+    again();
+  });
+  $sheet.querySelectorAll("[data-dm]").forEach(el => el.onclick = () => { d.board.mode = el.dataset.dm; saveVault(); again(); });
+  if (d.board && !d.board.done)
+    $sheet.querySelectorAll("[data-dc]").forEach(el => el.onclick = () => {
+      /* 모드를 먼저 쥡니다 — digAct 가 판을 마치면 board 가 결과 쪽으로 넘어갑니다 */
+      const mode = d.board.mode;
+      if (!digAct(+el.dataset.dc)) return;      /* 헛손질에는 소리도 흔들림도 없습니다 */
+      const board = d.board;                     /* digFinish 가 돌아도 같은 판입니다 */
+      saveVault();
+      again();                                   /* 판을 다시 그린 «뒤» 에 연출을 겁니다 */
+      digSfx(mode);
+      if (mode === "hammer") digShake();
+      digPlayFx(board);                          /* 캐냈거나 깨뜨렸으면 그 순간을 */
+    });
+  $sheet.querySelectorAll("[data-team]").forEach(el => el.onclick = () => {
+    DIG_TEAM_OPEN = DIG_TEAM_OPEN === el.dataset.team ? null : el.dataset.team;
+    again();
+  });
+  $sheet.querySelectorAll("[data-team-set]").forEach(el => el.onclick = () => {
+    if (!DIG_TEAM_OPEN) return;
+    digTeam()[DIG_TEAM_OPEN] = el.dataset.teamSet || null;
+    DIG_TEAM_OPEN = null;
+    /* 사람을 빼서 견디는 양이 이미 쌓인 피로 아래로 내려가면 그 슬랩은 거기서 끝납니다 */
+    digSyncBoardMax(d.board);
+    if (d.board && !d.board.done && d.board.sta < DIG_RULE.brush) digFinish();
+    saveVault();
+    again();
+  });
+  const leg = $sheet.querySelector(".diglegend");
+  if (leg) leg.ontoggle = () => { DIG_LEGEND_OPEN = leg.open; };
+  const end = document.getElementById("digend");
+  if (end) end.onclick = () => { digFinish(); again(); };
+  const ok = document.getElementById("digok");
+  if (ok) ok.onclick = () => { d.board = null; saveVault(); again(); };
+}
+
+/* 펼쳐 둔 현장 줄 — 표본을 누를 때마다 다시 그려서 <details> 가 제 상태를 못 지킵니다 */
+const DIG_SHELF_OPEN = {};
+function digShelfHTML() {
+  const d = digState();
+  /* 안내(튜토리얼)가 짚을 자리는 **펼쳐져 있는 첫 줄** 에 답니다 — 접힌 줄에 달면
+   * 화살표가 높이 0 인 데를 가리킵니다. */
+  let 표쓸차례 = true;
+  /* 머리 안내는 두 줄짜리 상자로 (사용자 지침 2026-11-04) — 흐린 글줄 하나에
+   * 두 가지 이야기가 이어 붙어 어디서 끊기는지가 안 보였습니다. */
+  let h = '<div class="dignotebox">' +
+            '<div>한 현장의 표본을 다 걸면 생물군 세트 완성 보상으로 그 지층의 화석 기프트를 받습니다. ' +
+              '발굴로만 얻는 기프트입니다.</div>' +
+            '<div>빠진 표본을 누르면 ' + DIG_SHARD + '으로 복원할 수 있습니다.</div>' +
+          '</div>';
+  DIG_SITES.forEach((site, i) => {
+    const open = digSiteOpen(i), got = digOwnCount(site);
+    /* 고른 표본이 이 현장의 것이면, **그 현장의 보상 줄 자리**에 세웁니다
+     * (사용자 지침 2026-11-04). 예전에는 어느 줄의 표본을 눌러도 화면 맨 위에 떠서,
+     * 맨 아래 것을 누르면 눈이 화면 끝에서 끝으로 건너뛰어야 했습니다. */
+    const hit = DIG_PICK ? digSpecBy(DIG_PICK) : null;
+    const 여기 = !!(hit && hit.site.key === site.key);
+    /* 한 장도 못 캔 줄은 접어 둡니다 (사용자 지침 2026-11-04) — 여섯 줄이 다 펼쳐져
+     * ？？？ 서른 칸이 늘어서 있었습니다. 펼쳐 둔 줄은 DIG_SHELF_OPEN 이 기억합니다
+     * (표본을 누를 때마다 화면을 다시 그려서 <details> 가 제 상태를 못 지킵니다). */
+    const 펼침 = DIG_SHELF_OPEN[site.key] != null ? DIG_SHELF_OPEN[site.key] : (got > 0 || 여기);
+    const 표 = 표쓸차례 && 펼침;
+    if (표) 표쓸차례 = false;
+    h += '<details class="digshelf' + (open || got ? '' : ' lockd') + '"' + (펼침 ? ' open' : '') +
+           ' data-shelf="' + site.key + '">' +
+         '<summary class="hd"><span class="nm">' + digSiteName(site, open || !!got) + '</span>' +
+         /* 연대는 따로 묶습니다 — 좁은 화면에서는 감춥니다(사용자 지침 2026-11-04).
+          * 잠긴 줄의 «몇 장을 마치면» 은 연대가 아니라 안내라 그대로 둡니다. */
+         '<span class="sub">' +
+           (open || got ? '<span class="wh">' + site.where + ' · </span>'
+                        : digOpenText(site) + ' · ') +
+           got + ' / ' + site.specs.length + '</span>' +
+         '</summary>' +
+         '<div class="specs"' + (표 ? ' data-tut="shelf-specs"' : '') + '>';
+    /* 아직 캐지 못한 표본은 이름도 설명도 감춥니다 (사용자 지침 2026-11-04) — 현장이
+     * 열렸다고 목록이 미리 펼쳐지면, 파낼 때의 «무엇이 나왔나» 가 없어집니다.
+     * 성급만 남깁니다 — 복원 삯이 성급으로 매겨져서, 그마저 가리면 값이 뜻을 잃습니다. */
+    site.specs.forEach(p => {
+      const own = !!d.own[p.name];
+      h += '<div class="sp' + (p.name === DIG_PICK ? ' on' : '') + '" data-sp="' + p.name + '">' +
+           iconHTML(p.name, { dim: !own, star: p.star }) + '<span class="star">' + stars(p.star) + '</span>' +
+           '<span>' + (own ? p.name : '？？？') + '</span></div>';
+    });
+    h += '</div>' + (여기 ? digPickHTML_spec(d, hit) : digRewardHTML(site, 표)) + '</details>';
+  });
+  return h;
+}
+
+/* 고른 표본 한 줄 — 보상 줄과 **같은 자리에 같은 높이로** 섭니다(.digreward 와 짝) */
+function digPickHTML_spec(d, hit) {
+  const own = !!d.own[DIG_PICK], cost = DIG_RULE.restore[digStarIdx(hit.spec)];
+  return '<div class="digpick">' + iconHTML(DIG_PICK, { dim: !own, star: hit.spec.star }) +
+         '<div class="body"><div class="sub">' + (own ? '걸어 둔 표본' : '빠진 표본') + '</div>' +
+         '<div class="nm"><span class="star">' + stars(hit.spec.star) + '</span> ' +
+           (own ? DIG_PICK : '？？？') + '</div>' +
+         '<div class="sub">' + (own ? hit.spec.note : '아직 캐지 못했습니다. ' + DIG_SHARD + '으로 복원할 수 있습니다.') + '</div></div>' +
+         (own ? '' : '<button id="digrestore"' + (d.shards < cost ? ' disabled' : '') + '>복원 (' + DIG_SHARD + ' ' + cost + ')</button>') +
+         '</div>';
+}
+function digShelfBind(again) {
+  const d = digState();
+  $sheet.querySelectorAll("[data-sp]").forEach(el => el.onclick = () => { DIG_PICK = el.dataset.sp; again(); });
+  $sheet.querySelectorAll("[data-shelf]").forEach(el => el.ontoggle = () => {
+    DIG_SHELF_OPEN[el.dataset.shelf] = el.open;
+    /* 접으면 그 안의 고른 표본도 함께 접힙니다 — 접힌 줄에 떠 있을 자리가 없습니다 */
+    if (!el.open) {
+      const hit = DIG_PICK ? digSpecBy(DIG_PICK) : null;
+      if (hit && hit.site.key === el.dataset.shelf) DIG_PICK = null;
+    }
+  });
+  const r = document.getElementById("digrestore");
+  if (r) r.onclick = () => {
+    const hit = digSpecBy(DIG_PICK);
+    if (!hit || d.own[DIG_PICK]) return;
+    const cost = DIG_RULE.restore[digStarIdx(hit.spec)];
+    if (d.shards < cost) return;
+    d.shards -= cost;
+    d.own[DIG_PICK] = true;
+    const pay = digPayCheck();
+    saveVault();
+    again();
+    if (pay.length) flashFx("표본실 완성", pay.join(" / "), null);
+  };
+}
+
+/* ── 튜토리얼 (사용자 지침 2026-11-04) ──────────────────────────────
+ *  TUTORIALS(data/tutorial.js)에 세 줄을 얹습니다. 그 파일이 아니라 여기 두는 것은
+ *  글에 DIG_BRUSH · DIG_SLAB 같은 이름을 쓰기 때문입니다(그 파일은 engine.js 보다 먼저 섭니다).
+ *  화면이 셋(현장 고르기 · 슬랩 · 표본실)이라 안내도 셋입니다 —
+ *  하나로 묶으면 그 화면에 없는 데를 짚게 되고, 짚을 데가 없으면 화살표 없이
+ *  가운데에 떠서 «무엇을 가리키는 말인지» 가 사라집니다. */
+TUTORIALS.push(
+  {
+    id:    "dig",
+    name:  "화석 탐사",
+    where: "[탐사] 에 처음 들어왔을 때",
+    steps: [
+      { text: "여기가 «화석 탐사» 입니다. " + DIG_BRUSH + " 하나로 " + DIG_SLAB +
+              " 한 장을 떼어 와, 흙을 걷어내며 그 안에 묻힌 화석을 찾습니다." },
+      { at: { sel: "[data-tut='dig-map']" },
+        text: "현장 여섯은 세계에 흩어진 «라거슈타트» — 화석이 유난히 잘 남은 지층들입니다. " +
+              "점이 실제로 그 지층이 있는 자리입니다." },
+      { at: { sel: "[data-tut='dig-list']" },
+        text: "줄을 누르면 그 현장을 고릅니다. 오른쪽 수는 그 현장에서 이미 걸어 둔 표본 수입니다. " +
+              "아직 열리지 않은 현장은 몇 장을 마쳐야 하는지가 뜹니다." },
+      { at: { sel: "[data-tut='dig-detail']" },
+        text: "고른 현장이 아래에 펼쳐집니다. 지층마다 «성격» 이 달라 도구가 다르게 먹힙니다 — " +
+              "켜가 결대로 갈라지는 석판이 있고, 손만 대도 금이 가는 눌린 화석이 있습니다." },
+      { at: { sel: "[data-tut='dig-go']" },
+        text: "[여기를 팝니다] 를 누르면 " + DIG_BRUSH + " 하나를 쓰고 " + DIG_SLAB + " 이 펼쳐집니다." },
+      { text: DIG_BRUSH + "는 " + DIG_BRUSH_WAYS + " 쌓아 두었다가 몰아서 파도 됩니다." }
+    ]
+  },
+  {
+    id:    "digslab",
+    name:  "슬랩 파기",
+    where: "슬랩을 처음 펼쳤을 때",
+    steps: [
+      { text: "떼어 온 돌 한 장을 «" + DIG_SLAB + "» 이라 부릅니다. 화석을 깨지 않고 흙을 다 걷어내면 " +
+              "표본이 되어 표본실에 걸립니다." },
+      { at: { sel: "[data-tut='dig-grid']" },
+        text: "칸을 누르면 그 자리의 흙을 걷습니다. 흙이 짙을수록 깊습니다 — 옅어지다 다 걷히면 " +
+              "밑에 있던 것이 드러납니다." },
+      { at: { sel: "[data-tut='dig-tools']" },
+        text: "붓은 한 칸을 얕게, 망치는 두 겹에 둘레까지 한 번에 — 대신 화석이 깨질 수 있습니다. " +
+              "탐침은 파지 않고 둘레 3×3 에 화석 칸이 몇인지만 읽습니다." },
+      { at: { sel: "[data-tut='dig-sta']" },
+        text: "손질할 때마다 피로감이 쌓이고, 가득 차면 그 " + DIG_SLAB + "은 거기서 끝납니다. " +
+              "어디를 팔지 고르는 것이 이 자리의 전부입니다." },
+      { at: { sel: "[data-tut='dig-team']" },
+        text: "발굴에 몸담았던 작성위원과 보조 교육위원을 여기 세우면 견디는 피로감이 늘어납니다." },
+      { at: { sel: "[data-tut='dig-legend']" },
+        text: "칸의 그림이 무슨 뜻인지는 여기서 다시 봅니다." }
+    ]
+  },
+  {
+    id:    "digshelf",
+    name:  "표본실",
+    where: "표본실에 처음 들어왔을 때",
+    steps: [
+      { text: "캐낸 표본은 여기 걸립니다. 한 번 걸면 사라지지 않습니다." },
+      { at: { sel: "[data-tut='shelf-specs']" },
+        text: "현장마다 표본 다섯입니다. 아직 캐지 못한 것은 이름도 설명도 없이 그림자로만 섭니다 — " +
+              "무엇이 묻혀 있는지는 파 봐야 압니다." },
+      { at: { sel: "[data-tut='shelf-reward']" },
+        text: "다섯을 다 걸면 «생물군 세트 완성 보상» 으로 그 지층의 화석 기프트를 받습니다. " +
+              "발굴로만 나오는 ★3 기프트입니다." },
+      { text: "깨뜨린 표본과 이미 걸어 둔 표본은 " + DIG_SHARD + "이 됩니다. 조각으로 빠진 표본을 " +
+              "복원하거나, 상점에서 황금교본으로 바꿉니다." }
+    ]
+  }
+);
+
+/* ── 상점의 교환 줄 (사용자 지침 2026-11-04) ─────────────────────────
+ *  SHOP_TRADES 에 줄을 하나 얹습니다. show() 가 있어 [탐사] 가 열리기 전에는 서지
+ *  않습니다 — can() 을 false 로 두면 «못 누르는 줄» 로 서서 아직 없는 것을 알려 버립니다.
+ *  SHOP_TRADES 표 안이 아니라 여기 두는 것은 name · desc 가 DIG_SHARD · DIG_RULE 을
+ *  곧바로 읽기 때문입니다 — 표는 이 자리보다 위에 서 있습니다. */
+SHOP_TRADES.push({
+  id: "shard_to_codex", icon: "황금교본",
+  name: DIG_SHARD + " 교환",
+  desc: DIG_SHARD + " " + DIG_RULE.shardCodex.shards + "개를 황금교본 " +
+        DIG_RULE.shardCodex.codex + "권으로 바꾼다.",
+  show: () => digOpen(),
+  can:  () => digState().shards >= DIG_RULE.shardCodex.shards,
+  need: () => DIG_SHARD + " " + DIG_RULE.shardCodex.shards + "개" +
+              "　(지닌 것 " + digState().shards + ")",
+  give: () => {
+    const d = digSync();
+    d.shards -= DIG_RULE.shardCodex.shards;
+    S.codex += DIG_RULE.shardCodex.codex;
+    return DIG_SHARD + " " + DIG_RULE.shardCodex.shards + "개를 넘기고 황금교본 " +
+           DIG_RULE.shardCodex.codex + "권을 받았다.";
+  }
+});
 
 /* ── 어비스 거울 던전 ─────────────────────────────────────────────────
  *  익스트림 세 층을 지난 뒤, 4·5층을 더 내려갑니다(사용자 지침 2026-10-23 —

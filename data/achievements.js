@@ -322,5 +322,16 @@ const ACHIEVEMENTS = [
     reward: "E.G.O 기프트 ★★★ 깨끗한 비늘 브러쉬",
     when: { clear: "mirrorDeep:rails4" },
     give: { gift: "깨끗한 비늘 브러쉬" }
+  },
+  {
+    /* 화석 탐사(v2.26.0) — 생물군 세트 완성 보상(화석 기프트)을 다섯 가지 받으면.
+     * 이름은 캄브리아기 대폭발에서(사용자 지침 2026-11-05). 기프트를 «지닌» 수가 아니라
+     * 받은 현장 수(S.dig.paid)로 셉니다 — 합성 재료로 쓰고 나서도 모은 것은 모은 것이라서.
+     * engine.js 의 digAchieveCheck 가 다섯째에 checkAchievements(null, "dig:gifts5") 를 부릅니다. */
+    name: "라거슈타트 대폭발!",
+    desc: "화석 탐사에서 생물군 세트 완성 보상을 다섯 가지 모은다.",
+    reward: "동기화 모듈 1개",
+    when: { clear: "dig:gifts5" },
+    give: { syncModule: 1 }
   }
 ];

@@ -759,6 +759,71 @@ const GIFTS = [
         effect: { reviveFirst: 0.70 } }
     ],
     effect: { reviveFirst: 0.50 }
+  },
+  /* ── 화석 기프트 — 화석 탐사에서만(v2.26.0 에 wip/발굴_표본실 을 옮겨 붙임). noGacha · fossil ── */
+  {
+    star: 3, noGacha: true, fossil: true, name: "다르위니우스",
+    flavor: "털 한 올, 마지막 끼니까지 고요한 호수 바닥에 남았다.",
+    desc: "모든 인격의 체력 20%, 방어력 10% 강화",
+    up: [
+      { desc: "모든 인격의 체력 25%, 방어력 12% 강화", effect: { all: { hp: 0.25, def: 0.12 } } },
+      { desc: "모든 인격의 체력 30%, 방어력 15% 강화", effect: { all: { hp: 0.30, def: 0.15 } } }
+    ],
+    effect: { all: { hp: 0.20, def: 0.10 } }
+  },
+  {
+    star: 3, noGacha: true, fossil: true, name: "시노사우롭테릭스",
+    flavor: "화산재가 덮은 자리에서, 깃털은 색까지 살아남았다.",
+    desc: "전투에서 처음으로 쓰러진 작성위원이 체력 70%로 한 번 살아남 · 모든 인격의 방어력 10% 강화",
+    up: [
+      { desc: "전투에서 처음으로 쓰러진 작성위원이 체력 80%로 한 번 살아남 · 모든 인격의 방어력 10% 강화",
+        effect: { reviveFirst: 0.80, all: { def: 0.10 } } },
+      { desc: "전투에서 처음으로 쓰러진 작성위원이 체력 90%로 한 번 살아남 · 모든 인격의 방어력 12% 강화",
+        effect: { reviveFirst: 0.90, all: { def: 0.12 } } }
+    ],
+    effect: { reviveFirst: 0.70, all: { def: 0.10 } }
+  },
+  {
+    star: 3, noGacha: true, fossil: true, name: "시조새",
+    flavor: "인쇄용 석판을 캐다가, 날개가 찍힌 한 장이 나왔다.",
+    desc: "크리티컬 확률 +12%p, 크리티컬 배율 +0.5 · 치명타로 주는 피해 10% 증가",
+    up: [
+      { desc: "크리티컬 확률 +13%p, 크리티컬 배율 +0.55 · 치명타로 주는 피해 15% 증가",
+        effect: { crit: 0.13, critMult: 0.55, critDmg: 0.15 } },
+      { desc: "크리티컬 확률 +15%p, 크리티컬 배율 +0.6 · 치명타로 주는 피해 20% 증가",
+        effect: { crit: 0.15, critMult: 0.60, critDmg: 0.20 } }
+    ],
+    effect: { crit: 0.12, critMult: 0.50, critDmg: 0.10 }
+  },
+  {
+    star: 3, noGacha: true, fossil: true, name: "오파비니아",
+    flavor: "눈이 다섯이라는 말에, 학회장이 웃음바다가 되었다.",
+    desc: "모든 인격의 공격력·방어력 15%, 체력 10% 강화",
+    up: [
+      { desc: "모든 인격의 공격력·방어력 18%, 체력 12% 강화", effect: { all: { atk: 0.18, def: 0.18, hp: 0.12 } } },
+      { desc: "모든 인격의 공격력·방어력 20%, 체력 15% 강화", effect: { all: { atk: 0.20, def: 0.20, hp: 0.15 } } }
+    ],
+    effect: { all: { atk: 0.15, def: 0.15, hp: 0.10 } }
+  },
+  {
+    star: 3, noGacha: true, fossil: true, name: "하이코우이크티스",
+    flavor: "등뼈의 첫 줄. 모든 버팀은 여기서 시작했다.",
+    desc: "모든 인격의 방어력 20% 강화 · 교정으로 줄이는 피해 +10%p",
+    up: [
+      { desc: "모든 인격의 방어력 25% 강화 · 교정으로 줄이는 피해 +12%p", effect: { all: { def: 0.25 }, correct: 0.12 } },
+      { desc: "모든 인격의 방어력 30% 강화 · 교정으로 줄이는 피해 +15%p", effect: { all: { def: 0.30 }, correct: 0.15 } }
+    ],
+    effect: { all: { def: 0.20 }, correct: 0.10 }
+  },
+  {
+    star: 3, noGacha: true, fossil: true, name: "티모레베스티아",
+    flavor: "얼음 너머 가장 오래된 바다의 포식자.",
+    desc: "모든 인격의 공격력 20% 강화 · 치명타로 주는 피해 25% 증가",
+    up: [
+      { desc: "모든 인격의 공격력 25% 강화 · 치명타로 주는 피해 30% 증가", effect: { all: { atk: 0.25 }, critDmg: 0.30 } },
+      { desc: "모든 인격의 공격력 30% 강화 · 치명타로 주는 피해 35% 증가", effect: { all: { atk: 0.30 }, critDmg: 0.35 } }
+    ],
+    effect: { all: { atk: 0.20 }, critDmg: 0.25 }
   }
 ];
 
