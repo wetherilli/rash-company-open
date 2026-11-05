@@ -749,6 +749,13 @@
   .vfold[open] > summary{margin-bottom:6px;}
   /* [기프트 강화] · [기프트 합성] 손잡이 줄 (engine.js giftWorkHTML) — 보관함 · 편성의 기프트 머리 */
   .giftwork{margin:6px 0 4px;}
+  /* 기프트 고르기 창 맨 위의 강화 · 합성 (engine.js openGiftPick · 2026-11-06) —
+   * 아래 「모두 내려놓기」 와 한 줄 띄우고, 넓은 화면에서는 둘을 한 줄에 나란히 */
+  .gpwork{margin-bottom:18px;}
+  @media (min-width:641px){
+    .gpwork .giftwork{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .gpwork .giftwork .syncrow{margin:0;}
+  }
   /* 편성 창 맨 위 — [인격 장착] · [동기화] · [편성 저장] 한 줄 (engine.js openParty) */
   .grid.partytools{grid-template-columns:repeat(3,1fr);margin:4px 0 2px;}
   .grid.partytools .slot{cursor:pointer;}
@@ -950,6 +957,30 @@
   .achgauge{margin:4px 0 12px;color:var(--text-2);font-size:13px;}
   .achgauge .rwgauge{height:10px;width:calc(100% - 94px);}
   .achgauge .rwgnum{width:90px;white-space:nowrap;}   /* 「달성도 100%」 가 한 줄에 들어가게 */
+  /* 기프트 목록의 성급 묶음 머리줄 — 장착 창 · 보관함 (engine.js giftGroupsHTML · 2026-11-06).
+   * 화석 기프트 묶음은 맨 아래, 호박색 머리줄로 갈립니다 */
+  .giftgrp{display:flex;align-items:baseline;gap:8px;margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--line);
+           cursor:pointer;list-style:none;user-select:none;}
+  .giftgrp::-webkit-details-marker{display:none;}
+  /* 접힘 표시 — 머리줄 오른쪽 끝의 ▸ / ▾ */
+  .giftgrp::after{content:"▸";margin-left:auto;color:var(--dim);font-size:11px;}
+  .giftfold[open] > .giftgrp::after{content:"▾";}
+  /* 기프트 카드는 세로 크기를 고정합니다 (사용자 지침 2026-11-06) — 줄마다 가장 긴 카드에 맞춰 늘어나
+   * 묶음 · 줄마다 높이가 들쭉날쭉했습니다. 값은 2026-11-06 에 가장 긴 카드(화석 기프트 — 이름 · 한 줄 대사 ·
+   * 두 줄 설명)를 재서 맞췄습니다: 넓은 화면(세 칸) 182px, 좁은 화면(한 칸 · 글씨 한 단 작게) 126px.
+   * 설명이 이보다 긴 기프트를 새로 넣으면 잘리니, 그때 이 값을 올리십시오. */
+  .giftfold .grid .slot{box-sizing:border-box;height:182px;overflow:hidden;}
+  /* 좁은 화면에서는 카드 글씨를 한 단 줄입니다 (사용자 지침 2026-11-06) — 이름 · 대사 · 설명 모두 */
+  @media (max-width:640px){
+    .giftfold .grid .slot{height:126px;padding:7px 9px;}   /* 줄인 글씨로 가장 긴 카드가 123px (2026-11-06) */
+    .giftfold .grid .slot .nm,.giftfold .grid .slot .lock{font-size:12px;}
+    .giftfold .grid .slot .notequote{font-size:11px;}
+    .giftfold .grid .slot .sub{font-size:11px;}
+  }
+  .giftgrp b{color:var(--text);font-size:13px;}
+  .giftgrp span{color:var(--dim);font-size:12px;}
+  .giftgrp:has(+ .grid .ic.sf) b{color:#d08a2e;}
+  .giftgrp:has(+ .grid .ic.sf){border-bottom-color:#8a5a22;}
   /* 업적 분류 탭 — 진행도 줄 바로 아래 (engine.js ACH_CATS · 2026-11-05). 좁은 화면에서는 두 줄로 접힙니다 */
   .achtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;}
   .achtabs button{padding:5px 10px;font-size:12.5px;}
@@ -976,6 +1007,38 @@
   }
   .rwpick{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
   .rwpick button{display:flex;align-items:center;gap:5px;}
+  /* 재화 한 덩이 「[아이콘]30」 (engine.js payHTML · 2026-11-06) — 상점과 그 안의 창들 */
+  .payic{display:inline-flex;align-items:center;gap:2px;vertical-align:middle;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .payic .icmini{margin:0;}
+  /* 배정 손잡이 — 아이콘이 글자 줄보다 커서 손잡이 키가 늘어나 「닫기」 와 줄이 어긋났습니다.
+   * 손잡이 안에서는 아이콘을 글자 높이(14px)로 줄이고 줄 높이를 다른 손잡이와 같게 둡니다 */
+  .paybtn{white-space:nowrap;}
+  /* 배정 단추 줄 — 창 맨 아래, 두 단추가 반씩 (engine.js openGacha · openStockGacha · 2026-11-06) */
+  .pullbar{display:flex;gap:8px;margin:14px 0 4px;}
+  .pullbar button{flex:1 1 0;min-width:0;justify-content:center;display:inline-flex;align-items:center;padding:9px 8px;font-size:13.5px;}
+  .paybtn .payic{margin-left:4px;line-height:1;}
+  .paybtn .payic .icmini{width:14px;height:14px;}
+  /* 출석 · 주간 보상 창 머리의 안내 상자 (engine.js openReward · 2026-11-06) — 표본실 머리 상자(.dignotebox)와 같은 꼴 */
+  .rwnote{margin:0 0 12px;padding:7px 10px;border:1px solid var(--line);background:var(--sheet);border-radius:3px;
+          color:var(--muted);font-size:12px;line-height:1.6;}
+  .rwnote b{color:var(--text);}
+  .rwnote.small{font-size:11px;line-height:1.55;margin-top:10px;}   /* 비었을 때 안내 같은 작은 상자 (2026-11-06) */
+  /* 금빛 상자 — 특정 배정 · 기념 배정의 이름과 설명 (engine.js openGacha · 2026-11-06) */
+  .rwnote.gold{border-color:var(--gold-mid);background:var(--gold-bg);color:var(--gold);}
+  .rwnote.gold b{color:var(--gold);}
+  .rwnote .sm{font-size:11px;line-height:1.55;margin-top:2px;}   /* 이름 아래 설명 줄 — 한 단 작게 */
+  /* 상자 안 줄마다 가운데 점 — 배정 창 정보 (engine.js openGacha · openStockGacha · 2026-11-06).
+   * 딸린 수치(.more)는 점 없이 한 칸 들여 작게 */
+  .rwnote ul.dots{list-style:none;margin:0;padding:0;}
+  .rwnote ul.dots li{position:relative;padding-left:13px;}
+  .rwnote ul.dots li + li{margin-top:2px;}
+  .rwnote ul.dots li::before{content:"·";position:absolute;left:3px;top:0;color:var(--gold);font-weight:800;}
+  .rwnote ul.dots .more{display:block;color:var(--dim);font-size:11px;}
+  /* 주간 과제 최종 보상 둘(선택권)은 좁은 화면에서도 한 줄에 나란히 (사용자 지침 2026-11-06) */
+  @media (max-width:640px){
+    .rwpick{flex-wrap:nowrap;gap:6px;}
+    .rwpick button{flex:1 1 0;min-width:0;justify-content:center;padding:5px 6px;font-size:10.5px;white-space:nowrap;gap:3px;}
+  }
   .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
   .slot:hover{border-color:var(--red);}
   .slot.sel{border-color:var(--gold);background:var(--panel-2);}
@@ -988,6 +1051,9 @@
   /* 키보드로 옮겨 다닐 때만 보이는 초점 테두리 — 누르는 칸은 engine.js markSheetPressables 가 초점을 받게 합니다 */
   button:focus-visible, [role="button"]:focus-visible, summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
   .slot .nm{color:var(--text);font-weight:700;}
+  /* 못 누르는 칸의 제목 — 굵기는 그대로 두고 색만 흐리게. 한 줄에 선 칸끼리 제목 급이 어긋나지 않게
+   * (상점 기프트 배정소 · 인격 교환 · 교육위원 파견 — 사용자 지침 2026-11-06) */
+  .slot .nm.off{color:var(--dim);}
   /* 편성 창 맨 위 «지금 편성» — 몇 번째 칸인지 동그라미 숫자로 (engine.js openParty) */
   .teamstrip .teamno{display:inline-block;min-width:18px;height:18px;line-height:18px;border-radius:9px;text-align:center;
                      background:var(--gold);color:var(--bg);font-size:11.5px;font-weight:800;margin-right:2px;}
@@ -1009,12 +1075,13 @@
   .achrow .body{flex:1;min-width:0;}
   .achrow .nm{color:var(--text);font-weight:700;}
   .achrow .lock{color:var(--dim);font-size:13px;font-weight:700;}
-  .achrow .sub{color:var(--muted);font-size:12.5px;}
+  .achrow .sub{color:var(--muted);font-size:11.5px;}   /* 조건 글 — 12.5 → 11.5 (사용자 지침 2026-11-06) */
   .achrow .rw{flex:none;max-width:42%;text-align:right;color:var(--muted);font-size:12.5px;}
   .achrow.got .rw{color:#cfc6b0;}
   @media (max-width:640px){
     .achrow{flex-wrap:wrap;gap:4px 10px;}
     .achrow .rw{flex-basis:100%;max-width:none;text-align:left;padding-left:26px;}
+    .achrow .sub{font-size:11px;}   /* 좁은 화면에서는 한 단 더 */
   }
   /* 이벤트 교환소의 물건 줄 — 업적 줄과 같은 틀. 살 수 있는 줄만 손가락이 뜹니다 */
   .evrow.can{cursor:pointer;}
@@ -1374,6 +1441,23 @@
   .tutrow .tutwhen{color:var(--dim);font-size:11px;}
   .tutrow .tutline{color:var(--text-3);font-size:12px;line-height:1.65;}
   .tutrow .tutline b{color:var(--gold);font-weight:700;}
+  /* 노트 → 튜토리얼: 안내마다 접힘 (engine.js tutorView · 2026-11-06). 머리줄을 누르면 펴지고, 줄 아래 [다시 보기] */
+  .tutrow > summary.tuthead{list-style:none;cursor:pointer;position:relative;padding-right:18px;}
+  .tutrow > summary.tuthead::-webkit-details-marker{display:none;}
+  .tutrow > summary.tuthead::after{content:"▸";position:absolute;right:0;top:2px;color:var(--dim);font-size:11px;}
+  .tutrow[open] > summary.tuthead::after{content:"▾";}
+  .tutrow[open] > summary.tuthead{margin-bottom:6px;}
+  .tutrow .tutplay{margin-top:8px;}
+  /* 노트 작성위원 카드 — 설명(E.G.O · 주의사항) 글씨를 한 단 줄여 줄이 덜 나뉘게 (engine.js openNote · 2026-11-06) */
+  .notewho .slot .sub{font-size:11px;line-height:1.45;}
+  .notewho .slot .nm{font-size:12px;white-space:nowrap;}   /* 「No.12 김하 / 주」 처럼 이름이 꺾이지 않게 */
+  /* 노트 승무원 카드도 같은 크기로 (2026-11-06) */
+  .notecrew .slot .sub{font-size:11px;line-height:1.45;}
+  .notecrew .slot .nm{font-size:12px;}
+  /* 세로 크기 고정 — 2026-11-06 에 가장 긴 카드(주의사항이 두 줄 넘는 사람)를 재서: 넓은 화면(네 칸) 91px,
+   * 좁은 화면(두 칸) 113px. 설명이 더 긴 사람이 들어오면 잘리니 그때 이 값을 올리십시오. */
+  .notewho .slot{box-sizing:border-box;overflow:hidden;height:92px;}
+  @media (max-width:640px){ .notewho .slot{height:114px;} }
 
   /* ── 좁은 화면 (휴대전화) ──────────────────
    *  전투 화면이 한 눈에 들어오도록, 보여 주는 것을 줄입니다.
@@ -1647,24 +1731,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.26.4"></script>
-<script src="data/vault.js?v=2.26.4"></script>
-<script src="data/characters.js?v=2.26.4"></script>
-<script src="data/skills.js?v=2.26.4"></script>
-<script src="data/allies.js?v=2.26.4"></script>
-<script src="data/gifts.js?v=2.26.4"></script>
-<script src="data/pickup.js?v=2.26.4"></script>
-<script src="data/achievements.js?v=2.26.4"></script>
-<script src="data/mail.js?v=2.26.4"></script>
-<script src="data/notice.js?v=2.26.4"></script>
-<script src="data/patch.js?v=2.26.4"></script>
-<script src="data/event.js?v=2.26.4"></script>
-<script src="data/reward.js?v=2.26.4"></script>
-<script src="data/tutorial.js?v=2.26.4"></script>
-<script src="data/foes.js?v=2.26.4"></script>
-<script src="data/story.js?v=2.26.4"></script>
-<script src="data/mirrorpacks.js?v=2.26.4"></script>
-<script src="engine.js?v=2.26.4"></script>
+<script src="data/access.js?v=2.26.5"></script>
+<script src="data/vault.js?v=2.26.5"></script>
+<script src="data/characters.js?v=2.26.5"></script>
+<script src="data/skills.js?v=2.26.5"></script>
+<script src="data/allies.js?v=2.26.5"></script>
+<script src="data/gifts.js?v=2.26.5"></script>
+<script src="data/pickup.js?v=2.26.5"></script>
+<script src="data/achievements.js?v=2.26.5"></script>
+<script src="data/mail.js?v=2.26.5"></script>
+<script src="data/notice.js?v=2.26.5"></script>
+<script src="data/patch.js?v=2.26.5"></script>
+<script src="data/event.js?v=2.26.5"></script>
+<script src="data/reward.js?v=2.26.5"></script>
+<script src="data/tutorial.js?v=2.26.5"></script>
+<script src="data/foes.js?v=2.26.5"></script>
+<script src="data/story.js?v=2.26.5"></script>
+<script src="data/mirrorpacks.js?v=2.26.5"></script>
+<script src="engine.js?v=2.26.5"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
