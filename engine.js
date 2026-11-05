@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.26.6";
+const VERSION = "2.26.7";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1157,7 +1157,7 @@ function enkBarHTML() {
   for (let i = 0; i < ENK_RULE.max; i++)
     pips += '<i class="' + (i < n ? 'on' : '') + '"></i>';
   return '<div class="enkwrap">' +
-           '<span class="enknm">' + ENK_RULE.name + '</span>' +
+           '<span class="enknm">' + iconMini(ENK_RULE.name) + ENK_RULE.name + '</span>' +   // 아이콘 (사용자 지침 2026-11-06)
            '<span class="enkpips">' + pips + '</span>' +
            '<span class="enknum">' + n + ' / ' + ENK_RULE.max + '</span>' +
            /* 가득 찼을 때는 «가득 찼습니다» 를 적지 않습니다 — 눈금과 10 / 10 으로 이미 보이고,
@@ -4532,6 +4532,8 @@ function buttons(list) {
     if (!b) return;
     const el = document.createElement("button");
     el.textContent = b.label;
+    /* 드는 관리력 — 「첨삭 (2)」 대신 「첨삭 [도장]2」 (사용자 지침 2026-11-06) */
+    if (b.mcost != null) el.insertAdjacentHTML("beforeend", payHTML("관리력", b.mcost));
     /* 단축키 표시는 따로 감싸 둡니다 — 손가락으로 쓰는 기기(폰·태블릿)에서는 CSS 가 감춥니다.
      * 글쇠가 없는 기기라 쓸 수도 없고, 손잡이 글자만 길어집니다(사용자 지침 2026-10-20). */
     if (b.key) {
@@ -4805,14 +4807,14 @@ function renderManage() {
     const c  = skillCost(s.cost);
     const ok = now >= c;
     return '<span class="mgsk' + (ok ? '' : ' off') + '">' +
-             '<b>' + s.name + '</b><i>' + c + '</i>' +
+             '<b>' + s.name + '</b>' + payHTML("관리력", c) +   // 드는 관리력 — 아이콘 + 수
              (s.short || s.desc || "") +
            '</span>';
   }).join("");
 
   box.innerHTML =
     '<div class="mgwrap">' +
-      '<span class="mgnm">관리력</span>' +
+      '<span class="mgnm">' + iconMini("관리력") + '관리력</span>' +   // 아이콘 (사용자 지침 2026-11-06)
       '<span class="mgpips">' + pips + '</span>' +
       '<span class="mgnum">' + now + ' / ' + cap + '</span>' +
       '<span class="mgsub">턴마다 ' + (RULE.manageGain + advisorEffect().gain) +
@@ -6832,7 +6834,7 @@ function askNext() {
   const downed = S.party.filter(w => w && !alive(w) && !allyLoseOnDown(w));   // 작성위원이 아닌 조력자는 첨삭으로 못 일으킵니다
 
   list.push({
-    label: "첨삭 (" + cRevive + ")", cls: "ghost", key: "e",
+    label: "첨삭", mcost: cRevive, cls: "ghost", key: "e",
     disabled: b.manage < cRevive || !downed.length || railGraveNoRevive(),   // 편도(4호선)에서는 잠깁니다
     fn: () => {
       const t = downed[0];
@@ -6847,7 +6849,7 @@ function askNext() {
   const hurt = S.party.filter(w => w && alive(w) && curHp(w) < maxHp(w))
                       .sort((a, b) => curHp(a) - curHp(b))[0];
   list.push({
-    label: "퇴고 (" + cHeal + ")", cls: "ghost", key: "r",
+    label: "퇴고", mcost: cHeal, cls: "ghost", key: "r",
     disabled: b.manage < cHeal || !hurt,
     fn: () => {
       b.manage -= cHeal;
@@ -6864,7 +6866,7 @@ function askNext() {
    * b.cur 에 그냥 걸면 관리력만 버리는 일이 잦았습니다. pickTarget 참고. */
   const guardable = S.party.filter(w => w && alive(w) && !b.mods[w + "_guard"]);
   list.push({
-    label: "교정 (" + cCorrect + ")…", cls: "ghost", key: "2",
+    label: "교정…", mcost: cCorrect, cls: "ghost", key: "2",
     disabled: b.manage < cCorrect || !guardable.length,
     fn: () => pickTarget(guardable, t => {
       b.manage -= cCorrect; b.mods[t + "_guard"] = true;
@@ -6876,7 +6878,7 @@ function askNext() {
    * 바로 그 사람이라, b.cur 가 늘 원하는 대상입니다. 손잡이에 이름도 붙이지 않습니다
    * (사용자 지침 2026-10-20 — 지금 차례인 사람인 것이 뻔해 손잡이만 길어졌습니다). */
   list.push({
-    label: "독촉 (" + cPush + ")", cls: "ghost", key: "1",
+    label: "독촉", mcost: cPush, cls: "ghost", key: "1",
     disabled: b.manage < cPush || b.mods[who + "_push"],
     fn: () => {
       b.manage -= cPush; b.mods[who + "_push"] = true;
@@ -6891,7 +6893,7 @@ function askNext() {
     const cArrest = skillCost(arrest.cost);
     list.push({
       /* 상대가 늘 하나라 대상 이름은 붙이지 않습니다(사용자 지침 2026-10-20) — 손잡이가 짧아집니다 */
-      label: "체포 (" + cArrest + ")", cls: "ghost", key: "3",
+      label: "체포", mcost: cArrest, cls: "ghost", key: "3",
       disabled: b.manage < cArrest || !!b.mods.arrest,
       fn: () => {
         b.manage -= cArrest;
