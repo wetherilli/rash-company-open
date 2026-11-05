@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.26.5";
+const VERSION = "2.26.6";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -8218,20 +8218,21 @@ function chapterEnd() {
   }
 
   const firstEver = first && CHAPTERS[0] && c.id === CHAPTERS[0].id;
+  /* 0장을 처음 마치면 손잡이는 [유리창으로] 하나 — 유리창에서 화면 안내(tutorOnce "glass")가 이어집니다
+   * (사용자 지침 2026-11-06 — 상점 · 다음 장 · 편성 · 보관함 · 노트 · 운전석 · 유리창이 한꺼번에 서서 헷갈렸습니다). */
   if (firstEver) {
     divider();
-    say("이제 [상점] 에서 인격을 배정받아 보십시오.", "good");
-    say("모은 " + CURRENCY + "로 새 인격을 뽑고, [편성] 에서 갈아 끼우면 " +
-        "작성위원이 훨씬 강해집니다. 뽑은 인격은 회차가 바뀌어도 남습니다.", "sys");
+    say("유리창으로 돌아가 화면 안내를 받으십시오.", "good");
+    buttons([{ label: "유리창으로", cls: "primary", fn: () => glass() }]);
+    return;
   }
 
   buttons([
-    firstEver ? { label: "상점 — 인격 배정받기", cls: "primary", fn: () => openShop(() => chapterEnd()) } : null,
     hasNext ? { label: (gid && CHAPTERS[S.ch + 1].part === gid) ? "다음 부분으로" : "다음 장으로",
-                cls: firstEver ? "" : "primary",
+                cls: "primary",
                 fn: () => startChapter(S.ch + 1) } : null,
     { label: "편성", fn: () => openParty(() => {}) },
-    firstEver ? null : { label: "상점", fn: () => openShop(() => {}) },
+    { label: "상점", fn: () => openShop(() => {}) },
     { label: "보관함", fn: () => openVault(() => chapterEnd()) },
     { label: "노트", cls: "ghost", fn: () => openNote(() => chapterEnd()) },
     { label: "운전석", cls: "ghost", fn: () => openChapterSelect(() => chapterEnd()) },
@@ -8843,6 +8844,10 @@ const TUTOR_SCREENS = {
   giftup:   () => { if (giftUpUnlocked()) openGiftUp(() => openVault(() => glass())); },
   giftfuse: () => { if (giftFuseUnlocked()) openGiftFuse(() => openVault(() => glass())); },
   sync:     () => { if (syncUnlocked()) openSync(() => glass()); },
+  note:     () => openNote(() => glass()),
+  achieve:  () => openAchieve(() => glass()),
+  reward:   () => { if (rewardOn()) openReward(() => glass()); },
+  settings: () => openSettings(() => glass()),
   /* 화석 탐사 셋 (2026-11-06 — 병합 때 빠져 있어 유리창 위에 떴습니다). 탐사가 안 열렸으면 유리창 위에.
    * 슬랩 안내는 파는 중인 슬랩이 있어야 짚을 데가 있습니다 — 없으면 현장 화면 위에 가운데로 뜹니다. */
   dig:      () => { if (digOpen()) { DIG_VIEW = "site";  openDig(() => glass()); } },
@@ -9397,6 +9402,8 @@ function openNote(back, focus) {
   };
 
   if (focus && SINNERS[focus]) detail(focus); else index();
+  liftSheetFoot();    // 짚을 머리줄(.sheettop)을 먼저 세웁니다 — 평소엔 MutationObserver 가 한 박자 늦게 세움
+  tutorOnce("note");    /* 노트에 처음 들어왔을 때 한 번 (UI-09) */
 }
 
 /* ── 상점 ─────────────────────────────────────────────────────
@@ -14246,6 +14253,8 @@ function openReward(back, note) {
     RW_OPEN.week = RW_OPEN.tasks = false;
     closeModal(); render(); if (back) back();
   };
+  liftSheetFoot();    // 짚을 머리줄(.sheettop)을 먼저 세웁니다 — 평소엔 MutationObserver 가 한 박자 늦게 세움
+  tutorOnce("reward");    /* 출석 · 보상 창에 처음 들어왔을 때 한 번 (UI-09) */
 }
 
 /* ── 업적 분류 (사용자 지침 2026-11-05 — «업적이 너무 많으니 나눠 볼 수 있게») ──────────
@@ -14355,6 +14364,7 @@ function openAchieve(back) {
   document.getElementById("acclose").onclick = () => {
     closeModal(); render(); if (back) back();
   };
+  tutorOnce("achieve");    /* 업적에 처음 들어왔을 때 한 번 (UI-09) */
 }
 
 /* ── 저장해 둔 편성 ────────────────────────────────────────────
@@ -15582,6 +15592,8 @@ function openSettings(back) {
     document.getElementById("setclose").onclick = () => { SET_PAL_OPEN = false; closeModal(); render(); if (back) back(); };
   };
   draw();
+  liftSheetFoot();    // 짚을 머리줄(.sheettop)을 먼저 세웁니다 — 평소엔 MutationObserver 가 한 박자 늦게 세움
+  tutorOnce("settings");    /* 설정에 처음 들어왔을 때 한 번 (UI-09) */
 }
 
 /* 설정의 «효과음 크기» 칸 (사용자 지침 2026-10-27) — 막대를 끌면 곧바로 바뀌고, 놓을 때 보관함에 남깁니다.
@@ -16427,7 +16439,8 @@ function glass() {
   ]);
   showEnkBar(true);
   /* 처음 오신 분께 — 손잡이를 하나씩 짚어 드립니다. 한 번만 나옵니다. */
-  if (!INSTALL_ASKING) tutorOnce("glass");   // 설치 창을 닫으면 glass() 가 다시 불려 그때 나옵니다
+  /* 0장을 마친 뒤에 처음 나옵니다 — 그 전에는 «운전석 → 0장» 한 줄만 (사용자 지침 2026-11-06) */
+  if (!INSTALL_ASKING && S.cleared && CHAPTERS[0] && S.cleared[CHAPTERS[0].id]) tutorOnce("glass");   // 설치 창을 닫으면 glass() 가 다시 불려 그때 나옵니다
 }
 
 /* 예전 이름 — 부팅과 내부 호출에서 그대로 쓸 수 있게 남겨 둡니다 */
