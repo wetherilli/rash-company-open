@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.26.7";
+const VERSION = "2.26.8";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3216,6 +3216,17 @@ function setHp(who, v) {
  *   · 여럿을 지녔으면 가장 큰 비율 하나만 씁니다.
  * 알리는 글은 한 박자 늦춰(setTimeout 0) 그 공격의 피해 줄 «뒤» 에 서게 합니다 —
  * setHp 는 피해 줄을 적기 전에 불리기 때문입니다. */
+/* E.G.O 기프트 effect.lowHpCut: { below, cut } (화석 기프트 「키티파티」, 2026-11-08).
+ * 맞기 «전» 체력이 최대의 below 아래인 사람은 받는 피해를 cut 만큼 덜 받습니다.
+ * 여럿을 지녔으면 큰 cut 하나. 못박은 광역(aoeFlat)에는 듣지 않습니다(hitOne 이 그 앞에서 돌아감). */
+function lowHpCut(who) {
+  let cut = 0;
+  equippedGifts().forEach(g => {
+    const e = g.effect && g.effect.lowHpCut;
+    if (e && e.cut > cut && curHp(who) < maxHp(who) * (e.below || 0.5)) cut = e.cut;
+  });
+  return Math.min(0.9, cut);
+}
 function reviveFirstDown(who) {
   const b = S.battle;
   if (!b || !b.persist || b.persist._reviveUsed) return;
@@ -7466,6 +7477,7 @@ function resolveTurn() {
         if (b.mods[t + "_guard"]) dmg *= Math.max(0.05, RULE.correctCut - advisorEffect().correct);
         if (b.mods[t + "_immune"]) dmg *= (1 - b.mods[t + "_immune"]);
         if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
+        { const lc = lowHpCut(t); if (lc) dmg *= (1 - lc); }       // 화석 기프트 「키티파티」
         return Math.max(1, Math.floor(dmg));
       };
 
@@ -7679,6 +7691,7 @@ function resolveTurn() {
     if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
     if (t === hero && heroPct) dmg *= (1 - heroPct / 100);
     if (tookFor) dmg *= (1 - tookFor);
+    { const lc = lowHpCut(t); if (lc) dmg *= (1 - lc); }         // 화석 기프트 「키티파티」
     dmg = Math.max(1, Math.floor(dmg));
     setHp(t, curHp(t) - dmg);
 
@@ -16830,13 +16843,14 @@ const DIG_RULE = {
   brushDaily: 3,     // 매일 출석 (1 → 3). 숫자가 코드에 박혀 있던 것을 여기로 뺐습니다
 };
 
-/* 현장 여섯 — 얕은 곳(젊은 지층)부터. 표본마다 그 이름의 아이콘(assets/icon/<이름>.png).
- * open — 이 장을 마치면 열립니다(4장에 셋, 5 · 6 · 7장에 하나씩 — 사용자 지침 2026-10-23).
+/* 현장 일곱 — 얕은 곳(젊은 지층)부터. 표본마다 그 이름의 아이콘(assets/icon/<이름>.png).
+ * open — 이 장을 마치면 열립니다(4장에 셋, 5 · 6 · 7장에 하나씩 — 사용자 지침 2026-10-23, 8장에 우하 톨고드 — 2026-11-08).
  * star — 표본 희귀도 ★1~★3. 현장마다 ★3 하나 · ★2 둘 · ★1 둘.
  * gift — 표본을 다 걸면 받는 그 지층의 ★3 기프트(data/gifts.js · GIFTS, fossil — 발굴로만).
  * en   — 학술 문헌에 서는 영문 이름. 화면에서는 한글 이름 옆에 작게 병기합니다
  *        (사용자 지침 2026-11-04 — 라거슈타트 이름은 영문으로 찾아보는 것이라서).
  * at   — [위도, 경도]. 지도에 점을 찍는 자리입니다(digMapXY).
+ * cost — 슬랩 한 장을 여는 데 드는 지질망치(안 적으면 1). 우하 톨고드는 2 (사용자 지침 2026-11-08).
  * soil — 그 현장 흙 타일의 색조 (사용자 지침 2026-11-05 — «현장마다 회색 · 붉은빛 · 녹색 · 황색 · 흑색으로 조금씩»).
  *        그림(발굴 - 흙 1~4)은 하나를 같이 쓰고, 그 위에 tint 한 겹을 mode(background-blend-mode)로 섞습니다.
  *        color 는 밝기는 두고 빛깔만, multiply 는 짙게. 칸 안의 글자(탐침 수 · 흔적)는 안 물듭니다. */
@@ -16853,6 +16867,22 @@ const DIG_SITES = [
       { name: "에우로타만두아", star: 1, note: "개미핥기를 닮은 주둥이." },
       { name: "메셀오르니스", star: 1, note: "땅을 걷던 메셀의 새." },
       { name: "메셀 비단벌레", star: 2, note: "4,700만 년이 지나도 금속빛 구조색이 그대로." }
+    ] },
+  /* 8장을 마치면 열립니다(사용자 지침 2026-11-08). 백악기 후기 — 8장의 공룡들과 같은 시대.
+   * 다른 현장과 달리 «어렵게» 짠 현장입니다 — 슬랩 한 장에 지질망치 둘, 흙이 한 겹 더 깊고,
+   * 화석이 서로 맞닿아 묻혀 망치 둘레가 곁의 화석을 치기 쉽습니다. */
+  { key: "ukhaa", gift: "키티파티", open: "ch8", cost: 2, en: "Ukhaa Tolgod", at: [43.6, 101.0], name: "우하 톨고드", where: "몽골 고비 · 백악기 후기 약 7,500만 년 전",
+    soil: { mode: "color",    tint: "rgba(236,150,96,.38)" },    /* 살굿빛 — 고비의 붉은 사암 */
+    /* 무너진 사구 — 화석 아닌 흙이 한 겹 더 깊고(deep), 화석끼리 맞닿아 묻힙니다(cluster). */
+    trait: { name: "무너진 사구", note: "모래 언덕이 한꺼번에 무너져 덮었다. 흙이 한 겹 더 깊고, 화석이 서로 맞닿아 묻혀 망치가 곁의 화석까지 치기 쉽다.",
+             deep: true, cluster: true },
+    note: "모래가 무너진 그 순간 그대로 — 둥지를 품은 채, 서로 맞붙은 채.",
+    specs: [
+      { name: "키티파티", star: 3, note: "«빅 마마». 알 둥지를 품은 채 모래에 묻힌 어미." },
+      { name: "오비랍토르", star: 2, note: "«알 도둑» 이라는 이름. 사실은 제 알을 품고 있었다." },
+      { name: "벨로키랍토르", star: 2, note: "프로토케라톱스와 맞붙은 채 묻힌 «싸우는 공룡»." },
+      { name: "프로토케라톱스", star: 1, note: "고비에서 가장 흔한 작은 각룡." },
+      { name: "슈부이아", star: 1, note: "손가락이 하나뿐인 작은 사냥꾼." }
     ] },
   { key: "jehol", gift: "시노사우롭테릭스", open: "ch4", en: "Jehol Biota", at: [41.60, 120.78], name: "열하 생물군", where: "중국 랴오닝 · 백악기 전기 약 1억 2,500만 년 전",
     soil: { mode: "color",    tint: "rgba(128,126,122,.45)" },   /* 회색 — 화산재 */
@@ -16923,6 +16953,8 @@ const DIG_SITES = [
 const DIG_SHARD = "화석 조각";
 
 function digSiteBy(key) { return DIG_SITES.find(s => s.key === key) || null; }
+/* 슬랩 한 장을 여는 데 드는 지질망치 — 현장의 cost(안 적으면 1) */
+function digCost(s) { return (s && s.cost) || 1; }
 /* 현장 이름 — 한글 옆에 영문을 작게 병기합니다(사용자 지침 2026-11-04).
  * 라거슈타트는 영문 이름으로 찾아보는 것이라, 한글만으로는 어디인지 짚기 어렵습니다.
  * 잠긴 현장은 이름 자체를 감추므로 영문도 안 답니다. */
@@ -16995,7 +17027,14 @@ const DIG_BRUSH = "지질망치";
 function digSpecStar(name) { const h = digSpecBy(name); return h ? (h.spec.star || 1) : 0; }
 function digOwnCount(site) { const d = digState(); return site.specs.filter(p => d.own[p.name]).length; }
 function digSiteOpen(i) { const s = DIG_SITES[i]; return !!(s && S.cleared && S.cleared[s.open]); }
-function digOpenText(s) { const c = CHAPTERS.find(x => x.id === s.open); return (c ? c.no : s.open) + "을 마치면 열립니다"; }
+/* 8장처럼 «장 묶음»(part)이면 id 가 ch8_1 … 이라 묶음 머리의 group.no 를 씁니다.
+ * 아직 안 나간 장(CHAPTERS 에 없음)은 열쇠 ch8 → «8장» 으로 읽습니다 — 열쇠가 그대로 보이면 안 됩니다. */
+function digOpenText(s) {
+  const c = CHAPTERS.find(x => x.id === s.open),
+        g = c ? null : CHAPTERS.find(x => x.part === s.open && x.group);
+  const m = /^ch(\d+(?:\.\d+)?)$/.exec(s.open || "");
+  return (c ? c.no : g ? g.group.no : m ? m[1] + "장" : s.open) + "을 마치면 열립니다";
+}
 /* ── 발굴팀 두 자리 (사용자 지침 2026-11-04) ─────────────────────────
  *  S.dig.team = { sinner: 인격 열쇠 | null, advisor: 교육위원 아이디 | null }
  *  제목에 「발굴」 이 든 것만, 그리고 지닌 것만 섭니다 — 안 지닌 것이 남아 있으면
@@ -17086,17 +17125,30 @@ function digNewBoard(site) {
                         (Math.random() < DIG_RULE.third ? 1 : 0));
   for (let k = 0; k < n; k++) {
     const spec = digPickSpec(site);
-    for (let tries = 0; tries < 60; tries++) {
+    /* 무너진 사구(cluster) — 둘째 화석부터는 이미 놓인 화석에 맞닿는 자리를 먼저 찾습니다.
+     * 앞 80번 안에 못 찾으면 맞닿지 않아도 놓습니다(판에 못 놓는 일은 없게). */
+    const 붙임 = t.cluster && fossils.length > 0;
+    const 맞닿음 = idx => idx.some(i => {
+      const x = i % W, y = Math.floor(i / W);
+      return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(d => {
+        const nx = x + d[0], ny = y + d[1];
+        return nx >= 0 && ny >= 0 && nx < W && ny < H && cells[ny * W + nx].f >= 0;
+      });
+    });
+    for (let tries = 0; tries < (붙임 ? 140 : 60); tries++) {
       const pool = DIG_SHAPES[digStarIdx(spec)], shape = pool[Math.floor(Math.random() * pool.length)];
       const mx = Math.max.apply(null, shape.map(p => p[0])), my = Math.max.apply(null, shape.map(p => p[1]));
       const x0 = Math.floor(Math.random() * (W - mx)), y0 = Math.floor(Math.random() * (H - my));
       const idx = shape.map(p => (y0 + p[1]) * W + (x0 + p[0]));
       if (idx.some(i => cells[i].f >= 0)) continue;
+      if (붙임 && tries < 80 && !맞닿음(idx)) continue;
       idx.forEach(i => { cells[i].f = fossils.length; cells[i].d = Math.max(2, cells[i].d) + (Math.random() < 0.5 ? 1 : 0); });
       fossils.push({ spec: spec.name, cells: idx });
       break;
     }
   }
+  /* 무너진 사구(deep) — 화석이 아닌 흙만 한 겹 더 깊게(4겹까지). 화석 칸은 그대로입니다 */
+  if (t.deep) cells.forEach(c => { if (c.f < 0) c.d = Math.min(4, c.d + 1); });
   let sh = 0;
   for (let tries = 0; sh < DIG_RULE.shardCells && tries < 200; tries++) {
     const i = Math.floor(Math.random() * cells.length);
@@ -17777,9 +17829,10 @@ function digPickHTML(d) {
            (t ? '<div class="tr"><b>' + t.name + '</b>　' + t.note + '</div>' : '') +
          '</div>' + digRewardHTML(sel) +
          '<div class="go" data-tut="dig-go"><button data-dig-go="' + sel.key + '" class="primary"' +
-           (d.brush > 0 ? '' : ' disabled') + '>' + iconMini(DIG_BRUSH) + '여기를 팝니다</button>' +
-         '<span class="sub">' + (d.brush > 0 ? DIG_BRUSH + ' 1개 소모'
-                                             : '지질망치가 없습니다. ' + DIG_BRUSH_WAYS) + '</span></div>';
+           (d.brush >= digCost(sel) ? '' : ' disabled') + '>' + iconMini(DIG_BRUSH) + '여기를 팝니다</button>' +
+         '<span class="sub">' + (d.brush >= digCost(sel) ? DIG_BRUSH + ' ' + digCost(sel) + '개 소모'
+                                 : (d.brush > 0 ? '지질망치가 ' + digCost(sel) + '개 있어야 합니다. '
+                                                : '지질망치가 없습니다. ') + DIG_BRUSH_WAYS) + '</span></div>';
   }
   h += '</div>';
   return h;
@@ -18002,8 +18055,8 @@ function digSiteBind(again) {
   /* 파기 시작 — 여기서만 지질망치가 나갑니다 */
   $sheet.querySelectorAll("[data-dig-go]").forEach(el => el.onclick = () => {
     const s = digSiteBy(el.dataset.digGo);
-    if (!s || d.brush <= 0 || d.board) return;
-    d.brush -= 1;
+    if (!s || d.brush < digCost(s) || d.board) return;
+    d.brush -= digCost(s);
     d.board = digNewBoard(s);
     saveVault();
     again();
@@ -18147,7 +18200,7 @@ TUTORIALS.push(
       { text: "여기가 «화석 탐사» 입니다. " + DIG_BRUSH + " 하나로 " + DIG_SLAB +
               " 한 장을 떼어 와, 흙을 걷어내며 그 안에 묻힌 화석을 찾습니다." },
       { at: { sel: "[data-tut='dig-map']" },
-        text: "현장 여섯은 세계에 흩어진 «라거슈타트» — 화석이 유난히 잘 남은 지층들입니다. " +
+        text: "현장 일곱은 세계에 흩어진 «라거슈타트» — 화석이 유난히 잘 남은 지층들입니다. " +
               "점이 실제로 그 지층이 있는 자리입니다." },
       { at: { sel: "[data-tut='dig-list']" },
         text: "줄을 누르면 그 현장을 고릅니다. 오른쪽 수는 그 현장에서 이미 걸어 둔 표본 수입니다. " +

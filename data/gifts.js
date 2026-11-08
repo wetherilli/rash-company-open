@@ -43,6 +43,8 @@
  *                                 「보복」이 그 배수만큼 오른다 (engine.js retribGain)
  *    reviveFirst: 0.5             한 전투에서 처음 쓰러진 사람을 최대 체력의 그 비율로
  *                                 한 번 다시 세운다 (engine.js reviveFirstDown)
+ *    lowHpCut: { below: 0.5, cut: 0.2 }   맞기 전 체력이 최대의 below 아래인 사람이 받는 피해 -cut
+ *                                 (engine.js lowHpCut — 화석 기프트 「키티파티」)
  *    skillStackMult: 0.5          그 작성위원 고유 능력(패시브)의 스택 하나당
  *                                 몫 +비율 (tag/who 로 대상 제한. 아직 이 키를
  *                                 쓰는 기프트는 없습니다)
@@ -824,6 +826,18 @@ const GIFTS = [
       { desc: "모든 인격의 공격력 30% 강화 · 치명타로 주는 피해 35% 증가", effect: { all: { atk: 0.30 }, critDmg: 0.35 } }
     ],
     effect: { all: { atk: 0.20 }, critDmg: 0.25 }
+  },
+  {
+    star: 3, noGacha: true, fossil: true, name: "키티파티",
+    flavor: "모래가 무너지는 순간에도, 어미는 둥지를 떠나지 않았다.",
+    desc: "모든 인격의 체력 10% 강화 · 체력이 절반 아래인 아군이 받는 피해 20% 감소",
+    up: [
+      { desc: "모든 인격의 체력 12% 강화 · 체력이 절반 아래인 아군이 받는 피해 25% 감소",
+        effect: { all: { hp: 0.12 }, lowHpCut: { below: 0.5, cut: 0.25 } } },
+      { desc: "모든 인격의 체력 15% 강화 · 체력이 절반 아래인 아군이 받는 피해 30% 감소",
+        effect: { all: { hp: 0.15 }, lowHpCut: { below: 0.5, cut: 0.30 } } }
+    ],
+    effect: { all: { hp: 0.10 }, lowHpCut: { below: 0.5, cut: 0.20 } }
   }
 ];
 
