@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.27.0";
+const VERSION = "2.27.1";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4387,7 +4387,7 @@ function renderHeader() {
   const idle = !(SCENES && SCENES.length) && !S.battle;
   $chap.textContent = idle
     ? "v" + VERSION + (VERSION_NAME ? "  «" + VERSION_NAME + "»" : "")
-    : (c ? (c.no + "  " + c.title + (c.subtitle ? "  ─  " + c.subtitle : "")) : "") + "   v" + VERSION;
+    : (c ? (c.no + "  " + c.title + (c.subtitle ? "  ─  " + c.subtitle : "")) : "") + "   v" + VERSION;   // subtitle — 장 묶음 부분의 한 줄 소개
   /* 재화는 아이콘과 양만 — 이름 · 설명은 누르면 작은 창으로 뜹니다(WALLET_INFO · #chipinfo, 사용자 지침 2026-10-16) */
   /* 재화 둘은 한 덩이(.curs)로 묶습니다 — 좁은 화면에서는 위아래 두 줄로 쌓습니다(index.html, 사용자 지침 2026-10-17) */
   let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") + '<span class="curs">' +
@@ -9222,20 +9222,21 @@ function foeCodexTraits(f) {
   if (f.phases && f.phases.length) t.push("페이즈 " + (f.phases.length + 1));
   return t;
 }
+/* 장의 «이야기 제목» — title 이 곧 제목입니다(사용자 지침 2026-11-09). 장 묶음의 부분(8-1 「참가등록」 …)도 같습니다. */
+function chapterStoryName(c) { return c.no + " " + c.title; }
+/* 도감의 묶음 넷 — 본편 · 곁가지 · 거울굴절철도 · 그 외 (사용자 지침 2026-11-09).
+ * 묶음 안은 «만나는 차례» 그대로 — 장 차례(곁가지는 곁가지끼리) → 그 장에서 처음 나오는 차례, 철도는 호선 · 역 차례. */
 function foeCodexGroups() {
-  const home = foeHomes(), groups = [], at = {};
-  const put = (id, name, k) => {
-    if (!at[id]) { at[id] = { name: name, keys: [] }; groups.push(at[id]); }
-    at[id].keys.push(k);
-  };
-  /* 장 차례 → 호선 차례 → 그 밖. 장 안에서는 처음 나오는 차례 */
-  CHAPTERS.forEach(c => foeCodexKeys().filter(k => home[k] && home[k].kind === "story" && home[k].ch === c)
-    .forEach(k => put("ch:" + c.id, c.no + " " + c.title, k)));
+  const home = foeHomes(), keys = foeCodexKeys();
+  const main = [], side = [], rail = [], etc = [];
+  CHAPTERS.forEach(c => keys.filter(k => home[k] && home[k].kind === "story" && home[k].ch === c)
+    .forEach(k => (isSide(c) ? side : main).push(k)));
   railLines().forEach(r => railLineStops(r).forEach(k => {
-    if (home[k] && home[k].kind === "rail" && home[k].r === r && at["rail:" + r.key] && at["rail:" + r.key].keys.indexOf(k) >= 0) return;
-    if (home[k] && home[k].kind === "rail" && home[k].r === r) put("rail:" + r.key, r.name, k);
+    if (home[k] && home[k].kind === "rail" && home[k].r === r && rail.indexOf(k) < 0) rail.push(k);
   }));
-  foeCodexKeys().filter(k => !home[k]).forEach(k => put("etc", "거울 던전", k));
+  keys.filter(k => !home[k]).forEach(k => etc.push(k));
+  const groups = [{ name: "본편", keys: main }, { name: "곁가지", keys: side },
+                  { name: "거울굴절철도", keys: rail }, { name: "그 외", keys: etc }].filter(g => g.keys.length);
   return { groups: groups, home: home };
 }
 
@@ -9282,23 +9283,27 @@ function noteCodexHTML() {
   let h = '<div class="eqbar codextabs">' + tab("foe", "적", c.foe) + tab("gift", "E.G.O 기프트", c.gift) +
           tab("support", "지원 작성위원", c.sup) + '</div>';
   const unknown = sub => '<div class="slot ro"><div class="lock">？？？</div><div class="sub">' + sub + '</div></div>';
+  /* 분류마다 접기 — 처음에는 다 접혀 있습니다(사용자 지침 2026-11-09). 편 자리는 시너지 무리와 같은 표(NOTE_SYN_OPEN)에 */
+  const fold = (id, name, count, body) =>
+    '<div class="csec codexfold' + (NOTE_SYN_OPEN[id] ? ' on' : '') + '" data-sec="' + id + '">' +
+      '<div class="csechead"><b>' + name + '</b><span>' + count + '</span><i></i></div>' +
+      '<div class="csecbody">' + body + '</div></div>';
 
   if (NOTE_CODEX_TAB === "foe") {
     const met = foeMetMap(), cg = foeCodexGroups();
-    let no = 0;
     h += '<div class="hint">한 번 싸운 적이 여기 남습니다. 누르면 기록을 펼칩니다.</div>';
     cg.groups.forEach(g => {
-      h += '<div class="codexhead">' + g.name + '</div><div class="grid four codexfoe">';
+      let b = '<div class="grid four codexfoe">';
       g.keys.forEach(k => {
-        no++;
         const f = FOES[k];
-        if (!met[k]) { h += unknown('No.' + no + '　아직 만나지 않았습니다'); return; }
-        h += '<div class="slot codexcard" data-foe="' + k + '">' +
+        if (!met[k]) { b += unknown('아직 만나지 않았습니다'); return; }
+        b += '<div class="slot codexcard" data-foe="' + k + '">' +
                (f.img ? '<div class="pic"><img src="' + assetURL(f.img) + '" alt="" onerror="this.style.display=\'none\'"></div>' : '<div class="pic"></div>') +
                '<div><div class="nm">' + f.name + '</div>' +
-               '<div class="sub">No.' + no + (f.boss ? '　· 보스' : '') + '</div></div></div>';
+               (f.boss ? '<div class="sub">보스</div>' : '') + '</div></div>';
       });
-      h += '</div>';
+      b += '</div>';
+      h += fold("codex_foe_" + g.name, g.name, g.keys.filter(k => met[k]).length + ' / ' + g.keys.length, b);
     });
   } else if (NOTE_CODEX_TAB === "gift") {
     const gifts = (typeof GIFTS !== "undefined" ? GIFTS : []);
@@ -9308,18 +9313,19 @@ function noteCodexHTML() {
       const list = gifts.filter(g => fossil ? g.fossil : (!g.fossil && g.star === star))
                         .sort((a, b) => giftHasN(b) - giftHasN(a) || a.name.localeCompare(b.name, "ko"));   // 지닌 것 먼저
       if (!list.length) return;
-      h += '<div class="codexhead">' + name + '</div><div class="grid">';
+      let b = '<div class="grid">';
       list.forEach(g => {
         const has = !!(S.giftsOwned && S.giftsOwned[giftId(g)]);
         if (!has) return;
         const v = giftView(g);
-        h += '<div class="slot hasic">' + giftIconHTML(v) + '<div>' +
+        b += '<div class="slot hasic">' + giftIconHTML(v) + '<div>' +
                '<div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) + '</div>' +
                flavorHTML(v) + '<div class="sub">' + v.desc + '</div></div></div>';
       });
       const none = list.filter(g => !giftHasN(g)).length;
-      if (none) h += unknown('아직 지니지 않은 것 ' + none + '개');
-      h += '</div>';
+      if (none) b += unknown('아직 지니지 않은 것 ' + none + '개');
+      b += '</div>';
+      h += fold("codex_gift_" + name, name, (list.length - none) + ' / ' + list.length, b);
     });
   } else {
     h += '<div class="hint">편성 셋째 칸에 서는 사람들입니다. 함께하게 되면 여기 기록됩니다.</div><div class="grid">';
@@ -9462,10 +9468,9 @@ function openNote(back, focus) {
   const foeDetail = (k) => {
     const f = FOES[k];
     const cg = foeCodexGroups(), home = cg.home[k];
-    const no = cg.groups.reduce((a, g) => a.concat(g.keys), []).indexOf(k) + 1;
     const st = foeCodexStats(k, home);
     const kills = (S.foeLog || {})[k];
-    const where = home ? (home.kind === "story" ? home.ch.no + " " + home.ch.title : home.r.name) : "거울 던전";
+    const where = home ? (home.kind === "story" ? chapterStoryName(home.ch) : home.r.name) : "거울 던전";
     let h = '<h2>노 트<span class="notepg">　·　도감</span></h2>' +
             '<div class="hint">적 기록 · 관리자 열람용</div>' +
             '<div class="note">';
@@ -9473,10 +9478,9 @@ function openNote(back, focus) {
     if (f.img)
       h += '<div class="card foe"><img src="' + assetURL(f.img) + '" alt="" ' +
            'onerror="this.parentNode.style.display=\'none\'">' +
-           '<div class="tag">No.' + no + '　' + f.name + '</div></div>';
+           '<div class="tag">' + f.name + '</div></div>';
     h += '</div>';
     h += '<div class="notebody">' +
-           '<div class="noteno">No. ' + no + '</div>' +
            '<div class="notename">' + f.name + '</div>' +
            '<div class="noteego">' + (f.boss ? '보스　·　' : '') + '처음 만난 곳 :: ' + where + '</div>';
     if (f.quote) h += '<div class="notequote">“' + f.quote + '”</div>';
@@ -10750,7 +10754,7 @@ function isSide(c) { return !!(c && c.side); }
  *    · 황금교본은 데이터 몫입니다 — { t:"codex" } 를 마지막 부분에만 둡니다
  *
  *  묶음의 이름·그림·소개는 첫 부분에 group 으로 적습니다.
- *      group: { no: "8장", title: "…", subtitle: "…", img, banner, summary, pitch, glassNote }
+ *      group: { no: "8장", title: "이야기 제목", img, banner, summary, pitch, glassNote }   (title 에 주인공 이름을 적지 않습니다)
  *  안 적은 칸은 첫 부분의 것을 빌립니다. */
 function partOf(c) { return (c && c.part) || null; }
 function groupParts(gid) {
@@ -10762,7 +10766,7 @@ function groupMeta(gid) {
   const idx = groupParts(gid);
   const first = CHAPTERS[idx[0]] || {};
   const g = (idx.map(i => CHAPTERS[i]).find(c => c.group) || {}).group || {};
-  return { id: gid, no: g.no || first.no || gid, title: g.title || "", subtitle: g.subtitle || null,
+  return { id: gid, no: g.no || first.no || gid, title: g.title || "",
            img: g.img || first.img || null, banner: g.banner || chapterBanner(first),
            summary: g.summary || null, pitch: g.pitch || null, glassNote: g.glassNote || null,
            parts: idx };
@@ -10899,8 +10903,7 @@ function openChapterSelect(back) {
     const miss  = chapterMissing(c);
     return '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-i="' + i + '"' : '') + '>' +
              slotStrip(open ? chapterBanner(c) : null) +
-             '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no +
-               (c.subtitle ? '　' + c.subtitle : (c.title ? '　' + c.title : '')) + '</div>' +
+             '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no + (c.title ? '　' + c.title : '') + '</div>' +
              '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능') : '잠김') + '</div>' +
              (rich && chapPitch(c).length
                ? '<div class="csum">' +
@@ -10928,8 +10931,7 @@ function openChapterSelect(back) {
     const needs = chapterNeeds(nextP), miss = chapterMissing(nextP);
     return '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-group="' + gid + '"' : '') + '>' +
              slotStrip(open ? m.banner : null) +
-             '<div class="' + (open ? 'nm' : 'lock') + '">' + m.no +
-               (m.subtitle ? '　' + m.subtitle : (m.title ? '　' + m.title : '')) + '</div>' +
+             '<div class="' + (open ? 'nm' : 'lock') + '">' + m.no + (m.title ? '　' + m.title : '') + '</div>' +
              '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능　·　' + n + ' / ' + parts.length + ' 부분')
                                         : '잠김') + '</div>' +
              (rich && chapPitch(m).length
@@ -11093,8 +11095,7 @@ function openPartSelect(gid, back) {
   const m = groupMeta(gid);
   $modal.classList.add("on");
   let h = '<h2>' + m.no + (m.title ? '　' + m.title : '') + '</h2>' +
-          '<div class="hint">' + (m.subtitle ? '— ' + m.subtitle + ' —<br>' : '') +
-            '앞 부분을 마쳐야 다음 부분이 열립니다.</div><div class="grid">';
+          '<div class="hint">앞 부분을 마쳐야 다음 부분이 열립니다.</div><div class="grid">';
   m.parts.forEach(i => {
     const c = CHAPTERS[i];
     const done = S.cleared && S.cleared[c.id];
@@ -15697,10 +15698,9 @@ function chapterBGs(c) {
  * 배경이 하나도 없는 장은 아예 세우지 않습니다. */
 function glassBgGroups() {
   const done = id => !!(S.cleared && S.cleared[id]);
-  /* 이름은 «이야기 제목» 으로 답니다 (사용자 지침 2026-09-12). 본편은 title 이
-   * 그 장의 작성위원 이름이고(1장 김두현), 이야기 제목은 subtitle 에 있습니다
-   * (「공식 설정에 속하지 못하는」). 곁가지와 0장은 title 이 곧 이야기 제목입니다. */
-  const ch = c => ({ key: c.id, name: c.no + "  " + (c.subtitle || c.title || ""),
+  /* 이름은 «이야기 제목» 으로 답니다 (사용자 지침 2026-09-12). title 이 곧 이야기 제목입니다
+   * (2026-11-09 — 예전에는 본편 title 이 그 장 작성위원 이름이고 제목은 subtitle 에 있었습니다). */
+  const ch = c => ({ key: c.id, name: c.no + "  " + (c.title || ""),
                      short: c.no, imgs: chapterBGs(c) });
   /* 거울 갈래는 배경이 한 장씩입니다. 2호선만 종착역 그림이 하나 더 있습니다. */
   const mir = r => ({ key: "mirror:" + r.key, name: r.name, short: r.name,
@@ -15712,7 +15712,7 @@ function glassBgGroups() {
     const imgs = [];
     m.parts.map(i => CHAPTERS[i]).filter(c => done(c.id))
       .forEach(c => chapterBGs(c).forEach(p => { if (imgs.indexOf(p) < 0) imgs.push(p); }));
-    return { key: m.id, name: m.no + "  " + (m.subtitle || m.title || ""), short: m.no, imgs: imgs };
+    return { key: m.id, name: m.no + "  " + (m.title || ""), short: m.no, imgs: imgs };
   };
   return [
     { id: "main", cat: "주요 이야기",
