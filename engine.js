@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.26.9";
+const VERSION = "2.27.0";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -340,6 +340,8 @@ function vaultBody() {
     /* 화석 탐사 — { brush, shards, own, paid, board, team }. vaultSig() 에는 넣지 않습니다 —
      * 출석처럼 진행 기록이라서요. 합칠 때는 vaultMergeOnce 가 한 번만 받는 것을 묶습니다. */
     dig:      S.dig || null,
+    /* 적 도감 — { 적 열쇠: 쓰러뜨린 수 }. 0 이면 «만났지만 아직 못 이김». vaultSig 밖(진행 기록) */
+    foeLog:   S.foeLog || {},
     ver:      VERSION
   };
 }
@@ -395,6 +397,7 @@ function loadVault() {
     sfxVol:   v.sfxVol != null ? v.sfxVol : null,
     glassBg:  v.glassBg || null,
     dig:      v.dig || null,          // 화석 탐사 — newState 의 digClean 이 거릅니다
+    foeLog:   v.foeLog || null,       // 적 도감 — newState 의 foeLogClean 이 거릅니다
     ver:      v.ver || null
   };
 }
@@ -763,6 +766,10 @@ function vaultMergeOnce(seed) {
     team:   now.dig ? db.team : da.team,
     board:  db.board || da.board
   };
+  /* 적 도감 — 열쇠마다 큰 쪽. 만난 적이 사라지지 않게 */
+  const fa = foeLogClean(seed.foeLog), fb = foeLogClean(now.foeLog);
+  for (const k in fb) fa[k] = Math.max(fa[k] || 0, fb[k]);
+  seed.foeLog = fa;
   return seed;
 }
 
@@ -1398,6 +1405,7 @@ function newState() {
      * glassBgKey() 가 보고, 못 쓰면 기본값으로 물러납니다(고른 값은 지우지 않습니다). */
     glassBg: (v && v.glassBg) || null,
     dig: digClean(v && v.dig),   // 화석 탐사 — 못 알아보는 값은 거르고 빈 칸은 채웁니다
+    foeLog: foeLogClean(v && v.foeLog),   // 적 도감 — { 적 열쇠: 쓰러뜨린 수 }
     partyStack: [],         // 강제 편성 — forcePartyPush/Pop 이 씁니다
     partyBan: [],            // 지금은 편성할 수 없는 사람 — banParty/unbanParty 가 씁니다
     battleForced: false,
@@ -5748,6 +5756,7 @@ function startBattle(scene) {
 
 function startBattleFight(scene, f) {
   S.waiting = true;
+  foeLogMeet(scene.foe);             /* 적 도감 — 만났다 */
   /* 덮여 있던 컷신은 전투를 열면서 걷습니다 — 컷신이 싸움판 위에 얹힌 채로
    * 남으면 적도 체력도 안 보입니다 (showCut 참고). */
   CUR_CUT = null;
@@ -7763,6 +7772,7 @@ function resolveTurn() {
 
 function victory() {
   const b = S.battle;
+  foeLogKill(b.id);                  /* 적 도감 — 쓰러뜨린 수 */
   battleOver(b);
   battleSuccess(b);
   /* 거울굴절철도 결과 카드에 적을 총 턴수 — 이긴 전투의 턴만 더합니다.
@@ -9128,9 +9138,211 @@ let NOTE_SYN_DETAIL = null;
 let NOTE_TUT_OPEN = {};   // 노트 → 튜토리얼 — 펴 둔 안내 (기본은 다 접힘, 2026-11-06)
 let NOTE_ADV_SORT = "added";
 let NOTE_ADV_OWNED_ONLY = false;
+/* 노트는 차림표 하나와 화면 다섯입니다 (사용자 지침 2026-11-09).
+ *   null 차림표 · "who" 작성위원 · "crew" 승무원 · "adv" 교육위원 · "syn" 시너지 · "codex" 도감
+ * 도감은 갈래 셋 — "foe" 적 · "gift" E.G.O 기프트 · "support" 지원 작성위원. */
+let NOTE_PAGE = null;
+let NOTE_CODEX_TAB = "foe";
+const NOTE_PAGES = { who: "작성위원", crew: "승무원", adv: "교육위원", syn: "시너지", codex: "도감" };
+
+/* ── 적 도감 (2026-11-09) ─────────────────────────────────────
+ *  ■ 저장 — S.foeLog = { 적 열쇠: 쓰러뜨린 수 }. 싸움이 열리면 0 으로 서고(foeLogMeet),
+ *    이기면 하나씩 오릅니다(foeLogKill). 거울 사본(__mirror_…)은 원래 열쇠(src)로 셉니다.
+ *  ■ 만났는가 — 기록에 있거나, 마친 장의 전투에 나왔거나(metFoes), 완주한 철도 호선에 섰거나.
+ *    도감이 생기기 전에 놀던 보관함도 빈 도감으로 시작하지 않게 하려는 것입니다.
+ *  ■ 수치 — 이야기에 나오는 적은 이야기 수치(data/foes.js 그대로).
+ *    이야기에는 없고 거울굴절철도에서 처음 나오는 적은 그 호선의 철도 표 수치
+ *    (RAIL_STEPS — 그 자리의 몫, 시작 배수 기준이라 흔들림 없이) (사용자 지침 2026-11-09). */
+function foeLogClean(v) {
+  const m = {};
+  if (v && typeof v === "object")
+    for (const k in v) { const n = Number(v[k]); if (n >= 0 && isFinite(n)) m[k] = Math.floor(n); }
+  return m;
+}
+function foeBaseKey(id) { const f = id && FOES[id]; return (f && f.src) || id; }
+function foeLogMeet(id) {
+  const k = foeBaseKey(id);
+  if (!k || !FOES[k]) return;
+  if (!S.foeLog) S.foeLog = {};
+  if (S.foeLog[k] == null) S.foeLog[k] = 0;
+}
+function foeLogKill(id) {
+  const k = foeBaseKey(id);
+  if (!k || !FOES[k]) return;
+  if (!S.foeLog) S.foeLog = {};
+  S.foeLog[k] = (S.foeLog[k] || 0) + 1;
+}
+/* 철도 호선 하나에 서는 적 — 그 갈래가 실제로 세우는 차례 그대로(railRole 의 자리 번호가 맞게) */
+function railLineStops(r) {
+  if (r.loop) return (r.loopFoes || []).concat(r.finalFoe ? [r.finalFoe] : []);
+  const fs = r.foes || [];
+  if (r.express) return fs.slice(0, 3).concat(r.midFoe ? [r.midFoe] : [], fs.slice(3), r.finalFoe ? [r.finalFoe] : []);
+  return fs.concat(r.finalFoe ? [r.finalFoe] : []);
+}
+function railLines() { return MIRROR_TIERS.filter(r => r && r.group === "rail"); }
+/* 적마다 «처음 나오는 곳» — { kind: "story", ch } | { kind: "rail", r, i } | { kind: "etc" } */
+function foeHomes() {
+  const home = {};
+  const walk = (list, ch) => (list || []).forEach(sc => {
+    if (!sc) return;
+    if (sc.t === "recall") return walk(sc.scenes, ch);
+    if (sc.t === "battle" && sc.foe && FOES[sc.foe] && !home[sc.foe]) home[sc.foe] = { kind: "story", ch: ch };
+  });
+  CHAPTERS.forEach(c => walk(c.scenes, c));
+  railLines().forEach(r => railLineStops(r).forEach((x, i) => {
+    if (FOES[x] && !home[x]) home[x] = { kind: "rail", r: r, i: i };
+  }));
+  return home;
+}
+function foeCodexKeys() {
+  return Object.keys(FOES).filter(k => k.indexOf("__") !== 0 && typeof FOES[k].hp === "number");
+}
+function foeMetMap() {
+  const m = Object.assign({}, metFoes());
+  for (const k in (S.foeLog || {})) m[k] = true;
+  railLines().forEach(r => { if (S.mirrorDone && S.mirrorDone[r.key]) railLineStops(r).forEach(x => m[x] = true); });
+  return m;
+}
+/* 도감에 적을 수치와 그 기준 */
+function foeCodexStats(k, home) {
+  const f = FOES[k];
+  if (home && home.kind === "rail") {
+    const b = RAIL_STEPS[railRole(home.r, k, home.i)];
+    return { hp: b.hp, atk: b.atk, def: b.def, from: home.r.name + " 기준" };
+  }
+  return { hp: f.hp, atk: f.atk, def: f.def, from: "이야기 기준" };
+}
+/* 적의 버릇 — 노트에 태그로 늘어놓을 몫 */
+function foeCodexTraits(f) {
+  const t = [];
+  if (f.boss && !f.noHeavy) t.push("강타 " + (f.heavyEvery || 3) + "턴마다");
+  if (f.aoeEvery) t.push("광역 " + f.aoeEvery + "턴마다");
+  if (f.healEvery) t.push("회복 " + f.healEvery + "턴마다");
+  if (f.counterEvery) t.push("되받아치기 " + f.counterEvery + "턴마다");
+  if (f.phases && f.phases.length) t.push("페이즈 " + (f.phases.length + 1));
+  return t;
+}
+function foeCodexGroups() {
+  const home = foeHomes(), groups = [], at = {};
+  const put = (id, name, k) => {
+    if (!at[id]) { at[id] = { name: name, keys: [] }; groups.push(at[id]); }
+    at[id].keys.push(k);
+  };
+  /* 장 차례 → 호선 차례 → 그 밖. 장 안에서는 처음 나오는 차례 */
+  CHAPTERS.forEach(c => foeCodexKeys().filter(k => home[k] && home[k].kind === "story" && home[k].ch === c)
+    .forEach(k => put("ch:" + c.id, c.no + " " + c.title, k)));
+  railLines().forEach(r => railLineStops(r).forEach(k => {
+    if (home[k] && home[k].kind === "rail" && home[k].r === r && at["rail:" + r.key] && at["rail:" + r.key].keys.indexOf(k) >= 0) return;
+    if (home[k] && home[k].kind === "rail" && home[k].r === r) put("rail:" + r.key, r.name, k);
+  }));
+  foeCodexKeys().filter(k => !home[k]).forEach(k => put("etc", "거울 던전", k));
+  return { groups: groups, home: home };
+}
+
+/* 노트 차림표 — 화면 다섯과 튜토리얼 다시 보기 */
+function noteMenuHTML() {
+  const advAll = advisorOpenList();
+  const advN = advAll.filter(a => S.advisorsOwned && S.advisorsOwned[advisorId(a)]).length;
+  const syAll = (typeof SYNERGIES !== "undefined" && SYNERGIES) ? SYNERGIES : [];
+  const synOn = activeSynergies(S.party).length;
+  const c = noteCodexCounts();
+  const tile = (pg, sub) =>
+    '<div class="slot notetile" data-npage="' + pg + '"><div class="nm">' + NOTE_PAGES[pg] + '</div>' +
+    '<div class="sub">' + sub + '</div></div>';
+  return '<div class="hint">수감자 신상과 설정을 모아 둔 곳입니다.<br>이야기 내용은 담기지 않습니다.</div>' +
+         '<div class="grid two notemenu">' +
+           tile("who",   Object.keys(SINNERS).length + "명의 신상과 인격") +
+           tile("crew",  "버스에 함께 탄 " + Object.keys(CREW).length + "명") +
+           tile("adv",   "보유 " + advN + " / " + advAll.length + "명") +
+           tile("syn",   "모두 " + syAll.length + "가지" + (synOn ? "　·　지금 발동 " + synOn : "")) +
+           tile("codex", "적 " + c.foe[0] + " / " + c.foe[1] + "　·　기프트 " + c.gift[0] + " / " + c.gift[1] +
+                         "　·　지원 " + c.sup[0] + " / " + c.sup[1]) +
+           /* 게임 구조 안내 — 처음 그 화면에 들어섰을 때 저절로 한 번 나오고, 여기서 언제든 다시 볼 수 있습니다 */
+           '<div class="slot notetile" data-tut-open="1"><div class="nm">' + tutorRule().name + ' 다시 보기</div>' +
+             '<div class="sub">게임 구조 안내　·　' + tutorSawCount() + ' / ' + tutorList().length + ' 봄</div></div>' +
+         '</div>';
+}
+function noteCodexCounts() {
+  const met = foeMetMap(), keys = foeCodexKeys();
+  const gifts = (typeof GIFTS !== "undefined" ? GIFTS : []);
+  const sups = supportList();
+  return {
+    foe:  [keys.filter(k => met[k]).length, keys.length],
+    gift: [gifts.filter(g => S.giftsOwned && S.giftsOwned[giftId(g)]).length, gifts.length],
+    sup:  [sups.filter(supportOwned).length, sups.length]
+  };
+}
+/* 도감 — 갈래 셋. 만나지 않은 적 · 지니지 않은 것은 이름까지 ？？？ 입니다
+ * (지원 작성위원은 숨은 업적 보상이고, 업적 보상 기프트도 있어서 이름이 곧 귀띔이 됩니다). */
+function giftHasN(g) { return S.giftsOwned && S.giftsOwned[giftId(g)] ? 1 : 0; }
+function noteCodexHTML() {
+  const c = noteCodexCounts();
+  const tab = (k, name, n) => '<button data-ctab="' + k + '" class="' + (NOTE_CODEX_TAB === k ? "" : "ghost") + '">' +
+                               name + ' <span class="sub">' + n[0] + ' / ' + n[1] + '</span></button>';
+  let h = '<div class="eqbar codextabs">' + tab("foe", "적", c.foe) + tab("gift", "E.G.O 기프트", c.gift) +
+          tab("support", "지원 작성위원", c.sup) + '</div>';
+  const unknown = sub => '<div class="slot ro"><div class="lock">？？？</div><div class="sub">' + sub + '</div></div>';
+
+  if (NOTE_CODEX_TAB === "foe") {
+    const met = foeMetMap(), cg = foeCodexGroups();
+    let no = 0;
+    h += '<div class="hint">한 번 싸운 적이 여기 남습니다. 누르면 기록을 펼칩니다.</div>';
+    cg.groups.forEach(g => {
+      h += '<div class="codexhead">' + g.name + '</div><div class="grid four codexfoe">';
+      g.keys.forEach(k => {
+        no++;
+        const f = FOES[k];
+        if (!met[k]) { h += unknown('No.' + no + '　아직 만나지 않았습니다'); return; }
+        h += '<div class="slot codexcard" data-foe="' + k + '">' +
+               (f.img ? '<div class="pic"><img src="' + assetURL(f.img) + '" alt="" onerror="this.style.display=\'none\'"></div>' : '<div class="pic"></div>') +
+               '<div><div class="nm">' + f.name + '</div>' +
+               '<div class="sub">No.' + no + (f.boss ? '　· 보스' : '') + '</div></div></div>';
+      });
+      h += '</div>';
+    });
+  } else if (NOTE_CODEX_TAB === "gift") {
+    const gifts = (typeof GIFTS !== "undefined" ? GIFTS : []);
+    const groups = [[3, false, "★★★"], [2, false, "★★"], [1, false, "★"], [0, true, "화석 기프트"]];
+    h += '<div class="hint">지닌 E.G.O 기프트는 지금 강화 단계의 효과로 보입니다.</div>';
+    groups.forEach(([star, fossil, name]) => {
+      const list = gifts.filter(g => fossil ? g.fossil : (!g.fossil && g.star === star))
+                        .sort((a, b) => giftHasN(b) - giftHasN(a) || a.name.localeCompare(b.name, "ko"));   // 지닌 것 먼저
+      if (!list.length) return;
+      h += '<div class="codexhead">' + name + '</div><div class="grid">';
+      list.forEach(g => {
+        const has = !!(S.giftsOwned && S.giftsOwned[giftId(g)]);
+        if (!has) return;
+        const v = giftView(g);
+        h += '<div class="slot hasic">' + giftIconHTML(v) + '<div>' +
+               '<div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) + '</div>' +
+               flavorHTML(v) + '<div class="sub">' + v.desc + '</div></div></div>';
+      });
+      const none = list.filter(g => !giftHasN(g)).length;
+      if (none) h += unknown('아직 지니지 않은 것 ' + none + '개');
+      h += '</div>';
+    });
+  } else {
+    h += '<div class="hint">편성 셋째 칸에 서는 사람들입니다. 함께하게 되면 여기 기록됩니다.</div><div class="grid">';
+    supportList().slice().sort((a, b) => supportOwned(b) - supportOwned(a)).forEach(sp => {   // 함께한 사람 먼저
+      if (!supportOwned(sp)) return;
+      h += '<div class="slot hasic">' + iconHTML(supportIconName(sp), { star: sp.star }) + '<div>' +
+             '<div class="nm"><span class="star">' + stars(sp.star) + '</span> ' + sp.title + ' ' + sp.name +
+               (sp.atkType ? ' ' + atkTypeIconHTML(sp.atkType) : '') + '</div>' +
+             '<div class="sub">공 ' + sp.atk + '　방 ' + sp.def + '　체 ' + sp.hp + '</div>' +
+             (sp.note ? '<div class="sub">' + sp.note + '</div>' : '') + '</div></div>';
+    });
+    const none = supportList().filter(sp => !supportOwned(sp)).length;
+    if (none) h += unknown('아직 함께하지 않은 사람 ' + none + '명');
+    h += '</div>';
+  }
+  return h;
+}
 
 function openNote(back, focus) {
   $modal.classList.add("on");
+  NOTE_PAGE = (focus && SINNERS[focus]) ? "who" : null;
+  /* 닫으면 다음에 열 때 차림표부터 */
+  const shut = () => { NOTE_PAGE = null; closeModal(); render(); if (back) back(); };
 
   /* ── 한 사람 자세히 ── */
   const detail = (who) => {
@@ -9188,7 +9400,7 @@ function openNote(back, focus) {
          '</div>';
     $sheet.innerHTML = h;
     document.getElementById("nback").onclick = () => index();
-    document.getElementById("nclose").onclick = () => { closeModal(); render(); if (back) back(); };
+    document.getElementById("nclose").onclick = shut;
   };
 
   /* ── 튜토리얼 ──
@@ -9243,26 +9455,63 @@ function openNote(back, focus) {
     });
     document.getElementById("tback").onclick  = () => index();
     document.getElementById("treset").onclick = () => { tutorForget(); tutorView(); };
-    document.getElementById("tclose").onclick = () => { closeModal(); render(); if (back) back(); };
+    document.getElementById("tclose").onclick = shut;
+  };
+
+  /* ── 적 한 마리 — 작성위원 신상과 같은 꼴 (사용자 지침 2026-11-09) ── */
+  const foeDetail = (k) => {
+    const f = FOES[k];
+    const cg = foeCodexGroups(), home = cg.home[k];
+    const no = cg.groups.reduce((a, g) => a.concat(g.keys), []).indexOf(k) + 1;
+    const st = foeCodexStats(k, home);
+    const kills = (S.foeLog || {})[k];
+    const where = home ? (home.kind === "story" ? home.ch.no + " " + home.ch.title : home.r.name) : "거울 던전";
+    let h = '<h2>노 트<span class="notepg">　·　도감</span></h2>' +
+            '<div class="hint">적 기록 · 관리자 열람용</div>' +
+            '<div class="note">';
+    h += '<div class="notepic">';
+    if (f.img)
+      h += '<div class="card foe"><img src="' + assetURL(f.img) + '" alt="" ' +
+           'onerror="this.parentNode.style.display=\'none\'">' +
+           '<div class="tag">No.' + no + '　' + f.name + '</div></div>';
+    h += '</div>';
+    h += '<div class="notebody">' +
+           '<div class="noteno">No. ' + no + '</div>' +
+           '<div class="notename">' + f.name + '</div>' +
+           '<div class="noteego">' + (f.boss ? '보스　·　' : '') + '처음 만난 곳 :: ' + where + '</div>';
+    if (f.quote) h += '<div class="notequote">“' + f.quote + '”</div>';
+    const ty = (f.weak || []).map(t => ATK_TYPES[t] ? atkTypeIconHTML(t) + ATK_TYPES[t].name : t).join(" ");
+    const rs = (f.resist || []).map(t => ATK_TYPES[t] ? atkTypeIconHTML(t) + ATK_TYPES[t].name : t).join(" ");
+    if (ty) h += '<div class="noterow"><span class="k">약점</span>' + noteTag(ty) + '</div>';
+    if (rs) h += '<div class="noterow"><span class="k">내성</span>' + noteTag(rs) + '</div>';
+    const tr = foeCodexTraits(f);
+    if (tr.length) h += '<div class="noterow"><span class="k">버릇</span>' + tr.map(noteTag).join("") + '</div>';
+    if (f.desc) h += '<div class="notebrief">' + f.desc + '</div>';
+    h += '<div class="noterow"><span class="k">수치</span>' +
+           '<span>체 ' + st.hp + '　공 ' + st.atk + '　방 ' + st.def + '</span>' +
+           '<span class="sub">　' + st.from + '</span></div>' +
+         '<div class="noterow"><span class="k">쓰러뜨린 수</span>' +
+           '<span>' + (kills ? kills + '번' : '—') + '</span></div>';
+    h += '</div></div>';
+    h += '<div class="modalfoot">' +
+           '<button id="nback">도감으로</button>' +
+           '<button id="nclose" class="ghost">닫기</button>' +
+         '</div>';
+    $sheet.innerHTML = h;
+    $sheet.scrollTop = 0;
+    document.getElementById("nback").onclick = () => index();
+    document.getElementById("nclose").onclick = shut;
   };
 
   /* ── 목록 ── */
   const index = () => {
-    let h = '<h2>노 트</h2>' +
-            '<div class="hint">수감자 신상과 설정을 모아 둔 곳입니다.<br>이야기 내용은 담기지 않습니다.</div>';
+    const pg = NOTE_PAGE;
+    let h = '<h2>노 트' + (pg ? '<span class="notepg">　·　' + NOTE_PAGES[pg] + '</span>' : '') + '</h2>';
+    if (!pg) h += noteMenuHTML();
 
-    /* 게임 구조 안내 — 처음 그 화면에 들어섰을 때 저절로 한 번 나오고,
-     * 여기서 언제든 다시 볼 수 있습니다. */
-    h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">' +
-           tutorRule().name + '</div>' +
-         '<div class="grid one"><div class="slot" data-tut-open="1">' +
-           '<div class="nm">' + tutorRule().name + ' 다시 보기</div>' +
-           '<div class="sub">게임 구조 안내　·　' +
-             tutorSawCount() + ' / ' + tutorList().length + ' 봄　—　눌러서 목록으로</div>' +
-         '</div></div>';
-
+    if (pg === "who") {
     /* .notewho — 설명 글씨를 줄이고 세로 크기를 고정합니다 (index.html, 사용자 지침 2026-11-06) */
-    h += '<div style="margin:10px 0 6px;color:var(--text);font-weight:700">작성위원</div><div class="grid four notewho">';
+    h += '<div class="grid four notewho" style="margin-top:8px">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
       h += '<div class="slot hasic" data-who="' + who + '">' + iconHTML(memberIconName(who)) +
@@ -9272,9 +9521,11 @@ function openNote(back, focus) {
            '</div></div>';
     });
     h += '</div>';
+    }
 
+    if (pg === "crew") {
     /* .notecrew — 설명 글씨를 작성위원 칸과 같이 한 단 작게 (index.html, 사용자 지침 2026-11-06) */
-    h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">승무원</div><div class="grid four notecrew">';
+    h += '<div class="grid four notecrew" style="margin-top:8px">';
     Object.keys(CREW).forEach(k => {
       const c = CREW[k];
       /* 노란테 · 메카고질라는 제 아이콘(노란 방패 — 도안 CREW, 사용자 지침 2026-10-16),
@@ -9287,9 +9538,10 @@ function openNote(back, focus) {
            (ic ? '</div>' : '') + '</div>';
     });
     h += '</div>';
+    }
 
     const advAll = advisorOpenList();
-    if (advAll.length) {
+    if (pg === "adv" && advAll.length) {
       const advHas = a => !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
       let advShow = advAll.slice();
       if (NOTE_ADV_SORT === "name")
@@ -9299,10 +9551,8 @@ function openNote(back, focus) {
       if (NOTE_ADV_OWNED_ONLY) advShow = advShow.filter(advHas);
       const sortBtn = (key, label) =>
         '<button data-nadvsort="' + key + '" class="' + (NOTE_ADV_SORT === key ? "" : "ghost") + '">' + label + '</button>';
-      h += '<div class="csec' + (NOTE_SYN_OPEN.adv ? ' on' : '') + '" data-sec="adv">' +
-             '<div class="csechead"><b>교육위원</b><span>보유 ' + advAll.filter(advHas).length +
-               ' / ' + advAll.length + '명</span><i></i></div>' +
-             '<div class="csecbody">' +
+      h += '<div class="notecount">보유 ' + advAll.filter(advHas).length + ' / ' + advAll.length + '명</div>' +
+             '<div>' +
                '<div class="eqbar">' +
                  '<label class="eqchk"><input type="checkbox" id="nadvowned"' +
                    (NOTE_ADV_OWNED_ONLY ? ' checked' : '') + '> 보유한 것만 보기</label>' +
@@ -9320,7 +9570,7 @@ function openNote(back, focus) {
                '<div class="sub">' + (has ? a.desc : '미보유　— 효과는 함께한 뒤에 열립니다') + '</div>' +
              '</div></div>';
       });
-      h += '</div></div></div>';
+      h += '</div></div>';
     }
 
     /* ── 편성 시너지 한눈에 ──
@@ -9328,7 +9578,7 @@ function openNote(back, focus) {
      *  큰 갈래(SYNERGY_GROUPS)로 접어 두고, 시너지 한 줄을 누르면 거기
      *  걸리는 사람을 펼쳐 보여줍니다(synergyMembersHTML 참고). */
     const syAll = (typeof SYNERGIES !== "undefined" && SYNERGIES) ? SYNERGIES : [];
-    if (syAll.length) {
+    if (pg === "syn" && syAll.length) {
       const nowTitles = synergyNames();
       h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">편성 시너지 ' +
            '<span class="sub" style="font-weight:400">모두 ' + syAll.length + '가지</span></div>' +
@@ -9383,8 +9633,27 @@ function openNote(back, focus) {
       });
     }
 
-    h += '<div class="modalfoot"><button id="nclose">닫기</button></div>';
+    if (pg === "codex") h += noteCodexHTML();
+
+    h += '<div class="modalfoot">' +
+           (pg ? '<button id="nmenu">노트로</button><button id="nclose" class="ghost">닫기</button>'
+               : '<button id="nclose">닫기</button>') +
+         '</div>';
     $sheet.innerHTML = h;
+    $sheet.scrollTop = 0;
+
+    /* 차림표 · 도감 갈래 · 적 한 줄 */
+    $sheet.querySelectorAll("[data-npage]").forEach(el => {
+      el.onclick = () => { NOTE_PAGE = el.dataset.npage; index(); };
+    });
+    const nmenu = document.getElementById("nmenu");
+    if (nmenu) nmenu.onclick = () => { NOTE_PAGE = null; index(); };
+    $sheet.querySelectorAll("[data-ctab]").forEach(el => {
+      el.onclick = () => { NOTE_CODEX_TAB = el.dataset.ctab; index(); };
+    });
+    $sheet.querySelectorAll("[data-foe]").forEach(el => {
+      el.onclick = () => foeDetail(el.dataset.foe);
+    });
 
     $sheet.querySelectorAll(".slot[data-who]").forEach(el => {
       el.onclick = () => detail(el.dataset.who);
@@ -9413,7 +9682,7 @@ function openNote(back, focus) {
         index();
       };
     });
-    document.getElementById("nclose").onclick = () => { closeModal(); render(); if (back) back(); };
+    document.getElementById("nclose").onclick = shut;
   };
 
   if (focus && SINNERS[focus]) detail(focus); else index();
@@ -15570,7 +15839,7 @@ function openSettings(back) {
     /* 색 테마는 기본으로 접어 둡니다 — 열한 가지라 펴 두면 «다른 설정» 이 한참 아래로 밀립니다
      * (사용자 지침 2026-10-17). 고르면 다시 그리므로 펼친 것은 SET_PAL_OPEN 에 들고, [닫기] 로 나가면 다시 접힙니다. */
     const cur = paletteBy(paletteNow()) || PALETTES[0];
-    let h = '<h2>설 정</h2>' +
+    let h = '<h2>설 정</h2>' + aboutHTML() +
             '<details class="vfold setpal" id="setpal"' + (SET_PAL_OPEN ? ' open' : '') + '>' +
               '<summary><b>색 테마</b>　지금 「' + cur.name + '」</summary>' +
               '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
@@ -15609,6 +15878,25 @@ function openSettings(back) {
   draw();
   liftSheetFoot();    // 짚을 머리줄(.sheettop)을 먼저 세웁니다 — 평소엔 MutationObserver 가 한 박자 늦게 세움
   tutorOnce("settings");    /* 설정에 처음 들어왔을 때 한 번 (UI-09) */
+}
+
+/* 설정 맨 위 — 게임 소개와 만든 사람들 (사용자 지침 2026-11-09).
+ * 사람을 더하거나 고칠 때는 CREDITS 만 고치면 됩니다. */
+const CREDITS = [
+  { role: "라거슈타트 행정고문", names: ["이승찬"] },
+  { role: "라거슈타트 디자인부", names: ["이창수", "최찬경"] },
+  { role: "도움", names: ["라거슈타트"] }
+];
+function aboutHTML() {
+  return '<div class="setabout">' +
+           '<div class="hd"><img src="' + iconSrc("라슈 컴퍼니-큰") + '" alt="">' +
+             '<div><b>라슈 컴퍼니</b><span class="ver">v' + VERSION + (VERSION_NAME ? ' «' + VERSION_NAME + '»' : '') + '</span></div></div>' +
+           '<div class="hint">청소년 고생물학 단체 «라거슈타트» 사람들을 바탕으로 한 «림버스 컴퍼니» 팬 게임입니다. 비상업적으로 만들었습니다.</div>' +
+           '<div class="credhd">만든 사람들</div>' +
+           '<div class="cred">' + CREDITS.map(c =>
+             '<div><span class="rl">' + c.role + '</span><span class="nm">' + c.names.join(' · ') + '</span></div>').join('') +
+           '</div>' +
+         '</div>';
 }
 
 /* 설정의 «효과음 크기» 칸 (사용자 지침 2026-10-27) — 막대를 끌면 곧바로 바뀌고, 놓을 때 보관함에 남깁니다.

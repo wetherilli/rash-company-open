@@ -209,6 +209,17 @@
     opacity:1;transition:opacity var(--fade,360ms) ease-out;
   }
   .scenebox .typefx.out{opacity:0;}
+  /* 설정 맨 위의 게임 소개 · 만든 사람들 (engine.js aboutHTML) */
+  .setabout{margin:4px 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;}
+  .setabout .hd{display:flex;align-items:center;gap:12px;color:var(--text);}
+  .setabout .hd img{width:40px;height:40px;image-rendering:pixelated;flex:none;}
+  .setabout .hd b{font-size:17px;margin-right:8px;}
+  .setabout .ver{color:var(--gold);font-size:12px;}
+  .setabout .hint{margin:8px 0 10px;}
+  .setabout .credhd{font-size:12px;color:var(--gold);margin-bottom:6px;}
+  .setabout .cred{display:grid;gap:4px;font-size:13px;}
+  .setabout .cred .rl{color:var(--muted);display:inline-block;min-width:9.5em;}
+  .setabout .cred .nm{color:var(--text);}
   /* 설정의 «효과음 크기» — 막대 하나와 [들어 보기] 셋 (engine.js sfxSettingHTML) */
   .setsfx{margin:16px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;}
   .setsfxhead{display:flex;justify-content:space-between;align-items:baseline;color:var(--text);}
@@ -1304,6 +1315,19 @@
           border:1px dashed var(--line-2);border-radius:3px;text-align:center;}
   /* ── 노트 ─────────────────────────────── */
   .note{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
+  /* 노트 차림표 · 도감 (engine.js noteMenuHTML · noteCodexHTML, 2026-11-09) */
+  .notepg{font-size:.7em;color:var(--dim);font-weight:400;letter-spacing:0;}
+  .notemenu .notetile{cursor:pointer;min-height:64px;}
+  .notemenu .notetile .nm{font-size:16px;}
+  .notecount{margin:4px 0 8px;color:var(--dim);font-size:12.5px;}
+  .codextabs{flex-wrap:wrap;}
+  .codexhead{margin:16px 0 6px;color:var(--text);font-weight:700;}
+  .codexfoe .codexcard{cursor:pointer;display:flex;gap:8px;align-items:center;}
+  .codexfoe .codexcard .pic{flex:none;width:44px;height:44px;border-radius:6px;background:#0b0b0f;overflow:hidden;}
+  .codexfoe .codexcard .pic img{width:100%;height:100%;object-fit:contain;}
+  .notepic .card.foe{background:#0b0b0f;border-color:var(--line);}
+  .notepic .card.foe img{width:190px;height:250px;max-width:none;max-height:none;object-fit:contain;}
+  @media (max-width:640px){ .notepic .card.foe img{width:150px;height:190px;} }
   .notepic{flex:0 0 auto;}
   .notebody{flex:1 1 320px;min-width:280px;}
   .noteno{color:var(--dim);font-size:11.5px;letter-spacing:.2em;}
@@ -1740,24 +1764,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.26.9"></script>
-<script src="data/vault.js?v=2.26.9"></script>
-<script src="data/characters.js?v=2.26.9"></script>
-<script src="data/skills.js?v=2.26.9"></script>
-<script src="data/allies.js?v=2.26.9"></script>
-<script src="data/gifts.js?v=2.26.9"></script>
-<script src="data/pickup.js?v=2.26.9"></script>
-<script src="data/achievements.js?v=2.26.9"></script>
-<script src="data/mail.js?v=2.26.9"></script>
-<script src="data/notice.js?v=2.26.9"></script>
-<script src="data/patch.js?v=2.26.9"></script>
-<script src="data/event.js?v=2.26.9"></script>
-<script src="data/reward.js?v=2.26.9"></script>
-<script src="data/tutorial.js?v=2.26.9"></script>
-<script src="data/foes.js?v=2.26.9"></script>
-<script src="data/story.js?v=2.26.9"></script>
-<script src="data/mirrorpacks.js?v=2.26.9"></script>
-<script src="engine.js?v=2.26.9"></script>
+<script src="data/access.js?v=2.27.0"></script>
+<script src="data/vault.js?v=2.27.0"></script>
+<script src="data/characters.js?v=2.27.0"></script>
+<script src="data/skills.js?v=2.27.0"></script>
+<script src="data/allies.js?v=2.27.0"></script>
+<script src="data/gifts.js?v=2.27.0"></script>
+<script src="data/pickup.js?v=2.27.0"></script>
+<script src="data/achievements.js?v=2.27.0"></script>
+<script src="data/mail.js?v=2.27.0"></script>
+<script src="data/notice.js?v=2.27.0"></script>
+<script src="data/patch.js?v=2.27.0"></script>
+<script src="data/event.js?v=2.27.0"></script>
+<script src="data/reward.js?v=2.27.0"></script>
+<script src="data/tutorial.js?v=2.27.0"></script>
+<script src="data/foes.js?v=2.27.0"></script>
+<script src="data/story.js?v=2.27.0"></script>
+<script src="data/mirrorpacks.js?v=2.27.0"></script>
+<script src="engine.js?v=2.27.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
