@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.27.1";
+const VERSION = "2.27.2";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -9307,13 +9307,13 @@ function noteCodexHTML() {
     });
   } else if (NOTE_CODEX_TAB === "gift") {
     const gifts = (typeof GIFTS !== "undefined" ? GIFTS : []);
-    const groups = [[3, false, "★★★"], [2, false, "★★"], [1, false, "★"], [0, true, "화석 기프트"]];
+    const groups = [[4, false, "★★★★"], [3, false, "★★★"], [2, false, "★★"], [1, false, "★"], [0, true, "화석 기프트"]];
     h += '<div class="hint">지닌 E.G.O 기프트는 지금 강화 단계의 효과로 보입니다.</div>';
     groups.forEach(([star, fossil, name]) => {
       const list = gifts.filter(g => fossil ? g.fossil : (!g.fossil && g.star === star))
                         .sort((a, b) => giftHasN(b) - giftHasN(a) || a.name.localeCompare(b.name, "ko"));   // 지닌 것 먼저
       if (!list.length) return;
-      let b = '<div class="grid">';
+      let b = '<div class="grid codexgift">';
       list.forEach(g => {
         const has = !!(S.giftsOwned && S.giftsOwned[giftId(g)]);
         if (!has) return;
@@ -9328,7 +9328,7 @@ function noteCodexHTML() {
       h += fold("codex_gift_" + name, name, (list.length - none) + ' / ' + list.length, b);
     });
   } else {
-    h += '<div class="hint">편성 셋째 칸에 서는 사람들입니다. 함께하게 되면 여기 기록됩니다.</div><div class="grid">';
+    h += '<div class="hint">편성 셋째 칸에 서는 사람들입니다. 함께하게 되면 여기 기록됩니다.</div><div class="grid codexsup">';
     supportList().slice().sort((a, b) => supportOwned(b) - supportOwned(a)).forEach(sp => {   // 함께한 사람 먼저
       if (!supportOwned(sp)) return;
       h += '<div class="slot hasic">' + iconHTML(supportIconName(sp), { star: sp.star }) + '<div>' +
