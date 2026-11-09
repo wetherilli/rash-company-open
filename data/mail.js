@@ -46,6 +46,13 @@ const MAIL_RULE = {
 
 const MAILS = [
   {
+    id: "2026-11-09-ch1-reissue-delay",
+    title: "1장 복각 연기 안내",
+    body: "1장 복각을 이번 주 금요일(11월 13일)로 미룹니다. 기다려 주시는 동안 쓰실 몫입니다.",
+    from: "2026-11-09",
+    give: { money: 200 }
+  },
+  {
     id: "2026-11-05-dig-trip",
     title: "화석 탐사 출장비",
     body: "화석 탐사가 열렸습니다. 첫 현장에 나가실 때 쓰실 몫입니다.",
