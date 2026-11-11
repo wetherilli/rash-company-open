@@ -557,9 +557,15 @@ function vaultBackups() {
   try { return JSON.parse(Store.get(VAULT_BACK_KEY)) || []; } catch (e) { return []; }
 }
 
-function backupVault() {
-  const raw = Store.get(VAULT_KEY);
+/* 이 창이 마지막으로 써 넣은 보관함 글. 저장소에 든 것이 이것과 글자 하나 안 틀리면
+ * «이 판이 쓴 것» 이 분명하므로, 통째로 풀어(JSON.parse) 판 번호를 읽어 볼 것도 없습니다.
+ * saveVault 는 「계속」을 누를 때마다 불리므로(cont → save) 이 몫이 매번 돌았습니다. */
+let VAULT_RAW_WRITTEN = null;
+
+function backupVault(raw) {
+  if (raw === undefined) raw = Store.get(VAULT_KEY);
   if (!raw) return;                       // 뜰 것이 없습니다
+  if (raw === VAULT_RAW_WRITTEN) return;  // 이 판이 방금 쓴 그대로입니다 — 아래 «같은 판» 과 같은 답
   let o = null;
   try { o = JSON.parse(raw); } catch (e) { o = null; }
   const ver = (o && o.ver) || "(판 없음)";
@@ -574,8 +580,16 @@ function backupVault() {
 function saveVault() {
   if (!S) return;
   if (vaultLocked()) return;   // 뒤에서 온 보관함은 절대 덮어쓰지 않습니다
-  backupVault();               // 덮어쓰기 «전에» 한 벌 떠 둡니다
-  Store.set(VAULT_KEY, JSON.stringify(vaultToObject()));
+  const was = Store.get(VAULT_KEY);
+  const raw = JSON.stringify(vaultToObject());
+  /* 바뀐 것이 없으면 다시 쓰지 않습니다 — 저장소에 든 글과 «똑같은 글» 을 덮어쓰는 것이라
+   * 결과가 같고, 저장소 쓰기(동기 · 기기에 따라 디스크까지 감)만 한 번 덜 합니다.
+   * 대사만 넘기는 동안에는 보관함이 그대로라 거의 늘 이쪽으로 빠집니다. */
+  if (raw !== was) {
+    backupVault(was);          // 덮어쓰기 «전에» 한 벌 떠 둡니다
+    Store.set(VAULT_KEY, raw);
+  }
+  VAULT_RAW_WRITTEN = raw;
 }
 /* 보관함을 아주 비웁니다.
  *
@@ -10635,7 +10649,10 @@ function save(silent) {
     /* «자리» 만 적습니다. 모은 것은 보관함이 임자입니다 (load 의 주석 참고) */
     const c = {};
     SAVE_KEEPS.forEach(k => { if (S[k] !== undefined) c[k] = S[k]; });
-    Store.set(SAVE_KEY, JSON.stringify(JSON.parse(JSON.stringify(c))));
+    /* 예전에는 글로 폈다가 풀고 다시 폈습니다(stringify → parse → stringify) — 결과가 같은 글이라
+     * 한 번만 폅니다. 편성 창을 여닫는 것처럼 자리가 그대로면 쓰기도 건너뜁니다. */
+    const raw = JSON.stringify(c);
+    if (raw !== readSave()) Store.set(SAVE_KEY, raw);
     saveVault();                     // 기록할 때 모은 것도 함께 굳혀 둡니다
     if (!silent) say("기록했다. (" + curChapter().no + ")", "sys");
   } catch (e) { if (!silent) say("기록 실패.", "todo"); }
