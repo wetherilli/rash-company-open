@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.27.3";
+const VERSION = "2.28.0";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4237,6 +4237,72 @@ function foeHit(delay, dmg, crit, type) {
 /* 공격 유형 그림 — 넉 장을 ATK_TYPE_RULE.fxFrameMs 마다 넘기고, 마지막 장을 fxHoldMs 동안 둔 뒤
  * fxFadeMs 에 걸쳐 흐려지며 사라집니다(한 대 약 1.2초).
  * 대마다 조금씩 돌리고 비켜 세워, 잇달아 친 자국이 한 자리에 포개지지 않게 합니다. */
+/* ── 픽셀 연출 (v2.28.0) ─────────────────────────────────────────
+ *  pixelfx(https://github.com/patch-gg/pixelfx, MIT)의 이펙트를 스프라이트 시트로 구운 것을
+ *  한 장씩 넘겨 틉니다. 시트는 tools/픽셀연출-굽기.sh 가 굽고, 거기서 찍어 주는
+ *  «장 수 · 칸 크기 · 열 수 · fps» 를 아래 표에 그대로 적습니다.
+ *
+ *  n 장 수 · w,h 한 칸 · cols 열 수 · fps · ax,ay 칸 안에서 «가운데» 로 칠 점 · loop 되풀이
+ *
+ *  ★★★ 이 처음 나온 자리와 동기화에만 씁니다 — 다른 성급에는 연출이 없습니다(사용자 지침 2026-11-12).
+ *  경로는 글자 그대로 적습니다(배포 거르개가 이 글자를 보고 그림을 고릅니다). */
+const PX_SHEETS = {
+  starGold:  { src: "assets/fx/픽셀-별빛-금.png",   n: 40, w: 128, h: 128, cols: 7, fps: 10, ax: 64,  ay: 64,  loop: true },
+  starGreen: { src: "assets/fx/픽셀-별빛-초록.png", n: 40, w: 128, h: 128, cols: 7, fps: 10, ax: 64,  ay: 64,  loop: true },
+  sync:      { src: "assets/fx/픽셀-동기화.png",    n: 37, w: 208, h: 150, cols: 6, fps: 20, ax: 104, ay: 96  },
+  unlock:    { src: "assets/fx/픽셀-해금.png",      n: 60, w: 200, h: 220, cols: 9, fps: 15, ax: 100, ay: 204 },
+  gain:      { src: "assets/fx/픽셀-획득.png",      n: 42, w: 112, h: 108, cols: 7, fps: 30, ax: 56,  ay: 62  }
+};
+/* host 의 한가운데(또는 opt.dx · dy 만큼 비킨 자리)에 시트를 틉니다. 그림을 다 받은 뒤에 첫 장부터
+ * 시작하므로 느린 회선에서도 앞머리가 잘리지 않습니다. host 가 화면에서 사라지면 저절로 멈춥니다.
+ *   opt.scale 배율(정수) · opt.delay 늦출 ms · opt.front 맨 위에 얹기(기본은 맨 밑에 깔기) */
+function pxFx(host, key, opt) {
+  const m = PX_SHEETS[key];
+  if (!m || !host) return;
+  opt = opt || {};
+  const k = opt.scale || 1;
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;left:50%;top:50%;pointer-events:none;background-repeat:no-repeat;" +
+    "image-rendering:crisp-edges;image-rendering:pixelated;z-index:" + (opt.front ? 6 : 0) + ";" +
+    "width:" + m.w * k + "px;height:" + m.h * k + "px;" +
+    "margin-left:" + ((opt.dx || 0) - m.ax * k) + "px;margin-top:" + ((opt.dy || 0) - m.ay * k) + "px;" +
+    "background-size:" + m.cols * m.w * k + "px auto;";
+  const url = assetURL(m.src);
+  let f = 0;
+  const show = () => {
+    el.style.backgroundPosition = "-" + (f % m.cols) * m.w * k + "px -" + Math.floor(f / m.cols) * m.h * k + "px";
+  };
+  const start = () => {
+    if (!host.isConnected) return;
+    el.style.backgroundImage = 'url("' + url + '")';
+    show();
+    if (opt.front) host.appendChild(el); else host.insertBefore(el, host.firstChild);
+    const t = setInterval(() => {
+      if (!el.isConnected) { clearInterval(t); return; }
+      if (++f >= m.n) {
+        if (!m.loop) { clearInterval(t); el.remove(); return; }
+        f = 0;
+      }
+      show();
+    }, 1000 / m.fps);
+  };
+  const img = new Image();
+  img.onload = () => setTimeout(start, opt.delay || 0);
+  img.src = url;
+}
+/* 크게 빛나는 화면(flashFx)에 깔 배율 — 좁은 화면 3배, 넓으면 4배 */
+function pxFlashScale() {
+  return Math.max(2, Math.min(4, Math.floor(Math.min(window.innerWidth, window.innerHeight) / 140)));
+}
+/* 배정 결과 목록에서 처음 얻은 ★★★ 칸(.px3)의 아이콘 위에 반짝임을 한 번 — 여럿이면 차례로 */
+function pxNewBurst() {
+  $sheet.querySelectorAll(".slot.px3 .ic").forEach((ic, i) => {
+    ic.style.position = "relative";
+    ic.style.overflow = "visible";
+    pxFx(ic, "gain", { front: true, delay: 120 + i * 220 });
+  });
+}
+
 const ATK_FX_CACHE = {};
 function atkTypeFx(box, frames) {
   frames.forEach(f => { if (!ATK_FX_CACHE[f]) { ATK_FX_CACHE[f] = new Image(); ATK_FX_CACHE[f].src = assetURL(f); } });
@@ -4598,6 +4664,12 @@ function flashFx(headlineHTML, line, after, cls) {
                  '</div>' +
                  '<div class="tap">눌러서 계속</div>';
   $modal.appendChild(el);
+  /* 빛 뒤에 픽셀 연출을 깝니다 — 금빛 · 초록빛은 글자 위에서 도는 빛살, 붉은빛(동기화)은 한 점으로
+   * 모였다 터지는 빛, 흰빛(고유 능력)은 진이 그려지고 솟는 빛기둥. */
+  const pk = pxFlashScale();
+  if (cls === "red")        pxFx(el, "sync",   { scale: pk, dy: -46 * pk });
+  else if (cls === "white") pxFx(el, "unlock", { scale: pk, dy: -64 });   // 진의 바닥이 큰 글자 바로 위 — 빛기둥이 글자를 덮지 않게
+  else pxFx(el, cls === "green" ? "starGreen" : "starGold", { scale: pk, dy: -34 * pk });
 
   /* 빛이 터진 뒤에는 그대로 머물러 있다가, 누르면 결과로 넘어갑니다. */
   let done = false;
@@ -10260,13 +10332,13 @@ function openGacha(done, pk, deal) {
       h += '<div class="grid">';
       result.forEach(r => {
         if (r.kind === "adv") {
-          h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + '">' + iconHTML(advisorIconName(r.adv)) + '<div>' +
+          h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + (r.isNew && r.adv.star >= 3 ? ' px3' : '') + '">' + iconHTML(advisorIconName(r.adv)) + '<div>' +
                  '<div class="nm"><span class="star">' + stars(r.adv.star) + '</span> ' +
                    r.adv.title + ' ' + r.adv.name + '</div>' +
                  '<div class="sub">보조 교육위원' + (r.isNew ? '　— 신규' : '　— 중복') + '</div>' +
                '</div></div>';
         } else {
-          h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + '">' + iconHTML(memberIconName(r.who)) + '<div>' +
+          h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + (r.isNew && r.id.star >= 3 ? ' px3' : '') + '">' + iconHTML(memberIconName(r.who)) + '<div>' +
                  '<div class="nm"><span class="star">' + stars(r.id.star) + '</span> ' + r.id.title + '</div>' +
                  '<div class="sub">' + SINNERS[r.who].name + (r.isNew ? '　— 신규' : '　— 중복') + '</div>' +
                '</div></div>';
@@ -10362,7 +10434,7 @@ function openGacha(done, pk, deal) {
        * 그것이 이 특정 배정의 대상이면 초록빛으로 터집니다. */
       const onBanner = bigWinOn(out, pickup);
       const win = onBanner || bigWin(out);
-      if (win) starFlash(3, bigWinLine(win), () => draw(out), !!onBanner);
+      if (win) starFlash(3, bigWinLine(win), () => { draw(out); pxNewBurst(); }, !!onBanner);
       else draw(out);
     };
 
@@ -10470,7 +10542,8 @@ function openStockGacha(kind, done) {
     if (result) {
       h += '<div class="grid">';
       result.forEach(r => {
-        h += '<div class="slot ro' + (isGift || r.ic ? ' hasic' : '') + (r.isNew ? ' sel' : '') + '">' +
+        h += '<div class="slot ro' + (isGift || r.ic ? ' hasic' : '') + (r.isNew ? ' sel' : '') +
+                 (r.isNew && r.star >= 3 ? ' px3' : '') + '">' +
                (isGift ? giftIconHTML(r) : r.ic ? iconHTML(r.ic) : '') +
                '<div><div class="nm"><span class="star">' + stars(r.star) + '</span> ' + r.name + '</div>' +
                '<div class="sub">' + (r.isNew ? '신규 — ' + r.desc : '중복') + '</div></div>' +
@@ -10508,7 +10581,7 @@ function openStockGacha(kind, done) {
       /* 중복은 축하할 일이 아니니 연출을 넣지 않습니다.
        * 이름은 알리지 않습니다 — 눌러 봐야 무엇을 얻었는지 알도록. */
       const win = out.find(r => r.isNew && r.star >= 3) || null;
-      if (win) starFlash(3, win.desc || null, () => draw(out));
+      if (win) starFlash(3, win.desc || null, () => { draw(out); pxNewBurst(); });
       else draw(out);
     };
 
@@ -15913,6 +15986,8 @@ function aboutHTML() {
            '<div class="cred">' + CREDITS.map(c =>
              '<div><span class="rl">' + c.role + '</span><span class="nm">' + c.names.join(' · ') + '</span></div>').join('') +
            '</div>' +
+           /* 픽셀 연출의 출처 — pixelfx 와 그 바탕이 된 Hugo Duprez 의 이펙트(둘 다 MIT) */
+           '<div class="hint">픽셀 연출 — pixelfx (Patch · Hugo Duprez, MIT License)</div>' +
          '</div>';
 }
 
