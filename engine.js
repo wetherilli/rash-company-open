@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.2";
+const VERSION = "2.28.3";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4307,6 +4307,39 @@ function pxNewBurst() {
     ic.style.overflow = "visible";
     pxFx(ic, "gain", { front: true, delay: 120 + i * 220 });
   });
+}
+
+/* 거울 완주 — 이야기 그림 칸(#stage) 위에 유리가 «도로 맞물리는» 연출(v2.28.3).
+ * pixelfx 의 shatter-wipe(판이 덮이고 금 가 깨지는 전환)를 거꾸로 틉니다 — 조각이 날아와 금 간 판으로
+ * 맞물리고, 금이 지워진 뒤 판이 걷혀 그림이 다시 보입니다. 시트는 16:9, 칸은 납작하므로 너비에 맞추고 위아래를 자릅니다. */
+const PX_MIRROR = { src: "assets/fx/픽셀-거울.png", n: 43, w: 320, h: 180, cols: 5, fps: 15 };
+function pxMirrorMend() {
+  const st = document.getElementById("stage"), m = PX_MIRROR;
+  if (!st || !RULE.gachaFxMs) return;
+  const r = st.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const k = r.width / m.w, off = (m.h * k - r.height) / 2;
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:7;" +
+    "image-rendering:crisp-edges;image-rendering:pixelated;background-repeat:no-repeat;" +
+    "background-size:" + m.cols * m.w * k + "px auto;";
+  const show = f => {
+    el.style.backgroundPosition = "-" + (f % m.cols) * m.w * k + "px -" + (Math.floor(f / m.cols) * m.h * k + off) + "px";
+  };
+  const url = assetURL(m.src), img = new Image();
+  img.onload = () => {
+    if (!st.isConnected) return;
+    if (getComputedStyle(st).position === "static") st.style.position = "relative";
+    el.style.backgroundImage = 'url("' + url + '")';
+    let f = m.n - 1;
+    show(f);
+    st.appendChild(el);
+    const t = setInterval(() => {
+      if (!el.isConnected || --f < 0) { clearInterval(t); el.remove(); return; }
+      show(f);
+    }, 1000 / m.fps);
+  };
+  img.src = url;
 }
 
 /* 기록칸 마지막 줄 끝에 반짝임을 한 번 — 업적 달성 줄. 빛 화면을 새로 띄우지 않고 그 줄에만 얹습니다(v2.28.2) */
@@ -13866,6 +13899,7 @@ function mirrorClear() {
     : rule === MIRROR_EXTREME ? "흩어진 조각들이 하나씩 제자리를 찾아 간다."
     : rule === MIRROR_HARD    ? "깨진 유리가 도로 맞물린다."
     :                           "유리창이 다시 맑아진다.", "good");
+  pxMirrorMend();
   /* 이 갈래를 «처음» 완주하는가 — 표를 남기기 전에 봐 두어야 합니다 */
   const firstRun = !(S.mirrorDone && S.mirrorDone[rule.key]);
   if (!S.mirrorDone) S.mirrorDone = {};
