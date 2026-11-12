@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.3";
+const VERSION = "2.28.4";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3984,10 +3984,78 @@ function renderStage() {
             '</div>';
   html += '</div>';
   $stage.innerHTML = html;
+  stageWeather();
+}
+
+/* ── 날씨 (v2.28.4) ───────────────────────────────────────────
+ *  장소 장면에 wx: "rain" | "snow" 를 달면 그 장소에서 다음 장소 장면까지 배경 위에 비 · 눈이 내립니다.
+ *  **실외에만 답니다**(사용자 지침 2026-11-12 — 8-1 처럼 실내인 자리에 날씨를 깔지 않음, 장소를 보고 넣을 것).
+ *  시트는 pixelfx weather/rain · snow 를 구운 것(tools/픽셀연출-굽기.sh). 칸 너비에 맞추고 위아래를 자릅니다.
+ *  같은 DOM 하나를 renderStage 마다 배경 바로 위(적 · 초상 아래)에 다시 꽂으므로, 대사마다 처음부터 돌지 않습니다. */
+const PX_WEATHER = {
+  rain: { src: "assets/fx/픽셀-비.png", n: 80,  w: 320, h: 180, cols: 7, fps: 10 },
+  snow: { src: "assets/fx/픽셀-눈.png", n: 120, w: 320, h: 180, cols: 9, fps: 10 }
+};
+let CUR_WX = null, WX_EL = null, WX_KEY = null, WX_T = null;
+function stageWeather() {
+  const box = $stage.querySelector(".scenebox");
+  const m = CUR_WX && PX_WEATHER[CUR_WX];
+  if (!m || !box || !RULE.gachaFxMs || !(SCENES && SCENES.length)) {
+    if (WX_T) { clearInterval(WX_T); WX_T = null; }
+    WX_EL = null; WX_KEY = null;
+    return;
+  }
+  if (WX_KEY !== CUR_WX) {
+    if (WX_T) clearInterval(WX_T);
+    WX_KEY = CUR_WX;
+    WX_EL = document.createElement("div");
+    WX_EL.style.cssText = "position:absolute;inset:0;pointer-events:none;background-repeat:no-repeat;" +
+      "image-rendering:crisp-edges;image-rendering:pixelated;background-image:url(\"" + assetURL(m.src) + "\");";
+    let f = 0;
+    const show = () => {
+      const W = WX_EL.clientWidth, H = WX_EL.clientHeight;
+      if (!W) return;
+      const k = W / m.w, off = (m.h * k - H) / 2;
+      WX_EL.style.backgroundSize = m.cols * m.w * k + "px auto";
+      WX_EL.style.backgroundPosition = "-" + (f % m.cols) * m.w * k + "px -" + (Math.floor(f / m.cols) * m.h * k + off) + "px";
+    };
+    WX_T = setInterval(() => { f = (f + 1) % m.n; show(); }, 1000 / m.fps);
+    WX_EL._show = show;
+  }
+  const bg = box.querySelector("img.scene");
+  if (bg) bg.after(WX_EL); else box.insertBefore(WX_EL, box.firstChild);
+  WX_EL._show();
+}
+
+/* 무대 바닥에 한 번 — 이야기 장면 { t:"flash", fx:"land" } (6장 옥상 「그리고 그것이 내려앉았다」).
+ * pixelfx impacts/ground-slam. 칸 바닥 가운데에 땅이 오게 세우고, 넘치는 위쪽은 칸이 자릅니다. */
+const PX_STAGE_ONCE = {
+  land: { src: "assets/fx/픽셀-착지.png", n: 49, w: 288, h: 208, cols: 6, fps: 15, ax: 144, ay: 166 }
+};
+function stageOnce(key) {
+  const m = PX_STAGE_ONCE[key], box = $stage.querySelector(".scenebox");
+  if (!m || !box || !RULE.gachaFxMs) return;
+  const H = box.clientHeight || 300, k = Math.max(1, Math.round(H / 150));
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;left:50%;bottom:8px;pointer-events:none;z-index:5;background-repeat:no-repeat;" +
+    "image-rendering:crisp-edges;image-rendering:pixelated;" +
+    "width:" + m.w * k + "px;height:" + m.h * k + "px;margin-left:" + (-m.ax * k) + "px;" +
+    "margin-bottom:" + (-(m.h - m.ay) * k) + "px;background-size:" + m.cols * m.w * k + "px auto;";
+  let f = 0;
+  const show = () => { el.style.backgroundPosition = "-" + (f % m.cols) * m.w * k + "px -" + Math.floor(f / m.cols) * m.h * k + "px"; };
+  const url = assetURL(m.src), img = new Image();
+  img.onload = () => {
+    if (!box.isConnected) return;
+    el.style.backgroundImage = 'url("' + url + '")';
+    show(); box.appendChild(el);
+    const t = setInterval(() => { if (!el.isConnected || ++f >= m.n) { clearInterval(t); el.remove(); return; } show(); }, 1000 / m.fps);
+  };
+  img.src = url;
 }
 
 /* 무대를 아예 접는다 — 지금은 출입 코드 화면에서만 씁니다 */
 function hideStage() {
+  CUR_WX = null; stageWeather();
   $stage.className = ""; $stage.innerHTML = "";
   CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null; CUR_CUT = null; CUR_SIDE = null;
 }
@@ -5244,6 +5312,7 @@ function play(s) {
     case "flash":
       flashScreen(s.ms);
       shakeScreen(true);
+      if (s.fx) stageOnce(s.fx);
       if (s.text) say(s.text, s.cls || "n");
       return cont();
 
@@ -5275,6 +5344,7 @@ function play(s) {
       return cont();
 
     case "place":
+      CUR_WX = s.wx || null;   // 장소가 갈리면 날씨도 갈립니다 — 실외 장소에만 wx 를 답니다
       showCard(s.img || (curChapter() || {}).img, s.name, s.name);
       say("▶ " + s.name, "place");
       return cont();
@@ -10817,11 +10887,12 @@ function restoreStage() {
   let img = c.img || null;
   let name = c.no ? (c.no + "  " + c.title) : null;
   let recalling = false;
+  CUR_WX = null;   // 이어 하기 — 마지막 장소의 날씨를 되살립니다
 
   for (let k = Math.min(S.sc || 0, SCENES.length) - 1; k >= 0; k--) {
     const sc = SCENES[k];
     if (!sc) continue;
-    if (sc.t === "place")       { img = sc.img || c.img || null; name = sc.name || null; break; }
+    if (sc.t === "place")       { img = sc.img || c.img || null; name = sc.name || null; CUR_WX = sc.wx || null; break; }
     if (sc.t === "recallStart") { if (sc.img) img = sc.img; name = sc.name || null; recalling = true; break; }
     if (sc.t === "recallEnd")   break;      // 회상은 이미 닫혔다 — 그 장의 그림으로
   }
@@ -16795,6 +16866,7 @@ function glass() {
   VAULT_LOCK = null;       // 다시 읽으므로 판단도 다시 합니다
   S = newState();          // 보관함에서 다시 읽어 온다
   SCENES = [];
+  CUR_WX = null;           // 이야기 밖에서는 날씨가 없습니다
   if (vaultLocked()) return vaultLockScreen();
   clearLog();
   AT_GLASS = true;         // 머리줄에 [우편함] · [보상] 아이콘을 세웁니다 (renderHeader)

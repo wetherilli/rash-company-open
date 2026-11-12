@@ -1368,7 +1368,7 @@ const CHAPTERS = [
   { t: "n", text: "무언가가 구름을 찢으며 하늘을 가로질렀다. 옥상 끝에서 끝까지, 한 호흡에." },
   { t: "d", who: "kim_duhyeon", text: "…와." },
   { t: "d", who: "kim_duhyeon", text: "저건 좀… 멋있는데." },
-  { t: "flash", text: "그리고 그것이 내려앉았다. 목이 없는 것이 일어섰다." },
+  { t: "flash", text: "그리고 그것이 내려앉았다. 목이 없는 것이 일어섰다.", fx: "land" },
   { t: "d", who: "마왕 이경원", text: "케빈. 손님이다." },
   { t: "battle", foe: "kevin",
     joinIn: { at: 0.2, foe: "mawang_lee", heal: 0.3,
@@ -2789,7 +2789,7 @@ const CHAPTERS = [
       { t: "d", who: "manager", text: "또 뭐가 있어?" },
       { t: "d", who: "song_hamin", text: "레전드 개판이네.." },
       { t: "n", text: "지붕이 날아갔다.", shake: "hard" },
-      { t: "place", img: "assets/scene/여관 기가노토 조우.jpg", name: "여관 · 뜯겨나간 지붕, 쏟아지는 비" },
+      { t: "place", img: "assets/scene/여관 기가노토 조우.jpg", name: "여관 · 뜯겨나간 지붕, 쏟아지는 비", wx: "rain" },
       { t: "d", who: "kim_taeseong", text: "방금 씻었는데…" },
       { t: "n", text: "그리고 거대한 육식공룡이 모습을 드러낸다." },
       { t: "n", text: "번쩍이는 붉은 눈동자가 아래를 응시한다." },
@@ -2811,7 +2811,7 @@ const CHAPTERS = [
       /* 원작 지문이 이 최종전 앞에만 "편성 고칠 수 있는 중간 저장"을 한 번
        * 더 따로 적어 둬(뮤타돈 전 한 번뿐이던 다른 전투들과 달리), 여기서만
        * ban/unban 없이 순수한 편성 확인 자리를 하나 더 얹었습니다. */
-      { t: "place", img: "assets/scene/여관 기가노토 전투.jpg", name: "여관 · 붉은 눈동자 아래" },
+      { t: "place", img: "assets/scene/여관 기가노토 전투.jpg", name: "여관 · 붉은 눈동자 아래", wx: "rain" },
       { t: "party", require: ["yu_ain"], text: "가장 큰 상대가 남았습니다 — 편성을 마지막으로 손보십시오. 유아인은 반드시 서야 합니다." },
       { t: "battle", foe: "giganotosaurus" },
 
