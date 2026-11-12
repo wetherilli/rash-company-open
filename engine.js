@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.0";
+const VERSION = "2.28.1";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4653,7 +4653,7 @@ function buttons(list) {
  *  결과를 바로 보여주지 않고, 한 번 크게 빛낸 뒤에 펼칩니다.
  *  길이는 RULE.gachaFxMs 에서 고칩니다. 0 으로 두면 그냥 넘어갑니다.
  *  cls 로 색을 고릅니다 — 비우면 금빛, "green"/"red" 등 flashfx 변형 클래스. */
-function flashFx(headlineHTML, line, after, cls) {
+function flashFx(headlineHTML, line, after, cls, px) {
   if (!RULE.gachaFxMs) { if (after) after(); return; }
   const el = document.createElement("div");
   el.className = "flashfx" + (cls ? " " + cls : "");
@@ -4664,12 +4664,12 @@ function flashFx(headlineHTML, line, after, cls) {
                  '</div>' +
                  '<div class="tap">눌러서 계속</div>';
   $modal.appendChild(el);
-  /* 빛 뒤에 픽셀 연출을 깝니다 — 금빛 · 초록빛은 글자 위에서 도는 빛살, 붉은빛(동기화)은 한 점으로
-   * 모였다 터지는 빛, 흰빛(고유 능력)은 진이 그려지고 솟는 빛기둥. */
-  const pk = pxFlashScale();
-  if (cls === "red")        pxFx(el, "sync",   { scale: pk, dy: -46 * pk });
-  else if (cls === "white") pxFx(el, "unlock", { scale: pk, dy: -64 });   // 진의 바닥이 큰 글자 바로 위 — 빛기둥이 글자를 덮지 않게
-  else pxFx(el, cls === "green" ? "starGreen" : "starGold", { scale: pk, dy: -34 * pk });
+  /* 빛 뒤에 픽셀 연출을 깝니다 — px 를 넘긴 자리에만(PX_SHEETS 의 열쇠). 색(cls)만 보고 깔면
+   * 같은 빛을 빌려 쓰는 다른 화면(기프트 강화 · 합성 · 화석 탐사의 「깨졌다」)에까지 번집니다(v2.28.1). */
+  if (px) {
+    const pk = pxFlashScale();
+    pxFx(el, px, { scale: pk, dy: px === "unlock" ? -64 : px === "sync" ? -46 * pk : -34 * pk });   // 전부 큰 글자 «위» 에 — 빛기둥이 글자를 덮지 않게
+  }
 
   /* 빛이 터진 뒤에는 그대로 머물러 있다가, 누르면 결과로 넘어갑니다. */
   let done = false;
@@ -4695,12 +4695,12 @@ function flashFx(headlineHTML, line, after, cls) {
 
 /* 배정에서 ★★★ 이 나왔을 때. green 을 켜면 금빛 대신 초록빛 — 특정 배정의 대상이 나왔을 때 */
 function starFlash(star, line, after, green) {
-  flashFx(stars(star), line, after, green ? "green" : null);
+  flashFx(stars(star), line, after, green ? "green" : null, green ? "starGreen" : "starGold");
 }
 
 /* 동기화 단계가 올랐을 때 — 붉게 빛나며 오른 단계와 그 작성위원의 대표 대사를 보여준다 */
 function syncFlash(level, quote, after) {
-  flashFx("동기화 " + level + "단계", quote, after, "red");
+  flashFx("동기화 " + level + "단계", quote, after, "red", "sync");
 }
 
 /* 동기화 1·4·8·12단계 — 고유 능력이 해금되거나 강화되는 자리라, 이번엔 붉은빛
@@ -4712,7 +4712,7 @@ function uniqueSkillFlash(level, quote, skillName, after) {
   const headlineHTML = big +
     '<span style="display:block;font-size:15px;letter-spacing:.18em;opacity:.75;margin-top:12px;">' +
     '동기화 ' + level + '단계</span>';
-  flashFx(headlineHTML, quote, after, "white");
+  flashFx(headlineHTML, quote, after, "white", "unlock");
 }
 
 /* 이번 묶음에서 처음 손에 넣은 ★★★ — 없으면 null.
