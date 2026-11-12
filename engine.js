@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.11";
+const VERSION = "2.28.12";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2244,7 +2244,8 @@ const ATK_TYPE_RULE = {
 };
 /* 이 사람이 지금 치는 유형 — 낀 인격 → 그 사람의 기본 → (지원이면) supportType. 없으면 null */
 function atkTypeOf(w) {
-  if (!w || isAlly(w)) return null;
+  if (!w) return null;
+  if (isAlly(w)) { const a = allyBy(w); return (a && a.atkType) || null; }   // 조력자 — data/allies.js 의 atkType(v2.28.12)
   if (isSupport(w)) { const sp = supportBy(w); return (sp && sp.atkType) || ATK_TYPE_RULE.supportType; }
   const id = S && S.equip ? idByKey(S.equip[w]) : null;
   if (id && id.atkType) return id.atkType;
