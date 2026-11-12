@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.5";
+const VERSION = "2.28.6";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4331,7 +4331,16 @@ const PX_SHEETS = {
   shatter:   { src: "assets/fx/픽셀-깨짐.png",      n: 43, w: 224, h: 112, cols: 5, fps: 15, ax: 92,  ay: 100, maxk: 3 },   // 덩이가 칸 왼쪽에 서고 조각은 오른쪽으로 흩어짐 — 그 사이를 가운데로
   firework:  { src: "assets/fx/픽셀-불꽃.png",      n: 37, w: 240, h: 248, cols: 7, fps: 10, ax: 120, ay: 170, maxk: 2 },   // 터지는 자리(칸 위쪽)가 큰 글자를 덮지 않게 위로
   fuse:      { src: "assets/fx/픽셀-합성.png",      n: 34, w: 208, h: 184, cols: 6, fps: 20, ax: 104, ay: 92,  maxk: 3 },
-  giftUp:    { src: "assets/fx/픽셀-강화.png",      n: 24, w: 120, h: 86,  cols: 5, fps: 15, ax: 60,  ay: 50,  loop: true }
+  giftUp:    { src: "assets/fx/픽셀-강화.png",      n: 24, w: 120, h: 86,  cols: 5, fps: 15, ax: 60,  ay: 50,  loop: true },
+  /* v2.28.6 — UI 자리. ay 는 바닥(땅)이 닿는 점 */
+  chest:     { src: "assets/fx/픽셀-상자.png",      n: 51, w: 176, h: 112, cols: 6, fps: 15, ax: 88,  ay: 96  },   // 인격 파편 상자 열기
+  /* 카드 위 넷(퇴고 · 첨삭 · 교정 · 독촉)은 카드 크기에 맞춰 늘립니다(pxCard) — 칸 크기는 여백을 걷은(CROP) 그림 크기.
+   * card: 카드 폭 그대로 × (카드 높이 × card), op: 불투명도 */
+  heal:      { src: "assets/fx/픽셀-회복.png",      n: 30, w: 38,  h: 77,  cols: 8, fps: 15, ax: 19,  ay: 77,  card: 1   },   // 전투 퇴고 — 고친 사람 카드
+  revive:    { src: "assets/fx/픽셀-부활.png",      n: 46, w: 159, h: 156, cols: 7, fps: 12, ax: 80,  ay: 156, card: 1.6 },   // 전투 첨삭 — 날개가 카드 위로 조금 넘침
+  spark:     { src: "assets/fx/픽셀-불똥.png",      n: 16, w: 136, h: 80,  cols: 4, fps: 30, ax: 44,  ay: 64  },   // 화석 탐사 망치질 — 내리친 칸
+  guard:     { src: "assets/fx/픽셀-교정.png",      n: 36, w: 66,  h: 68,  cols: 7, fps: 15, ax: 33,  ay: 66,  card: 1, op: 0.45 },   // 전투 교정 — 카드를 덮되 비치게
+  push:      { src: "assets/fx/픽셀-독촉.png",      n: 18, w: 52,  h: 57,  cols: 5, fps: 15, ax: 26,  ay: 55,  card: 1, rep: 2 }      // 전투 독촉 — 씩씩대는 김
 };
 /* host 의 한가운데(또는 opt.dx · dy 만큼 비킨 자리)에 시트를 틉니다. 그림을 다 받은 뒤에 첫 장부터
  * 시작하므로 느린 회선에서도 앞머리가 잘리지 않습니다. host 가 화면에서 사라지면 저절로 멈춥니다.
@@ -4414,6 +4423,53 @@ function pxMirrorMend() {
     }, 1000 / m.fps);
   };
   img.src = url;
+}
+
+/* 화면의 한 점(x, y — 시트의 ax, ay 가 닿을 곳)에 한 번 틉니다(v2.28.6). 화면 기준으로 body 에 얹으므로,
+ * 그 뒤에 창이나 카드가 다시 그려져도 끊기지 않습니다 — 우편 · 보상 받기 · 전투 카드 · 화석 칸처럼
+ * 누르자마자 그 자리를 새로 그리는 곳에 씁니다. rect 를 넘기면 그 가운데 아래쪽(opt.mid 면 한가운데)이 x, y. */
+function pxAt(key, rect, opt) {
+  const m = PX_SHEETS[key];
+  if (!m || !rect || !rect.width || !RULE.gachaFxMs) return;
+  opt = opt || {};
+  const k = opt.scale || 1;
+  /* opt.cover — 한 칸을 rect 에 꼭 맞게 늘립니다(가로세로 비율은 깨져도 됨 — 사용자 지침, 카드 전체를 덮는 교정 · 독촉) */
+  /* opt.cover 면 폭은 rect 그대로, 높이는 rect 높이 × (m.card || 1) — 바닥을 rect 바닥에 맞춥니다 */
+  const W = opt.cover ? rect.width : m.w * k, H = opt.cover ? rect.height * (m.card || 1) : m.h * k;
+  const x = rect.left + rect.width / 2, y = opt.mid ? rect.top + rect.height / 2 : rect.bottom - (opt.lift || 0);
+  const left = opt.cover ? rect.left : x - m.ax * k, top = opt.cover ? rect.bottom - H : y - m.ay * k;
+  const el = document.createElement("div");
+  el.style.cssText = "position:fixed;pointer-events:none;z-index:10000;background-repeat:no-repeat;" +
+    (m.op ? "opacity:" + m.op + ";" : "") +
+    "image-rendering:crisp-edges;image-rendering:pixelated;" +
+    "left:" + left + "px;top:" + top + "px;width:" + W + "px;height:" + H + "px;" +
+    "background-size:" + m.cols * W + "px " + Math.ceil(m.n / m.cols) * H + "px;";
+  let f = 0;
+  const show = () => { el.style.backgroundPosition = "-" + (f % m.cols) * W + "px -" + Math.floor(f / m.cols) * H + "px"; };
+  const url = assetURL(m.src), img = new Image();
+  img.onload = () => {
+    el.style.backgroundImage = 'url("' + url + '")';
+    show(); document.body.appendChild(el);
+    const total = m.n * (m.rep || 1);
+    let i = 0;
+    const t = setInterval(() => { if (++i >= total) { clearInterval(t); el.remove(); return; } f = i % m.n; show(); }, 1000 / m.fps);
+  };
+  img.src = url;
+}
+/* 전투 작성위원 카드 위에 — 카드 바닥에서 조금 띄운 자리가 시트의 땅 */
+/* 카드는 조력자가 붙으면 좁아지고 폰에서도 크기가 다르므로, 그때그때 카드 크기를 재서 그 크기로 늘립니다 */
+function pxCard(who, key) {
+  const card = $party && $party.querySelector('.pcard[data-who="' + who + '"]');
+  const m = PX_SHEETS[key];
+  if (card && m) pxAt(key, card.getBoundingClientRect(), m.card ? { cover: true } : { lift: 8 });
+}
+/* 인격 파편 상자 결과 창 머리에 상자가 열리는 연출 — 자리를 하나 비워 두고 그 바닥에 세웁니다 */
+const PX_CHEST_SLOT = '<div class="pxchest" style="position:relative;height:96px;"></div>';
+function pxChestPlay() {
+  const host = $sheet.querySelector(".pxchest");
+  if (!host) return;
+  if (!RULE.gachaFxMs) { host.remove(); return; }
+  pxAt("chest", host.getBoundingClientRect());
 }
 
 /* 기록칸 마지막 줄 끝에 반짝임을 한 번 — 업적 달성 줄. 빛 화면을 새로 띄우지 않고 그 줄에만 얹습니다(v2.28.2) */
@@ -4742,8 +4798,56 @@ function renderParty() {
       '<div class="st"><span class="hpnum">' + (hideNum ? "??? / ???" : hp + ' / ' + mx) + '</span>' +
         '<span class="ostat">　공 ' + (hideNum ? "???" : st.atk) +
           '　방 ' + (hideNum ? "???" : st.def) + '</span></div>';
+    /* 고른 명령을 카드에 걸어 둡니다(v2.28.6, 사용자 지침) — 방어는 빛 방패, 공격은 칼을 한 번씩 휘두르는 준비 자세 */
+    if (ready) div.insertAdjacentHTML("beforeend", '<i class="pxmark" data-pxm="' + (cmd === "guard" ? "guard" : "attack") + '"></i>');
     $party.appendChild(div);
   });
+  pxMarkTick();
+}
+
+/* 카드에 걸린 명령 표시 — 카드는 자주 다시 그려지므로, 시계 하나가 모든 .pxmark 를 «지금 시각» 의 장으로 맞춥니다.
+ * 그래서 다시 그려져도 처음부터 돌지 않습니다. 공격은 휘두른 뒤 잠깐 쉬었다 다시(gap 장). */
+const PX_MARKS = {
+  guard:  { src: "assets/fx/픽셀-교정.png", n: 36, w: 66,  h: 68,  cols: 7, fps: 15, cover: true, op: 0.45, gap: 0 },   // 카드 전체를 덮되 비치게(사용자 지침)
+  /* 공격은 카드 높이의 hk 배 높이로 — 넓은 화면 카드(약 100px)에서 예전 0.55배(57px)와 같은 크기, 폰 · 조력자 넷일 때는 따라 줄어듦 */
+  attack: { src: "assets/fx/픽셀-공격.png", n: 12, w: 136, h: 104, cols: 4, fps: 15, hk: 0.57, gap: 16 }
+};
+let PX_MARK_T = null;
+function pxMarkTick() {
+  if (PX_MARK_T || !RULE.gachaFxMs) return;
+  const step = () => {
+    const els = $party ? $party.querySelectorAll(".pxmark") : [];
+    if (!els.length) { clearInterval(PX_MARK_T); PX_MARK_T = null; return; }
+    const now = performance.now();
+    els.forEach(el => {
+      const m = PX_MARKS[el.dataset.pxm];
+      if (!m) return;
+      if (!el.dataset.on) {
+        el.dataset.on = "1";
+        el.style.cssText = "position:absolute;pointer-events:none;background-repeat:no-repeat;" +
+          "image-rendering:crisp-edges;image-rendering:pixelated;background-image:url(\"" + assetURL(m.src) + "\");" +
+          (m.op ? "opacity:" + m.op + ";" : "") +
+          (m.cover ? "inset:0;border-radius:inherit;" : "right:4px;top:50%;");
+      }
+      /* 한 칸의 크기 — 장마다 카드 크기를 다시 잽니다(조력자가 붙거나 화면 폭이 바뀌어도 따라감).
+       * cover 는 카드 크기 그대로(비율이 깨져도 됨), 아니면 카드 높이 × hk 에 비율을 지킴 */
+      let W, H;
+      if (m.cover) { W = el.clientWidth; H = el.clientHeight; }
+      else {
+        const ch = el.parentNode ? el.parentNode.clientHeight : 0;
+        H = Math.round(ch * m.hk); W = Math.round(H * m.w / m.h);
+        el.style.width = W + "px"; el.style.height = H + "px"; el.style.marginTop = (-H / 2) + "px";
+      }
+      if (!W || !H) return;
+      el.style.backgroundSize = m.cols * W + "px " + Math.ceil(m.n / m.cols) * H + "px";
+      const f = Math.floor(now / (1000 / m.fps)) % (m.n + m.gap);
+      if (f >= m.n) { el.style.visibility = "hidden"; return; }
+      el.style.visibility = "";
+      el.style.backgroundPosition = "-" + (f % m.cols) * W + "px -" + Math.floor(f / m.cols) * H + "px";
+    });
+  };
+  step();
+  PX_MARK_T = setInterval(step, 1000 / 15);
 }
 
 function buttons(list) {
@@ -7077,6 +7181,7 @@ function askNext() {
       b.manage -= cRevive;
       setHp(t, maxHp(t) * (RULE.reviveRatio + ae.revive));
       say(CREW.manager.codename + "의 첨삭 — " + withJosa(memberName(t), "이") + " 다시 일어선다.", "good");
+      pxCard(t, "revive");
       askNext();
     }
   });
@@ -7093,6 +7198,7 @@ function askNext() {
       setHp(hurt, before + maxHp(hurt) * RULE.healRatio);
       say(CREW.manager.codename + "의 퇴고 — " + withJosa(memberName(hurt), "이") +
           " " + (curHp(hurt) - before) + " 회복했다.", "good");
+      pxCard(hurt, "heal");
       askNext();
     }
   });
@@ -7107,6 +7213,7 @@ function askNext() {
     fn: () => pickTarget(guardable, t => {
       b.manage -= cCorrect; b.mods[t + "_guard"] = true;
       say(withJosa(CREW.manager.codename, "이") + " " + memberName(t) + "의 글을 교정한다.", "good");
+      pxCard(t, "guard");
       askNext();
     })
   });
@@ -7119,6 +7226,7 @@ function askNext() {
     fn: () => {
       b.manage -= cPush; b.mods[who + "_push"] = true;
       say(withJosa(CREW.manager.codename, "이") + " " + withJosa(memberName(who), "을") + " 독촉한다.", "good");
+      pxCard(who, "push");
       askNext();
     }
   });
@@ -14490,9 +14598,11 @@ function openMail(back, note) {
       const m = live[+el.dataset.mail];
       /* 창을 닫지 않고 그 자리에서 다시 그립니다 — 유리창으로 돌아가면
        * 로그가 지워져 무엇을 받았는지 못 보게 됩니다. */
+      const rc = el.getBoundingClientRect();
       const r = mailTake(m);
       render();
       openMail(back, r);
+      if (r && r.ok) pxAt("gain", rc, { mid: true });   // 받은 칸 자리에 반짝임 한 번(v2.28.6)
     };
   });
   document.getElementById("mlclose").onclick = () => {
@@ -14751,9 +14861,11 @@ function openReward(back, note) {
 
   $sheet.querySelectorAll("[data-rw]").forEach(el => {
     el.onclick = () => {
+      const rc = el.getBoundingClientRect();
       const res = rewardTake(el.dataset.rw);
       render();
       openReward(back, res);
+      if (res && res.ok) pxAt("gain", rc, { mid: true });
     };
   });
   $sheet.querySelectorAll("[data-rwfold]").forEach(el => {
@@ -16696,7 +16808,7 @@ function openFragBoxRandom(n, back, ret) {
   saveVault(); render();
   say("인격 파편 상자(무작위) " + n + "개를 열어, 파편 " + total + "개를 나눠 받았다.", "gain");
 
-  let h = '<h2>인격 파편 상자 (무작위)</h2>' +
+  let h = '<h2>인격 파편 상자 (무작위)</h2>' + PX_CHEST_SLOT +
     '<div class="hint">상자 ' + n + '개를 열어 인격 파편 ' + total + '개를 얻었습니다.</div>' +
     '<div class="grid">' +
     Object.keys(got).sort((a, b) => got[b] - got[a]).map(w =>
@@ -16707,6 +16819,7 @@ function openFragBoxRandom(n, back, ret) {
     '</div>' +
     '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
   $sheet.innerHTML = h;
+  pxChestPlay();
   document.getElementById("bxdone").onclick = () => ret();
 }
 
@@ -16736,11 +16849,12 @@ function openFragBoxPickWho(n, back, ret) {
       saveVault(); render();
       say(SINNERS[w].name + " 몫으로 인격 파편 상자(선택) " + n + "개를 써, 파편 " + gain + "개를 얻었다.", "gain");
 
-      let h2 = '<h2>인격 파편 상자 (선택)</h2>' +
+      let h2 = '<h2>인격 파편 상자 (선택)</h2>' + PX_CHEST_SLOT +
         '<div class="hint">' + SINNERS[w].name + ' 파편 ' + gain +
           '개를 얻었습니다.  (지금 ' + fragCount(w) + '개)</div>' +
         '<div class="modalfoot"><button id="bxdone" class="primary">확인</button></div>';
       $sheet.innerHTML = h2;
+      pxChestPlay();
       document.getElementById("bxdone").onclick = () => ret();
     };
   });
@@ -18589,7 +18703,11 @@ function digSiteBind(again) {
       saveVault();
       again();                                   /* 판을 다시 그린 «뒤» 에 연출을 겁니다 */
       digSfx(mode);
-      if (mode === "hammer") digShake();
+      if (mode === "hammer") {
+        digShake();
+        const cell = $sheet.querySelector('[data-dc="' + el.dataset.dc + '"]');
+        if (cell) pxAt("spark", cell.getBoundingClientRect(), { mid: true });   // 내리친 칸에서 불똥(v2.28.6)
+      }
       digPlayFx(board);                          /* 캐냈거나 깨뜨렸으면 그 순간을 */
     });
   $sheet.querySelectorAll("[data-team]").forEach(el => el.onclick = () => {
