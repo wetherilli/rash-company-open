@@ -850,7 +850,7 @@ const CHAPTERS = [
     { t: "d", who: "이형우", text: "…하지만..." },
     { t: "d", who: "강호영", text: "여기가. 네가 있을 자리란다 형우야. 이 안이... 이 강대한 괴수가..." },
     { t: "d", who: "강호영", text: "너의 진정한 자리라고." },
-    { t: "n", text: "이형우는 아라온호 선장 강호영에게 선동되어 해양으로 떨어졌다." },
+    { t: "n", text: "이형우는 아라온호 선장 강호영에게 선동되어 해양으로 떨어졌다.", fx: "splash" },
     { t: "d", who: "강호영", text: "너를 깎아내라!" },
     { t: "d", who: "seong_siyun", text: "형우 씨!" },
     { t: "n", text: "시윤군이 뛰어들려는 것을, 관리자가 막아섰다." },
@@ -1375,7 +1375,7 @@ const CHAPTERS = [
               text: "마왕 이경원이 칼을 뽑아 케빈의 등에 올라탄다. 둘이 한 몸으로 움직인다." } },
 
   /* ── 마왕의 최후 ───────────────────────────────────────── */
-  { t: "n", text: "번개가 멎었다. 구름이 흩어지고, 오랜만에 하늘이 보였다." },
+  { t: "n", text: "번개가 멎었다. 구름이 흩어지고, 오랜만에 하늘이 보였다.", wx: "rays" },
   { t: "d", who: "마왕 이경원", text: "…너도." },
   { t: "d", who: "마왕 이경원", text: "너도 결국 괴수의 이야기를 전부 망치고 말 거야.",
     extra: [ { when: { equip: { who: "lee_gyeongwon", titleHas: "모나크 백룡야행" } },
@@ -2732,7 +2732,7 @@ const CHAPTERS = [
       { t: "n", text: "쿵! 쿵!", shake: true },
       { t: "d", who: "manager", text: "그래, 그러니까. 이게 끝이 아닌 거지?" },
       { t: "place", img: "assets/scene/여관 폭발한 정문.jpg", name: "여관 · 폭발한 정문" },
-      { t: "n", text: "여관의 출입구였던 곳에 커다란 폭발이 일어난다.", shake: "hard" },
+      { t: "n", text: "여관의 출입구였던 곳에 커다란 폭발이 일어난다.", shake: "hard", fx: "boom" },
       { t: "d", who: "디아", text: "좋은 밤이군, 유아인." },
       { t: "d", who: "디아", text: "너희들의 숙소를 알아내는 데 시간을 꽤 썼지." },
       { t: "d", who: "manager", text: "아는 사람이야?" },
@@ -2756,7 +2756,7 @@ const CHAPTERS = [
       /* ── ⑦ 이서진 — 5장 「참깨라면」의 그 원한 ──────────────── */
       { t: "n", text: "그리고 또 한번 쿵 쿵 소리가 난다.", shake: true },
       { t: "place", img: "assets/scene/여관 폭발한 뒷문.jpg", name: "여관 · 폭발한 뒷문" },
-      { t: "n", text: "여관의 뒷문이 화려한 폭발과 함께." },
+      { t: "n", text: "여관의 뒷문이 화려한 폭발과 함께.", fx: "boom" },
       { t: "n", text: "익숙한 얼굴이 등장한다." },
       { t: "d", who: "튼튼한 조직원", text: "형님 여기입니다!" },
       { t: "d", who: "제3발톱 큰형님 이서진", portrait: "assets/enemy/큰형님 이서진.png",
@@ -2821,7 +2821,7 @@ const CHAPTERS = [
        * 붙이지 않고, 그림 한 장이 그 자리를 대신하게 뒀습니다 — 첫 두 줄을
        * 덮은 채로 지나가고, 디아 쪽으로 넘어가기 전에 걷습니다
        * (로단 제압 컷신 둘과 같은 서식 — wip/ch7_5_권모술수/package.js 참고). */
-      { t: "place", img: "assets/scene/여관 무너짐.jpg", name: "여관 · 무너진 자리" },
+      { t: "place", img: "assets/scene/여관 무너짐.jpg", name: "여관 · 무너진 자리", wx: "rain" },
       { t: "cut", img: "assets/cut/기가노토사우루스 사망.png" },
       { t: "d", who: "manager", text: "다들… 괜찮아?" },
       { t: "d", who: "yu_ain", text: "그런 것 같네요." },

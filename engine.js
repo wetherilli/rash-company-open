@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.4";
+const VERSION = "2.28.5";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3994,7 +3994,9 @@ function renderStage() {
  *  같은 DOM 하나를 renderStage 마다 배경 바로 위(적 · 초상 아래)에 다시 꽂으므로, 대사마다 처음부터 돌지 않습니다. */
 const PX_WEATHER = {
   rain: { src: "assets/fx/픽셀-비.png", n: 80,  w: 320, h: 180, cols: 7, fps: 10 },
-  snow: { src: "assets/fx/픽셀-눈.png", n: 120, w: 320, h: 180, cols: 9, fps: 10 }
+  snow: { src: "assets/fx/픽셀-눈.png", n: 120, w: 320, h: 180, cols: 9, fps: 10 },
+  /* 빛줄기는 한 장만 구워(되풀이 시트는 5MB) 천천히 밝아졌다 어두워지게만 합니다 — 6장 옥상 «구름이 흩어지고» */
+  rays: { src: "assets/fx/픽셀-빛줄기.png", n: 1, w: 320, h: 180, cols: 1, fps: 1, pulse: true }
 };
 let CUR_WX = null, WX_EL = null, WX_KEY = null, WX_T = null;
 function stageWeather() {
@@ -4019,7 +4021,8 @@ function stageWeather() {
       WX_EL.style.backgroundSize = m.cols * m.w * k + "px auto";
       WX_EL.style.backgroundPosition = "-" + (f % m.cols) * m.w * k + "px -" + (Math.floor(f / m.cols) * m.h * k + off) + "px";
     };
-    WX_T = setInterval(() => { f = (f + 1) % m.n; show(); }, 1000 / m.fps);
+    if (m.pulse) WX_EL.style.animation = "wxpulse 5s ease-in-out infinite";
+    else WX_T = setInterval(() => { f = (f + 1) % m.n; show(); }, 1000 / m.fps);
     WX_EL._show = show;
   }
   const bg = box.querySelector("img.scene");
@@ -4030,12 +4033,15 @@ function stageWeather() {
 /* 무대 바닥에 한 번 — 이야기 장면 { t:"flash", fx:"land" } (6장 옥상 「그리고 그것이 내려앉았다」).
  * pixelfx impacts/ground-slam. 칸 바닥 가운데에 땅이 오게 세우고, 넘치는 위쪽은 칸이 자릅니다. */
 const PX_STAGE_ONCE = {
-  land: { src: "assets/fx/픽셀-착지.png", n: 49, w: 288, h: 208, cols: 6, fps: 15, ax: 144, ay: 166 }
+  land:   { src: "assets/fx/픽셀-착지.png",   n: 49, w: 288, h: 208, cols: 6, fps: 15, ax: 144, ay: 166 },
+  /* v2.28.5 — kh 는 «칸 높이 몇 px 마다 1배» (기본 150). 폭발은 크게 그려져 1배, 물보라는 작아 3배쯤 */
+  boom:   { src: "assets/fx/픽셀-폭발.png",   n: 32, w: 360, h: 300, cols: 6, fps: 10, ax: 180, ay: 262, kh: 300 },   // 7.5장 여관 정문 · 뒷문
+  splash: { src: "assets/fx/픽셀-물보라.png", n: 31, w: 176, h: 100, cols: 5, fps: 12, ax: 88,  ay: 78,  kh: 100 }    // 5장 «해양으로 떨어졌다»
 };
 function stageOnce(key) {
   const m = PX_STAGE_ONCE[key], box = $stage.querySelector(".scenebox");
   if (!m || !box || !RULE.gachaFxMs) return;
-  const H = box.clientHeight || 300, k = Math.max(1, Math.round(H / 150));
+  const H = box.clientHeight || 300, k = Math.max(1, Math.round(H / (m.kh || 150)));
   const el = document.createElement("div");
   el.style.cssText = "position:absolute;left:50%;bottom:8px;pointer-events:none;z-index:5;background-repeat:no-repeat;" +
     "image-rendering:crisp-edges;image-rendering:pixelated;" +
@@ -5300,6 +5306,9 @@ function play(s) {
      *   { t:"flash" }                       번쩍인 뒤 크게 흔들립니다 */
     case "n":     { const x = applyAlt(s); say(x.text, "n");
                     if (s.shake) shakeScreen(s.shake === "hard");
+                    /* 서술 한 줄에 얹는 연출 — fx 는 무대 바닥에 한 번(stageOnce), wx 는 이 줄부터 다음 장소까지의 날씨 */
+                    if (s.fx) stageOnce(s.fx);
+                    if (s.wx !== undefined) { CUR_WX = s.wx || null; stageWeather(); }
                     playExtras(x); return cont(); }
     case "d":     { const x = applyAlt(s); speak(x.who, x.text, x.portrait);
                     /* caption:true — 이 줄만 무대 가운데에 큰 글씨로도 띄웁니다
@@ -10888,11 +10897,14 @@ function restoreStage() {
   let name = c.no ? (c.no + "  " + c.title) : null;
   let recalling = false;
   CUR_WX = null;   // 이어 하기 — 마지막 장소의 날씨를 되살립니다
+  let wxAt = null;
 
   for (let k = Math.min(S.sc || 0, SCENES.length) - 1; k >= 0; k--) {
     const sc = SCENES[k];
     if (!sc) continue;
-    if (sc.t === "place")       { img = sc.img || c.img || null; name = sc.name || null; CUR_WX = sc.wx || null; break; }
+    /* 서술 줄의 wx(6장 옥상 빛줄기)는 장소 장면보다 뒤에 있으니, 거꾸로 걷다 먼저 만나면 그것이 지금 날씨 */
+    if (sc.t === "n" && sc.wx !== undefined && wxAt === null) wxAt = sc.wx || null;
+    if (sc.t === "place")       { img = sc.img || c.img || null; name = sc.name || null; CUR_WX = wxAt !== null ? wxAt : (sc.wx || null); break; }
     if (sc.t === "recallStart") { if (sc.img) img = sc.img; name = sc.name || null; recalling = true; break; }
     if (sc.t === "recallEnd")   break;      // 회상은 이미 닫혔다 — 그 장의 그림으로
   }
