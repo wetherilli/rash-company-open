@@ -46,6 +46,13 @@ const MAIL_RULE = {
 
 const MAILS = [
   {
+    id: "2026-11-13-support-battle-stop",
+    title: "지원 작성위원 관련 오류 보상",
+    body: "지원 작성위원이나 조력자가 공격하면 전투가 멈추던 오류를 고쳤습니다. 불편을 드려 죄송합니다.",
+    from: "2026-11-13",
+    give: { money: 500, enkCap: 1 }
+  },
+  {
     id: "2026-11-09-ch1-reissue-delay",
     title: "1장 복각 연기 안내",
     body: "1장 복각을 이번 주 금요일(11월 13일)로 미룹니다. 기다려 주시는 동안 쓰실 몫입니다.",

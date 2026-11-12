@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.12";
+const VERSION = "2.28.13";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3847,7 +3847,9 @@ function say(text, cls, opt) {
  * opt.who 를 주면 줄 맨 앞(공격한 사람 이름 앞)에 그 작성위원 아이콘을 겁니다(사용자 지침 2026-11-13, v2.28.11).
  * 글은 그대로 textContent 로 넣으므로 안전합니다. */
 function sayTagged(el, text, opt) {
-  if (opt.who) el.insertAdjacentHTML("beforeend", iconMini(memberIconName(opt.who)));
+  /* 지원 작성위원 · 조력자도 공격합니다 — memberIconName 은 SINNERS 만 알아서 그들에게 TypeError 를 던졌고,
+   * 공격 줄이 찍히다 멈춰 «…» 잠금이 풀리지 않았습니다(v2.28.13). 편성 칸 아이콘(partyIconName)으로 셉니다. */
+  if (opt.who) el.insertAdjacentHTML("beforeend", iconMiniOr(partyIconName(opt.who)));
   const re = /\s\(([^()]+)\)/g;
   let last = 0, m;
   while ((m = re.exec(text))) {
