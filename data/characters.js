@@ -146,18 +146,19 @@ const CREW = {
     /* 전투에서 직접 공격하지 않는다. 아래는 관리자 능력 */
     skills: [
       /* short 는 전투 화면 아래에 한 줄로 붙는 설명입니다. 짧게 적으세요. */
-      { id: "revive", name: "첨삭", cost: 2, short: "쓰러진 하나 일으킴",
+      { id: "revive", name: "첨삭", cost: 2, short: "쓰러진 하나 일으킴", tiny: "부활",
         desc: "쓰러진 작성위원 하나를 최대 체력의 20%로 다시 세운다." },
-      { id: "heal",   name: "퇴고", cost: 2, short: "가장 지친 하나 회복",
+      { id: "heal",   name: "퇴고", cost: 2, short: "가장 지친 하나 회복", tiny: "회복",
         desc: "체력이 가장 적은 작성위원의 체력을 최대치의 30%만큼 회복시킨다." },
-      { id: "guard",  name: "교정", cost: 1, short: "받는 피해 감소",
+      { id: "guard",  name: "교정", cost: 1, short: "받는 피해 감소", tiny: "피해 감소",
         desc: "이번 턴, 작성위원 하나가 받는 피해를 크게 줄인다." },
-      { id: "push",   name: "독촉", cost: 1, short: "공격력 상승",
+      { id: "push",   name: "독촉", cost: 1, short: "공격력 상승", tiny: "공격 상승",
         desc: "작성위원 하나의 이번 턴 공격력을 올린다." },
-      /* needCleared 를 적으면 그 장을 마쳐야 손잡이가 섭니다.
+      /* tiny — 좁은 화면(폰)의 관리력 설명 줄에 쓰는 짧은 글(두 줄 안에 들어가게, v2.28.11). short 는 넓은 화면.
+       * needCleared 를 적으면 그 장을 마쳐야 손잡이가 섭니다.
        * 그 전에는 전투 화면에도, 아래 설명 줄에도 나오지 않습니다.
        * 깎는 비율은 engine.js 의 RULE.arrestCut 에 있습니다 — 아래 글과 함께 고치십시오. */
-      { id: "arrest", name: "체포", cost: 1, short: "적 방어 40% 감소",
+      { id: "arrest", name: "체포", cost: 1, short: "적 방어 40% 감소", tiny: "적 방어 감소",
         desc: "이번 턴, 적의 방어를 40% 깎는다.",
         needCleared: "ch5" }
     ]

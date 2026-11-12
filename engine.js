@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.8";
+const VERSION = "2.28.11";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3834,12 +3834,30 @@ function portraitOf(who) {
 }
 
 /* ── 출력 ─────────────────────────────────────────────────── */
-function say(text, cls) {
+function say(text, cls, opt) {
   const el = document.createElement("p");
   el.className = cls || "n";
-  el.textContent = text;
+  if (opt && (opt.tags || opt.who)) sayTagged(el, text, opt);
+  else el.textContent = text;
   $log.appendChild(el);
   $log.scrollTop = $log.scrollHeight;
+}
+/* 공격 줄 — 끝에 붙는 « (독촉)» « (흑수)» « (약점 · 관통)» 같은 괄호를 작은 상자(.atag)로 바꾸고,
+ * opt.who 를 주면 줄 맨 앞(공격한 사람 이름 앞)에 그 작성위원 아이콘을 겁니다(사용자 지침 2026-11-13, v2.28.11).
+ * 글은 그대로 textContent 로 넣으므로 안전합니다. */
+function sayTagged(el, text, opt) {
+  if (opt.who) el.insertAdjacentHTML("beforeend", iconMini(memberIconName(opt.who)));
+  const re = /\s\(([^()]+)\)/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const t = document.createElement("span");
+    t.className = "atag";
+    t.textContent = m[1];
+    el.appendChild(t);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 /* 굵게 한 줄 — 해금 알림처럼 «놓치면 안 되는» 한 줄에만 씁니다.
  * say() 와 같되 글자만 굵습니다. 본문은 그대로 글자로 넣으므로 안전합니다. */
@@ -3864,6 +3882,28 @@ function speak(who, text, portraitSrc) {
   else say(text, "d");
   const pt = portraitSrc || portraitOf(who);
   if (pt) showSpeaker(pt, nameOf(who));
+}
+/* 전투 턴 머리 — 가운데 굵은 흰 «n턴» 양옆에 구분선, 그 아래 적 이름 · 체력을 크게(사용자 지침 2026-11-13, v2.28.11).
+ * 예전 «── n턴 ──  적  hp/max» 한 줄과 그 위 붉은 구분선(divider)을 대신합니다 — 지난 턴 결과와 한눈에 갈리게. */
+const TURN_LABEL = n => "TURN " + n;      // «TURN n»(사용자 지침 2026-11-13) — 글꼴은 index.html #log .turnhead .tn(Orbitron)
+function turnHead(n, name, hp, max) {
+  const h = document.createElement("div");
+  h.className = "turnhead";
+  const t = document.createElement("span");
+  t.className = "tn";
+  t.textContent = TURN_LABEL(n);
+  h.appendChild(t);
+  $log.appendChild(h);
+  const f = document.createElement("p");
+  f.className = "turnfoe";
+  const nm = document.createElement("b");
+  nm.textContent = name;
+  const hpEl = document.createElement("span");
+  hpEl.className = "hp";
+  hpEl.textContent = hp + " / " + max;
+  f.appendChild(nm); f.appendChild(hpEl);
+  $log.appendChild(f);
+  $log.scrollTop = $log.scrollHeight;
 }
 function divider() {
   const d = document.createElement("div");
@@ -3914,6 +3954,7 @@ function setBackdrop(src, placeName) {
    * 따라가 붙어 있는 일이 없도록 (showCut 참고). */
   CUR_CUT = null;
   drawStage(null, null, null);
+  if (!(S && S.battle)) renderFoeBar();   // 적 정보 줄 자리의 장소 이름도 함께(v2.28.10)
 }
 
 /* fig   : 그 자리에 세울 그림 (없으면 그 자리를 비운다)
@@ -4677,10 +4718,49 @@ function renderHeader() {
 
 /* 적이 나타났을 때만 뜨는 체력바 — 이름은 왼쪽 아래, 공·방은 오른쪽 아래.
  * S.battle 이 없으면(전투 밖) 아예 감춥니다. */
+/* 이야기 · 전투를 타는 동안(유리창 밖) — 전투에만 서는 줄(적 체력 · 관리력)과 기프트 줄의 자리를 비운 채로 남깁니다(v2.28.10, 사용자 지침).
+ * 이야기 ↔ 전투가 바뀔 때 이 줄들이 생겼다 사라지며 그 아래 «계속» · «공격» 단추가 106px 오르내렸습니다.
+ * 같은 꼴을 그리되 보이지 않게(.ghost — visibility:hidden) 두므로, 화면 폭이 달라도 자리 높이가 전투 때와 꼭 같습니다. */
+function inPlay() { return !AT_GLASS && !!(SCENES && SCENES.length); }
+/* 전투 밖 적 정보 줄 자리에 걸 이름 */
+function foeBarIdleLabel() {
+  if (AT_GLASS) return "유리창";
+  if (S && S.mirror) {
+    const rule = mirrorRuleNow();
+    if (rule.group === "rail") return rule.name;                       // 거울굴절철도 — 갈래(호선) 이름
+    const id = S.railSave && S.railSave.current;                       // 거울 던전 — 지금 치르는 테마팩
+    const pack = id && MIRROR_PACKS.find(x => x.id === id);
+    if (pack) return (S.railSave.currentEnh && typeof deepEnhName === "function") ? deepEnhName(pack) : pack.name;
+    return rule.name;                                                   // 갈림길 등 팩 밖
+  }
+  /* 이야기 — 지나온 장면 가운데 마지막 장소(전투 화면을 거치면 CUR_NAME 이 비므로 장면에서 찾습니다). 없으면 장 이름 */
+  let closed = 0;   // 이미 끝난 회상(recallEnd 를 거꾸로 먼저 만남) 안의 장소는 건너뜁니다
+  for (let k = Math.min((S && S.sc) || 0, (SCENES || []).length) - 1; k >= 0; k--) {
+    const sc = SCENES[k];
+    if (!sc) continue;
+    if (sc.t === "recallEnd") { closed++; continue; }
+    if (sc.t === "recallStart") { if (closed) { closed--; continue; } if (sc.name) return "회상 · " + sc.name; }
+    if (sc.t === "place" && sc.name && !closed) return sc.name;
+  }
+  const c = curChapter();
+  return CUR_NAME || (c ? c.title : "");
+}
 function renderFoeBar() {
   const b = S.battle;
-  if (!b) { $foehp.classList.remove("on"); $foehp.innerHTML = ""; return; }
+  if (!b) {
+    if (AT_GLASS || inPlay()) {
+      /* 빈 상자에는 지금 어디인지를 겁니다(사용자 지침 2026-11-13) — 이야기는 장소, 거울 던전은 테마팩, 거울굴절철도는 갈래 이름.
+       * 꼴(체력바 + 이름 줄)은 그대로 두고 감춰 높이를 전투 때와 같게 맞추고, 이름만 그 위에 얹습니다. */
+      const label = String(foeBarIdleLabel() || "").replace(/</g, "&lt;");
+      $foehp.classList.add("on", "ghost");
+      $foehp.innerHTML = '<div class="hpbar"><i style="width:100%"></i></div>' +
+        '<div class="row"><span class="nm">　</span><span class="stat">공 0　방 0</span></div>' +
+        (label ? '<span class="ghostlabel">' + label + '</span>' : '');
+    } else { $foehp.classList.remove("on", "ghost"); $foehp.innerHTML = ""; }
+    return;
+  }
   $foehp.classList.add("on");
+  $foehp.classList.remove("ghost");
   const pct = Math.max(0, Math.round(b.hp / b.maxhp * 100));
   /* ── 순환/차례 눈금 (거울굴절철도) ──────────────────────────────
    *  열 몇 판을 내리 붙는 갈래라, 지금이 «몇 번째» 인지 화면에 없으면
@@ -4737,20 +4817,23 @@ function renderParty() {
                     (aimed  ? " aimed"  : "") +
                     (ready ? (cmd === "guard" ? " cmd-guard" : " cmd-attack") : "");
     let mark = "";
-    if (hp <= 0)      mark = ' <span style="color:var(--red)">쓰러짐</span>';
+    /* 꼬리표는 넓은 화면에서는 이름 옆 글줄에, 폰에서는 카드 오른쪽 위 구석에 겹쳐 짧은 글자로 섭니다(v2.28.9, 사용자 지침).
+     * 폰 카드가 좁아 «차례 노려짐» 처럼 둘만 붙어도 줄이 넘어가 카드가 68 → 90px 로 커졌고, 그 아래 행동 단추가 턴마다 22px 오르내렸습니다.
+     * 카드 · 기록칸 높이는 건드리지 않습니다(사용자 지침) — 꼬리표를 글줄 밖으로 빼서 막습니다. */
+    const two = (full, short) => '<span class="skfull">' + full + '</span><span class="skshort">' + short + '</span>';
+    if (hp <= 0)      mark = ' <span class="downtag" style="color:var(--red)">' + two("쓰러짐", "×") + '</span>';
     else {
-      if (acting) mark += ' <span class="turntag">차례</span>';
-      if (aimed)  mark += ' <span class="aimtag">노려짐' + (b.heavy ? '·강타' : '') + '</span>';
-      if (ready)  mark += ' <span class="readytag">' +
-                          (cmd === "guard" ? "방어" : "공격") + '</span>';
+      if (acting) mark += ' <span class="turntag">' + two("차례", "▶") + '</span>';
+      if (aimed)  mark += ' <span class="aimtag">' + two("노려짐" + (b.heavy ? '·강타' : ''), b.heavy ? "!!" : "!") + '</span>';
+      /* 고른 명령(공격 · 방어)은 글자로 달지 않습니다 — 카드에 칼 · 방패 연출(.pxmark)이 걸려 그것으로 보입니다(사용자 지침 2026-11-13) */
       if (b && b.mods) {
-        if (b.mods[who + "_guard"]) mark += ' <span class="corrtag">교정</span>';
-        if (b.mods[who + "_push"])  mark += ' <span class="pushtag">독촉</span>';
+        if (b.mods[who + "_guard"]) mark += ' <span class="corrtag">' + two("교정", "교") + '</span>';
+        if (b.mods[who + "_push"])  mark += ' <span class="pushtag">' + two("독촉", "독") + '</span>';
         /* 「기세」(varyMult) — 위 effStats(who) 가 이미 이 턴 몫을 굴려 두었습니다 */
         const vm = b.mods[who + "_vary"];
         if (vm != null) {
           const p = Math.round((vm - 1) * 100);
-          mark += ' <span class="stacktag">기세 ' + (p < 0 ? "−" : "+") + Math.abs(p) + '%</span>';
+          mark += ' <span class="stacktag">' + two("기세 ", "") + (p < 0 ? "−" : "+") + Math.abs(p) + '%</span>';
         }
       }
     }
@@ -4786,7 +4869,7 @@ function renderParty() {
                  : sup ? iconMini(supportIconName(sup))
                  : allyIc ? iconMini(allyIc) : "";
     div.innerHTML =
-      '<div class="nm">' + icHTML + nameHTML + mark + '</div>' +
+      '<div class="nm">' + icHTML + nameHTML + '<span class="pctags">' + mark + '</span></div>' +
       '<div class="id">' + idHTML + '</div>' +
       /* 조력자는 수치를 감춥니다 — 실제로는 그대로 쓰이지만 화면에는 ??? 로.
        * 얼마나 센지 모르는 편이 «와 준 사람» 답습니다. 다만 showStats 를 단 조력자
@@ -4800,6 +4883,8 @@ function renderParty() {
           '　방 ' + (hideNum ? "???" : st.def) + '</span></div>';
     /* 고른 명령을 카드에 걸어 둡니다(v2.28.6, 사용자 지침) — 방어는 빛 방패, 공격은 칼을 한 번씩 휘두르는 준비 자세 */
     if (ready) div.insertAdjacentHTML("beforeend", '<i class="pxmark" data-pxm="' + (cmd === "guard" ? "guard" : "attack") + '"></i>');
+    /* 공격 유형(관통 · 참격 · 타격) — 카드 오른쪽 아래 구석에 작게(사용자 지침 2026-11-13, v2.28.11). 조력자처럼 유형이 없으면 빈 글 */
+    div.insertAdjacentHTML("beforeend", atkTypeIconHTML(atkTypeOf(who)));
     $party.appendChild(div);
   });
   pxMarkTick();
@@ -4851,7 +4936,14 @@ function pxMarkTick() {
 }
 
 function buttons(list) {
-  $actions.classList.remove("mid");   // 가운데 정렬은 출입 코드 화면에서만
+  /* 전투 콘솔이 서 있는 동안의 «…»(적이 움직이는 중 · 승패를 푸는 중) — 칸을 «…» 하나로 바꾸지 않고
+   * 지금 칸들을 그대로 둔 채 누르지 못하게만 잠급니다(사용자 지침 2026-11-13, v2.28.11). 칸이 사라지지 않아 자리가 그대로입니다. */
+  if (list.length === 1 && list[0] && list[0].label === "…" && list[0].disabled && $actions.classList.contains("console")) {
+    $actions.querySelectorAll("button").forEach(el => { el.disabled = true; el.onclick = null; });
+    $actions.classList.add("locked");
+    return;
+  }
+  $actions.classList.remove("mid", "console", "locked");   // 가운데 정렬은 출입 코드 화면에서만 · 콘솔 배치는 askNext 가 다시 겁니다
   showEnkBar(false);          // 눈금은 유리창에서만 — 필요한 곳에서 다시 켭니다
   $actions.innerHTML = "";
   list.forEach(b => {
@@ -5008,12 +5100,17 @@ function showEnkBar(on) {
 function renderAdvisors() {
   const box = document.getElementById("advisors");
   if (!box) return;
-  box.innerHTML = equippedAdvisors().map(a =>
+  const list = equippedAdvisors();
+  box.innerHTML = list.map(a =>
     '<div class="acard" title="' + String(a.desc || "").replace(/"/g, "&quot;") + '">' +
       '<div class="nm">' + iconMini(advisorIconName(a)) + a.name +
         ' <span class="star">' + stars(a.star) + '</span></div>' +
       '<div class="id">' + a.title + '</div>' +
-    '</div>').join("");
+    '</div>').join("") +
+    /* 이야기 · 전투 중에는 빈 자리도 세 칸을 채웁니다 — 가운데 ▲ 만 있는 빈 칸(사용자 지침 2026-11-13, v2.28.10).
+     * 교육위원을 하나도 안 데려가도 줄이 서 있어, 판마다 아래 단추 자리가 같습니다. 빈 칸 높이는 진짜 칸과 같게(이름 · 직함 두 줄을 감춰 둠). */
+    (inPlay() ? Array.from({ length: Math.max(0, 3 - list.length) }, () =>
+      '<div class="acard aghost"><div class="nm">' + iconMini("원고료") + '　</div><div class="id">　</div><i>▲</i></div>').join("") : "");
 }
 
 /* 지닌 E.G.O 기프트 — 「E.G.O 기프트 |」 로 시작하는 줄 하나 (사용자 지침 2026-10-16).
@@ -5039,7 +5136,10 @@ function renderGifts() {
                        '<span class="star">' + stars(gf.star) + '</span><span class="gtx"> ' + giftLabel(gf) + '</span></span>').join("") +
       perks.map((p, j) => '<span class="perk" data-ginfo="' + (list.length + j) + '" title="' + esc(p.desc) + '">' +
                        iconMini(p.name) + '<span class="gtx">' + p.name + '</span></span>').join("")
-    : "";
+    /* 비어 있어도 시너지 줄처럼 늘 섭니다 — «없음» 과 짧은 귀띔(사용자 지침 2026-11-13). 거울에서 도중에 얻어도 아래가 밀리지 않게.
+     * 높이는 기프트 딱지가 선 줄과 같게 맞춥니다(index.html #gifts min-height). */
+    : '<span class="rowlabel">E.G.O 기프트</span><span class="rowbar">|</span>' +
+      '<span class="none">없음</span>';
   giftRowFit();
 }
 /* 좁은 화면에서만, 넘칠 때만 아이콘으로 줄입니다. 화면을 돌리거나 창 크기가 바뀌면 다시 잽니다. */
@@ -5047,8 +5147,12 @@ function giftRowFit() {
   const box = document.getElementById("gifts");
   if (!box) return;
   box.classList.remove("compact");
-  if (!box.firstChild || !rwNarrow()) return;
-  if (box.scrollWidth > box.clientWidth + 1) box.classList.add("compact");
+  if (!box.firstChild) return;
+  /* 좁은 화면은 한 줄(nowrap)이라 옆으로 넘치는지로, 넓은 화면은 줄이 둘로 접히는지로 봅니다.
+   * 넓은 화면도 접히면 아이콘만 — 거울에서 특전이 다섯 넘게 쌓이면 줄이 커져 아래 단추가 밀렸습니다(v2.28.10, 누를 칸이 움직이지 않게) */
+  const kids = [...box.children].filter(e => e.offsetParent);
+  const wraps = kids.length > 1 && kids[kids.length - 1].offsetTop > kids[0].offsetTop + 4;
+  if (box.scrollWidth > box.clientWidth + 1 || wraps) box.classList.add("compact");
 }
 window.addEventListener("resize", () => giftRowFit());
 
@@ -5129,9 +5233,11 @@ function renderMood() {
 function renderManage() {
   const box = document.getElementById("manage");
   if (!box) return;
-  if (!S || !S.battle) { box.innerHTML = ""; return; }
+  const ghost = !(S && S.battle);
+  box.classList.toggle("ghost", ghost && inPlay());
+  if (ghost && !inPlay()) { box.innerHTML = ""; const hb = document.getElementById("mghelp"); if (hb) hb.innerHTML = ""; return; }   // 유리창 — 자리도 남기지 않음
 
-  const now = S.battle.manage, cap = manageCap();
+  const now = ghost ? 0 : S.battle.manage, cap = manageCap();
   let pips = "";
   for (let i = 0; i < cap; i++)
     pips += '<i class="' + (i < now ? 'on' : '') + '"></i>';
@@ -5142,7 +5248,8 @@ function renderManage() {
     const ok = now >= c;
     return '<span class="mgsk' + (ok ? '' : ' off') + '">' +
              '<b>' + s.name + '</b>' + payHTML("관리력", c) +   // 드는 관리력 — 아이콘 + 수
-             (s.short || s.desc || "") +
+             '<span class="mgkl">' + (s.short || s.desc || "") + '</span>' +
+             '<span class="mgks">' + (s.tiny || s.short || "") + '</span>' +   // 폰에서는 짧은 글(index.html)
            '</span>';
   }).join("");
 
@@ -5153,8 +5260,32 @@ function renderManage() {
       '<span class="mgnum">' + now + ' / ' + cap + '</span>' +
       '<span class="mgsub">턴마다 ' + (RULE.manageGain + advisorEffect().gain) +
         ' 회복　·　누가 방어하면 +' + RULE.guardManage + '</span>' +
-    '</div>' +
-    '<div class="mgskills">' + help + '</div>';
+      /* 능력 설명은 손잡이 아래(#mghelp)로 뺐고, 이 단추로 폈다 접습니다 — 처음엔 접힘(사용자 지침 2026-11-13, v2.28.11) */
+      '<button class="mgfold" type="button">' + (mgHelpOpen() ? '설명 접기 ▴' : '능력 설명 ▾') + '</button>' +
+    '</div>';
+  const fold = box.querySelector(".mgfold");
+  if (fold) fold.onclick = () => { mgHelpOpen(!mgHelpOpen()); renderManage(); };
+
+  /* 설명 칸 — 손잡이 아래. 전투 중이고 펴 두었을 때만 */
+  const helpBox = document.getElementById("mghelp");
+  if (helpBox) helpBox.innerHTML = (!ghost && mgHelpOpen())
+    ? '<div class="mgskills">' + help +
+        /* 좁은 화면은 세 칸씩 두 줄 — 비는 칸도 같은 꼴의 빈 상자로 채웁니다(사용자 지침, 넓은 화면에서는 CSS 가 감춤) */
+        '<span class="mgsk mgfill"></span>'.repeat((3 - managerSkills().length % 3) % 3) +
+      '</div>'
+    : "";
+}
+/* 관리력 설명을 펴 두었는가 — 이 기기에만 기억(다른 사람 · 다른 기기와 나누지 않는 보기 설정) */
+var MG_HELP_OPEN = null;   // var — 읽어 들이는 도중 render() 가 먼저 불려도 TDZ 에 걸리지 않게
+function mgHelpOpen(set) {
+  if (set !== undefined) {
+    MG_HELP_OPEN = !!set;
+    try { localStorage.setItem("rash-mghelp", MG_HELP_OPEN ? "1" : "0"); } catch (e) {}
+  }
+  if (MG_HELP_OPEN === null) {
+    try { MG_HELP_OPEN = localStorage.getItem("rash-mghelp") === "1"; } catch (e) { MG_HELP_OPEN = false; }
+  }
+  return MG_HELP_OPEN;
 }
 
 /* =====================================================================
@@ -6299,8 +6430,7 @@ function beginTurn() {
    * 또 누가 말을 걸면(checkLinkSkills 등, 아래에서) 새로 세웁니다. */
   clearSpeaker();
   b.manage = Math.min(manageCap(), b.manage + (b.turn > 1 ? RULE.manageGain + advisorEffect().gain : 0));
-  divider();
-  say("── " + (b.turn + ((b.scene && b.scene.turnBase) || 0)) + "턴 ──  " + b.name + "  " + b.hp + "/" + b.maxhp, "sys");
+  turnHead(b.turn + ((b.scene && b.scene.turnBase) || 0), b.name, b.hp, b.maxhp);
   {
     /* 테마팩 특전 healEvery — 그 턴 머리에 서 있는 전원이 조금 되찹니다 */
     const ps = perkSum();
@@ -6980,7 +7110,7 @@ function openingVolley(next) {
       b.hp -= dmg;
       say((crit ? (memberName(w) + "의 치명적인 공격! — " + dmg + " 피해")
                 : (memberName(w) + "의 공격 — " + dmg + " 피해")) +
-          " (" + (lk.label || "일제사격") + ")" + ty.tag, crit ? "crit" : "hit");
+          " (" + (lk.label || "일제사격") + ")" + ty.tag, crit ? "crit" : "hit", { tags: true, who: w });
       foeHit(0, dmg, crit, ty.type);
       render();
       if (b.hp <= 0) {
@@ -7005,14 +7135,23 @@ function openingVolley(next) {
  */
 function pickTarget(cands, done) {
   const b = S.battle;
-  const list = cands.map((w, i) => ({
-    label: memberName(w) + (b.aim === w ? "  ◀ 노려짐" : ""),
-    cls:   b.aim === w ? "primary" : "",
-    key:   i < 9 ? String(i + 1) : null,
-    fn:    () => done(w)
-  }));
+  /* 편성된 사람을 카드와 같은 차례로 모두 세우고, 고를 수 없는 사람은 흐리게 자리만 지킵니다(v2.28.11, 사용자 지침).
+   * 조력자가 붙어 넷이어도 같은 꼴 — 「그만두기」 까지 한 줄로 콘솔 자리 안에 섭니다. 단축키는 카드 차례대로 1 · 2 · 3 · 4. */
+  const all = S.party.filter(Boolean);
+  const list = all.map((w, i) => {
+    const ok = cands.indexOf(w) >= 0;
+    return {
+      label: memberName(w) + (b.aim === w ? " ◀" : ""),
+      cls:   b.aim === w && ok ? "primary" : "",
+      key:   i < 9 ? String(i + 1) : null,
+      disabled: !ok,
+      fn:    () => done(w)
+    };
+  });
   list.push({ label: "그만두기", cls: "ghost", key: "0", fn: () => askNext() });
   buttons(list);
+  $actions.classList.add("console");
+  $actions.style.setProperty("--half", list.length);   // 폰에서도 한 줄(사람 셋 · 넷 + 그만두기)
 }
 
 /* ── 작성위원 고유 능력 — 액티브 손잡이 ─────────────────────────
@@ -7116,7 +7255,8 @@ function renderUniqueSkillInfo(who) {
   const level = who ? syncLevel(who) : 0;
   if (!S.battle || !skill || level < 1) { box.innerHTML = ""; return; }
   const v = skillTierValue(skill, level);
-  box.innerHTML = '<span class="uskill"><b>' + skill.name + '</b> ' + skill.desc(v) + '</span>';
+  /* 능력 이름 앞에 그 작성위원 아이콘(사용자 지침 2026-11-13) — 누구의 능력인지 한눈에 */
+  box.innerHTML = '<span class="uskill">' + iconMini(memberIconName(who)) + '<b>' + skill.name + '</b> ' + skill.desc(v) + '</span>';
 }
 
 function askNext() {
@@ -7164,6 +7304,9 @@ function askNext() {
   if (skillNow) {
     list.push({ label: skillNow.skill.name, cls: "skill", key: "t",
                 fn: () => useUniqueSkill(who) });
+  } else {
+    /* 능력이 없거나 지금 못 쓰는 사람도 자리는 지킵니다 — 사람마다 손잡이 수가 달라 뒤쪽 손잡이가 옆으로 밀리지 않게(v2.28.11) */
+    list.push({ label: "고유 능력", cls: "skill none", disabled: true });
   }
 
   /* 관리자 능력 — 비용과 성능은 세워둔 보조 교육위원에 따라 달라진다 */
@@ -7252,6 +7395,13 @@ function askNext() {
   }
 
   buttons(list);
+  /* 전투 콘솔 — 넓은 화면은 한 줄을 똑같이 나눠 꽉 채우고, 좁은 화면은 두 줄을 꽉 채웁니다(사용자 지침 2026-11-13, v2.28.11).
+   * 손잡이 수(고유 능력 자리 · 체포 포함 8~9)는 한 전투 안에서 바뀌지 않으므로 자리가 고정됩니다.
+   * 그 높이를 --conh 로 남겨, 적이 움직이는 동안(「…」 하나)에도 콘솔 자리가 접히지 않게 합니다. */
+  $actions.classList.add("console");
+  $actions.style.setProperty("--half", Math.ceil(list.filter(Boolean).length / 2));
+  document.body.style.removeProperty("--conh");                         // 잡아 둔 높이를 풀고 «지금» 의 높이를 잽니다
+  document.body.style.setProperty("--conh", $actions.offsetHeight + "px");   // (안 풀면 그 높이가 다시 재어져 화면 폭이 바뀌어도 굳음)
   renderHeader();
 
   /* 첫 전투의 첫 턴 — 명령 손잡이가 다 선 뒤에 한 번만 덮습니다 */
@@ -7572,7 +7722,7 @@ function resolveTurn() {
                   : (memberName(target) + "의 공격 — " + dmg + " 피해")) +
             " (" + (ls.label || "연계") + ")" +
             (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : "") + ty.tag,
-            crit ? "crit" : "hit");
+            crit ? "crit" : "hit", { tags: true, who: target });
         foeHit(0, dmg, crit, ty.type);
         stackAfterHit(target);     // 연계 추가타도 «공격» — 히트 · 염화가 쌓입니다(원작 «원호공격으로 인한 발동에도»)
         checkJoinIn();
@@ -7651,7 +7801,7 @@ function resolveTurn() {
         (vampBonus ? " (흡혈 과잉회복 +" + vampBonus + ")" : "") +
         (evadeBonus ? " (회피 보상)" : "") +
         (!evadeBonus && forceCrit ? " (" + b.mods[who + "_critLabel"] + ")" : "") + ty.tag,
-        crit ? "crit" : "hit");
+        crit ? "crit" : "hit", { tags: true, who: who });
     if (evadeBonus) delete b.persist[who + "_evadeBonus"];
     if (vampBonus) delete b.persist[who + "_vampBonus"];
 
@@ -8044,7 +8194,7 @@ function resolveTurn() {
         (b.mods[t + "_fragile"] ? " (강공)" : "") +
         (t === hero && heroPct ? " (책임)" : "") +
         (covered ? " (대신 받음)" : "") +
-        (tookFor ? " (−" + Math.round(tookFor * 100) + "%)" : ""), heavy ? "heavy" : "bad");
+        (tookFor ? " (−" + Math.round(tookFor * 100) + "%)" : ""), heavy ? "heavy" : "bad", { tags: true });
 
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     lockKillCheck(b, t);
@@ -10567,6 +10717,7 @@ function openGacha(done, pk, deal) {
               '<span class="more">인격 — ' + iconMini("인격 파편") + '그 인격 파편 ' + dupStarList([1, 2, 3], '개') + '</span>' +
               '<span class="more">교육위원 — ' + iconMini("원고료") + CURRENCY + ' ' + dupStarList([2, 3]) + '</span></li>' +
             '</ul></div>';
+    h += '<!--PULLBAR-->';   // 배정 단추 줄은 결과 «위» — 아래 pb 참고
     if (result) {
       h += '<div class="grid">';
       result.forEach(r => {
@@ -10585,8 +10736,10 @@ function openGacha(done, pk, deal) {
       });
       h += '</div>';
     }
-    /* 배정 단추는 창 아래(.pullbar), 위 머리줄에는 「닫기」 만 (사용자 지침 2026-11-06) */
-    h += '<div class="pullbar">' +
+    /* 배정 단추는 정보 상자 바로 아래(.pullbar), 위 머리줄에는 「닫기」 만 (사용자 지침 2026-11-06).
+     * 결과 목록 «위» 에 둡니다(v2.28.10, 사용자 지침 — 누를 칸이 움직이지 않게) — 아래에 두면 결과가 길수록 밀려
+     * 1회 → +77px, 10회 → 폰 화면 밖(1,071px)까지 내려가 연달아 누를 수 없었습니다. */
+    const pb = '<div class="pullbar">' +
          (deal
            ? '<button id="gdeal" class="primary paybtn"' +
                ((S.money < cost || newbieLeft() <= 0) ? ' disabled' : '') + '>' +
@@ -10594,7 +10747,8 @@ function openGacha(done, pk, deal) {
            : '<button id="g1" class="primary paybtn"' + (S.money < cost ? ' disabled' : '') + '>1회 ' + payHTML("원고료", cost) + '</button>' +
              '<button id="g10" class="paybtn"' + (S.money < cost * RULE.guaranteePulls ? ' disabled' : '') + '>' +
                RULE.guaranteePulls + '회 ' + payHTML("원고료", cost * RULE.guaranteePulls) + '</button>') +
-         '</div>' +
+         '</div>';
+    h = h.replace('<!--PULLBAR-->', pb) +
          '<div class="modalfoot"><button id="gclose" class="ghost">닫기</button></div>';
     $sheet.innerHTML = h;
 
@@ -10778,6 +10932,7 @@ function openStockGacha(kind, done) {
               '<span class="more">성급마다 ' + dupStarList(isGift ? [1, 2, 3] : [2, 3]) + '</span></li>' +
             '</ul></div>';
 
+    h += '<!--PULLBAR-->';   // 배정 단추 줄은 결과 «위» (인격 배정과 같은 결, v2.28.10)
     if (result) {
       h += '<div class="grid">';
       result.forEach(r => {
@@ -10791,12 +10946,13 @@ function openStockGacha(kind, done) {
       h += '</div>';
     }
 
-    /* 배정 단추는 창 아래(.pullbar), 위 머리줄에는 「닫기」 만 (사용자 지침 2026-11-06) */
-    h += '<div class="pullbar">' +
+    /* 배정 단추는 결과 위(위 자리표시), 위 머리줄에는 「닫기」 만 (사용자 지침 2026-11-06 · v2.28.10) */
+    const pb = '<div class="pullbar">' +
          '<button id="s1" class="primary paybtn"' + (wallet() < cost ? ' disabled' : '') + '>1회 ' + payIc(cost) + '</button>' +
          '<button id="s5" class="paybtn"' + (wallet() < cost * multi ? ' disabled' : '') + '>' +
            multi + '회 ' + payIc(cost * multi) + '</button>' +
-         '</div>' +
+         '</div>';
+    h = h.replace('<!--PULLBAR-->', pb) +
          '<div class="modalfoot"><button id="sclose" class="ghost">닫기</button></div>';
     $sheet.innerHTML = h;
 
@@ -16999,8 +17155,7 @@ function glass() {
   paletteCheck();          // 고른 색 테마를 입힙니다 (잠긴 것이면 기본으로)
   /* 유리창 그림 — 고른 묶음(기본은 마지막으로 마친 장)에서 한 장. 아래 glassBgPick 참고 */
   showCard(glassBgPick(), "라슈 컴퍼니");
-  say("유 리 창", "place");
-  divider();
+  /* 「유 리 창」 머리 줄은 기록칸에 찍지 않고 위 적 정보 줄 자리에 겁니다(사용자 지침 2026-11-13, renderFoeBar) */
 
   /* 클리어 수는 «본편» 만 셉니다. 곁가지(.5장)는 세지 않습니다. */
   const mains = mainChapters();
