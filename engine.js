@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.1";
+const VERSION = "2.28.2";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4244,14 +4244,20 @@ function foeHit(delay, dmg, crit, type) {
  *
  *  n 장 수 · w,h 한 칸 · cols 열 수 · fps · ax,ay 칸 안에서 «가운데» 로 칠 점 · loop 되풀이
  *
- *  ★★★ 이 처음 나온 자리와 동기화에만 씁니다 — 다른 성급에는 연출이 없습니다(사용자 지침 2026-11-12).
+ *  빛 화면(flashFx)이 원래 있던 자리에만 씁니다 — 배정은 ★★★ 만, 다른 성급에는 연출이 없습니다(사용자 지침 2026-11-12).
+ *  빛 화면이 없는 자리는 업적 달성 줄(pxLogBurst) 하나 — 기록칸 그 줄에만 얹습니다.
  *  경로는 글자 그대로 적습니다(배포 거르개가 이 글자를 보고 그림을 고릅니다). */
 const PX_SHEETS = {
   starGold:  { src: "assets/fx/픽셀-별빛-금.png",   n: 40, w: 128, h: 128, cols: 7, fps: 10, ax: 64,  ay: 64,  loop: true },
   starGreen: { src: "assets/fx/픽셀-별빛-초록.png", n: 40, w: 128, h: 128, cols: 7, fps: 10, ax: 64,  ay: 64,  loop: true },
   sync:      { src: "assets/fx/픽셀-동기화.png",    n: 37, w: 208, h: 150, cols: 6, fps: 20, ax: 104, ay: 96  },
   unlock:    { src: "assets/fx/픽셀-해금.png",      n: 60, w: 200, h: 220, cols: 9, fps: 15, ax: 100, ay: 204 },
-  gain:      { src: "assets/fx/픽셀-획득.png",      n: 42, w: 112, h: 108, cols: 7, fps: 30, ax: 56,  ay: 62  }
+  gain:      { src: "assets/fx/픽셀-획득.png",      n: 42, w: 112, h: 108, cols: 7, fps: 30, ax: 56,  ay: 62  },
+  /* v2.28.2 — 빛 화면이 이미 있던 자리 넷. maxk 는 빛 화면 배율의 윗한(큰 시트가 화면을 넘지 않게) */
+  shatter:   { src: "assets/fx/픽셀-깨짐.png",      n: 43, w: 224, h: 112, cols: 5, fps: 15, ax: 92,  ay: 100, maxk: 3 },   // 덩이가 칸 왼쪽에 서고 조각은 오른쪽으로 흩어짐 — 그 사이를 가운데로
+  firework:  { src: "assets/fx/픽셀-불꽃.png",      n: 37, w: 240, h: 248, cols: 7, fps: 10, ax: 120, ay: 170, maxk: 2 },   // 터지는 자리(칸 위쪽)가 큰 글자를 덮지 않게 위로
+  fuse:      { src: "assets/fx/픽셀-합성.png",      n: 34, w: 208, h: 184, cols: 6, fps: 20, ax: 104, ay: 92,  maxk: 3 },
+  giftUp:    { src: "assets/fx/픽셀-강화.png",      n: 24, w: 120, h: 86,  cols: 5, fps: 15, ax: 60,  ay: 50,  loop: true }
 };
 /* host 의 한가운데(또는 opt.dx · dy 만큼 비킨 자리)에 시트를 틉니다. 그림을 다 받은 뒤에 첫 장부터
  * 시작하므로 느린 회선에서도 앞머리가 잘리지 않습니다. host 가 화면에서 사라지면 저절로 멈춥니다.
@@ -4301,6 +4307,16 @@ function pxNewBurst() {
     ic.style.overflow = "visible";
     pxFx(ic, "gain", { front: true, delay: 120 + i * 220 });
   });
+}
+
+/* 기록칸 마지막 줄 끝에 반짝임을 한 번 — 업적 달성 줄. 빛 화면을 새로 띄우지 않고 그 줄에만 얹습니다(v2.28.2) */
+function pxLogBurst() {
+  const p = $log && $log.lastElementChild;
+  if (!p || !RULE.gachaFxMs) return;
+  const dot = document.createElement("span");
+  dot.style.cssText = "position:relative;display:inline-block;width:0;height:1em;vertical-align:middle;margin-left:14px;";
+  p.appendChild(dot);
+  pxFx(dot, "gain", { front: true, delay: 80 });
 }
 
 const ATK_FX_CACHE = {};
@@ -4667,8 +4683,10 @@ function flashFx(headlineHTML, line, after, cls, px) {
   /* 빛 뒤에 픽셀 연출을 깝니다 — px 를 넘긴 자리에만(PX_SHEETS 의 열쇠). 색(cls)만 보고 깔면
    * 같은 빛을 빌려 쓰는 다른 화면(기프트 강화 · 합성 · 화석 탐사의 「깨졌다」)에까지 번집니다(v2.28.1). */
   if (px) {
-    const pk = pxFlashScale();
-    pxFx(el, px, { scale: pk, dy: px === "unlock" ? -64 : px === "sync" ? -46 * pk : -34 * pk });   // 전부 큰 글자 «위» 에 — 빛기둥이 글자를 덮지 않게
+    const pk = Math.min(pxFlashScale(), PX_SHEETS[px] && PX_SHEETS[px].maxk || 9);
+    /* 화석 탐사(digfx)는 큰 글자가 «성급 / 이름» 두 줄이라 그만큼 더 위로 */
+    const two = cls && cls.indexOf("digfx") >= 0 ? -44 : 0;
+    pxFx(el, px, { scale: pk, dy: two + (px === "unlock" ? -64 : px === "sync" ? -46 * pk : -34 * pk) });   // 전부 큰 글자 «위» 에 — 빛기둥이 글자를 덮지 않게
   }
 
   /* 빛이 터진 뒤에는 그대로 머물러 있다가, 누르면 결과로 넘어갑니다. */
@@ -7086,6 +7104,7 @@ function checkAchievements(foeName, cleared) {
 
     divider();
     say("업적 달성 — " + a.name, "gain");
+    pxLogBurst();
     if (a.desc) say(a.desc, "sys");
 
     const g = a.give || {};
@@ -15349,7 +15368,7 @@ function openGiftUp(back) {
         saveVault(); render();
         const g = giftView(g0);
         flashFx(giftLabel(g), g.flavor && g.flavor !== "TODO" ? g.flavor : null,
-                () => draw(giftLabel(g) + " — " + g.desc), "red");
+                () => draw(giftLabel(g) + " — " + g.desc), "red", "giftUp");
       };
     });
     document.getElementById("guclose").onclick = () => { closeModal(); render(); if (back) back(); };
@@ -15445,7 +15464,7 @@ function openGiftFuse(back) {
         S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
         saveVault(); render();
         flashFx(stars(r.star) + ' ' + r.name, r.flavor && r.flavor !== "TODO" ? r.flavor : null,
-                () => draw(r.name + " — 합성했습니다. 편성의 [E.G.O 기프트] 에서 지닐 수 있습니다."), "red");
+                () => draw(r.name + " — 합성했습니다. 편성의 [E.G.O 기프트] 에서 지닐 수 있습니다."), "red", "fuse");
       };
     });
     document.getElementById("gfuclose").onclick = () => { closeModal(); render(); if (back) back(); };
@@ -17639,11 +17658,11 @@ function digPlayFx(b) {
      * 한 줄에 서면 좁은 화면에서 넘칩니다(digfx 가 글씨를 줄입니다). */
     if (e.t === "found")
       flashFx('<span class="st">' + stars(star) + '</span><span class="nm">' + f.spec + '</span>',
-              (hit && hit.spec.note) || null, next, "digfx");
+              (hit && hit.spec.note) || null, next, "digfx", star >= 3 ? "starGold" : null);
     else
       /* 깨진 쪽에는 이름을 안 적습니다 (사용자 지침 2026-11-04) — 무엇이었는지
        * 알려 주면 잃은 것이 더 또렷해질 뿐이고, 이름은 결과 상자가 어차피 적습니다. */
-      flashFx('<span class="st">깨 졌 다</span>', DIG_SHARD + '만 남았다.', next, "red digfx");
+      flashFx('<span class="st">깨 졌 다</span>', DIG_SHARD + '만 남았다.', next, "red digfx", "shatter");
   };
   one(0);
 }
@@ -18562,7 +18581,7 @@ function digShelfBind(again) {
     const pay = digPayCheck();
     saveVault();
     again();
-    if (pay.length) flashFx("표본실 완성", pay.join(" / "), null);
+    if (pay.length) flashFx("표본실 완성", pay.join(" / "), null, null, "firework");
   };
 }
 
