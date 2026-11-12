@@ -1010,7 +1010,7 @@
   .giftfold .grid .slot{box-sizing:border-box;height:182px;overflow:hidden;}
   /* 좁은 화면에서는 카드 글씨를 한 단 줄입니다 (사용자 지침 2026-11-06) — 이름 · 대사 · 설명 모두 */
   @media (max-width:640px){
-    .giftfold .grid .slot{height:126px;padding:7px 9px;}   /* 줄인 글씨로 가장 긴 카드가 123px (2026-11-06) */
+    .giftfold .grid .slot{height:142px;padding:7px 9px;}   /* 375px 폭에서 가장 긴 카드 142px (2026-11-13 다시 잼 — 키티파티 등이 126 을 넘어 잘렸음) */
     .giftfold .grid .slot .nm,.giftfold .grid .slot .lock{font-size:12px;}
     .giftfold .grid .slot .notequote{font-size:11px;}
     .giftfold .grid .slot .sub{font-size:11px;}
@@ -1345,8 +1345,13 @@
   .codexgift .slot{box-sizing:border-box;height:182px;overflow:hidden;}
   .codexsup .slot{box-sizing:border-box;height:130px;overflow:hidden;}
   @media (max-width:640px){
-    .codexgift .slot{height:136px;}
+    .codexgift .slot{height:160px;}   /* 375px 에서 가장 긴 카드 160px (2026-11-13 다시 잼 — 136 이면 잘렸음) */
     .codexsup .slot{height:90px;}
+  }
+  /* 작은 폰(320 · 360px) — 카드 폭이 더 좁아 글이 한 줄씩 늘어납니다. 320px 에서 잰 값(2026-11-13) */
+  @media (max-width:374px){
+    .giftfold .grid .slot{height:162px;}
+    .codexgift .slot{height:182px;}
   }
   .codexfoe .codexcard{cursor:pointer;display:flex;gap:8px;align-items:center;}
   .codexfoe .codexcard .pic{flex:none;width:44px;height:44px;border-radius:6px;background:#0b0b0f;overflow:hidden;}
@@ -1380,7 +1385,7 @@
     position:sticky;top:-26px;z-index:6;   /* #modal 의 위 여백(26px)까지 덮어 위로 비치는 글이 없게 */display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
     margin:-18px -20px 10px;padding:12px 20px 10px;background:var(--sheet);border-bottom:1px solid var(--line);
   }
-  .sheettop > h2{margin:0;flex:1 1 auto;}
+  .sheettop > h2{margin:0;flex:1 1 auto;min-width:0;overflow-wrap:anywhere;}   /* 좁은 폰에서 띄어 쓴 제목이 단추를 밀어내지 않게(2026-11-13) */
   .sheettop > .modalfoot.top{margin:0 0 0 auto;justify-content:flex-end;}
   .dl{
     display:inline-block;background:var(--panel-2);border:1px solid #7a2b28;color:#e6b0ac;
@@ -1594,6 +1599,12 @@
     #wallet .curs{flex-direction:column;align-items:flex-end;gap:2px;}
     #wallet .curs .cur{margin-left:0;font-size:11.5px;}
     #wallet .curs .cur .icmini{width:14px;height:14px;}
+    /* 작은 폰(360px 이하)에서 원고료가 일곱 자리(9,876,543)면 머리줄이 넘쳐 — 제목 자간 · 로고 · 아이콘 틈을 한 번 더 줄입니다(2026-11-13) */
+    @media (max-width:360px){
+      header .brand{letter-spacing:.02em;}
+      header .brand .icmini{width:28px;height:28px;vertical-align:-9px;margin-right:4px;}
+      #wallet .hdrbtns{margin-left:6px;gap:2px;}
+    }
     #log .packgate .grid.three{grid-template-columns:repeat(3,1fr);gap:6px;}
     .grid.partytools{grid-template-columns:repeat(3,1fr);gap:6px;}   /* 편성 맨 위 세 칸 — 좁아도 나란히 */
     /* 색 테마 — 두 칸씩 작게, 견본 띠와 이름만. 잠긴 칸은 «몇 장을 마치면» 을 남깁니다 */
@@ -1790,24 +1801,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.28.7"></script>
-<script src="data/vault.js?v=2.28.7"></script>
-<script src="data/characters.js?v=2.28.7"></script>
-<script src="data/skills.js?v=2.28.7"></script>
-<script src="data/allies.js?v=2.28.7"></script>
-<script src="data/gifts.js?v=2.28.7"></script>
-<script src="data/pickup.js?v=2.28.7"></script>
-<script src="data/achievements.js?v=2.28.7"></script>
-<script src="data/mail.js?v=2.28.7"></script>
-<script src="data/notice.js?v=2.28.7"></script>
-<script src="data/patch.js?v=2.28.7"></script>
-<script src="data/event.js?v=2.28.7"></script>
-<script src="data/reward.js?v=2.28.7"></script>
-<script src="data/tutorial.js?v=2.28.7"></script>
-<script src="data/foes.js?v=2.28.7"></script>
-<script src="data/story.js?v=2.28.7"></script>
-<script src="data/mirrorpacks.js?v=2.28.7"></script>
-<script src="engine.js?v=2.28.7"></script>
+<script src="data/access.js?v=2.28.8"></script>
+<script src="data/vault.js?v=2.28.8"></script>
+<script src="data/characters.js?v=2.28.8"></script>
+<script src="data/skills.js?v=2.28.8"></script>
+<script src="data/allies.js?v=2.28.8"></script>
+<script src="data/gifts.js?v=2.28.8"></script>
+<script src="data/pickup.js?v=2.28.8"></script>
+<script src="data/achievements.js?v=2.28.8"></script>
+<script src="data/mail.js?v=2.28.8"></script>
+<script src="data/notice.js?v=2.28.8"></script>
+<script src="data/patch.js?v=2.28.8"></script>
+<script src="data/event.js?v=2.28.8"></script>
+<script src="data/reward.js?v=2.28.8"></script>
+<script src="data/tutorial.js?v=2.28.8"></script>
+<script src="data/foes.js?v=2.28.8"></script>
+<script src="data/story.js?v=2.28.8"></script>
+<script src="data/mirrorpacks.js?v=2.28.8"></script>
+<script src="engine.js?v=2.28.8"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

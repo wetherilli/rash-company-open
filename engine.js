@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.7";
+const VERSION = "2.28.8";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4650,8 +4650,8 @@ function renderHeader() {
   /* 재화는 아이콘과 양만 — 이름 · 설명은 누르면 작은 창으로 뜹니다(WALLET_INFO · #chipinfo, 사용자 지침 2026-10-16) */
   /* 재화 둘은 한 덩이(.curs)로 묶습니다 — 좁은 화면에서는 위아래 두 줄로 쌓습니다(index.html, 사용자 지침 2026-10-17) */
   let right = (S.battle ? '<span class="fighting">전투 중</span>' : "") + '<span class="curs">' +
-              '<span class="cur" data-cur="money" title="' + CURRENCY + '">' + iconMini("원고료") + "<b>" + S.money + "</b></span>";
-  if (S.codex) right += '<span class="cur" data-cur="codex" title="황금교본">' + iconMini("황금교본") + "<b>" + S.codex + "</b></span>";
+              '<span class="cur" data-cur="money" title="' + CURRENCY + '">' + iconMini("원고료") + "<b>" + (S.money || 0).toLocaleString("ko-KR") + "</b></span>";   // 천 단위 쉼표(2026-11-13 — 9876543 이 세어야 읽혔음)
+  if (S.codex) right += '<span class="cur" data-cur="codex" title="황금교본">' + iconMini("황금교본") + "<b>" + S.codex.toLocaleString("ko-KR") + "</b></span>";
   right += '</span>';
   /* 유리창에서만 — [우편함] · [보상] · [설정] 을 아이콘 손잡이로 (사용자 지침 2026-10-16 · 17).
    * 예전에는 아래 손잡이 줄에 글자로 섰습니다. 받을 것이 있으면 금빛 테두리와 개수 딱지 */
