@@ -628,6 +628,9 @@
   #wallet .hdrbtn{position:relative;padding:3px 5px;line-height:0;border-radius:6px;}
   #wallet .hdrbtn .icmini{width:22px;height:22px;margin:0;}
   #wallet .hdrbtn.on{border-color:var(--gold);}
+  /* [보상] 손잡이 — 받을 것이 남았으면 출석 창의 칸과 같은 점멸(v2.28.14) */
+  #wallet .hdrbtn.on[data-hdr="reward"]{animation:rwready 1.4s ease-in-out infinite;}
+  @media (prefers-reduced-motion:reduce){ #wallet .hdrbtn.on[data-hdr="reward"]{animation:none;} }
   #wallet .hdrbtn i{
     position:absolute;top:-6px;right:-6px;min-width:15px;height:15px;padding:0 3px;box-sizing:border-box;
     border-radius:8px;background:var(--gold);color:#1a1408;font-style:normal;font-size:10px;font-weight:700;line-height:15px;text-align:center;
@@ -1053,6 +1056,14 @@
   .attgrid .attcell{text-align:center;padding:8px 4px;cursor:default;}
   .attgrid .attcell.now{border-color:var(--gold);cursor:pointer;}
   .attgrid .attcell .nm{display:flex;align-items:center;justify-content:center;gap:3px;margin:3px 0;}
+  /* 받을 수 있는데 아직 안 받은 칸 — 테두리가 천천히 점멸(v2.28.14). 색은 테마의 --gold 를 따릅니다 */
+  .slot.rwready{border-color:var(--gold);cursor:pointer;animation:rwready 1.4s ease-in-out infinite;}
+  @keyframes rwready{
+    0%,100%{border-color:var(--gold-line-2);box-shadow:none;}
+    50%{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 12px var(--gold);}
+  }
+  @media (prefers-reduced-motion:reduce){ .slot.rwready{animation:none;box-shadow:0 0 0 1px var(--gold);} }
+  .rwallrow{display:flex;justify-content:flex-end;margin:10px 0 2px;}
   .grid.rwgrid{grid-template-columns:repeat(4,1fr);}
   /* 주간 과제 진행 게이지 — 다 채우면 금빛 */
   .rwgauge{display:inline-block;vertical-align:middle;width:calc(100% - 56px);height:7px;background:var(--panel-2);border:1px solid var(--line-2);}
@@ -1888,24 +1899,24 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.28.13"></script>
-<script src="data/vault.js?v=2.28.13"></script>
-<script src="data/characters.js?v=2.28.13"></script>
-<script src="data/skills.js?v=2.28.13"></script>
-<script src="data/allies.js?v=2.28.13"></script>
-<script src="data/gifts.js?v=2.28.13"></script>
-<script src="data/pickup.js?v=2.28.13"></script>
-<script src="data/achievements.js?v=2.28.13"></script>
-<script src="data/mail.js?v=2.28.13"></script>
-<script src="data/notice.js?v=2.28.13"></script>
-<script src="data/patch.js?v=2.28.13"></script>
-<script src="data/event.js?v=2.28.13"></script>
-<script src="data/reward.js?v=2.28.13"></script>
-<script src="data/tutorial.js?v=2.28.13"></script>
-<script src="data/foes.js?v=2.28.13"></script>
-<script src="data/story.js?v=2.28.13"></script>
-<script src="data/mirrorpacks.js?v=2.28.13"></script>
-<script src="engine.js?v=2.28.13"></script>
+<script src="data/access.js?v=2.28.14"></script>
+<script src="data/vault.js?v=2.28.14"></script>
+<script src="data/characters.js?v=2.28.14"></script>
+<script src="data/skills.js?v=2.28.14"></script>
+<script src="data/allies.js?v=2.28.14"></script>
+<script src="data/gifts.js?v=2.28.14"></script>
+<script src="data/pickup.js?v=2.28.14"></script>
+<script src="data/achievements.js?v=2.28.14"></script>
+<script src="data/mail.js?v=2.28.14"></script>
+<script src="data/notice.js?v=2.28.14"></script>
+<script src="data/patch.js?v=2.28.14"></script>
+<script src="data/event.js?v=2.28.14"></script>
+<script src="data/reward.js?v=2.28.14"></script>
+<script src="data/tutorial.js?v=2.28.14"></script>
+<script src="data/foes.js?v=2.28.14"></script>
+<script src="data/story.js?v=2.28.14"></script>
+<script src="data/mirrorpacks.js?v=2.28.14"></script>
+<script src="engine.js?v=2.28.14"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.13";
+const VERSION = "2.28.14";
 const VERSION_NAME = "화석 탐사";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4384,7 +4384,9 @@ const PX_SHEETS = {
   revive:    { src: "assets/fx/픽셀-부활.png",      n: 46, w: 159, h: 156, cols: 7, fps: 12, ax: 80,  ay: 156, card: 1.6 },   // 전투 첨삭 — 날개가 카드 위로 조금 넘침
   spark:     { src: "assets/fx/픽셀-불똥.png",      n: 16, w: 136, h: 80,  cols: 4, fps: 30, ax: 44,  ay: 64  },   // 화석 탐사 망치질 — 내리친 칸
   guard:     { src: "assets/fx/픽셀-교정.png",      n: 36, w: 66,  h: 68,  cols: 7, fps: 15, ax: 33,  ay: 66,  card: 1, op: 0.45 },   // 전투 교정 — 카드를 덮되 비치게
-  push:      { src: "assets/fx/픽셀-독촉.png",      n: 18, w: 52,  h: 57,  cols: 5, fps: 15, ax: 26,  ay: 55,  card: 1, rep: 2 }      // 전투 독촉 — 씩씩대는 김
+  push:      { src: "assets/fx/픽셀-독촉.png",      n: 18, w: 52,  h: 57,  cols: 5, fps: 15, ax: 26,  ay: 55,  card: 1, rep: 2 },     // 전투 독촉 — 씩씩대는 김
+  clear:     { src: "assets/fx/픽셀-장종료.png",    n: 49, w: 176, h: 138, cols: 7, fps: 15, ax: 88,  ay: 114, maxk: 3, fit: 1 },   // 장을 처음 마칠 때 — 금빛 기둥이 솟고 반짝임(v2.28.14)
+  smite:     { src: "assets/fx/픽셀-격파.png",      n: 43, w: 224, h: 176, cols: 6, fps: 15, ax: 112, ay: 148 }             // 보스 격파 — 빛이 내리꽂혀 적 발치에서 터짐(v2.28.14)
 };
 /* host 의 한가운데(또는 opt.dx · dy 만큼 비킨 자리)에 시트를 틉니다. 그림을 다 받은 뒤에 첫 장부터
  * 시작하므로 느린 회선에서도 앞머리가 잘리지 않습니다. host 가 화면에서 사라지면 저절로 멈춥니다.
@@ -4514,6 +4516,17 @@ function pxChestPlay() {
   if (!host) return;
   if (!RULE.gachaFxMs) { host.remove(); return; }
   pxAt("chest", host.getBoundingClientRect());
+}
+
+/* 보스를 쓰러뜨렸을 때 — 적 그림(#figure) 발치에 빛이 내리꽂힙니다(v2.28.14). 잡졸은 지금처럼 깜빡이며 사라지기만.
+ * 빛이 터지는 때(0.6초 무렵)가 그림이 깜빡이는 때와 겹치게 foeFalls 와 함께 부릅니다.
+ * 크기는 그림 높이에 맞춥니다 — 터지는 덩이가 그림 폭의 절반 남짓이 되게 */
+function pxFoeDown() {
+  const fig = document.getElementById("figure");
+  if (!fig) return;
+  const r = fig.getBoundingClientRect();
+  if (!r.height) return;
+  pxAt("smite", r, { scale: Math.max(1, Math.min(4, Math.round(r.height / 120))), lift: r.height * 0.06 });
 }
 
 /* 기록칸 마지막 줄 끝에 반짝임을 한 번 — 업적 달성 줄. 빛 화면을 새로 띄우지 않고 그 줄에만 얹습니다(v2.28.2) */
@@ -4985,11 +4998,16 @@ function flashFx(headlineHTML, line, after, cls, px) {
                    (line ? '<div class="line">“' + line + '”</div>' : '') +
                  '</div>' +
                  '<div class="tap">눌러서 계속</div>';
-  $modal.appendChild(el);
+  /* 창이 닫힌 자리(장 종료)에서는 #modal 이 display:none 이라 body 에 얹습니다(v2.28.14).
+   * 그때는 터지는 동안에도 누름을 막아 둡니다 — 밑에 선 [다음 장으로] 가 눌리지 않게 */
+  if ($modal.classList.contains("on")) $modal.appendChild(el);
+  else { el.style.pointerEvents = "auto"; document.body.appendChild(el); }
   /* 빛 뒤에 픽셀 연출을 깝니다 — px 를 넘긴 자리에만(PX_SHEETS 의 열쇠). 색(cls)만 보고 깔면
    * 같은 빛을 빌려 쓰는 다른 화면(기프트 강화 · 합성 · 화석 탐사의 「깨졌다」)에까지 번집니다(v2.28.1). */
   if (px) {
-    const pk = Math.min(pxFlashScale(), PX_SHEETS[px] && PX_SHEETS[px].maxk || 9);
+    let pk = Math.min(pxFlashScale(), PX_SHEETS[px] && PX_SHEETS[px].maxk || 9);
+    /* fit — 위로 높이 솟는 시트(장 종료 기둥)는 꼭대기가 화면 위로 잘리지 않게 화면 높이로 배율을 한 번 더 누릅니다 */
+    if (PX_SHEETS[px] && PX_SHEETS[px].fit) pk = Math.max(2, Math.min(pk, Math.floor(window.innerHeight / 2 / (PX_SHEETS[px].ay + 34))));
     /* 화석 탐사(digfx)는 큰 글자가 «성급 / 이름» 두 줄이라 그만큼 더 위로 */
     const two = cls && cls.indexOf("digfx") >= 0 ? -44 : 0;
     pxFx(el, px, { scale: pk, dy: two + (px === "unlock" ? -64 : px === "sync" ? -46 * pk : -34 * pk) });   // 전부 큰 글자 «위» 에 — 빛기둥이 글자를 덮지 않게
@@ -8309,7 +8327,29 @@ function victory() {
   S.waiting = true;                 // 쓰러지는 동안은 손잡이를 잠근다
   render();
   buttons([{ label: "…", cls: "primary", disabled: true }]);
+  if (bossDownFx(b)) pxFoeDown();   // 보스만 — 쓰러지는 깜빡임 위에 빛이 내리꽂힘(v2.28.14)
   foeFalls(() => { S.waiting = false; cont(); });
+}
+
+/* 격파 연출(pxFoeDown)을 걸 보스인가 (v2.28.14, 사용자 지침 — 거울에서 잦지 않게).
+ *   본편 이야기       보스 전부
+ *   거울 던전(테마팩) 팩의 셋째 자리(큰보스)만 — buildPackRunScenes 가 floorBoss 를 답니다
+ *   거울굴절철도      중간 보스와 마지막 보스만(사용자 지침) —
+ *                       마지막 = 종점(finalFoe)
+ *                       중간   = midFoe 를 적은 호선(3 · 4호선)은 그 역,
+ *                                없으면 1호선(rest)은 길잡이가 들르기 직전 역, 2호선(loop)은 순환마다 마지막 보스 */
+function bossDownFx(b) {
+  if (!b || !b.boss) return false;
+  if (!S.mirror) return true;
+  const f = FOES[b.id] || {};
+  if (f.floorBoss) return true;
+  const r = mirrorRuleNow();
+  if (!r || r.group !== "rail") return false;
+  if (f.src && (f.src === r.finalFoe || (r.midFoe && f.src === r.midFoe))) return true;
+  if (r.midFoe) return false;
+  const lp = /^__mirror_r2_\d+_(\d+)$/.exec(b.id || "");
+  if (r.loop && lp) return +lp[1] === (r.loopFoes ? r.loopFoes.length : r.loop.foes) - 1;
+  return !!(r.rest && b.id === "__mirror_" + (r.rest.after - 1));
 }
 
 /* ── 단계 전투 (8장 지와, 사용자 지침 2026-10-25) ─────────────────────
@@ -8644,6 +8684,11 @@ function chapterEnd() {
   if (first && pay > 0) {
     S.money += pay;
     say((groupDone ? groupMeta(gid).no : c.no) + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
+  }
+  /* 처음 마쳤을 때만 — 화면이 금빛으로 빛나고 기둥이 솟습니다(v2.28.14). 다시 마칠 때는 기록칸 줄만 */
+  if (first) {
+    const gm = groupDone ? groupMeta(gid) : null;
+    flashFx((gm ? gm.no : c.no) + " 종료", (gm && gm.title) || c.title || null, null, null, "clear");
   }
   /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
    * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
@@ -13377,6 +13422,8 @@ function buildPackRunScenes(rule, pack, round) {
   round = round || 1;
   const ids = pack.foes.map((src, i) =>
     mirrorFoeCopy("__mirror_" + i, src, rule, 1, 1, mirrorStepBase(pack, round, i)));
+  /* 팩의 마지막 자리(큰보스) = 그 층의 보스 — 격파 연출(pxFoeDown)은 거울에서 이 자리에만 겁니다(v2.28.14) */
+  if (FOES[ids[ids.length - 1]]) FOES[ids[ids.length - 1]].floorBoss = true;
   const scenes = [];
   ids.forEach((id, i) => {
     if (i) scenes.push({ t: "n", text: "숨을 고를 새도 없이, 다음 것이 유리를 밀고 나온다." });
@@ -14946,6 +14993,10 @@ function openReward(back, note) {
     '<div class="rwnote">매일 출석은 원고료, 주간 보상은 키우는 재료입니다.<br>' +
     '하루는 0시에, 주는 <b>월요일 0시</b>에 갈립니다.<br>' +
     '받지 않은 주간 보상은 그때 사라집니다.</div>';
+  /* 받을 것이 둘 이상이면 한 번에 — 둘 중 하나를 골라야 하는 「모두 달성」 보상만 빼고(v2.28.14, 사용자 지침) */
+  const allN = rewardWaiting() - (rewardAllFull() && !r.wk.all ? 1 : 0);
+  if (allN >= 2)
+    h += '<div class="rwallrow"><button id="rwall" class="primary">받을 수 있는 것 모두 받기 (' + allN + ')</button></div>';
 
   /* ── 매일 출석 — 일곱 칸 ── */
   const L = ATTEND_DAYS.length;
@@ -15019,6 +15070,9 @@ function openReward(back, note) {
   $sheet.innerHTML = h;
 
   $sheet.querySelectorAll("[data-rw]").forEach(el => {
+    /* 받을 수 있는데 아직 안 받은 칸 — 테두리가 천천히 점멸합니다(v2.28.14, 사용자 지침 — 어디를 안 받았는지 찾기 어려웠음).
+     * 「모두 채움」 의 고르는 단추는 단추가 아니라 그 칸 전체를 빛냅니다 */
+    (el.tagName === "BUTTON" ? el.closest(".slot") : el).classList.add("rwready");
     el.onclick = () => {
       const rc = el.getBoundingClientRect();
       const res = rewardTake(el.dataset.rw);
@@ -15027,6 +15081,18 @@ function openReward(back, note) {
       if (res && res.ok) pxAt("gain", rc, { mid: true });
     };
   });
+  const allBtn = document.getElementById("rwall");
+  if (allBtn) allBtn.onclick = () => {
+    const cells = Array.prototype.slice.call($sheet.querySelectorAll("[data-rw]"))
+      .filter(el => el.dataset.rw.indexOf("all:") !== 0)
+      .map(el => ({ key: el.dataset.rw, rc: el.getBoundingClientRect() }));
+    const got = cells.map(c => ({ c: c, res: rewardTake(c.key) })).filter(x => x.res && x.res.ok);
+    render();
+    openReward(back, got.length
+      ? { ok: true, msg: got.length + "개를 받았습니다.<br>" + got.map(x => x.res.msg).join("<br>") }
+      : { ok: false, msg: "받을 수 있는 것이 없습니다." });
+    got.forEach((x, i) => setTimeout(() => pxAt("gain", x.c.rc, { mid: true }), i * 120));
+  };
   $sheet.querySelectorAll("[data-rwfold]").forEach(el => {
     /* 창을 닫은 뒤 늦게 오는 toggle 은 받지 않습니다 — [닫기] 가 접어 둔 것을 도로 펴지 않게 */
     el.ontoggle = () => { if ($modal.classList.contains("on")) RW_OPEN[el.dataset.rwfold] = el.open; };
@@ -15037,6 +15103,12 @@ function openReward(back, note) {
   };
   liftSheetFoot();    // 짚을 머리줄(.sheettop)을 먼저 세웁니다 — 평소엔 MutationObserver 가 한 박자 늦게 세움
   tutorOnce("reward");    /* 출석 · 보상 창에 처음 들어왔을 때 한 번 (UI-09) */
+  /* 새로 열었을 때만 — 받을 칸이 화면 밖(폰에서 주간 과제 쪽)이면 그 칸까지 굴려 둡니다(v2.28.14).
+   * 받은 뒤 다시 그릴 때(note)는 보던 자리를 지킵니다 */
+  if (!note) {
+    const f = $sheet.querySelector(".rwready");
+    if (f) { const rc = f.getBoundingClientRect(); if (rc.bottom > window.innerHeight - 16) f.scrollIntoView({ block: "center" }); }
+  }
 }
 
 /* ── 업적 분류 (사용자 지침 2026-11-05 — «업적이 너무 많으니 나눠 볼 수 있게») ──────────
