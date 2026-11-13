@@ -226,7 +226,8 @@ const EXTRA_PORTRAITS = {
    * 되살렸습니다(작은 구멍도 메움). 비중이 작은 인물이라 rembg 대신 — 사용자 지침. */
   "안내인": "assets/portrait/안내인.png",
   /* 도규민(2026-10-18) — 배경이 지워진 채로 와서 누끼 없이 그대로(이미 세로 720).
-   * 아래 ADVISORS 「제3발톱 작은아우」의 portrait 에도 같은 그림. */
+   * 아래 ADVISORS 의 도규민 카드 다섯 장 모두 portrait 에 같은 그림(2.28.15 — 예전엔 「제3발톱 작은아우」 하나뿐이라
+   * 다른 넷을 세우면 유리창 · 철도 쉼표에서 도규민이 건너뛰어졌음). */
   "도규민": "assets/portrait/도규민.png"
 };
 
@@ -822,12 +823,12 @@ const ADVISORS = [
     note: "동탄 이름을 단 인격이 둘 이상 서야 시너지가 켜집니다. 이 교육위원도 동탄 머릿수에 듭니다" },
 
   /* ── 대륵도 ── */
-  { name: "도규민", title: "Y사 수석연구원", star: 2, portrait: null,
+  { name: "도규민", title: "Y사 수석연구원", star: 2, portrait: "assets/portrait/도규민.png",
     effect: { correct: 0.05, manage: 2, manageMax: 2, def: 0.05, hp: 0.04 },
     flavor: "먼저 재어 보고 움직인다.",
     desc: "교정 +5%p, 시작 관리력 +2·최대 +2, 파티 방어 +5%·체력 +4%." },
 
-  { name: "도규민", title: "대륵도 발굴팀원", star: 3, portrait: null,
+  { name: "도규민", title: "대륵도 발굴팀원", star: 3, portrait: "assets/portrait/도규민.png",
     effect: { correct: 0.13, manage: 3, manageMax: 3, atk: 0.05 },
     flavor: "층을 걷어내며 나아간다.",
     desc: "교정 +13%p, 시작 관리력 +3·최대 +3, 파티 공격 +5%." },
@@ -884,7 +885,7 @@ const ADVISORS = [
     desc: "I사 인격 방어 +22%·체력 +12%, 시작 관리력 +2·최대 +2, 교정 +8%p.",
     note: "방어·체력은 I사 이름을 단 작성위원에게만, 관리력과 교정은 파티 전체에 걸립니다" },
 
-  { name: "도규민", title: "I사 지원2팀 전술지원관", star: 2, portrait: null,
+  { name: "도규민", title: "I사 지원2팀 전술지원관", star: 2, portrait: "assets/portrait/도규민.png",
     effect: { gain: 1, def: 0.05, hp: 0.04 },
     flavor: "뒤에서 보급을 잇는다.",
     desc: "턴마다 관리력 +1, 방어 +5%·체력 +4%.",
@@ -905,7 +906,7 @@ const ADVISORS = [
     desc: "공룡의날 인격 체력 +24%·방어 +14%, 시작 관리력 +2, 턴마다 +1.",
     note: "체력·방어는 공룡의날 이름을 단 작성위원에게만, 관리력은 파티 전체에 걸립니다" },
 
-  { name: "도규민", title: "모나크 회계사", star: 2, portrait: null,
+  { name: "도규민", title: "모나크 회계사", star: 2, portrait: "assets/portrait/도규민.png",
     effect: { arrest: 0.10, manage: 2, atk: 0.05 },
     flavor: "장부를 뒤져 약점을 찾아낸다.",
     desc: "체포 +10%p, 시작 관리력 +2, 파티 공격 +5%.",
@@ -1069,9 +1070,9 @@ const GLASS_LINES_BY_ID = {
  *    누가 나오든 같아야 하는 말이라 나레이션으로 흐릅니다
  *    (engine.js 의 railCampHeal · SCENE_EXT.railCamp 참고).
  *
- *  ■ 지금 실제로 나올 수 있는 사람은 일곱입니다 (초상이 있는 이름)
- *    이형우 · 강호영 · 김연준 · 이승찬 · 이서진 · 이정빈 · 최
- *    나머지 셋(김정래 · 도규민 · 박재민)은 초상이 생기는 날부터 쓰입니다.
+ *  ■ 지금 실제로 나올 수 있는 사람은 여덟입니다 (초상이 있는 이름)
+ *    이형우 · 강호영 · 김연준 · 이승찬 · 이서진 · 이정빈 · 최 · 도규민(2.28.15 — 교육위원 카드 다섯 장 모두에 초상)
+ *    나머지 둘(김정래 · 박재민)은 초상이 생기는 날부터 쓰입니다.
  *
  *  아직 안 채운 자리는 "TODO" 로 두었습니다 — 화면에 «(대사 미작성)» 이라고
  *  흐리게 뜹니다. 지우지 말고 그 자리에 덮어쓰십시오.
