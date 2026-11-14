@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.5";
+const VERSION = "2.29.6";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2471,7 +2471,15 @@ function storyPays() {
   if (S.mirror) return true;
   const c = curChapter();
   if (!c) return true;
-  return !(S.cleared && S.cleared[c.id]);
+  return storyFirstRun(c);
+}
+/* 이 장을 «처음» 지나가는가 — 일반으로 안 마쳤거나, **어려움으로 처음** 이거나.
+ * 어려움 첫 완주도 처음입니다(사용자 지침 2026-11-14): 처치 원고료 · 장을 마친 삯 ·
+ * 이벤트 재화 초회 몫 · 황금교본이 일반으로 처음 마칠 때처럼 나옵니다. */
+function storyFirstRun(c) {
+  if (!c) return true;
+  if (!(S.cleared && S.cleared[c.id])) return true;
+  return !!(hardStepNow() && !hardCleared(c.id));
 }
 
 function manageCap()  { return RULE.manageMax + advisorEffect().manageMax; }
@@ -2787,7 +2795,13 @@ function gainEvent(base) {
 /* 스토리 장을 마쳤을 때 줄 몫 — 맨 마지막 장이면 더 줍니다 */
 function eventStoryGain(c, first) {
   const g = eventRule().gain || {};
-  const last = lastStory();
+  /* «마지막 장» 은 **지금 이벤트가 걸린 장** 입니다(사용자 지침 2026-11-14). 복각처럼
+   * now 로 세운 이벤트는 맨 뒤의 장이 아니라 제 장(chapter 제목)을 봅니다 — 예전에는
+   * lastStory() 만 봐서 1장 복각 중에도 7.5장 코드레드가 큰 몫을 가져갔습니다.
+   * 이벤트가 장을 못 찾으면 예전처럼 맨 뒤의 장입니다. */
+  const ev = curEvent();
+  const evCh = ev && ev.chapter ? CHAPTERS.find(x => x && x.title === ev.chapter) : null;
+  const last = evCh || lastStory();
   /* 장 묶음의 부분이면 «마지막 장» 도 묶음으로 보고, 한 장 몫을 부분 수로 나눠 줍니다
    * (사용자 지침 2026-10-25 — 이벤트 재화는 부분마다 조금씩). */
   const gid = partOf(c);
@@ -5939,7 +5953,7 @@ function play(s) {
     /* 본편 황금교본은 그 장을 처음 마칠 때만 준다 */
     case "codex": {
       const c = curChapter();
-      const already = !!(S.cleared && c && S.cleared[c.id]);
+      const already = !!c && !storyFirstRun(c);
       divider();
       if (already) {
         say("황금교본은 이미 이 손을 거쳐 갔다.", "sys");
@@ -8943,7 +8957,7 @@ function chapterEnd() {
    * 묶음의 부분은 마지막 부분에서만 줍니다. */
   const pay = (typeof c.clearPay === "number") ? c.clearPay
             : (gid && !groupDone) ? 0 : RULE.clearPay;
-  if (first && pay > 0) {
+  if ((first || hardFirst) && pay > 0) {
     S.money += pay;
     say((groupDone ? groupMeta(gid).no : c.no) + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
   }
@@ -8957,7 +8971,7 @@ function chapterEnd() {
   }
   /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
    * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
-  gainEvent(eventStoryGain(c, first));
+  gainEvent(eventStoryGain(c, first || hardFirst));
   /* 화석 탐사 — 장을 «처음» 마칠 때 지질망치. 탐사가 이 장으로 처음 열리면
    * digSync 가 첫 몫(brushStart)만 줍니다 — 이 장의 초회 몫은 따로 얹지 않습니다. */
   if (first && digOpen()) {

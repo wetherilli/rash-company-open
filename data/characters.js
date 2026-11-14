@@ -654,7 +654,8 @@ const SINNERS = {
       { star: 2, tier: 2.0, title: "L사 비포팀",                   atk: 19, def: 8,  hp: 76, note: "이런 것까지 내가 해야돼?" },
       { star: 2, tier: 2.0, title: "N사 작은망치", atkType: "blunt",                 atk: 22, def: 7,  hp: 70,  note: "경북대 진학 후 야외조사 다니는 세계선" },
       { star: 3, tier: 3.0, title: "이블죠 사무소 해결사",         atk: 28, def: 11, hp: 94, note: "이블죠 정도는 이제 간단하지" },
-      { star: 3, tier: 3.2, title: "개화 E.G.O :: 궁극의 도마뱀",  atk: 31, def: 15, hp: 120, note: "울티마 그 자체가 됨" },
+      { star: 3, tier: 3.2, title: "개화 E.G.O :: 울티마",  atk: 31, def: 15, hp: 120, note: "울티마 그 자체가 됨",
+        was: "개화 E.G.O :: 궁극의 도마뱀" },   /* v2.29.6 에서 제목이 바뀜(사용자 지침 2026-11-14) — 옛 보관함이 잃지 않도록 */
       { star: 3, tier: 3.0, title: "구C사 일등대리", atkType: "pierce",               atk: 25, def: 14, hp: 100, note: "보고드립니다!" },
       /* 3.1성급 — 실효 예산 63.5 (머리말 「잣대」 참고). 표준형 29/13/109 */
       { star: 3, tier: 3.1, title: "G사 4등급 가면라이더", atkType: "blunt", atk: 29, def: 13, hp: 109, note: "이번 생은 조연도 나쁘지 않다." },

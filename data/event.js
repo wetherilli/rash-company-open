@@ -70,7 +70,8 @@ const EVENT_RULE = {
    * 만큼 더 받습니다. 교환소 맨 위 알림에 이 수가 그대로 적힙니다. */
   bonusPct: 20,
   /* 스토리 장을 마칠 때 들어오는 몫.
-   *   latest — «가장 마지막 장»(지금은 7.5장 권모술수가 난무하는) 을 마쳤을 때
+   *   latest — «지금 이벤트가 걸린 장» 을 마쳤을 때 — 그 이벤트의 chapter 제목으로 찾습니다.
+   *            복각(now)이면 그 장, 아니면 맨 마지막 장입니다(engine.js eventStoryGain)
    *   story  — 그 밖의 장을 마쳤을 때
    *   first  — 그 장을 처음 마쳤을 때 / again — 다회차로 다시 마쳤을 때
    * 거울 던전 쪽 몫은 engine.js 의 MIRROR_TIERS 각 갈래에 event 로 적혀 있습니다. */
@@ -300,9 +301,9 @@ const EVENTS = [
       { id: "gene_id_hanbeom", name: "이한범 — 구C사 연구원",
         cost: 150, limit: 1,
         give: { id: { who: "lee_hanbeom", star: 2, title: "구C사 연구원" } } },
-      { id: "gene_id_duhyeon", name: "김두현 — 개화 E.G.O :: 궁극의 도마뱀",
+      { id: "gene_id_duhyeon", name: "김두현 — 개화 E.G.O :: 울티마",
         cost: 300, limit: 1,
-        give: { id: { who: "kim_duhyeon", star: 3, title: "개화 E.G.O :: 궁극의 도마뱀" } } }
+        give: { id: { who: "kim_duhyeon", star: 3, title: "개화 E.G.O :: 울티마" } } }
     ]
   }
 ];

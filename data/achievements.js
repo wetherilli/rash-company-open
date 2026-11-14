@@ -348,9 +348,10 @@ const ACHIEVEMENTS = [
   },
   {
     name: "포장지 덜 뜯었는데?",
-    desc: "익스트림 난이도 이상의 거울 던전에서 구C사 이사 원대한을 쓰러뜨린다.",
+    desc: "「섞인 것」 시너지를 발동한 채로 익스트림 난이도 이상의 거울 던전에서 구C사 이사 원대한을 쓰러뜨린다.",
     reward: "지원 작성위원 ★★★ 구C사 E.G.O :: 꿰뚫린 혀 원대한",
-    when: { kill: "구C사 이사 원대한", where: ["mirrorExtreme", "mirrorDeep"] },
+    /* synergy 는 시너지의 «이름» — data/characters.js SYNERGIES 의 "섞인 것" (사용자 지침 2026-11-14) */
+    when: { kill: "구C사 이사 원대한", where: ["mirrorExtreme", "mirrorDeep"], synergy: "섞인 것" },
     give: { support: "구C사 E.G.O :: 꿰뚫린 혀|원대한" }
   }
 ];
