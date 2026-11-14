@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.4";
+const VERSION = "2.29.5";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4168,14 +4168,36 @@ function renderStage() {
   /* 컷신은 맨 나중에, 맨 위에 얹습니다 — 배경·적·초상·지명을 «지우지 않고»
    * 통째로 가립니다(showCut 참고). 그림이 투명한 선화라 바탕을 불투명한
    * 종이색으로 깔아야 아래가 비쳐 보이지 않습니다 — 그 몫이 .cutwrap 입니다. */
-  if (CUR_CUT)
-    html += '<div class="cutwrap">' +
-              '<img src="' + assetURL(CUR_CUT.src) + '" alt="' + (CUR_CUT.tag || "") + '" ' +
-              'onerror="this.style.display=\'none\'">' +
-            '</div>';
+  /* 컷신은 여기서 글로 찍지 않습니다 — 아래 stageCut() 이 같은 DOM 을 옮겨 답니다 */
   html += '</div>';
   $stage.innerHTML = html;
   stageWeather();
+  stageCut();
+}
+
+/* ── 컷신 한 장을 «같은 DOM 으로» 지킵니다 (사용자 지침 2026-11-14) ──
+ *  renderStage 는 무대를 innerHTML 로 통째로 다시 찍습니다. 컷신까지 그 글에
+ *  섞여 있으면, 컷신을 덮어 둔 채 누가 말을 걸어 초상이 설 때마다 <img> 가
+ *  **새로 만들어져** 그림이 한 번 번쩍입니다(1장 · 7.5장 권모술수가 난무하는).
+ *  날씨(stageWeather)가 쓰는 수를 그대로 씁니다 — 그림이 그대로면 같은 DOM 을
+ *  떼었다 다시 붙이기만 하므로 브라우저가 다시 받지도, 다시 그리지도 않습니다.
+ *  컷신이 걷힐 때(showCut(null) · setBackdrop · 전투 시작)에만 버립니다. */
+let CUT_EL = null, CUT_KEY = null;
+function stageCut() {
+  if (!CUR_CUT) { if (CUT_EL) CUT_EL.remove(); CUT_EL = null; CUT_KEY = null; return; }
+  const box = $stage.querySelector(".scenebox");
+  if (!box) return;
+  if (!CUT_EL || CUT_KEY !== CUR_CUT.src) {
+    CUT_EL = document.createElement("div");
+    CUT_EL.className = "cutwrap";
+    const im = document.createElement("img");
+    im.src = assetURL(CUR_CUT.src);
+    im.onerror = function () { this.style.display = "none"; };
+    CUT_EL.appendChild(im);
+    CUT_KEY = CUR_CUT.src;
+  }
+  CUT_EL.firstChild.alt = CUR_CUT.tag || "";
+  box.appendChild(CUT_EL);          // 맨 나중에 = 맨 위에 (배경 · 적 · 초상 · 지명을 덮습니다)
 }
 
 /* ── 날씨 (v2.28.4) ───────────────────────────────────────────
@@ -4255,6 +4277,7 @@ function hideStage() {
   CUR_WX = null; stageWeather();
   $stage.className = ""; $stage.innerHTML = "";
   CUR_BG = null; CUR_NAME = null; CUR_FOE = null; CUR_SPEAKER = null; CUR_CUT = null; CUR_SIDE = null;
+  CUT_EL = null; CUT_KEY = null;          // 지켜 두던 컷신 DOM 도 함께 버립니다(stageCut)
 }
 
 /* ── 컷신 ──────────────────────────────────────────────────────
@@ -5940,13 +5963,32 @@ function play(s) {
   }
 }
 
+/* ── 여기서 나가도 되는가 (사용자 지침 2026-11-14) ─────────────────
+ *  예전에는 cont() 가 **장면마다** [유리창] 을 세웠습니다. 적을 쓰러뜨린 바로
+ *  다음에도 섰고, [계속] 바로 옆이라 눌러서 이야기 밖으로 튕겨 나가기 쉬웠습니다.
+ *  이제 «중간 저장 지점» 에서만 세웁니다 —
+ *
+ *    본편·곁가지   편성을 고칠 수 있는 자리({t:"party"} — S.storySave 가 남는 곳)
+ *    거울굴절철도  쉼표({t:"rest"} · railExpressRest — S.railSave 가 남는 곳)
+ *    거울 던전     여기가 아니라 갈림길(packGateChoices)이 제 [유리창으로] 를 세웁니다.
+ *                  팩 하나를 마칠 때마다 그 화면으로 돌아오므로 나갈 자리는 거기입니다.
+ *
+ *  나간 자리로 정확히 돌아올 수 있는 곳만 고른 것입니다. 다른 자리에서도 창을
+ *  닫으면 그만이고(cont 가 매 장면 조용히 저장합니다), 다시 열면 이어집니다. */
+function canLeaveHere() {
+  const prev = (typeof SCENES !== "undefined" && SCENES) ? SCENES[S.sc - 1] : null;
+  if (!prev) return false;
+  if (prev.t === "party") return true;                       // 본편·곁가지의 중간 저장 지점
+  return prev.t === "rest" || prev.t === "railExpressRest";  // 거울굴절철도의 쉼표
+}
+
 /* 계속 버튼 — 손으로 누르는 「기록」 손잡이는 없앴습니다(사용자 지침
  * 2026-09-03). 그 자리에서 매번 조용히 자동 저장합니다 — save() 참고. */
 function cont() {
   render();
   save(true);
   buttons([{ label: "계속", cls: "primary", key: "p", fn: next },
-           { label: "유리창", cls: "ghost", fn: () => toGlass(() => cont()) }]);
+           canLeaveHere() ? { label: "유리창", cls: "ghost", fn: () => toGlass(() => cont()) } : null]);
 }
 
 /* 유리창(메인 화면)으로 돌아가기 — 매번 자동 저장되므로 더는 물어보지
@@ -8998,16 +9040,15 @@ function chapterEnd() {
     return;
   }
 
+  /* 손잡이는 둘뿐입니다 — [다음 장으로] 와 [유리창] (사용자 지침 2026-11-14).
+   * 예전에는 편성 · 상점 · 보관함 · 노트 · 운전석까지 일곱이 한 줄에 서서, 장을 마친
+   * 자리에서 무엇을 누를지가 한눈에 안 들어왔습니다. 그 다섯은 전부 유리창에 있습니다 —
+   * 0장을 처음 마쳤을 때 손잡이를 하나로 줄인 것(2026-11-06)과 같은 결입니다. */
   buttons([
     hasNext ? { label: (gid && CHAPTERS[S.ch + 1].part === gid) ? "다음 부분으로" : "다음 장으로",
                 cls: "primary",
                 fn: () => startChapter(S.ch + 1) } : null,
-    { label: "편성", fn: () => openParty(() => {}) },
-    { label: "상점", fn: () => openShop(() => {}) },
-    { label: "보관함", fn: () => openVault(() => chapterEnd()) },
-    { label: "노트", cls: "ghost", fn: () => openNote(() => chapterEnd()) },
-    { label: "운전석", cls: "ghost", fn: () => openChapterSelect(() => chapterEnd()) },
-    { label: "유리창", cls: "ghost", fn: () => glass() },
+    { label: "유리창", cls: hasNext ? "ghost" : "primary", fn: () => glass() },
     !hasNext ? { label: "처음부터", cls: "ghost", fn: () => { S = newState(); startChapter(0); } } : null
   ]);
   if (!hasNext) {
