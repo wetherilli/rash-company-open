@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.9";
+const VERSION = "2.29.10";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1379,7 +1379,7 @@ function newState() {
     equip, owned,
     advisorsOwned, advisor, advisorOn,
     giftsOwned, gift, giftOn, giftLv,
-    presets: (v && v.presets) || [null, null, null],
+    presets: (v && v.presets) || [],   /* presetList() 가 PRESET_MAX 만큼 채웁니다 */
     supportsOwned,
     achieved: achievedMap,
     frags,
@@ -8605,8 +8605,10 @@ function victory() {
   if (spare) say(b.scene.endText || "▶ 승부가 나기 전에 싸움이 끊겼다.", "sys");
   else say("▶ " + b.name + " 격파.", "good");
   if (reward) say(CURRENCY + " " + reward + " 획득.", "gain");
-  else if (noKillPay) say("선로 위에서 돈이 될 것은 없다. 끝까지 가야 삯이 나온다.", "sys");
-  else say("이미 지나온 길이다. " + CURRENCY + "는 나오지 않는다.", "sys");
+  /* 굴절철도(noKillPay)는 아무 말도 하지 않습니다 (사용자 지침 2026-11-14 — 「이 문구도 다 걷어줘」).
+   * 전투마다 「선로 위에서 돈이 될 것은 없다…」가 똑같이 떠서, 일곱~아홉 번 되풀이되고 있었습니다.
+   * 들어가기 전 화면(mirrorFacts)이 이미 «선로 위에서는 원고료가 안 나온다» 고 못박아 줍니다. */
+  else if (!noKillPay) say("이미 지나온 길이다. " + CURRENCY + "는 나오지 않는다.", "sys");
   checkAchievements(b.name);
   saveVault();
   healParty(winHealRatio(b, Math.max(RULE.winHeal, perkSum().winHeal)), "숨을 고른다.");
@@ -9270,7 +9272,7 @@ function openParty(done) {
     h += '<div class="grid partytools" data-tut="party-tools">' +
            tool("pids",  "인격 장착", "작성위원마다 낄 인격을 고릅니다.", true) +
            tool("psync", "동기화",   "인격 파편으로 작성위원의 동기화 단계를 올립니다.", syncUnlocked(), syncLockText()) +
-           tool("psave", "편성 저장", "지금 편성을 세 칸 가운데 하나에 담아 둡니다.", true) +
+           tool("psave", "편성 저장", "지금 편성을 " + PRESET_MAX + "칸 가운데 하나에 담아 둡니다.", true) +
          '</div>';
 
     /* ── 지금 편성 (UI 검토 2026-10-28) ─────────────────────────────
@@ -13020,8 +13022,14 @@ function mirrorNeedText(rule) {
     return "익스트림 거울 던전을 완주하고, 본편 " + (last ? last.no : "마지막 장") + "을 마치면 열립니다";
   }
   if (r.needChapter) {
+    /* 장 하나(ch7)일 수도, 부분으로 쪼갠 장의 «묶음 id»(ch8 — 8-1 ~ 8-6)일 수도 있습니다.
+     * 묶음은 CHAPTERS 에 그 id 로 서지 않으므로, 못 찾으면 묶음 쪽을 봅니다 —
+     * 안 그러면 화면에 「본편 ch8을 마치면」이라고 열쇠가 그대로 새어 나옵니다. */
     const c = CHAPTERS.find(x => x.id === r.needChapter);
-    return "본편 " + (c ? c.no : r.needChapter) + "을 마치면 열립니다";
+    const no = c ? c.no
+                 : (CHAPTERS.some(x => x.part === r.needChapter)
+                      ? groupMeta(r.needChapter).no : r.needChapter);
+    return "본편 " + no + "을 마치면 열립니다";
   }
   if (r.needMirrorDone) {
     const dr = MIRROR_TIERS.find(x => x.key === r.needMirrorDone);
@@ -13284,8 +13292,11 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     aoeMult: f.aoeMult != null ? f.aoeMult : null,
     aoeMultStep: f.aoeMultStep || 0,
     aoeAtkGain: f.aoeAtkGain || 0,
-    desc: base ? "유리창에 비쳐 나온 것. 본래와는 다른 세기로 서 있다."
-               : "유리창에 비쳐 나온 것. 본래보다 " + Math.round((k - 1) * 100) + "% 강하다."
+    /* 설명 줄은 비워 둡니다 (사용자 지침 2026-11-14 — "이런 쓸데없는 문구 지워").
+     * 예전에는 거울 적마다 전투 머리에 「유리창에 비쳐 나온 것. 본래와는 다른 세기로
+     * 서 있다.」가 붙었는데, 모든 거울 전투에서 똑같이 뜨는 데다 알려 주는 것도 없었습니다.
+     * 뒤섞인 거울(deepMixApply)처럼 «할 말이 있는» 자리만 desc 를 채웁니다. */
+    desc: ""
   };
   /* ── 거울에서만 더 얹는 결 (mirrorAdd) ──────────────────────────
    *  본편 이야기에서는 안 하고 거울에서만 하는 짓을 적습니다. 위의 칸들을
@@ -14820,26 +14831,41 @@ function mirrorClear() {
   S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
   MIRROR = null;
   S.ended = true;
-  if (record) { divider(); sayMirrorCard(record); }
+
+  /* ── 보상 먼저, 결과 카드는 한 박자 뒤에 ──────────────────────
+   *  완주 보상이 카드로 바뀌면서(v2.29.8) 줄이 길어졌습니다. 그 아래에 결과
+   *  카드까지 한꺼번에 세우면 방금 받은 것이 기록칸 위로 밀려 올라가, 무엇을
+   *  받았는지 보기도 전에 지나갑니다 (사용자 지침 2026-11-14).
+   *  그래서 보상까지만 보여 주고 [계속] 을 한 번 받은 뒤에 결과 카드와
+   *  손잡이를 세웁니다. 결과 카드가 없는 갈래는 밀릴 것이 없으니 곧바로. */
+  const 마무리 = () => {
+    if (record) { divider(); sayMirrorCard(record); }
+    render();
+    /* [한 번 더] 는 걷었습니다 (사용자 지침 2026-11-14). 방금 마친 자리에서 곧바로
+     * 같은 갈래에 다시 들어가는 손잡이였는데, 엔케팔린을 그 자리에서 내는 데다
+     * 결과 카드를 보기도 전에 눌리기 쉬웠습니다 — 다시 돌 사람은 운전석에서 고릅니다. */
+    const clearButtons = [];
+    /* 결과 카드가 있는 갈래(거울굴절철도)는 유리창/상점으로 바로 나가지 않고,
+     * 먼저 결과 카드 화면을 거칩니다 — 그 화면의 [유리창으로 나가기] 가 진짜 출구입니다. */
+    if (record) {
+      clearButtons.push({ label: "결과 카드 보기", cls: "primary",
+        fn: () => openMirrorResult(record) });
+      clearButtons.push({ label: "결과 카드 복사", cls: "ghost",
+        fn: () => copyText(mirrorRecordText(record), "결과 카드를 복사했습니다 — 자랑할 곳에 붙여 넣으세요.") });
+    } else {
+      clearButtons.push({ label: "유리창", fn: () => glass() });
+      clearButtons.push({ label: "상점", cls: "ghost", fn: () => openShop(() => {}) });
+    }
+    buttons(clearButtons);
+    showEnkBar(true);
+  };
+
+  if (!record) return 마무리();
   render();
-  const again = enkCount() >= rule.cost;
-  const clearButtons = [
-    { label: again ? "한 번 더" : "한 번 더 (" + ENK_RULE.name + " 부족)",
-      cls: "primary", disabled: !again, fn: () => startMirror(rule.key) }
-  ];
-  /* 결과 카드가 있는 갈래(거울굴절철도)는 유리창/상점으로 바로 나가지 않고,
-   * 먼저 결과 카드 화면을 거칩니다 — 그 화면의 [유리창으로 나가기] 가 진짜 출구입니다. */
-  if (record) {
-    clearButtons.push({ label: "결과 카드 보기", cls: "primary",
-      fn: () => openMirrorResult(record) });
-    clearButtons.push({ label: "결과 카드 복사", cls: "ghost",
-      fn: () => copyText(mirrorRecordText(record), "결과 카드를 복사했습니다 — 자랑할 곳에 붙여 넣으세요.") });
-  } else {
-    clearButtons.push({ label: "유리창", fn: () => glass() });
-    clearButtons.push({ label: "상점", cls: "ghost", fn: () => openShop(() => {}) });
-  }
-  buttons(clearButtons);
+  S.waiting = true;
   showEnkBar(true);
+  buttons([{ label: "계속", cls: "primary", key: "p",
+             fn: () => { S.waiting = false; 마무리(); } }]);
 }
 
 /* ── 기록 (진행 저장 + 보관함 파일 내보내기) ───────────────── */
@@ -15449,8 +15475,12 @@ function openReward(back, note) {
   const giveTxt = g => mailGiveText({ give: g });
   const giveIc  = g => iconMiniOr(giveIcon(g));
 
+  /* 창 맨 위의 알림 줄은 **아예 띄우지 않습니다** (사용자 지침 2026-11-14 —
+   * 받은 것은 "연출이 명확하게 보여주고 있으니까", 못 받은 것은 "나오는 줄 자체를 지워").
+   * 받은 것은 칸에서 튀어 오르는 연출(pxAt)과 기록칸의 「… 획득.」이 말하고,
+   * 못 받은 것은 그 칸이 이미 받은 꼴로 보이는 것이 곧 까닭입니다.
+   * note 는 부르는 쪽이 아직 넘겨 주므로 받기만 하고 쓰지 않습니다. */
   let h = '<h2>' + REWARD_RULE.title + '</h2>' +
-    (note ? '<div class="mailnote' + (note.ok ? ' ok' : ' no') + '">' + note.msg + '</div>' : '') +
     /* 문장마다 한 줄, 줄표(—) 없이, 상자로 묶어서 (사용자 지침 2026-11-06 — 표본실 머리 상자와 같은 꼴, .rwnote) */
     '<div class="rwnote">매일 출석은 원고료, 주간 보상은 키우는 재료입니다.<br>' +
     '하루는 0시에, 주는 <b>월요일 0시</b>에 갈립니다.<br>' +
@@ -15685,7 +15715,7 @@ function openAchieve(back) {
 
 /* ── 저장해 둔 편성 ────────────────────────────────────────────
  *  작성위원 셋과 그들이 낀 인격, 지닌 기프트, 세운 교육위원을 통째로 담아 둡니다.
- *  세 칸이고, 누르면 그 자리에서 그대로 갈아 끼웁니다.
+ *  아홉 칸(PRESET_MAX)이고, 누르면 그 자리에서 그대로 갈아 끼웁니다.
  *
  *  칸 이름은 «가장 많이 공명하는 시너지» 를 씁니다 — 수가 같으면 가나다 순으로 앞선 것.
  *  이름을 직접 적게 하지 않는 것은, 편성을 바꾸면 이름도 따라 바뀌는 편이
@@ -15694,7 +15724,10 @@ function openAchieve(back) {
  *  기프트·교육위원 칸이 나중에 늘어나도 그대로 삽니다 — 배열로 담아 두고,
  *  불러올 때 그때의 칸 수만큼만 끼웁니다.
  */
-const PRESET_MAX = 3;
+/* 칸 수 — 2026-11-14 에 3 → 9 로 늘렸습니다(사용자 지침).
+ * 거울굴절철도 5호선이 들어오면 «저장해 둔 편성 둘» 을 골라 들어가므로,
+ * 본편용 하나만 담아 두고 쓰기에는 칸이 모자랍니다. */
+const PRESET_MAX = 9;
 
 function presetList() {
   if (!S.presets || !Array.isArray(S.presets)) S.presets = [];
@@ -15783,19 +15816,19 @@ function presetClear(i) {
   saveVault();
 }
 
-/* 편성 화면 맨 아래에 서는 세 칸. 하나도 담아 둔 것이 없으면 칸째 감춥니다 (사용자 지침 2026-10-16) */
+/* 편성 화면 맨 아래에 서는 칸. 하나도 담아 둔 것이 없으면 칸째 감춥니다 (사용자 지침 2026-10-16)
+ * 칸이 아홉으로 늘어난 뒤로는 **담긴 것만** 세웁니다 — 빈 칸 여덟이 줄줄이 서면
+ * 편성 화면이 그만큼 길어집니다. 빈 칸은 [편성 저장] 창에서 다 보입니다. */
 function presetBarHTML() {
   const ps = presetList();
   if (!ps.some(Boolean)) return "";
+  const 담긴 = ps.filter(Boolean).length;
   let h = '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">저장해 둔 편성</div>' +
-          '<div class="hint">눌러서 그대로 갈아 끼웁니다. 맨 위 [편성 저장] 으로 담아 둡니다.</div>' +
+          '<div class="hint">눌러서 그대로 갈아 끼웁니다. 맨 위 [편성 저장] 으로 담아 둡니다.' +
+            '　담긴 ' + 담긴 + ' / ' + PRESET_MAX + '</div>' +
           '<div class="grid">';
   ps.forEach((p, i) => {
-    if (!p) {
-      h += '<div class="slot"><div class="lock">' + (i + 1) + '　비어 있음</div>' +
-             '<div class="sub">아직 담아 둔 것이 없습니다</div></div>';
-      return;
-    }
+    if (!p) return;
     const 이름 = presetLabel(p);
     const 깨짐 = presetBroken(p);
     const names = (p.party || []).filter(Boolean).map(memberName).join("　");
@@ -18094,23 +18127,6 @@ function boot() {
   Cloud.autoPull();
 }
 
-/* ── wip 확장 자리 ────────────────────────────────────────────
- *  특정 장·전투만을 위해 엔진을 손봐야 할 때, 매번 여기 engine.js 를
- *  직접 고치는 대신 wip 꾸러미의 package.js 에 이렇게 적으면 이 줄
- *  바로 뒤에 새 함수로 옮겨 붙습니다 (tools/wip-merge.js 참고).
- *
- *      /* @wip into: engine.js · EXT *\/
- *      SCENE_EXT.무엇 = function(s) { ... say(s.text, "n"); return next(); };
- *      /* @wip end *\/
- *
- *  그러면 그 장의 데이터에 { t: "무엇", … } 라고 적어 새 장면 종류를 씁니다 —
- *  switch 문 자체를 늘리지 않고도(짜깁기라 wip 로는 못 합니다) 이야기 쪽에서
- *  새 t 를 부를 수 있는 이유입니다. SCENE_EXT 정의는 위 「play()」 바로 앞에 있습니다.
- *
- *  두루 쓰일 만한 것(강제 편성처럼)은 옮겨 붙이지 말고 위쪽 제자리에
- *  바로 넣으십시오 — 여기는 «그 장 하나만을 위한» 자리입니다.
- */
-/* @wip anchor: EXT */
 /* ── 발굴 현장 · 표본실 ─────────────────────────────────────────
  *  ■ 저장 — S.dig (보관함에 담깁니다. vaultSig 에는 넣지 않습니다 — 출석처럼 진행 기록이라서)
  *    { brush: 지질망치(판 하나에 하나) | null(아직 첫 지질망치를 안 받음), shards: 화석 조각,
@@ -19915,7 +19931,7 @@ function deepMixApply(id, list) {
    * 강타는 막습니다 — 빌린 짓만 하고, 3턴 강타까지 얹지는 않습니다. */
   if (!f.boss) { f.boss = true; f.noHeavy = true; }
   f.deepMix = list.map(x => x.slice());
-  f.desc = "유리창에 비쳐 나온 것. 다른 것의 버릇이 섞여 있다 — " + deepMixText(list) + ".";
+  f.desc = "다른 것의 버릇이 섞여 있다 — " + deepMixText(list) + ".";
 }
 
 /* ── 한 층을 넘겼다 ──────────────────────────────────────────
@@ -20663,5 +20679,29 @@ function rail4Restart() {
 
 
 
+
+/* ── wip 확장 자리 ────────────────────────────────────────────
+ *  특정 장·전투만을 위해 엔진을 손봐야 할 때, 매번 여기 engine.js 를
+ *  직접 고치는 대신 wip 꾸러미의 package.js 에 이렇게 적으면 이 줄
+ *  바로 뒤에 새 함수로 옮겨 붙습니다 (tools/wip-merge.js 참고).
+ *
+ *      /* @wip into: engine.js · EXT *\/
+ *      SCENE_EXT.무엇 = function(s) { ... say(s.text, "n"); return next(); };
+ *      /* @wip end *\/
+ *
+ *  그러면 그 장의 데이터에 { t: "무엇", … } 라고 적어 새 장면 종류를 씁니다 —
+ *  switch 문 자체를 늘리지 않고도(짜깁기라 wip 로는 못 합니다) 이야기 쪽에서
+ *  새 t 를 부를 수 있는 이유입니다. SCENE_EXT 정의는 위 「play()」 바로 앞에 있습니다.
+ *
+ *  두루 쓰일 만한 것(강제 편성처럼)은 옮겨 붙이지 말고 위쪽 제자리에
+ *  바로 넣으십시오 — 여기는 «그 장 하나만을 위한» 자리입니다.
+ *
+ *  ⚠ 이 표시는 **engine.js 맨 끝(boot() 바로 앞)** 에 있어야 합니다
+ *    (2026-11-14 에 옮겼습니다). 예전에는 파일 가운데쯤에 있었는데, 그 뒤로
+ *    4호선 · 어비스가 그 아래에 붙으면서 꾸러미의 EXT 덩이가 «그것들보다 먼저»
+ *    실행됐습니다 — 5호선을 MIRROR_TIERS 에 얹었더니 4호선보다 앞에 서 버린
+ *    것이 그래서입니다. 엔진에 무엇을 더 붙이더라도 이 표시는 맨 끝에 둡니다.
+ */
+/* @wip anchor: EXT */
 
 boot();   // 코드를 통과하면 유리창부터
