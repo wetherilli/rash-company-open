@@ -338,5 +338,19 @@ const ACHIEVEMENTS = [
     reward: "동기화 모듈 1개",
     when: { clear: "dig:gifts5" },
     give: { syncModule: 1 }
+  },
+  {
+    name: "유리의 복수",
+    desc: "거울 던전에서 꿰뚫는 혀를 쓰러뜨린다.",
+    reward: "인격 ★★ 구C사 연구원 이경원",
+    when: { kill: "꿰뚫는 혀", where: ["mirror", "mirrorHard", "mirrorExtreme", "mirrorDeep"] },
+    give: { id: { who: "lee_gyeongwon", star: 2, title: "구C사 연구원" } }
+  },
+  {
+    name: "포장지 덜 뜯었는데?",
+    desc: "익스트림 난이도 이상의 거울 던전에서 구C사 이사 원대한을 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ 구C사 E.G.O :: 꿰뚫린 혀 원대한",
+    when: { kill: "구C사 이사 원대한", where: ["mirrorExtreme", "mirrorDeep"] },
+    give: { support: "구C사 E.G.O :: 꿰뚫린 혀|원대한" }
   }
 ];

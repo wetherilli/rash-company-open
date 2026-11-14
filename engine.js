@@ -11,8 +11,8 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.28.15";
-const VERSION_NAME = "화석 탐사";
+const VERSION = "2.29.4";
+const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
@@ -278,6 +278,10 @@ function vaultBody() {
     supports: Object.keys(S.supportsOwned || {}),
     achieved: Object.keys(S.achieved || {}),
     cleared:  Object.keys(S.cleared || {}),
+    /* 어려움으로 마친 장 — 일반 기록(cleared)과 따로 둡니다. 어느 쪽을 고르고
+     * 있었는지(hard)도 함께 담아, 기기를 옮겨도 고른 쪽이 따라갑니다. */
+    clearedHard: Object.keys(S.clearedHard || {}),
+    hard: !!S.hard,
     /* 완주한 거울 갈래 — 원고료는 갈래마다 «처음 완주할 때만» 나오므로,
      * 어느 갈래를 이미 돌았는지 남겨 두어야 합니다. */
     mirrorDone: Object.keys(S.mirrorDone || {}),
@@ -368,6 +372,9 @@ function loadVault() {
     achieved: toMap(v.achieved),
     mailTaken: toMap(v.mailTaken),
     cleared:  toMap(v.cleared),
+    /* 옛 보관함에는 이 칸이 아예 없습니다 — 그때는 어려움이 없었으니 빈 채로 둡니다 */
+    clearedHard: toMap(v.clearedHard),
+    hard: !!(v && v.hard),
     mirrorDone: toMap(v.mirrorDone),
     /* 옛 보관함에는 이 칸이 아예 없습니다 — newState 가 클리어한 장에서 되짚어 보탭니다 */
     storyGain: toMap(v.storyGain),
@@ -756,6 +763,8 @@ function vaultMergeOnce(seed) {
   seed.achieved  = union(seed.achieved,  now.achieved);
   /* 이야기 인격 지급 자리도 한 번만 받는 것입니다 — 옛 파일을 들여와도 되살아나지 않게 */
   seed.storyGain = union(seed.storyGain, now.storyGain);
+  /* 어려움 클리어도 «한 번만 받는» 표라 합집합입니다 — 어느 쪽에서 마쳤든 마친 것입니다 */
+  seed.clearedHard = union(seed.clearedHard, now.clearedHard);
   seed.newbie    = Math.max(Number(seed.newbie) || 0, Number(now.newbie) || 0);
   /* 출석 · 주간 보상도 받은 칸이 되살아나지 않게 */
   seed.reward    = rewardMerge(seed.reward, now.reward);
@@ -1391,6 +1400,10 @@ function newState() {
     newbie: v && typeof v.newbie === "number" ? v.newbie : 0, // 신입 관리자 기념 배정을 쓴 횟수
     enk: (v && v.enk && typeof v.enk.n === "number") ? v.enk : null,  // 엔케팔린 — enkSync() 가 채운다
     cleared: v && v.cleared ? v.cleared : {},
+    /* 고르고 있던 난이도와 어려움 클리어 기록 — 보관함에 담겨 있습니다(saveVault).
+     * 여기서 되돌려 받지 않으면 새로 열거나 이어하기 한 번에 일반으로 돌아갑니다. */
+    hard: !!(v && v.hard),
+    clearedHard: (v && v.clearedHard) ? v.clearedHard : {},
     mirrorDone: (v && v.mirrorDone) ? v.mirrorDone : {},   // 이미 완주한 거울 갈래
     /* 이야기에서 인격을 이미 받은 자리. 적힌 것에 «이미 마친 장» 몫을 보탭니다 —
      * 옛 보관함에는 이 칸 자체가 없고, 장을 마쳤다면 그 자리는 이미 거친 것이니까요. */
@@ -1901,7 +1914,8 @@ function giftHits(e, who) {
     return equippedAdvisors().some(adv => adv.name === e.advisorWho);
   }
   const id = idByKey(S.equip[who]);
-  const title = id ? id.title : "";
+  const title = tagTitle(id ? id.title : (isSupport(who) ? (supportBy(who) || {}).title : ""),
+                         memberName(who));
   const tags = e.tag ? (Array.isArray(e.tag) ? e.tag : [e.tag]) : [];
   if (tags.length && tags.some(t => title.indexOf(t) >= 0)) return true;
   if (e.who) {
@@ -1912,6 +1926,28 @@ function giftHits(e, who) {
     if ((isSupport(who) || isAlly(who)) && memberName(who) === e.who) return true;
   }
   return false;
+}
+
+/* 그 기프트가 걸리는 사람이 **편성에 몇이나** 있는가 (아래 defPerMember 가 씁니다).
+ * 작성위원·지원은 giftHits 그대로 보고, **보조 교육위원도 함께 셉니다**
+ * (사용자 지침 2026-11-14). 시너지의 머릿수(synergyNames)가 예전부터 교육위원을
+ * 세고 있어서, 같은 이름을 세는 자리끼리 셈이 어긋나면 안 됩니다.
+ * 교육위원은 인격을 갈아 끼우지 않으므로 제 제목을 그대로 봅니다. */
+function giftHitCount(e) {
+  const tags = e && e.tag ? (Array.isArray(e.tag) ? e.tag : [e.tag]) : [];
+  /* 사람 이름으로 한 번씩만 셉니다 — 같은 사람이 편성(지원)과 교육위원 양쪽에
+   * 서는 일은 지금 막혀 있지만(supportBlockedByAdvisor), 세는 쪽이 그걸 믿고
+   * 있을 까닭이 없습니다 (사용자 지침 2026-11-14). */
+  const 센사람 = {};
+  (S.party || []).forEach(w => {
+    if (!w || !giftHits(e, w)) return;
+    센사람[memberName(w) || w] = true;
+  });
+  if (tags.length) equippedAdvisors().forEach(a => {
+    const t = tagTitle(a.title, a.name);
+    if (t && tags.some(tg => t.indexOf(tg) >= 0)) 센사람[a.name] = true;
+  });
+  return Object.keys(센사람).length;
 }
 
 /* 작성위원 한 명에게 걸리는 기프트 보정 */
@@ -1925,6 +1961,12 @@ function giftBonusFor(who) {
     }
     if (giftHits(e, who)) {
       out.atk += e.atk || 0; out.def += e.def || 0; out.hp += e.hp || 0;
+      /* defPerMember — 「그 이름이 든 인격의 방어 +n% × 편성된 수」
+       * (1장 복각의 「혼종 정제기」 2026-11-14). 곱하는 수는 **같은 기프트가 걸리는
+       * 편성 인원** 입니다 — 셋이 다 걸리면 셋 다 3배를 받습니다. 혼자 서면 1배라,
+       * 같이 설수록 단단해지는 기프트입니다. atk · hp 쪽이 필요해지면 같은 꼴로
+       * atkPerMember · hpPerMember 를 더하면 됩니다. */
+      if (e.defPerMember) out.def += e.defPerMember * giftHitCount(e);
     }
   });
   return out;
@@ -2147,12 +2189,13 @@ function grantStoryPerk(ids) {
 /* 수로 더해지는 것들을 한데 모읍니다. winHeal·retribFloor 는 큰 쪽 하나, healEvery 는 잦은 쪽. */
 function perkSum() {
   const o = { crit: 0, critMult: 0, bossCritDmg: 0, push: 0, correct: 0, manage: 0, manageMax: 0, manageFull: false,
-              skillUses: 0, winHeal: 0, healEvery: 0, healRatio: 0, hitHeal: 0,
+              skillUses: 0, winHeal: 0, healEvery: 0, healRatio: 0, hitHeal: 0, uniqueHeal: 0,
               aoeCut: 0, aoeGuardCut: 0, firstCut: 0, retribFloor: 0, bossDefCut: 0, arrestZero: false,
               linkBoost: 0, egoSynergy: 0 };
   activePerks().forEach(p => {
     const e = p.effect || {};
     ["crit", "critMult", "bossCritDmg", "push", "correct", "manage", "manageMax", "skillUses", "hitHeal",
+     "uniqueHeal",
      "aoeCut", "aoeGuardCut", "firstCut", "bossDefCut", "linkBoost", "egoSynergy"].forEach(k => { o[k] += e[k] || 0; });
     if (e.manageFull) o.manageFull = true;
     if (e.arrestZero) o.arrestZero = true;
@@ -2633,6 +2676,13 @@ function lastStory() {
 /* 지금 서 있는 이벤트. 맨 마지막 장 몫을 안 적어 두었으면 «이벤트 없음»(null) 입니다 —
  * 그때는 상점에 교환소 손잡이가 아예 나오지 않습니다. */
 function curEvent() {
+  /* **now: true** — 맨 마지막 장이 아닌 이야기의 이벤트를 세우는 자리입니다.
+   * 복각이 그렇습니다(1장을 고쳐 쓴 v2.29.0) — 장을 맨 뒤에 붙이는 것이 아니라
+   * 이미 있는 장을 갈아 끼우므로, lastStory() 로는 영영 못 잡힙니다. 기간이
+   * 살아 있는 동안만 이깁니다 — 끝나면 아래 「맨 마지막 장 몫」으로 되돌아갑니다.
+   * (둘 이상 now 를 달면 먼저 적힌 것이 섭니다 — 재화는 한 번에 하나입니다) */
+  const 지금 = eventList().find(e => e && e.now && eventLive(e));
+  if (지금) return 지금;
   const c = lastStory();
   if (!c) return null;
   return eventList().find(e => e && e.chapter === c.title) || null;
@@ -2675,23 +2725,45 @@ function eventGoods()   { const e = curEvent(); return (e && e.goods) || []; }
  *  MIRROR_TIERS 각 갈래의 event 에 적혀 있습니다.
  *
  *  ■ 얹어 주는 몫
- *    «가장 새로 선 특정 배정»(pickupList()[0] — 지금은 G사) 의 대상 인격을
- *    편성에 세우고 있으면, 한 명당 EVENT_RULE.bonusPct % 를 더 받습니다.
- *    셋을 다 세우면 60% 더입니다. 지원 작성위원도 제목으로 함께 봅니다.
+ *    그 대상 인격을 편성에 세우고 있으면 한 명당 EVENT_RULE.bonusPct % 를 더
+ *    받습니다. 셋을 다 세우면 60% 더입니다. 지원 작성위원도 제목으로 함께 봅니다.
+ *
+ *    **보조 교육위원도 함께 셉니다**(사용자 지침 2026-11-14) — 시너지의 머릿수가
+ *    예전부터 그랬습니다(synergyNames). 같은 이름을 세는 자리끼리 어긋나면 안 됩니다.
+ *
+ *    대상을 고르는 길이 둘입니다 —
+ *      ① 이벤트 줄에 bonusTag 를 적으면 **그 이름들** 입니다(2026-11-14).
+ *      ② 안 적으면 예전처럼 «맨 앞 특정 배정»(pickupList()[0]) 의 대상입니다.
+ *    ①을 둔 까닭은 ②가 배정 차례에 매여 있었기 때문입니다 — 배정을 하나 더
+ *    얹거나 차례를 바꾸면 이벤트의 얹어 주는 몫이 말없이 딴 데로 갑니다
+ *    (data/pickup.js 머리말의 경고가 그것입니다). 제 대상은 이벤트가 적는 편이 낫습니다.
  */
 function eventLatestPickup() { return pickupList()[0] || null; }
-function eventBonusCount() {
+/* 얹어 주는 몫이 보는 이름들 */
+function eventBonusTags() {
+  const ev = openEvent();
+  if (ev && ev.bonusTag) return Array.isArray(ev.bonusTag) ? ev.bonusTag : [ev.bonusTag];
   const p = eventLatestPickup();
-  if (!p || !S || !S.party) return 0;
-  let n = 0;
+  return p ? pickupTags(p) : [];
+}
+function eventBonusCount() {
+  const tags = eventBonusTags();
+  if (!tags.length || !S || !S.party) return 0;
+  /* giftHitCount 와 같은 결 — 사람 이름으로 한 번씩만 셉니다 */
+  const 센사람 = {};
   S.party.forEach(w => {
     if (!w) return;
     /* 지원 작성위원은 자기 인격을 갈아 끼우지 않으므로 제 제목을 그대로 봅니다 */
-    const t = isSupport(w) ? (supportBy(w) || {}).title
-                           : (idByKey(S.equip[w]) || {}).title;
-    if (t && pickupHit(p, t)) n++;
+    const t = tagTitle(isSupport(w) ? (supportBy(w) || {}).title
+                                    : (idByKey(S.equip[w]) || {}).title, memberName(w));
+    if (t && tags.some(tg => t.indexOf(tg) >= 0)) 센사람[memberName(w) || w] = true;
   });
-  return n;
+  /* 보조 교육위원도 — 이쪽도 제 제목을 그대로 봅니다 */
+  equippedAdvisors().forEach(a => {
+    const t = tagTitle(a.title, a.name);
+    if (t && tags.some(tg => t.indexOf(tg) >= 0)) 센사람[a.name] = true;
+  });
+  return Object.keys(센사람).length;
 }
 /* 얹어 주는 몫까지 더한 값. 나머지는 버립니다 (다른 셈과 같은 결). */
 function eventGainWithBonus(base) {
@@ -2758,6 +2830,7 @@ function eventGiveText(g) {
   if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
   if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
   if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
+  if (g.digBrush)      out.push(DIG_BRUSH + " " + g.digBrush + "개");
   if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
   return out.join("　·　") || "—";
 }
@@ -2807,6 +2880,15 @@ function eventGiveApply(g) {
   if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
   if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
   if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); }
+  /* 지질망치 — 우편(giveApply)과 **같은 규칙** 입니다. 탐사가 아직 안 열렸으면
+   * bank 에 맡겨 두고, 처음 열 때 digSync 가 함께 줍니다. brush 를 null 에서
+   * 숫자로 바꿔 버리면 «처음 열 때 받는 첫 몫(brushStart)» 이 사라집니다. */
+  if (g.digBrush) {
+    const d = digState();
+    if (d.brush == null) d.bank = (d.bank || 0) + g.digBrush;
+    else d.brush += g.digBrush;
+    got.push(DIG_BRUSH + " " + g.digBrush + "개");
+  }
   if (g.advisor) {
     const ad = advisorById(g.advisor);
     if (ad) {
@@ -2983,12 +3065,41 @@ function baseStatsOf(key) {
  *  편성된 작성위원 3명 + 세워둔 보조 교육위원까지, 넷의 이름을 함께 봅니다.
  *  3명이 맞으면 1.75배, 교육위원까지 넷이 맞으면 2배가 됩니다.
  */
+/* ── 어려움 난이도 (data/hard.js · 사용자 지침 2026-11-14) ──────────
+ *  본편·곁가지에만 듣습니다. 거울 던전·거울굴절철도는 제 난이도 갈래를 따로
+ *  가지고 있어(MIRROR_TIERS) 여기 안 끼어듭니다 — hardStepNow 가 S.mirror 를 봅니다. */
+function hardRule()     { return (typeof HARD_RULE !== "undefined" && HARD_RULE) ? HARD_RULE : null; }
+function hardSteps()    { return (typeof HARD_STEPS !== "undefined" && HARD_STEPS) ? HARD_STEPS : {}; }
+function hardUnlocked() { const r = hardRule(); return !!(r && S && S.cleared && S.cleared[r.unlock]); }
+function hardOn()       { return !!(S && S.hard) && hardUnlocked(); }
+function hardStepOf(id) { return (id && hardSteps()[id]) || null; }
+/* 그 장(묶음이면 묶음 열쇠로도) 어려움이 있는가 */
+function hardHas(c) {
+  if (!c) return false;
+  return !!(hardStepOf(c.id) || (c.part && hardStepOf(c.part)));
+}
+/* 지금 돌고 있는 장의 사다리 — 거울 안에서는 없습니다 */
+function hardStepNow() {
+  if (!hardOn() || !S || S.mirror) return null;
+  const c = curChapter();
+  if (!c) return null;
+  return hardStepOf(c.id) || (c.part ? hardStepOf(c.part) : null) || null;
+}
+function hardCleared(id) { return !!(S && S.clearedHard && S.clearedHard[id]); }
+/* 어려움으로 아직 안 마친, «지금 들어갈 수 있는» 장이 하나라도 있는가.
+ * 운전석에서 — 일반으로는 추천할 이야기가 없는데 이쪽에 할 것이 남아 있으면
+ * 난이도 칸을 깜빡여 알립니다(사용자 지침 2026-11-14). */
+function hardTodo() {
+  if (!hardUnlocked()) return false;
+  return CHAPTERS.some((c, i) => c && hardHas(c) && chapterUnlocked(i) && !hardCleared(c.id));
+}
+
 function synergyNames(party) {
   const list = (party || S.party)
     .filter(w => w && (isSupport(w) || S.equip[w]))
-    .map(w => memberTitle(w))
+    .map(w => tagTitle(memberTitle(w), memberName(w)))
     .filter(t => t);
-  equippedAdvisors().forEach(a => list.push(a.title));
+  equippedAdvisors().forEach(a => list.push(tagTitle(a.title, a.name)));
   return list;
 }
 
@@ -3027,6 +3138,10 @@ function activeSynergies(party) {
       hp:  (sy.hp  || 0) * scale,
       /* 8장 — 최대 관리력(반올림, advisorEffect 가 더함) · 인격 스택(stackRulesFor 머리말) */
       manageMax: sy.manageMax ? Math.round(sy.manageMax * scale) : 0,
+      /* 「섞인 것」(1장 복각) — 고유 능력을 쓴 **그 차례에만** 방어력의 n배가 공격에
+       * 얹힙니다. useUniqueSkill 이 b.mods 에 적고 effStats 가 읽습니다. 머릿수 배수
+       * (3명 1.75 · 4명 2)는 atk/def/hp 와 똑같이 탑니다. */
+      uniqueAtkFromDef: (sy.uniqueAtkFromDef || 0) * scale,
       stack: sy.stack || null, scale: scale
     });
   });
@@ -3036,6 +3151,16 @@ function synergyBonus() {
   const b = { atk: 0, def: 0, hp: 0 };
   activeSynergies().forEach(s => { b.atk += s.atk; b.def += s.def; b.hp += s.hp; });
   return b;
+}
+/* 지금 켜진 시너지들이 주는 «고유 능력을 쓴 차례의 방어→공격» 몫의 합 */
+function synergyUniqueAtkFromDef() {
+  return activeSynergies().reduce((t, s) => t + (s.uniqueAtkFromDef || 0), 0);
+}
+/* 그 사람이 **이번 차례에** 고유 능력을 썼을 때 얹히는 방어→공격 배수.
+ * 기프트의 defToAtk(늘 걸림)와 달리 b.mods 에 얹혀 그 턴에만 삽니다. */
+function skillConvertFor(who) {
+  const b = S.battle;
+  return (b && b.mods && b.mods[who + "_skillAtkFromDef"]) || 0;
 }
 
 /* ── 작성위원 고유 능력 — 패시브 (광신·격노·배임·보복) ─────────────
@@ -3152,8 +3277,9 @@ function effStats(who) {
                     S.battle.mods && S.battle.mods[who + "_claw1Order"] === "guard")
                    ? (1.5 + claw1SynergyBonus()) : 1;
   const def = Math.max(0, Math.round(s.def * (1 + b.def + a.def + gf.def + af.def + sy + rl.def + pk.def) * claw1Def * vm) + pv.def);
-  /* 방어의 일부를 공격으로 옮기는 기프트 */
-  const conv = giftConvertFor(who);
+  /* 방어의 일부를 공격으로 옮기는 기프트 · 그리고 이번 차례에 고유 능력을 써서
+   * 얹힌 몫(시너지 「섞인 것」 — skillConvertFor). 둘 다 같은 자리에 더합니다. */
+  const conv = giftConvertFor(who) + skillConvertFor(who);
   /* 인격 스택(히트 · 염화)은 얻은 «수» 그대로 더합니다 — 배수가 아니라서 끝에 얹습니다(stackRulesFor 머리말) */
   /* 기프트 skillAtk — 이 전투에서 고유 능력을 쓴 만큼 쌓인 공격력(useUniqueSkill) */
   const skAtk = (S.battle && S.battle.persist && S.battle.persist[who + "_skillAtk"]) || 0;
@@ -3776,6 +3902,27 @@ function memberOf(w) {
   if (isSupport(w)) return supportBy(w);
   return SINNERS[w] || null;
 }
+/* ── 맞춤에 쓰는 «제목» (사용자 지침 2026-11-14) ────────────────────
+ *  시너지 · 기프트 · 특정 배정 · 이벤트는 모두 제목에 그 말이 들었는가로
+ *  맞춥니다. data/characters.js 의 EXTRA_TAGS 에 적힌 사람은 제목이 뭐가
+ *  되든 그 이름으로도 세야 해서, 맞출 때 쓰는 제목 뒤에 그 이름을 덧붙입니다.
+ *  **사람은 여전히 하나로 셉니다** — 늘어나는 것은 글자뿐입니다.
+ *  화면에 뜨는 제목은 건드리지 않습니다 — 이 값은 맞추는 데만 씁니다. */
+function extraTagsOf(name) {
+  if (typeof EXTRA_TAGS === "undefined" || !EXTRA_TAGS || !name) return [];
+  const v = EXTRA_TAGS[name];
+  return v ? (Array.isArray(v) ? v : [v]) : [];
+}
+function tagTitle(title, name) {
+  const t = String(title || "");
+  /* 제목에 이미 든 이름은 덧붙이지 않습니다 — 「구C사 이사」 원대한처럼 제목과 표가
+   * 겹치는 카드에서 같은 말이 두 번 들어가지 않게(사용자 지침 2026-11-14).
+   * 맞추는 쪽이 some/indexOf 라 세는 수가 늘지는 않지만, 겹친 글자를 남겨 둘 까닭이
+   * 없습니다 — 나중에 «몇 번 들었나» 로 세는 자리가 생기면 그때 탈이 납니다. */
+  const add = extraTagsOf(name).filter(x => x && t.indexOf(x) < 0);
+  return add.length ? t + " " + add.join(" ") : t;
+}
+
 function memberName(w) {
   const m = memberOf(w);
   return m ? m.name : (w || "");
@@ -5070,7 +5217,8 @@ function bigWinOn(out, p) {
   if (!p) return null;
   return (out || []).find(r =>
     r.isNew && (r.kind === "adv" ? r.adv.star : r.id.star) >= 3 &&
-    pickupHit(p, r.kind === "adv" ? r.adv.title : r.id.title)) || null;
+    pickupHit(p, r.kind === "adv" ? r.adv.title : r.id.title,
+                 r.kind === "adv" ? r.adv.name : null)) || null;
 }
 
 /* 빛날 때 함께 보여 줄 한 줄.
@@ -5554,6 +5702,12 @@ function play(s) {
   /* 화면을 흔듭니다. shake: true 는 가볍게, "hard" 면 크게.
    * 어느 장면에나 붙일 수 있습니다 — 포격을 맞는 대목 같은 데 씁니다. */
   if (s.shake) shakeScreen(s.shake === "hard");
+  /* 소리 한 번. shake 와 같이 **어느 장면에나** 붙습니다 (1장 복각 2026-11-14) —
+   * 컷신이 덮이는 그 순간에 관통음을 얹으려고 두었습니다.
+   *   { t:"cut", img:"…", sound:"assets/sound/효과음 관통.mp3" }
+   * 전투의 공격 소리(foeSfx · ATK_TYPES 의 sfx)와는 다른 길입니다 — 그쪽은
+   * 공격 유형이 고르고, 이쪽은 이야기가 고릅니다. 크기는 설정의 «효과음 크기». */
+  if (s.sound) playSfx(s.sound);
 
   switch (s.t) {
     /* shake 를 달면 그 줄에서 화면이 흔들립니다 — 번개·폭발 같은 자리에.
@@ -6290,6 +6444,22 @@ function startBattleFight(scene, f) {
   /* 「몰아친다」(ramp)·「격분」(rage)이 공격력을 올려 쓰므로, 올리기 전의 값을
    * 따로 들고 있어야 합니다 — 매 턴 b.atk 를 다시 셈할 때 이 값에서 출발합니다.
    * 그러지 않으면 올린 값 위에 또 올려 눈덩이가 됩니다 (beginTurn 참고). */
+  /* ── 어려움 사다리 ──────────────────────────────────────────────
+   *  장면에 적은 덮어쓰기(hp/atk/def)가 끝난 «뒤» 에 곱합니다 — 그래야 그 장면만
+   *  다르게 세운 값에도 똑같이 사다리가 탑니다. 잡졸과 보스를 따로 봅니다. */
+  const hstep = hardStepNow();
+  if (hstep) {
+    const m = (S.battle.boss && hstep.boss) ? hstep.boss : (hstep.mob || null);
+    if (m) {
+      S.battle.hp    = Math.round(S.battle.hp    * (m.hp  || 1));
+      S.battle.maxhp = Math.round(S.battle.maxhp * (m.hp  || 1));
+      S.battle.atk   = Math.round(S.battle.atk   * (m.atk || 1));
+      S.battle.def   = Math.round(S.battle.def   * (m.def || 1));
+    }
+    /* 어려움에서만 달라지는 결 — 장면 덮어쓰기와 같은 자리에 얹습니다 */
+    const extra = hstep.foes && hstep.foes[S.battle.id];
+    if (extra) for (const k in extra) S.battle[k] = extra[k];
+  }
   S.battle.atk0 = S.battle.atk;
   S.restManage = false;
   const b = S.battle;            // 딜레이가 끝났을 때 같은 전투인지 확인용
@@ -6437,6 +6607,13 @@ function beginTurn() {
     return rail4Swap(() => beginTurn());
   /* 설득 전투 foeLast — 마지막 턴의 적 차례까지 마친 뒤, 다음 턴 머리에서 끝냅니다(afterAllies 참고) */
   if (b.scene.persuade && b.scene.persuade.foeLast && b.turn >= b.scene.persuade.turns) return persuadeEnd();
+  /* 각본 전투 leaveTurn — 적이 제 발로 물러납니다(1장 「10턴째에 사라짐」).
+   * 이기지도 지지도 않은 채 이야기만 넘어가는 자리라, 이긴 것으로 셈하되
+   * 쓰러지는 연출은 쓰지 않습니다 — persuadeEnd 와 같은 길인 foeLeaves 로 갑니다.
+   * **전투 장면(scene.leaveTurn)에만 적습니다.** 적(FOES)에 달면 거울 던전에서도
+   * 물러나 그 적을 쓰러뜨려야 하는 업적이 아예 불가능해집니다(2026-11-14).
+   * b.turn 은 바로 아래에서 올라갑니다 — 아직 «전» 이라 n - 1 로 견줍니다. */
+  if (b && !b.done && b.scene.leaveTurn && b.turn >= b.scene.leaveTurn - 1) return foeLeaves(b);
   /* 「제3발톱 의리사슬」류(effect.defToAtkGuardMult) 가 볼 «지난 차례에 방어를
    * 골랐는가» 를 여기서 옮겨 적습니다 — b.cmds 는 바로 아래에서 비워지므로,
    * 비우기 전이어야 합니다. giftConvertFor() 가 이걸 읽습니다. */
@@ -7210,6 +7387,16 @@ function useUniqueSkill(who) {
   if (!avail) return askNext();
   const { skill, v } = avail;
   b.skillUsed[who] = (b.skillUsed[who] || 0) + 1;
+
+  /* ── 고유 능력을 «쓰는» 그 순간에 걸리는 것들 (1장 복각 2026-11-14) ──
+   *  패시브 고유 능력은 여기 오지 않습니다 — skillAvailable 이 액티브만 돌려줍니다.
+   *  · 시너지 uniqueAtkFromDef(「섞인 것」) — 그 차례에만 방어력의 n배가 공격에.
+   *    b.mods 는 beginTurn 마다 비므로 «그 차례» 가 저절로 지켜집니다.
+   *  · 테마팩 특전 uniqueHeal(「덜 뜯은 포장지」) — 쓸 때마다 전원이 최대 체력의 n% 회복. */
+  const sConv = synergyUniqueAtkFromDef();
+  if (sConv) b.mods[who + "_skillAtkFromDef"] = sConv;
+  const uHeal = perkSum().uniqueHeal;
+  if (uHeal) healParty(uHeal, "특전 — 섞인 것이 잠시 아문다.");
 
   switch (who) {
     case "cha_minjun":                     // 흡혈 — 공격으로 치고, 준 피해의 v% 회복
@@ -8497,6 +8684,24 @@ function persuadeEnd() {
   cont();
 }
 
+/* 적이 제 발로 물러납니다(장면의 leaveTurn — beginTurn 참고).
+ * 쓰러뜨린 것이 아니라 «등을 돌린» 것이라 foeFalls 같은 연출은 쓰지 않고 그 자리만
+ * 비웁니다. 뒷부분(S.battle 비우기 · render · cont)이 없으면 전투가 그 턴에서
+ * 멈춰 버립니다 — persuadeEnd 와 같은 차례를 지킵니다. */
+function foeLeaves(b) {
+  battleOver(b);
+  battleSuccess(b);
+  flushBattleLines();
+  dropSpeaker();
+  showFoe(null, null, null);
+  healParty(winHealRatio(b, RULE.winHeal), null);
+  if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
+  S.battle = null;
+  S.waiting = false;
+  render();
+  cont();
+}
+
 function healParty(ratio, msg) {
   let any = false;
   S.party.forEach(w => {
@@ -8665,6 +8870,14 @@ function chapterEnd() {
   /* «처음» 마쳤는지는 표시를 남기기 전에 봐 두어야 합니다 */
   const first = !S.cleared[c.id];
   S.cleared[c.id] = true;
+  /* 어려움으로 마쳤으면 그쪽에도 적습니다 — 일반 기록과 따로입니다.
+   * «어려움으로 처음» 이면 그 장의 삯을 한 번 더 줍니다(아래). */
+  const hstep = hardStepNow();
+  const hardFirst = !!(hstep && !hardCleared(c.id));
+  if (hstep) {
+    if (!S.clearedHard) S.clearedHard = {};
+    S.clearedHard[c.id] = true;
+  }
   say("── " + c.no + " 종료 ──", "place");
   /* 장 묶음 — 마지막 부분을 마치면 묶음 자체도 마친 것으로 칩니다(partOf 머리말).
    * 아래 «처음 마쳤을 때» 알림들은 이 장 id 와 묶음 id 를 함께 봅니다(newly) —
@@ -8672,6 +8885,13 @@ function chapterEnd() {
   const gid = partOf(c);
   const groupDone = !!gid && isLastPart(c);
   const firstGroup = groupDone && !S.cleared[gid];
+  if (hstep && gid && groupDone) S.clearedHard[gid] = true;
+  /* 어려움 첫 완주 삯 — 두 번째부터는 없습니다 */
+  if (hardFirst && hstep.firstReward) {
+    divider();
+    say("── " + hardRule().name + " 첫 완주 ──", "place");
+    say(giveApply(hstep.firstReward).join(" · ") + " 획득.", "gain");
+  }
   if (groupDone) {
     S.cleared[gid] = true;
     say("── " + groupMeta(gid).no + " 종료 ──", "place");
@@ -8685,10 +8905,13 @@ function chapterEnd() {
     S.money += pay;
     say((groupDone ? groupMeta(gid).no : c.no) + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
   }
-  /* 처음 마쳤을 때만 — 화면이 금빛으로 빛나고 기둥이 솟습니다(v2.28.14). 다시 마칠 때는 기록칸 줄만 */
-  if (first) {
+  /* 처음 마쳤을 때만 — 화면이 금빛으로 빛나고 기둥이 솟습니다(v2.28.14). 다시 마칠 때는 기록칸 줄만.
+   * **어려움으로 처음 마치는 것도 «처음»** 입니다(사용자 지침 2026-11-14) — 일반으로 이미
+   * 마친 장이라도 어려움 첫 완주에는 연출이 섭니다. 머리글에 난이도를 붙여 갈라 보입니다. */
+  if (first || hardFirst) {
     const gm = groupDone ? groupMeta(gid) : null;
-    flashFx((gm ? gm.no : c.no) + " 종료", (gm && gm.title) || c.title || null, null, null, "clear");
+    flashFx((gm ? gm.no : c.no) + (hardFirst && !first ? " " + hardRule().name : "") + " 종료",
+            (gm && gm.title) || c.title || null, null, null, "clear");
   }
   /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
    * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
@@ -10299,7 +10522,10 @@ function openNotice(then) {
   $sheet.innerHTML =
     '<h2>' + (n.title || "알림") + '</h2>' +
     띠 +
-    '<div class="hint">이번 판에 새로 들어온 것들입니다.</div>' +
+    /* 「이번 판에 새로 들어온 것들입니다」 한 줄은 걷었습니다 — 바로 위 띠의 sub 가
+     * 이미 그 말을 하고 있고, 알림이 길어 한 줄이라도 줄이는 편이 낫습니다
+     * (사용자 지침 2026-11-14 — 스크롤 압박). */
+    '<div class="noticebody">' +
     /* groups 로 적으면 무리마다 제목을 답니다. 옛 방식(lines)도 그대로 받습니다. */
     (n.groups || [{ lines: n.lines || [] }]).map(g => {
       /* showEventCountdown — 데이터(data/notice.js)에는 날짜를 그대로 안 적고
@@ -10319,12 +10545,13 @@ function openNotice(then) {
             '</div></div>';
           })()
         : "";
-      return (g.head ? '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">' + g.head + '</div>' : "") +
+      return (g.head ? '<div class="nthead">' + g.head + '</div>' : "") +
       '<div class="grid one">' +
         (g.lines || []).map(x => '<div class="slot"><div class="sub">' + x + '</div></div>').join("") +
         countdownLine +
       '</div>';
     }).join("") +
+    '</div>' +
     (n.tail ? '<div class="mailnote ok" style="margin-top:12px">' + n.tail + '</div>' : '') +
     '<div class="modalfoot">' +
       '<button id="ntgo" class="primary">상점으로</button>' +
@@ -10655,8 +10882,10 @@ function pickupTags(p) {
   return Array.isArray(p.tag) ? p.tag : [p.tag];
 }
 /* 제목에 그 배정의 대상 단어가 들어 있는가 */
-function pickupHit(p, title) {
-  const t = String(title || "");
+/* name 을 함께 넘기면 EXTRA_TAGS 까지 봅니다 — 배정이 그 사람을 끌어 올릴 때
+ * (원대한처럼 제목에 그 말이 없는 사람) 쓰입니다. 안 넘기면 예전 그대로입니다. */
+function pickupHit(p, title, name) {
+  const t = tagTitle(title, name);
   return pickupTags(p).some(w => w && t.indexOf(w) >= 0);
 }
 function pickupCost(p) {
@@ -10803,7 +11032,7 @@ function openGacha(done, pk, deal) {
     /* 특정 배정이면, 정해진 확률로 대상 안에서만 고른다 */
     const narrow = (list, get) => {
       if (!pickup || Math.random() >= rate) return list;
-      const only = list.filter(x => pickupHit(pickup, get(x)));
+      const only = list.filter(x => { const g = get(x); return pickupHit(pickup, g[0], g[1]); });
       return only.length ? only : list;
     };
 
@@ -10812,7 +11041,7 @@ function openGacha(done, pk, deal) {
        * 덕분에 특정 배정 대상을 이미 지녔어도 rate 만큼 그 대상이 다시 뜹니다. */
       let cand = pool.filter(p => p.id.star === star);
       if (!cand.length) cand = pool;
-      cand = narrow(cand, p => p.id.title);
+      cand = narrow(cand, p => [p.id.title, null]);
       const pick = cand[rnd(cand.length)];
       const key = idKey(pick.who, pick.id);
       const isNew = !S.owned[key];
@@ -10831,7 +11060,7 @@ function openGacha(done, pk, deal) {
       const all = advisorOpenList();
       if (!all.length) return pullIdentity(3);          // 교육위원이 없으면 3성으로 대신
       /* 미보유를 먼저 골라 주지 않습니다 — 남은 것이 있어도 중복이 뜹니다(사용자 지침 2026-10-20) */
-      let cand = narrow(all, a => a.title);
+      let cand = narrow(all, a => [a.title, a.name]);
       const a = cand[rnd(cand.length)];
       const k = advisorId(a);
       const isNew = !(S.advisorsOwned && S.advisorsOwned[k]);
@@ -11187,6 +11416,11 @@ function save(silent) {
  *  버려, 지금은 못 골라야 할 사람을 다시 고를 수 있게 됩니다. */
 const SAVE_KEEPS = ["ch", "sc", "flags", "hp", "party", "equip",
                     "mirror", "mirrorHard", "mirrorTier", "ended",
+                    /* 돌고 있던 판의 난이도 — 이것이 없으면 어려움으로 들어간 판을
+                     * 이어하기로 불러올 때 일반으로 돌아갔습니다(사용자 2026-11-14).
+                     * 보관함에도 담기지만(saveVault), 그쪽은 «지금 고른 쪽» 이고
+                     * 이쪽은 «그 판이 어느 쪽이었나» 입니다 — 둘은 다를 수 있습니다. */
+                    "hard",
                     "partyStack", "partyBan", "battleForced", "storyPerks", "carryManage"];
 
 /* ── 이어하기로 돌아왔을 때 무대 되살리기 ────────────────────────
@@ -11377,7 +11611,12 @@ function chapterPeek() {
 }
 
 function chapterPicks() {
-  const 마쳤나 = c => !!(S.cleared && S.cleared[c.id]);
+  /* 어려움으로 보고 있으면 «어려움으로» 마쳤는지를 봅니다(사용자 지침 2026-11-14).
+   * 그리고 사다리가 아직 없어 잠긴 장은 추천하지 않습니다 — 잠긴 칸을 세우면
+   * 약 올리는 것이 됩니다. 「열려 있는데 아직 안 마친 장」 만 세웁니다. */
+  const 어려움 = hardOn();
+  const 마쳤나 = c => 어려움 ? hardCleared(c.id) : !!(S.cleared && S.cleared[c.id]);
+  const 셀까 = c => !어려움 || hardHas(c);
   const out = { main: -1, side: -1, mirror: null };
 
   /* ── 곁가지는 «나온 차례대로» 입니다 (사용자 지침 2026-10-27) ──────
@@ -11393,7 +11632,7 @@ function chapterPicks() {
    *    새 곁가지는 반드시 배열 «끝» 에 붙이십시오. 가운데 끼워 넣으면
    *    추천 차례가 어긋납니다. */
   CHAPTERS.forEach((c, i) => {
-    if (마쳤나(c) || !chapterUnlocked(i)) return;
+    if (마쳤나(c) || !chapterUnlocked(i) || !셀까(c)) return;
     if (isSide(c)) { if (out.side < 0) out.side = i; }  // 곁가지는 «먼저 나온 것»
     else if (out.main < 0) out.main = i;                // 본편은 «가장 이른 것»
   });
@@ -11412,11 +11651,35 @@ function openChapterSelect(back) {
   /* 읽던 데가 있으면 맨 위에 — 무슨 장의 몇 번째 장면인지 보여 줍니다
    * (사용자 지침 2026-09-03, saveSpotText 참고) */
   const spotText = saveSpotText();
-  if (spotText)
-    h += '<div class="grid"><div class="slot" data-resume="1">' +
-           '<div class="nm">이어하기</div>' +
-           '<div class="sub">' + spotText + '</div>' +
-         '</div></div>';
+  /* 난이도 토글 — 이어하기 오른쪽에 섭니다(이어하기가 없으면 혼자 그 줄에).
+   * HARD_RULE.unlock 장을 마쳐야 눌립니다. 본편·곁가지에만 듣는 것이라,
+   * 아래 거울 던전·거울굴절철도 칸은 이것과 무관하게 그대로 섭니다. */
+  const hOpen = hardUnlocked(), hNow = hardOn(), hr = hardRule();
+  /* 일반으로 보고 있는데 이야기 추천이 비고, 어려움에는 아직 할 장이 남아 있으면
+   * 이 칸을 깜빡여 알립니다 — 받을 우편이 깜빡이는 것과 같은 결입니다
+   * (사용자 지침 2026-11-14). 추천은 아래 chapterPicks 가 세므로 여기서 미리 셉니다. */
+  const 미리 = chapterPicks();
+  const hardCall = hOpen && !hNow && 미리.main < 0 && 미리.side < 0 && hardTodo();
+  const hardSlot = !hr ? "" :
+    '<div class="slot hardtoggle' + (hNow ? ' on' : '') + (hOpen ? '' : ' lockd') +
+      (hardCall ? ' hardcall' : '') + '"' +
+      (hOpen ? ' data-hard="1"' : '') + '>' +
+      '<div class="' + (hOpen ? 'nm' : 'lock') + '">난이도 — ' + (hNow ? hr.name : hr.easy) + '</div>' +
+      '<div class="sub">' +
+        (!hOpen ? hr.lockNote
+                /* 한 줄에 들어가야 합니다 — 칸이 좁아(약 257px) 열일곱 자가 넘으면
+                 * 두 줄로 접히고, 옆의 「이어하기」 칸과 높이가 어긋나 보입니다. */
+                : hardCall ? hr.name + '에 할 장이 남았습니다.'
+                           : '눌러서 ' + (hNow ? hr.easy : hr.name) + '으로 바꿉니다.') +
+      '</div></div>';
+  if (spotText || hardSlot)
+    h += '<div class="grid">' +
+           (spotText ? '<div class="slot" data-resume="1">' +
+                         '<div class="nm">이어하기</div>' +
+                         '<div class="sub">' + spotText + '</div>' +
+                       '</div>' : '') +
+           hardSlot +
+         '</div>';
 
   /* 접히는 무리 하나. 눌러서 펴고 접습니다 — 펴 둔 자리는 CS_OPEN 이 기억합니다.
    * 접혀 있을 때는 이름만 보이므로, 무엇이 든 무리인지 한 줄로 곁들입니다. */
@@ -11433,15 +11696,29 @@ function openChapterSelect(back) {
    * 접어 둔 「본편」 목록에서는 달지 않습니다. 열 몇 칸이 한꺼번에 길어집니다. */
   const chapPitch = c =>
     (c.pitch && c.pitch.length) ? c.pitch : (c.summary ? [c.summary] : []);
+  /* 어려움일 때 그 장이 어떤 꼴로 서는가 —
+   *   사다리가 있으면  붉은 칸(hardon) · 「어려움 — 클리어/진행 가능」
+   *   없으면          잠긴 칸(hardnone) · 「아직 어려움 난이도가 추가되지 않았습니다.」
+   * 일반일 때는 아무것도 바뀌지 않습니다(빈 덩이를 돌려줍니다). */
+  const hardSkin = (c, id, open) => {
+    if (!hardOn()) return null;
+    if (!hardHas(c)) return { cls: " hardnone", open: false, sub: hardRule().none };
+    return { cls: " hardon" + (hardCleared(id) ? " harddone" : ""), open: open,
+             sub: hardRule().name + ' — ' + (hardCleared(id) ? '클리어' : '진행 가능') };
+  };
   const chapSlot = (c, i, rich) => {
     const done  = S.cleared && S.cleared[c.id];
-    const open  = chapterUnlocked(i);
+    let   open  = chapterUnlocked(i);
     const needs = chapterNeeds(c);
     const miss  = chapterMissing(c);
-    return '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-i="' + i + '"' : '') + '>' +
+    const hs    = hardSkin(c, c.id, open);
+    if (hs) open = hs.open;
+    return '<div class="slot' + (done ? ' sel' : '') + (hs ? hs.cls : '') + '"' +
+             (open ? ' data-i="' + i + '"' : '') + '>' +
              slotStrip(open ? chapterBanner(c) : null) +
              '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no + (c.title ? '　' + c.title : '') + '</div>' +
-             '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능') : '잠김') + '</div>' +
+             '<div class="sub">' + (hs ? hs.sub
+                                       : (open ? (done ? '클리어' : '진행 가능') : '잠김')) + '</div>' +
              (rich && chapPitch(c).length
                ? '<div class="csum">' +
                    chapPitch(c).map(x => '<span>' + x + '</span>').join('') +
@@ -11462,15 +11739,19 @@ function openChapterSelect(back) {
     const m = groupMeta(gid);
     const parts = m.parts.map(i => CHAPTERS[i]);
     const done  = S.cleared && S.cleared[gid];
-    const open  = chapterUnlocked(m.parts[0]);
+    let   open  = chapterUnlocked(m.parts[0]);
     const n     = parts.filter(c => S.cleared && S.cleared[c.id]).length;
     const nextP = parts.find(c => !(S.cleared && S.cleared[c.id])) || parts[0];
     const needs = chapterNeeds(nextP), miss = chapterMissing(nextP);
-    return '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-group="' + gid + '"' : '') + '>' +
+    const hs = hardSkin({ id: gid, part: gid }, gid, open);
+    if (hs) open = hs.open;
+    return '<div class="slot' + (done ? ' sel' : '') + (hs ? hs.cls : '') + '"' +
+             (open ? ' data-group="' + gid + '"' : '') + '>' +
              slotStrip(open ? m.banner : null) +
              '<div class="' + (open ? 'nm' : 'lock') + '">' + m.no + (m.title ? '　' + m.title : '') + '</div>' +
-             '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능　·　' + n + ' / ' + parts.length + ' 부분')
-                                        : '잠김') + '</div>' +
+             '<div class="sub">' + (hs ? hs.sub
+                                       : (open ? (done ? '클리어' : '진행 가능　·　' + n + ' / ' + parts.length + ' 부분')
+                                               : '잠김')) + '</div>' +
              (rich && chapPitch(m).length
                ? '<div class="csum">' + chapPitch(m).map(x => '<span>' + x + '</span>').join('') + '</div>'
                : '') +
@@ -11618,6 +11899,12 @@ function openChapterSelect(back) {
   $sheet.querySelectorAll(".slot[data-group]").forEach(el => {
     el.onclick = () => openPartSelect(el.dataset.group, back);
   });
+  const hb = $sheet.querySelector(".slot[data-hard]");
+  if (hb) hb.onclick = () => {
+    S.hard = !S.hard;
+    saveVault();
+    openChapterSelect(back);          // 카드 꼴이 통째로 달라지므로 다시 그립니다
+  };
   const rs = $sheet.querySelector(".slot[data-resume]");
   if (rs) rs.onclick = () => { closeModal(); if (!load()) { glass(); say("기록이 손상되었다.", "todo"); } };
   $sheet.querySelectorAll(".slot[data-mirror]").forEach(el => {
@@ -12889,6 +13176,15 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
     desc: base ? "유리창에 비쳐 나온 것. 본래와는 다른 세기로 서 있다."
                : "유리창에 비쳐 나온 것. 본래보다 " + Math.round((k - 1) * 100) + "% 강하다."
   };
+  /* ── 거울에서만 더 얹는 결 (mirrorAdd) ──────────────────────────
+   *  본편 이야기에서는 안 하고 거울에서만 하는 짓을 적습니다. 위의 칸들을
+   *  그대로 덧씌우므로 어떤 기믹이든 적을 수 있습니다.
+   *
+   *  원대한이 그렇습니다(사용자 지침 2026-11-14) — 1장의 그 자리에서는 회피와
+   *  강타만 쓰고, 광역 선공은 **어려움과 거울에서만** 합니다. 어려움 쪽은
+   *  data/hard.js 의 HARD_STEPS.<장>.foes 가 같은 꼴로 맡습니다. */
+  /* id 는 «열쇠 글자» 입니다 — 사본은 FOES[id] 쪽입니다(2026-11-14 에 이걸로 한 번 틀렸습니다) */
+  if (f.mirrorAdd) for (const key in f.mirrorAdd) FOES[id][key] = f.mirrorAdd[key];
   return id;
 }
 

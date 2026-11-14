@@ -935,6 +935,32 @@
 
   /* ── 배정에서 ★★★ 이 나왔을 때 ──────────
    *  결과를 펼치기 전에 화면이 한 번 크게 빛납니다. */
+  /* ── 어려움 난이도 (data/hard.js) ────────────────────
+   *  운전석의 토글과, 어려움이 있는 장 카드의 붉은 빛입니다. */
+  .slot.hardtoggle{cursor:pointer;}
+  .slot.hardtoggle.on{border-color:var(--red);background:linear-gradient(90deg,#241214,var(--panel) 70%);}
+  .slot.hardtoggle.on .nm{color:#ff9a90;}
+  .slot.hardtoggle.lockd{opacity:.5;cursor:default;}
+  .slot.hardon{border-color:#8a2b2b;background:linear-gradient(90deg,#1f1113,var(--panel) 72%);}
+  .slot.hardon .nm{color:#ff9a90;}
+  .slot.hardon.harddone{border-color:var(--red);}
+  .slot.hardnone{opacity:.45;cursor:default;}
+  /* 상점 알림 — 줄이 많아 창이 길어지므로 칸을 바짝 붙입니다(사용자 지침 2026-11-14).
+   * 여기서만 좁힙니다 — 다른 창의 .slot 은 누르는 칸이라 지금 크기를 지켜야 합니다. */
+  .noticebody .nthead{margin:10px 0 4px;color:var(--text);font-weight:700;}
+  .noticebody .grid.one{gap:4px;}
+  .noticebody .grid.one .slot{padding:6px 10px;}
+  /* 어려움에 할 것이 남았는데 일반으로 보고 있을 때 — 받을 우편(.rwready)과 같은 결로
+   * 테두리가 천천히 점멸합니다. 색만 난이도의 붉은빛입니다(사용자 지침 2026-11-14). */
+  .slot.hardtoggle.hardcall{animation:hardcall 1.4s ease-in-out infinite;}
+  @keyframes hardcall{
+    0%,100%{border-color:var(--line-2);box-shadow:none;}
+    50%{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 0 12px var(--red);}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .slot.hardtoggle.hardcall{animation:none;box-shadow:0 0 0 1px var(--red);}
+  }
+
   .flashfx{
     position:fixed;inset:0;z-index:40;pointer-events:none;
     display:flex;align-items:center;justify-content:center;
@@ -1899,24 +1925,25 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.28.15"></script>
-<script src="data/vault.js?v=2.28.15"></script>
-<script src="data/characters.js?v=2.28.15"></script>
-<script src="data/skills.js?v=2.28.15"></script>
-<script src="data/allies.js?v=2.28.15"></script>
-<script src="data/gifts.js?v=2.28.15"></script>
-<script src="data/pickup.js?v=2.28.15"></script>
-<script src="data/achievements.js?v=2.28.15"></script>
-<script src="data/mail.js?v=2.28.15"></script>
-<script src="data/notice.js?v=2.28.15"></script>
-<script src="data/patch.js?v=2.28.15"></script>
-<script src="data/event.js?v=2.28.15"></script>
-<script src="data/reward.js?v=2.28.15"></script>
-<script src="data/tutorial.js?v=2.28.15"></script>
-<script src="data/foes.js?v=2.28.15"></script>
-<script src="data/story.js?v=2.28.15"></script>
-<script src="data/mirrorpacks.js?v=2.28.15"></script>
-<script src="engine.js?v=2.28.15"></script>
+<script src="data/access.js?v=2.29.4"></script>
+<script src="data/vault.js?v=2.29.4"></script>
+<script src="data/characters.js?v=2.29.4"></script>
+<script src="data/skills.js?v=2.29.4"></script>
+<script src="data/allies.js?v=2.29.4"></script>
+<script src="data/gifts.js?v=2.29.4"></script>
+<script src="data/pickup.js?v=2.29.4"></script>
+  <script src="data/hard.js?v=2.29.4"></script>
+<script src="data/achievements.js?v=2.29.4"></script>
+<script src="data/mail.js?v=2.29.4"></script>
+<script src="data/notice.js?v=2.29.4"></script>
+<script src="data/patch.js?v=2.29.4"></script>
+<script src="data/event.js?v=2.29.4"></script>
+<script src="data/reward.js?v=2.29.4"></script>
+<script src="data/tutorial.js?v=2.29.4"></script>
+<script src="data/foes.js?v=2.29.4"></script>
+<script src="data/story.js?v=2.29.4"></script>
+<script src="data/mirrorpacks.js?v=2.29.4"></script>
+<script src="engine.js?v=2.29.4"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

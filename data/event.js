@@ -27,6 +27,10 @@
  *    그 장이 실제로 서기 전까지는 아무 일도 일어나지 않습니다.
  *
  *  ■ 기간 (우편함과 «같은 방식» 입니다 — 기기 시계를 봅니다)
+ *      now    true 를 달면 «맨 마지막 장이 아니어도» 그 기간 동안 이 이벤트가 섭니다.
+ *             복각처럼 이미 있는 장을 고쳐 쓴 판에 씁니다 — 기본은 맨 마지막 장 몫만
+ *             서는데, 복각은 장을 맨 뒤에 붙이지 않아 영영 안 잡힙니다.
+ *             기간이 끝나면 저절로 맨 마지막 장 몫으로 되돌아갑니다.
  *      from   시작한 날. "2026-08-29" 꼴입니다. 안 적으면 기한이 없습니다.
  *      days   며칠 동안. 안 적으면 아래 EVENT_RULE.days.
  *    기간이 지나면 상점 맨 위의 교환소 손잡이가 «사라집니다». 이미 모아 둔
@@ -260,6 +264,45 @@ const EVENTS = [
       { id: "norigae_id_siyun",   name: "성시윤 — 제3발톱 작은형님",
         cost: 300, limit: 1,
         give: { id: { who: "seong_siyun", star: 3, title: "제3발톱 작은형님" } } }
+    ]
+  },
+  {
+    id:      "gene",                       /* 보관함에 남는 열쇠 — 바꾸지 마십시오 */
+    chapter: "공식 설정에 속하지 못하는",   /* data/story.js 의 1장 title 과 같아야 합니다 */
+    cur:     "유전자",
+    desc:    "섞느라 덜어낸 것. 지하실에 아직 남아 있었다.",
+    line:    "순수하지 않은 것일수록, 많이 남는다.",
+    banner:  "assets/scene/구C사 지하실.jpg",
+    /* 1장은 «맨 마지막 장» 이 아닙니다 — 복각이라 장을 맨 뒤에 붙이지 않았으니까요.
+     * now 가 없으면 curEvent() 가 영영 이것을 못 잡습니다(2026-11-14 에 그랬습니다). */
+    now:     true,
+    from:    "2026-11-14",                 /* 복각이 나간 날 */
+    days:    14,
+    /* 원고 «울티마/안킬로라노돈/타나콘다/구C사를 편성하면 추가 획득».
+     * bonusTag 로 제 대상을 직접 적습니다 — 안 적으면 «맨 앞 특정 배정» 을 보는데,
+     * 그건 배정 차례에 매여 있어 배정을 하나 얹으면 말없이 딴 데로 갑니다. */
+    bonusTag: ["울티마", "안킬로라노돈", "타나콘다", "구C사"],
+    goods: [
+      { id: "gene_box_select", name: "인격 파편 상자 (선택) 10개",
+        cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
+      { id: "gene_box_random", name: "인격 파편 상자 (무작위) 5개",
+        cost: 10, limit: 30, give: { fragBoxRandom: 5 } },
+      { id: "gene_cap",        name: "엔케팔린 캡슐 1개",
+        cost: 10, limit: 6,  give: { enkCap: 1 } },
+      /* 지질망치 — 원고 «지질망치도 이제 이벤트 교환소에서 교환 가능».
+       * 열쇠는 **digBrush** 입니다. brush 라고 적었더니 엔진이 모르는 말이라
+       * 아이콘도 안 뜨고 사도 안 들어왔습니다(2026-11-14). */
+      { id: "gene_brush",      name: "지질망치 5개",
+        cost: 10, limit: 20, give: { digBrush: 5 } },
+      { id: "gene_money",      name: "원고료 5",
+        cost: 1,  limit: 0,  give: { money: 5 } },
+      /* 인격 둘 — 한 번씩만. 이미 지녔으면 파편으로 돌려받습니다(교환소 규칙 그대로) */
+      { id: "gene_id_hanbeom", name: "이한범 — 구C사 연구원",
+        cost: 150, limit: 1,
+        give: { id: { who: "lee_hanbeom", star: 2, title: "구C사 연구원" } } },
+      { id: "gene_id_duhyeon", name: "김두현 — 개화 E.G.O :: 궁극의 도마뱀",
+        cost: 300, limit: 1,
+        give: { id: { who: "kim_duhyeon", star: 3, title: "개화 E.G.O :: 궁극의 도마뱀" } } }
     ]
   }
 ];

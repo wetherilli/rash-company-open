@@ -193,7 +193,9 @@ const MIRROR_PACKS = [
     foes: ["csa_fraud", "unknown_squad", "kim_junseong"],
     perk: { name: "쥐어진 광신", desc: "김태성이 광신 3을 얻는다.", effect: { kills: 3 } } },
   { id: "pack02", name: "저녁을 방해하는 자들", bg: "assets/scene/K사 앞.jpg",
-    foes: ["csa_grunt", "ramen_twisted", "won_daehan"],
+    /* 1장 복각 — 원대한이 섰던 자리를 꿰뚫는 혀로 갈았습니다. 원대한은 이제 어비스
+     * 전용 팩 「지하실의 혼종」에서만 만납니다(업적 「포장지 덜 뜯었는데?」가 그 길입니다). */
+    foes: ["csa_grunt", "ramen_twisted", "piercing_tongue"],
     perk: { name: "식지 않은 참깨라면", desc: "전투에 이겼을 때의 회복이 25%에서 40%로 는다.", effect: { winHeal: 0.40 } } },
   { id: "pack03", name: "축제를 망치는 자", bg: "assets/scene/공룡의날 광장.jpg",
     foes: ["hwangjeo_phantasm", "viper_twisted", "hwangjeo"],
@@ -294,5 +296,10 @@ const MIRROR_PACKS = [
   { id: "deep03", name: "방과 후의 교무실", deepOnly: true, bg: "assets/scene/신해수랜드 교장실.jpg",
     foes: ["hyeolgwi", "baksangwon", "shinhaesu_principal"],
     perk: { name: "보건실 열쇠", desc: "공격할 때마다 자기 최대 체력의 6%를 회복하고, 전투에 이기면 60%를 회복한다.",
-            effect: { hitHeal: 0.06, winHeal: 0.60 } } }
+            effect: { hitHeal: 0.06, winHeal: 0.60 } } },
+  /* 어비스 전용 — 심층 4·5층 갈림길에만 섭니다. 1장의 셋이 그대로 올라왔습니다. */
+  { id: "deep_csa", name: "지하실의 혼종", deepOnly: true, bg: "assets/scene/구C사 지하실.jpg",
+    foes: ["csa_grunt", "piercing_tongue", "won_daehan"],
+    perk: { name: "덜 뜯은 포장지", desc: "고유 능력을 쓸 때마다 전원이 최대 체력의 8%를 회복한다.",
+            effect: { uniqueHeal: 0.08 } } }
 ];
