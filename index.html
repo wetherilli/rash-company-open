@@ -2,12 +2,19 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 확대 막기 (사용자 지침 2026-11-14) — 손가락으로 벌리거나 두 번 눌러 화면이 커지면 단추가 밖으로 밀려납니다.
+     maximum-scale=1 은 입력칸을 누를 때 iOS 가 저절로 확대하는 것도 막습니다. iOS 사파리는 user-scalable 을
+     무시하므로 아래 html,body 의 touch-action 과 맨 아래 gesturestart 막기가 함께 맡습니다. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>라슈 컴퍼니</title>
 <!-- 탭 아이콘 — 단체 로고를 도트로 옮긴 것 (tools/아이콘-도안.js 「라슈 컴퍼니」) -->
 <!-- 고른 색 테마를 «그리기 전에» 붙입니다 — engine.js 를 기다리면 기본 색이 잠깐 번쩍입니다.
      열쇠·이름은 engine.js 의 PALETTE_KEY · PALETTES 와 같아야 합니다. -->
 <script>
+  /* iOS 사파리의 손가락 확대 — viewport 의 user-scalable 을 듣지 않아 여기서 막습니다 */
+  ["gesturestart", "gesturechange", "gestureend"].forEach(function (t) {
+    document.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false });
+  });
   try { var p = localStorage.getItem("rash_company_palette_v1");
         if (p && /^[a-z]+$/.test(p) && p !== "ink") document.documentElement.setAttribute("data-palette", p);
         /* 밝은 테마 — engine.js PALETTES 의 light: true 와 같게 */
@@ -104,6 +111,7 @@
     margin:0;padding:0;background:var(--bg);color:var(--text-2);
     font-family:var(--font-ui);
     font-size:15px;line-height:1.75;
+    touch-action:pan-x pan-y;   /* 밀어 넘기기만 — 손가락 확대 · 두 번 눌러 확대를 막습니다(맨 위 viewport 주석) */
   }
   #app{max-width:960px;margin:0 auto;padding:14px 14px 40px;}
 
@@ -1925,25 +1933,25 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.29.6"></script>
-<script src="data/vault.js?v=2.29.6"></script>
-<script src="data/characters.js?v=2.29.6"></script>
-<script src="data/skills.js?v=2.29.6"></script>
-<script src="data/allies.js?v=2.29.6"></script>
-<script src="data/gifts.js?v=2.29.6"></script>
-<script src="data/pickup.js?v=2.29.6"></script>
-  <script src="data/hard.js?v=2.29.6"></script>
-<script src="data/achievements.js?v=2.29.6"></script>
-<script src="data/mail.js?v=2.29.6"></script>
-<script src="data/notice.js?v=2.29.6"></script>
-<script src="data/patch.js?v=2.29.6"></script>
-<script src="data/event.js?v=2.29.6"></script>
-<script src="data/reward.js?v=2.29.6"></script>
-<script src="data/tutorial.js?v=2.29.6"></script>
-<script src="data/foes.js?v=2.29.6"></script>
-<script src="data/story.js?v=2.29.6"></script>
-<script src="data/mirrorpacks.js?v=2.29.6"></script>
-<script src="engine.js?v=2.29.6"></script>
+<script src="data/access.js?v=2.29.7"></script>
+<script src="data/vault.js?v=2.29.7"></script>
+<script src="data/characters.js?v=2.29.7"></script>
+<script src="data/skills.js?v=2.29.7"></script>
+<script src="data/allies.js?v=2.29.7"></script>
+<script src="data/gifts.js?v=2.29.7"></script>
+<script src="data/pickup.js?v=2.29.7"></script>
+  <script src="data/hard.js?v=2.29.7"></script>
+<script src="data/achievements.js?v=2.29.7"></script>
+<script src="data/mail.js?v=2.29.7"></script>
+<script src="data/notice.js?v=2.29.7"></script>
+<script src="data/patch.js?v=2.29.7"></script>
+<script src="data/event.js?v=2.29.7"></script>
+<script src="data/reward.js?v=2.29.7"></script>
+<script src="data/tutorial.js?v=2.29.7"></script>
+<script src="data/foes.js?v=2.29.7"></script>
+<script src="data/story.js?v=2.29.7"></script>
+<script src="data/mirrorpacks.js?v=2.29.7"></script>
+<script src="engine.js?v=2.29.7"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

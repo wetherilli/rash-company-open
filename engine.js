@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.6";
+const VERSION = "2.29.7";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4209,6 +4209,11 @@ function stageCut() {
     im.onerror = function () { this.style.display = "none"; };
     CUT_EL.appendChild(im);
     CUT_KEY = CUR_CUT.src;
+  } else {
+    /* 같은 컷신을 다시 붙일 때는 들어오는 연출(cutIn — 투명에서 밝아짐)을 끕니다.
+     * DOM 을 떼었다 붙이면 CSS 애니메이션이 처음부터 다시 돌아, 같은 DOM 을 지켜도
+     * 초상이 설 때마다 컷신이 한 번 사라졌다 밝아졌습니다(v2.29.5 에서 남은 번쩍임). */
+    CUT_EL.style.animation = "none";
   }
   CUT_EL.firstChild.alt = CUR_CUT.tag || "";
   box.appendChild(CUT_EL);          // 맨 나중에 = 맨 위에 (배경 · 적 · 초상 · 지명을 덮습니다)
@@ -19693,31 +19698,33 @@ function deepOpen() {
  *
  *  fields 는 mirrorFoeCopy 가 옮겨 적는 칸 그대로입니다. 그림(aoeImg · counterImg · rageImg)은
  *  빌리지 않습니다 — 빌려 온 짓을 할 때 빌려 준 적의 그림이 뜨면 안 됩니다.
- *  대사는 빌려 준 쪽의 것을 그대로 씁니다. «다른 것의 목소리가 섞여 나오는» 것이 이 갈래의 결입니다. */
+ *  대사는 빌려 오지 않습니다(사용자 지침 2026-11-14) — 빌려 입은 쪽의 말투(예삿말 · 존대 · 괴수)로
+ *  data/mirrorpacks.js 의 DEEP_MIX_LINES 에서 고릅니다. 알림 줄(…Warn · takeHit)도 안 빌려
+ *  엔진의 기본 알림이 섭니다. 아래 lines 가 그 칸들입니다(fields 에서 빠지고 여기서 채웁니다). */
 const DEEP_MIX_KINDS = [
   { key: "aoe",      name: "광역",       on: "aoeEvery",
-    fields: ["aoeEvery", "aoeFrom", "aoeLine", "aoeWarn"] },
+    fields: ["aoeEvery", "aoeFrom"] },
   { key: "heal",     name: "회복",       on: "healEvery",
-    fields: ["healEvery", "healFrom", "healAtk", "healLine", "healWarn"] },
+    fields: ["healEvery", "healFrom", "healAtk"] },
   { key: "counter",  name: "되받아치기", on: "counterEvery",
-    fields: ["counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn"] },
+    fields: ["counterEvery", "counterFrom", "counterMult"] },
   { key: "evade",    name: "회피",       on: "evadeEvery",
-    fields: ["evadeEvery", "evadeFrom", "evadeLine", "evadeWarn"] },
+    fields: ["evadeEvery", "evadeFrom"] },
   { key: "first",    name: "선공",       on: "firstEvery",
-    fields: ["firstEvery", "firstFrom", "firstHeavy", "firstLine", "firstWarn"] },
+    fields: ["firstEvery", "firstFrom", "firstHeavy"] },
   { key: "firstAoe", name: "선공 광역",  on: "firstAoeEvery",
-    fields: ["firstAoeEvery", "firstAoeFrom", "firstAoeLine", "firstAoeWarn"] },
+    fields: ["firstAoeEvery", "firstAoeFrom"] },
   { key: "take",     name: "데려가기",   on: "takeEvery",
-    fields: ["takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit"] },
+    fields: ["takeEvery", "takeFrom", "takeOnce"] },
   { key: "break",    name: "버티기 깨기", on: "breakEvery",
-    fields: ["breakEvery", "breakFrom", "breakMult", "breakSplash", "breakLine", "breakWarn"] },
+    fields: ["breakEvery", "breakFrom", "breakMult", "breakSplash"] },
   { key: "ramp",     name: "몰아친다",   on: "rampEvery",
-    fields: ["rampEvery", "rampPct", "rampMax", "rampLine"] },
-  /* 격분은 광역 주기(rageAoeEvery)가 aoeLine 을 읽으므로 그 대사도 함께 빌립니다
-   * (제가 광역을 이미 가졌으면 제 것을 그대로 둡니다 — deepMixApply) */
+    fields: ["rampEvery", "rampPct", "rampMax"] },
+  /* 격분은 광역 주기(rageAoeEvery)가 aoeLine 을 읽으므로 광역 대사도 말투대로 채웁니다
+   * (제가 광역 대사를 이미 가졌으면 제 것을 그대로 둡니다 — deepMixApply) */
   { key: "rage",     name: "격분",       on: "rageAt",
-    fields: ["rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn"],
-    keepOwn: ["aoeLine", "aoeWarn"] }
+    fields: ["rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct"],
+    alsoLine: "aoe" }
 ];
 function deepMixDonors(floor) {
   const out = [];
@@ -19761,6 +19768,16 @@ function deepMixText(list) {
     return (kind ? kind.name : k) + "(" + ((FOES[d] && FOES[d].name) || d) + ")";
   }).join(" · ");
 }
+/* 그 적의 말투(예삿말 · 존대 · 괴수)와 그 말투의 기본 대사 — data/mirrorpacks.js */
+function deepMixVoice(src) {
+  const v = (typeof DEEP_MIX_VOICE !== "undefined" && DEEP_MIX_VOICE) || {};
+  for (const k in v) if ((v[k] || []).indexOf(src) >= 0) return k;
+  return "예삿말";
+}
+function deepMixLines(src) {
+  const t = (typeof DEEP_MIX_LINES !== "undefined" && DEEP_MIX_LINES) || {};
+  return t[deepMixVoice(src)] || t["예삿말"] || {};
+}
 /* 지어 둔 사본(FOES[id])에 빌린 칸을 덧입힙니다 */
 function deepMixApply(id, list) {
   const f = FOES[id];
@@ -19769,7 +19786,12 @@ function deepMixApply(id, list) {
     const kind = deepMixKind(k), src = FOES[d];
     if (!kind || !src) return;
     kind.fields.forEach(x => { if (src[x] != null) f[x] = src[x]; });
-    (kind.keepOwn || []).forEach(x => { if (!f[x] && src[x] != null) f[x] = src[x]; });
+    /* 대사 — 빌려 준 쪽 것이 아니라 제 말투의 기본 대사(DEEP_MIX_LINES). 제 것이 있으면 둡니다. */
+    const lines = deepMixLines(f.src || id);
+    const line = k => k === "first" ? "firstLine" : k === "firstAoe" ? "firstAoeLine" : k + "Line";
+    if (lines[kind.key] && !f[line(kind.key)]) f[line(kind.key)] = lines[kind.key].slice();
+    if (kind.alsoLine && lines[kind.alsoLine] && !f[line(kind.alsoLine)])
+      f[line(kind.alsoLine)] = lines[kind.alsoLine].slice();
   });
   /* 기믹은 전부 «보스일 때만» 섭니다(beginTurn 의 b.boss). 잡졸이 빌려 입으면 보스 판정을 주되
    * 강타는 막습니다 — 빌린 짓만 하고, 3턴 강타까지 얹지는 않습니다. */
