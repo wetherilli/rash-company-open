@@ -294,7 +294,7 @@ const EVENTS = [
        * 열쇠는 **digBrush** 입니다. brush 라고 적었더니 엔진이 모르는 말이라
        * 아이콘도 안 뜨고 사도 안 들어왔습니다(2026-11-14). */
       { id: "gene_brush",      name: "지질망치 5개",
-        cost: 10, limit: 20, give: { digBrush: 5 } },
+        cost: 10, limit: 3,  give: { digBrush: 5 } },   /* 20 → 3회 (사용자 지침 2026-11-14 — 지질망치를 크게 줄이며) */
       { id: "gene_money",      name: "원고료 5",
         cost: 1,  limit: 0,  give: { money: 5 } },
       /* 인격 둘 — 한 번씩만. 이미 지녔으면 파편으로 돌려받습니다(교환소 규칙 그대로) */
