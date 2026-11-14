@@ -359,6 +359,7 @@ const MIRROR_PACKS = [
   /* 어비스 전용 — 심층 4·5층 갈림길에만 섭니다. 1장의 셋이 그대로 올라왔습니다. */
   { id: "deep_csa", name: "지하실의 혼종", deepOnly: true, bg: "assets/scene/구C사 지하실.jpg",
     foes: ["csa_grunt", "piercing_tongue", "won_daehan"],
-    perk: { name: "덜 뜯은 포장지", desc: "고유 능력을 쓸 때마다 전원이 최대 체력의 8%를 회복한다.",
-            effect: { uniqueHeal: 0.08 } } }
+    /* 절반 · 강화면 가득(사용자 지침 2026-11-14). 강화는 ×1.5 셈을 안 타고 enhEffect 가 덮습니다 */
+    perk: { name: "덜 뜯은 포장지", desc: "고유 능력을 쓸 때마다 전원이 최대 체력의 50%를 회복한다.",
+            effect: { uniqueHeal: 0.5 }, enhEffect: { uniqueHeal: 1 } } }
 ];

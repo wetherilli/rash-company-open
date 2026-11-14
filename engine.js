@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.7";
+const VERSION = "2.29.8";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2783,10 +2783,17 @@ function eventGainWithBonus(base) {
 /* 실제로 넣어 주고 화면에 한 줄 적습니다. 넣은 값을 돌려줍니다.
  * 이벤트가 서 있지 않거나 기간이 끝났으면 아무것도 하지 않습니다 —
  * 쓸 곳(교환소)이 닫힌 뒤에 모아 봐야 쓸 데가 없기 때문입니다. */
-function gainEvent(base) {
+function gainEvent(base, cards) {
   if (!openEvent() || !base) return 0;
   const g = eventGainWithBonus(base);
   addEvent(g.total);
+  /* cards 를 넘기면 글줄 대신 카드 한 장으로 얹습니다(장 완료 몫 — chapterEnd) */
+  if (cards) {
+    cards.push(gainCard(eventCurName(), eventCurName(),
+      g.n ? "이벤트 재화　·　" + eventLatestPickup().name + " 인격 " + g.n + "명 — " + (eventRule().bonusPct * g.n) + "% 더" : "이벤트 재화",
+      0, g.total));
+    return g.total;
+  }
   say(eventCurName() + " " + g.total + " 획득." +
       (g.n ? "　(" + eventLatestPickup().name + " 인격 " + g.n + "명 — " +
              (eventRule().bonusPct * g.n) + "% 더 받았다)" : ""), "gain");
@@ -4073,6 +4080,49 @@ function divider() {
   const d = document.createElement("div");
   d.className = "divider";
   $log.appendChild(d);
+}
+/* ── 받은 것을 기록칸 안의 카드로 (사용자 지침 2026-11-14) ─────────────
+ *  업적 보상 · 이야기 도중(인격 · 교육위원 · 황금교본) · 장을 마친 몫 · 거울 던전 완주 몫을
+ *  이벤트 교환소의 물건 줄과 같은 꼴로 늘어놓습니다 — 왼쪽 끝 아이콘 칸, 가운데 이름 · 설명,
+ *  오른쪽 끝에 받은 수. **누르는 칸이 아닙니다** — 손잡이도 hover 도 없습니다(.gaincards).
+ *  cards — [{ ic: 아이콘 이름, star, nm: 이름, sub: 아랫줄, amt: 받은 수(없으면 비움) }]. */
+function gainCard(ic, nm, sub, star, amt) {
+  return { ic: ic || null, nm: nm, sub: sub || "", star: star || 0, amt: amt == null ? null : amt };
+}
+function sayGainCards(cards, head) {
+  cards = (cards || []).filter(Boolean);
+  if (!cards.length) return;
+  const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const box = document.createElement("div");
+  box.className = "gaincards";
+  box.innerHTML = (head ? '<div class="gchead">' + esc(head) + '</div>' : '') +
+    '<div class="gclist">' + cards.map(c =>
+      '<div class="achrow gainrow">' +
+        (c.ic ? iconHTML(c.ic, { star: c.star }) : '<span class="ic txt"></span>') +
+        '<div class="body"><div class="nm">' + esc(c.nm) + '</div>' +
+          (c.sub ? '<div class="sub">' + esc(c.sub) + '</div>' : '') + '</div>' +
+        (c.amt != null ? '<div class="rw"><div class="cost">' +
+           (typeof c.amt === "number" ? "+" + c.amt.toLocaleString("ko-KR") : esc(c.amt)) + '</div></div>' : '') +
+      '</div>').join('') +
+    '</div>';
+  $log.appendChild(box);
+  $log.scrollTop = $log.scrollHeight;
+}
+/* 자주 쓰는 몫의 카드 */
+function moneyCard(n, sub)  { return gainCard("원고료", CURRENCY, sub || "", 0, n); }
+function codexCard(n, sub)  { return gainCard("황금교본", "황금교본", sub || "", 0, n); }
+function fragBoxCard(n, sub) { return gainCard("인격 파편 상자 (선택)", "인격 파편 상자(선택)", sub || "", 0, n); }
+function idCard(who, id, sub) {
+  return gainCard(memberIconName(who), id.title + " " + SINNERS[who].name, stars(id.star) + " 인격" + (sub ? "　·　" + sub : ""), id.star);
+}
+function fragCard(who, n, sub) {
+  return gainCard("인격 파편 - " + SINNERS[who].name, SINNERS[who].name + " 인격 파편", sub || "", 0, n);
+}
+function advisorCard(a, sub) {
+  return gainCard(advisorIconName(a), a.title + " " + a.name, stars(a.star) + " 보조 교육위원" + (sub ? "　·　" + sub : ""), a.star);
+}
+function supportCard(sp, sub) {
+  return gainCard(supportIconName(sp), sp.title + " " + sp.name, stars(sp.star) + " 지원 작성위원" + (sub ? "　·　" + sub : ""), sp.star);
 }
 /* 유리창에 서 있는가 — 머리줄의 [우편함] · [보상] 아이콘은 유리창에서만 섭니다(renderHeader).
  * glass() 가 켜고, 다른 화면으로 넘어갈 때 부르는 clearLog() 가 끕니다. */
@@ -5964,7 +6014,7 @@ function play(s) {
         say("황금교본은 이미 이 손을 거쳐 갔다.", "sys");
       } else {
         S.codex += 1;
-        say("황금교본을 확보했다.  (보유 " + S.codex + ")", "gain");
+        sayGainCards([codexCard(1, "보유 " + S.codex)], "획득");
         saveVault();
       }
       render();
@@ -6041,11 +6091,11 @@ function grant(who, star, title) {
     } else {
       const rf = dupRefund(star);
       addFrag(who, rf);
-      say("이미 가진 인격이다. " + fragName(who) + " " + rf + " 획득.  (보유 " + fragCount(who) + ")", "sys");
+      sayGainCards([fragCard(who, rf, "이미 가진 인격　·　보유 " + fragCount(who))], "획득");
     }
   } else {
     S.owned[key] = true;
-    say("인격 획득 — " + stars(star) + " " + title + " " + s.name, "gain");
+    sayGainCards([idCard(who, id)], "인격 획득");
     if (id.note) say("(" + id.note + ")", "sys");
     if (!S.equip[who] || (idByKey(S.equip[who]) || {}).star < star) {
       S.equip[who] = key;
@@ -7747,6 +7797,8 @@ function checkAchievements(foeName, cleared) {
     if (a.desc) say(a.desc, "sys");
 
     const g = a.give || {};
+    /* 받은 것은 카드로 모아 한 번에 세우고(sayGainCards), 설명 줄은 그 아래에 둡니다 */
+    const cards = [], notes = [];
     /* 인격 — 우편·이벤트와 «똑같은» 자리를 씁니다(eventGiveId/eventGiveApply).
      * give.id 는 { who, star, title } 로 적습니다. 숨은 인격(hidden)도
      * 여기서 넣어 줍니다 — 그때부터 노트·장착 화면에 보이기 시작합니다. */
@@ -7761,12 +7813,12 @@ function checkAchievements(foeName, cleared) {
             S.equip[p.who] = p.key;
             equipHp(p.who);
           }
-          say("인격 획득 — " + stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name, "gain");
-          if (p.id.note) say("(" + p.id.note + ")", "sys");
+          cards.push(idCard(p.who, p.id));
+          if (p.id.note) notes.push("(" + p.id.note + ")");
         } else {
           const n = dupRefund(p.id.star);
           addFrag(p.who, n);
-          say("이미 지닌 인격이라 " + SINNERS[p.who].name + " 인격 파편 " + n + "개를 받았습니다.", "gain");
+          cards.push(fragCard(p.who, n, "이미 지닌 「" + p.id.title + "」"));
         }
       } else say("(보상 인격을 찾지 못했습니다: " +
                  [g.id.who, g.id.star, g.id.title].join(" / ") + ")", "todo");
@@ -7779,11 +7831,11 @@ function checkAchievements(foeName, cleared) {
         if (!S.advisorsOwned) S.advisorsOwned = {};
         if (S.advisorsOwned[g.advisor]) {
           S.codex += dupRefund(ad.star);
-          say("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권을 받았습니다.", "gain");
+          cards.push(codexCard(dupRefund(ad.star), "이미 함께하는 교육위원"));
         } else {
           S.advisorsOwned[g.advisor] = true;
-          say("보조 교육위원 합류 — " + stars(ad.star) + " " + ad.title + " " + ad.name, "gain");
-          if (ad.desc) say("(" + ad.desc + ")", "sys");
+          cards.push(advisorCard(ad));
+          if (ad.desc) notes.push("(" + ad.desc + ")");
         }
       } else say("(보상 교육위원을 찾지 못했습니다: " + g.advisor + ")", "todo");
     }
@@ -7792,21 +7844,17 @@ function checkAchievements(foeName, cleared) {
       if (sp) {
         if (!S.supportsOwned) S.supportsOwned = {};
         S.supportsOwned[SUP_PREFIX + g.support] = true;
-        say("지원 작성위원 합류 — " + stars(sp.star) + " " + sp.title + " " + sp.name, "gain");
-        if (sp.note) say("(" + sp.note + ")", "sys");
+        cards.push(supportCard(sp));
+        if (sp.note) notes.push("(" + sp.note + ")");
       } else say("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")", "todo");
     }
     /* E.G.O 기프트 — 이름으로. 우편과 같은 자리(giveApply)를 씁니다 — 이미 지녔으면 원고료로 (8장 업적 기프트) */
-    if (g.gift) giveApply({ gift: g.gift }).forEach(t => say(t + " 획득.", "gain"));
-    if (g.money) { S.money += g.money; say(CURRENCY + " " + g.money + " 획득.", "gain"); }
-    if (g.codex) { S.codex += g.codex; say("황금교본 " + g.codex + "권 획득.", "gain"); }
-    if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket);
-      say("보조 교육위원 선택권 " + g.advisorTicket + "개 획득.", "gain"); }
-    if (g.giftTicket) { addPickTicket("gift", g.giftTicket);
-      say("E.G.O 기프트 선택권 " + g.giftTicket + "개 획득.", "gain"); }
-    if (g.syncModule) { addSyncModule(g.syncModule);
-      say(SYNC_MODULE.name + " " + g.syncModule + "개 획득.", "gain"); }
-    if (g.event) { addEvent(g.event); say(eventCurName() + " " + g.event + " 획득.", "gain"); }
+    /* 그 밖의 몫 — 기프트 · 원고료 · 황금교본 · 선택권 · 모듈 · 이벤트 재화는 우편과 같은 자리(giveApply) */
+    const rest = {};
+    ["gift", "money", "codex", "advisorTicket", "giftTicket", "syncModule", "event"].forEach(k => { if (g[k]) rest[k] = g[k]; });
+    if (Object.keys(rest).length) giveApply(rest).cards.forEach(c => cards.push(c));
+    sayGainCards(cards, "업적 보상");
+    notes.forEach(t => say(t, "sys"));
     saveVault();
   });
 }
@@ -8947,12 +8995,12 @@ function chapterEnd() {
   const groupDone = !!gid && isLastPart(c);
   const firstGroup = groupDone && !S.cleared[gid];
   if (hstep && gid && groupDone) S.clearedHard[gid] = true;
+  /* 장을 마쳐 받는 몫 — 카드로 모아 한 번에 세웁니다(sayGainCards). 아래 «처음 마쳤을 때» 알림보다 먼저 */
+  const endCards = [];
   /* 어려움 첫 완주 삯 — 두 번째부터는 없습니다 */
-  if (hardFirst && hstep.firstReward) {
-    divider();
-    say("── " + hardRule().name + " 첫 완주 ──", "place");
-    say(giveApply(hstep.firstReward).join(" · ") + " 획득.", "gain");
-  }
+  if (hardFirst && hstep.firstReward)
+    giveApply(hstep.firstReward).cards.forEach(c => {
+      c.sub = hardRule().name + " 첫 완주" + (c.sub ? "　·　" + c.sub : ""); endCards.push(c); });
   if (groupDone) {
     S.cleared[gid] = true;
     say("── " + groupMeta(gid).no + " 종료 ──", "place");
@@ -8964,7 +9012,7 @@ function chapterEnd() {
             : (gid && !groupDone) ? 0 : RULE.clearPay;
   if ((first || hardFirst) && pay > 0) {
     S.money += pay;
-    say((groupDone ? groupMeta(gid).no : c.no) + "을 마친 삯 — " + CURRENCY + " " + pay + " 획득.", "gain");
+    endCards.unshift(moneyCard(pay, (groupDone ? groupMeta(gid).no : c.no) + "을 마친 삯"));
   }
   /* 처음 마쳤을 때만 — 화면이 금빛으로 빛나고 기둥이 솟습니다(v2.28.14). 다시 마칠 때는 기록칸 줄만.
    * **어려움으로 처음 마치는 것도 «처음»** 입니다(사용자 지침 2026-11-14) — 일반으로 이미
@@ -8976,7 +9024,7 @@ function chapterEnd() {
   }
   /* 이벤트 재화 — 원고료와 달리 «다시 마쳐도» 들어옵니다 (적게).
    * 맨 마지막 장이면 더 많이 줍니다. 얹어 주는 몫은 gainEvent 가 셈합니다. */
-  gainEvent(eventStoryGain(c, first || hardFirst));
+  gainEvent(eventStoryGain(c, first || hardFirst), endCards);
   /* 화석 탐사 — 장을 «처음» 마칠 때 지질망치. 탐사가 이 장으로 처음 열리면
    * digSync 가 첫 몫(brushStart)만 줍니다 — 이 장의 초회 몫은 따로 얹지 않습니다. */
   if (first && digOpen()) {
@@ -8984,8 +9032,9 @@ function chapterEnd() {
     const before = fresh ? 0 : digState().brush;
     const d = digSync();
     if (!fresh) d.brush += DIG_RULE.brushStory;
-    say(DIG_BRUSH + " " + (d.brush - before) + " 획득.  (보유 " + d.brush + ")", "gain");
+    endCards.push(gainCard("지질망치", DIG_BRUSH, "보유 " + d.brush, 0, d.brush - before));
   }
+  sayGainCards(endCards, "장 완료 보상");
   saveVault();
   save();
   Cloud.push().catch(() => {});   // 장을 마쳤으니 구름에도 — 못 올리면 다음 기회에
@@ -12757,7 +12806,9 @@ function openRail3Lost(rule, k) {
         S.money += p.money;
         addFragBox("select", p.frag);
         if (p.module) addSyncModule(p.module);
-        say("【" + p.name + "　" + railScaleText(p.k) + "】 " + rail3PrizeText(p), "gain");
+        sayGainCards([moneyCard(p.money), fragBoxCard(p.frag)]
+          .concat(p.module ? [gainCard("동기화 모듈", SYNC_MODULE.name, "", 0, p.module)] : []),
+          p.name + "　" + railScaleText(p.k));
       });
       if (받을것.length > 1)
         say("아직 안 받아 둔 아래 배수의 삯까지 한꺼번에 나왔다.", "sys");
@@ -14396,7 +14447,7 @@ function railFork(rule, cycle) {
  *
  *  packIds — 테마팩 갈래에서 이번 판에 고른 팩 id 목록(순서대로).
  *  거울굴절철도 등 팩이 없는 갈래는 null 을 넘깁니다. */
-function mirrorRecordBuild(rule, packIds) {
+function mirrorRecordBuild(rule, packIds, enhIds) {
   const party = S.party.map(w => {
     if (!w) return null;
     const id = idByKey(S.equip[w]);
@@ -14426,8 +14477,11 @@ function mirrorRecordBuild(rule, packIds) {
    * packs · perks 는 복사용 글과 옛 기록을 위해 그대로 둡니다. */
   const packCards = (packIds || []).map(id => {
     const p = MIRROR_PACKS.find(x => x.id === id);
-    return { name: p ? p.name : id,
-             perk: (p && p.perk) ? { name: p.perk.name, desc: p.perk.desc } : null };
+    /* 강화로 넘은 팩(어비스)은 「뒤섞인 …」 이름과 강화된 특전 글로 — 예전에는 원래 글로 남았습니다(v2.29.8) */
+    const enh = !!(p && (enhIds || []).indexOf(id) >= 0);
+    const k = p ? deepPerkOf(p, enh) : null;
+    return { name: p ? (enh ? deepEnhName(p) : p.name) : id,
+             perk: k ? { name: k.name, desc: k.desc } : null };
   });
   return {
     at: Date.now(),
@@ -14597,6 +14651,43 @@ function openMirrorResult(rec) {
   document.getElementById("mrExit").onclick = () => { closeModal(); glass(); };
 }
 
+/* ── 기록칸 안의 결과 카드 (사용자 지침 2026-11-14) ────────────────────
+ *  예전에는 복사용 글(mirrorRecordText)을 <pre> 한 덩이로 띄웠습니다. 이제 결과 카드 화면
+ *  (openMirrorResult)을 줄인 꼴로 — 머리(갈래 · 턴) · 편성 · 기프트 · 교육위원 · 고른 테마팩을
+ *  아이콘 딱지로 늘어놓습니다. 누르는 칸이 아닙니다. 복사용 글은 [결과 카드 복사] 가 그대로 씁니다. */
+function sayMirrorCard(rec) {
+  const esc = t => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const chip = (ic, nm, sub, star) =>
+    '<span class="mlchip">' + (ic ? iconHTML(ic, { star: star }) : '') +
+      '<span class="mltx"><b>' + esc(nm) + '</b>' + (sub ? '<i>' + esc(sub) + '</i>' : '') + '</span></span>';
+  const row = (label, inner) => inner ? '<div class="mlrow"><div class="mllabel">' + label + '</div><div class="mlchips">' + inner + '</div></div>' : '';
+  const party = (rec.party || []).filter(Boolean).map(w =>
+    chip(w.ic || null, w.name, (w.star ? stars(w.star) + " " : "") + (w.title || "") + (w.sync ? "　+" + w.sync + "단계" : ""))).join('');
+  const gifts = (rec.gifts || []).map(g => { const now = giftById(g.name);
+    return chip(now ? now.name : g.name, g.name, "", g.star || (now && now.star)); }).join('');
+  const advs = (rec.advisors || []).map(a => {
+    const ad = advisorList().find(x => x.name === a.name && x.title === a.title);
+    return chip(ad ? advisorIconName(ad) : null, a.title + " " + a.name, a.star ? stars(a.star) : ""); }).join('');
+  const packs = (rec.packCards || []).map((c, i) =>
+    chip(c.perk ? c.perk.name : null, (i + 1) + ". " + c.name, c.perk ? "특전 「" + c.perk.name + "」" : "")).join('');
+  const syn = (rec.synergies || []).length ? esc(rec.synergies.join(" · ")) : "";
+  const pick = mirrorPickText(rec);
+  const stats = [rec.turns + "턴"]
+    .concat(rec.cycles ? [rec.cycles + "순환"] : [])
+    .concat(rec.fallen != null ? ["내린 사람 " + rec.fallen + "명"] : [])
+    .concat(rec.railK != null ? ["운행 " + railScaleText(rec.railK) + " · 지나친 역 " + (rec.skips || 0)] : []);
+  const box = document.createElement("div");
+  box.className = "mirlog";
+  box.innerHTML =
+    '<div class="mlhead"><span class="mlname">' + esc(rec.name) + ' 클리어</span>' +
+      '<span class="mlstat">' + stats.map(esc).join('<span class="mldot">·</span>') + '</span></div>' +
+    row("편성", party) + row("기프트", gifts) + row("교육위원", advs) + row("테마팩", packs) +
+    (syn ? '<div class="mlrow"><div class="mllabel">시너지</div><div class="mlline">' + syn + '</div></div>' : '') +
+    (pick && !(rec.packCards || []).length ? '<div class="mlrow"><div class="mllabel">특전</div><div class="mlline">' + esc(pick) + '</div></div>' : '') +
+    '<div class="mlfoot">v' + esc(rec.ver) + '　' + esc(mirrorRecordDateText(rec.at)) + '</div>';
+  $log.appendChild(box);
+  $log.scrollTop = $log.scrollHeight;
+}
 /* 로그에 결과 카드를 한 덩이로 띄웁니다 — say() 와 달리 줄바꿈을 그대로 살립니다 */
 function sayCard(text) {
   const el = document.createElement("pre");
@@ -14643,6 +14734,9 @@ function mirrorClear() {
    * 먼저 빼 둡니다. case "mirrorPackDone" 이 마지막 팩까지 실어 둔 것입니다. */
   const clearedPackIds = (rule.packRounds && S.railSave && S.railSave.key === rule.key)
     ? (S.railSave.clearedPacks || []) : null;
+  /* 어비스 — 강화로 넘은 팩. 결과 카드가 강화된 특전 글로 보이게 함께 떠 둡니다 */
+  const clearedEnh = (rule.deep && S.railSave && S.railSave.key === rule.key)
+    ? (S.railSave.enh || []).slice() : [];
   /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — 임시 데이터라
    * 여기서 지웁니다(saveVault() 는 이 함수 뒤 어디선가 자연히 한 번 더 돌아
    * 보관함에도 반영됩니다). */
@@ -14671,33 +14765,37 @@ function mirrorClear() {
 
   /* 원고료는 «처음 완주할 때만» 나옵니다. 고정값이라 earn() 을 타지 않으므로,
    * 들머리 칸에 적힌 수가 그대로 들어옵니다. */
+  /* 받는 몫은 카드로 모아 한 번에 세웁니다(sayGainCards — 사용자 지침 2026-11-14) */
+  const clearCards = [];
+  let clearNote = null;
   if (rule.bonus) {
     if (firstRun) {
       S.money += 몫(rule.bonus);
-      say("처음 완주한 삯 — " + CURRENCY + " " + 몫(rule.bonus) + " 획득.", "gain");
+      clearCards.push(moneyCard(몫(rule.bonus), "처음 완주한 삯"));
     } else {
-      say(CURRENCY + "는 처음 완주할 때만 나온다.", "sys");
+      clearNote = CURRENCY + "는 처음 완주할 때만 나온다.";
     }
   }
   if (rule.codex) {
     S.codex += 몫(rule.codex);
-    say("비친 것들이 남기고 간 황금교본 " + 몫(rule.codex) + "권.  (보유 " + S.codex + ")", "gain");
+    clearCards.push(codexCard(몫(rule.codex), "비친 것들이 남기고 간 것　·　보유 " + S.codex));
   }
   /* 인격 파편 상자(선택) — 돌 때마다 받는 몫입니다. 갈래마다 다릅니다. */
   if (rule.fragBoxSelect) {
     addFragBox("select", 몫(rule.fragBoxSelect));
-    say("인격 파편 상자(선택) " + 몫(rule.fragBoxSelect) + "개 획득.  (보유 " +
-        fragBoxCount("select") + "개)", "gain");
+    clearCards.push(fragBoxCard(몫(rule.fragBoxSelect), "보유 " + fragBoxCount("select")));
   }
   /* 이벤트 재화 — 갈래마다 다릅니다. 각 MIRROR_TIERS 줄의 event 를 봅니다. */
-  gainEvent(몫(rule.event));
+  gainEvent(몫(rule.event), clearCards);
   /* 화석 탐사 — 거울 완주마다 지질망치(다시 돌아도). 행운의 부적은 곱하지 않습니다. */
   const digN = digMirrorBrush(rule);
   if (digN > 0 && digOpen()) {
     const d = digSync();
     d.brush += digN;
-    say(DIG_BRUSH + " " + digN + " 획득.  (보유 " + d.brush + ")", "gain");
+    clearCards.push(gainCard("지질망치", DIG_BRUSH, "보유 " + d.brush, 0, digN));
   }
+  sayGainCards(clearCards, rule.name + " 완주 보상");
+  if (clearNote) say(clearNote, "sys");
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
@@ -14706,7 +14804,7 @@ function mirrorClear() {
    * 같고, 남는 개수(pushMirrorRecord 의 slice(0,3))도 함께 셉니다.
    * S.rail2 를 지우기 전에(바로 아래) 만들어야 순환 수·특전을 읽을 수 있습니다. */
   const record = (rule.group === "rail" || rule.packRounds)
-    ? mirrorRecordBuild(rule, clearedPackIds) : null;
+    ? mirrorRecordBuild(rule, clearedPackIds, clearedEnh) : null;
   if (record) pushMirrorRecord(record);
   saveVault();
   Cloud.push().catch(() => {});   // 거울을 마쳤으니 구름에도
@@ -14722,7 +14820,7 @@ function mirrorClear() {
   S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
   MIRROR = null;
   S.ended = true;
-  if (record) { divider(); sayCard(mirrorRecordText(record)); }
+  if (record) { divider(); sayMirrorCard(record); }
   render();
   const again = enkCount() >= rule.cost;
   const clearButtons = [
@@ -15026,15 +15124,18 @@ function mailWasted(m) {
 function giveApply(g) {
   g = g || {};
   const got = [];
-  if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); }
-  if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); }
-  if (g.event) { addEvent(g.event); got.push(eventCurName() + " " + g.event); }
-  if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); }
-  if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); }
-  if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
-  if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
-  if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
-  if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); }
+  /* 카드 — 기록칸에 카드로 보일 때(sayGainCards) 씁니다. 글줄(got)과 같은 차례입니다 */
+  const cards = got.cards = [];
+  const C = (ic, nm, sub, star, amt) => cards.push(gainCard(ic, nm, sub, star, amt));
+  if (g.money) { S.money += g.money; got.push(CURRENCY + " " + g.money); cards.push(moneyCard(g.money)); }
+  if (g.codex) { S.codex += g.codex; got.push("황금교본 " + g.codex + "권"); cards.push(codexCard(g.codex)); }
+  if (g.event) { addEvent(g.event); got.push(eventCurName() + " " + g.event); C(eventCurName(), eventCurName(), "이벤트 재화", 0, g.event); }
+  if (g.fragBoxSelect) { addFragBox("select", g.fragBoxSelect); got.push("인격 파편 상자(선택) " + g.fragBoxSelect + "개"); cards.push(fragBoxCard(g.fragBoxSelect)); }
+  if (g.fragBoxRandom) { addFragBox("random", g.fragBoxRandom); got.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개"); C("인격 파편 상자 (무작위)", "인격 파편 상자(무작위)", "", 0, g.fragBoxRandom); }
+  if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); C("엔케팔린 캡슐", ENK_CAPSULE.name, "", 0, g.enkCap); }
+  if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); C("보조 교육위원 선택권", "보조 교육위원 선택권", "", 0, g.advisorTicket); }
+  if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); C("E.G.O 기프트 선택권", "E.G.O 기프트 선택권", "", 0, g.giftTicket); }
+  if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); C("동기화 모듈", SYNC_MODULE.name, "", 0, g.syncModule); }
   /* 지질망치 — 탐사가 아직 안 열렸으면(첫 몫을 안 받았으면) bank 에 맡겨 두고, 처음 열 때 digSync 가 함께 줍니다.
    * brush 를 null 에서 숫자로 바꿔 버리면 «처음 열 때 받는 첫 몫(brushStart)» 이 사라집니다. */
   if (g.digBrush) {
@@ -15042,13 +15143,14 @@ function giveApply(g) {
     if (d.brush == null) d.bank = (d.bank || 0) + g.digBrush;
     else d.brush += g.digBrush;
     got.push(DIG_BRUSH + " " + g.digBrush + "개");
+    C("지질망치", DIG_BRUSH, "", 0, g.digBrush);
   }
   if (g.advisor) {
     const ad = advisorById(g.advisor);
     if (ad) {
       if (!S.advisorsOwned) S.advisorsOwned = {};
-      if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); }
-      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); }
+      if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); cards.push(codexCard(dupRefund(ad.star), "이미 함께하는 교육위원")); }
+      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); cards.push(advisorCard(ad)); }
     }
   }
   /* E.G.O 기프트 — 이름으로 적습니다. 이미 지녔으면 상점 배정에서 겹쳤을 때와
@@ -15060,10 +15162,12 @@ function giveApply(g) {
       if (S.giftsOwned[giftId(gf)]) {
         S.money += dupRefund(gf.star);
         got.push("이미 지닌 기프트라 " + CURRENCY + " " + dupRefund(gf.star));
+        cards.push(moneyCard(dupRefund(gf.star), "이미 지닌 기프트 「" + gf.name + "」"));
       } else {
         S.giftsOwned[giftId(gf)] = true;
         if (!giftOnList().length) { S.giftOn = [giftId(gf)]; S.gift = giftId(gf); }
         got.push("E.G.O 기프트 " + stars(gf.star) + " " + gf.name);
+        C(gf.name, gf.name, stars(gf.star) + " E.G.O 기프트", gf.star);
       }
     } else got.push("(기프트를 찾지 못했습니다: " + g.gift + ")");
   }
@@ -15074,6 +15178,7 @@ function giveApply(g) {
     const n = enkCount() - before;
     got.push(ENK_RULE.name + " " + n +
              (n < g.enk ? " (상한 " + ENK_RULE.max + " 을 넘겨 받지는 못했습니다)" : ""));
+    C("엔케팔린", ENK_RULE.name, n < g.enk ? "상한 " + ENK_RULE.max + " 을 넘겨 받지 못함" : "", 0, n);
   }
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
@@ -15081,6 +15186,7 @@ function giveApply(g) {
       if (!S.supportsOwned) S.supportsOwned = {};
       S.supportsOwned[SUP_PREFIX + g.support] = true;
       got.push("지원 작성위원 " + stars(sp.star) + " " + sp.title + " " + sp.name);
+      cards.push(supportCard(sp));
     } else got.push("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")");
   }
   return got;
@@ -15950,7 +16056,7 @@ function grantAdvisor(s) {
   if (S.advisorsOwned[k]) { say("이미 함께하고 있는 교육위원이다.", "sys"); return; }
   S.advisorsOwned[k] = true;
   if (!advisorOnList().length) { S.advisorOn = [k]; S.advisor = k; }
-  say("보조 교육위원 합류 — " + stars(a.star) + " " + a.title + " " + a.name, "gain");
+  sayGainCards([advisorCard(a)], "보조 교육위원 합류");
   if (a.flavor) say("“" + a.flavor + "”", "d");
   say(a.desc, "sys");
   saveVault(); render();
@@ -19569,7 +19675,12 @@ function deepEnhancePerk(k) {
   if (!k) return k;
   if (_deepEnhCache[k.name]) return _deepEnhCache[k.name];
   const m = DEEP_ENH_PERK.mult, plus = DEEP_ENH_PERK.plus;
-  const r = v => v < 0.1 ? Math.round(v * 100) / 100 : Math.round(v * 20) / 20;
+  /* 0.05 단위로 맞추되, 그러다 «강화가 깎이면» 0.01 단위로 둡니다 — 「덜 뜯은 포장지」 8% × 1.5 = 12% 가
+   * 10% 로 내려앉아 반밖에 안 오르던 것(v2.29.8). 0.1 아래는 예전대로 0.01 단위입니다. */
+  const r = v => {
+    const q = Math.round(v * 20) / 20;
+    return (v < 0.1 || q < v - 0.005) ? Math.round(v * 100) / 100 : q;
+  };
   const e0 = k.effect || {}, e = {};
   Object.keys(e0).forEach(x => {
     const v = e0[x];
@@ -19593,6 +19704,8 @@ function deepEnhancePerk(k) {
     else e[x] = v;
   });
   if (e.manageFull && !e.manageMax) e.manageMax = plus;   // 이미 가득 차는 특전은 칸을 하나 더
+  /* 팩이 강화 값을 손수 적었으면 그것이 이깁니다 — 「덜 뜯은 포장지」 50% → 강화 100%(사용자 지침 2026-11-14) */
+  if (k.enhEffect) Object.assign(e, k.enhEffect);
   const o = { name: k.name, desc: deepPerkText(e), effect: e, enhanced: true };
   _deepEnhCache[k.name] = o;
   return o;
@@ -19639,6 +19752,9 @@ function deepPerkText(e) {
   if (e.winHeal)      L.push("전투에 이기면 체력 " + pc(e.winHeal) + " 회복");
   if (e.healEvery)    L.push(e.healEvery + "턴마다 전원이 체력 " + pc(e.healRatio || 0) + " 회복");
   if (e.hitHeal)      L.push("공격할 때마다 자기 최대 체력의 " + pc(e.hitHeal) + " 회복");
+  /* 「덜 뜯은 포장지」(1장 복각) — 이 줄이 없어 강화된 특전 글이 «【강화】 .» 로 비어 있었습니다(v2.29.8) */
+  if (e.uniqueHeal)   L.push(e.uniqueHeal >= 1 ? "고유 능력을 쓸 때마다 전원의 체력이 가득 참"
+                                           : "고유 능력을 쓸 때마다 전원이 최대 체력의 " + pc(e.uniqueHeal) + " 회복");
   if (e.aoeCut)       L.push("광역 공격으로 받는 피해 -" + pc(e.aoeCut));
   if (e.aoeGuardCut)  L.push("광역 공격에 방어를 고르면 그 피해를 " + pc(e.aoeGuardCut) + " 더 줄임");
   if (e.firstCut)     L.push("적의 선공으로 받는 피해 -" + pc(e.firstCut));
@@ -19818,13 +19934,14 @@ SCENE_EXT.deepPackDone = function (s) {
   say((deepIsDeepFloor(floor) ? "어비스 " : "") + floor + "층을 넘었다.", "good");
   S.codex += DEEP_PAY.codex;
   addFragBox("select", DEEP_PAY.fragBox);
-  say("황금교본 " + DEEP_PAY.codex + "권 · 인격 파편 상자(선택) " + DEEP_PAY.fragBox + "개.", "gain");
+  const floorCards = [codexCard(DEEP_PAY.codex, "보유 " + S.codex), fragBoxCard(DEEP_PAY.fragBox, "보유 " + fragBoxCount("select"))];
   if (!S.mirrorDone) S.mirrorDone = {};
   if (!S.mirrorDone[deepKey(floor)]) {
     S.mirrorDone[deepKey(floor)] = true;
     S.money += DEEP_PAY.firstMoney;
-    say("처음 닿은 깊이 — " + CURRENCY + " " + DEEP_PAY.firstMoney + " 획득.", "gain");
+    floorCards.unshift(moneyCard(DEEP_PAY.firstMoney, "처음 닿은 깊이"));
   }
+  sayGainCards(floorCards, floor + "층 보상");
   /* 업적 「거울에 비친 철도」 — 어비스에서 넘긴 거울굴절철도 팩을 판을 넘어 셉니다 */
   if (packDone && packDone.railOnly) {
     S.mirrorDone["mirrorDeep:rail:" + packDone.id] = true;
