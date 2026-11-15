@@ -190,7 +190,11 @@ const DEEP_MIX_COUNT = { upper: 1, deep: 2 };
  *    존대    -습니다 · -요 로 말하는 사람(집사 · 보건선생님 · 기록관 · 교장 …)
  *    괴수    말하지 않는 것 — 울음 · 소리만
  *  줄마다 배열이면 그중 하나가 무작위로 나옵니다. 기믹 key 는 engine.js 의 DEEP_MIX_KINDS 와 같습니다
- *  (ramp 는 대사 없이 알림 줄만 있어 여기 없습니다). */
+ *  (ramp 는 대사 없이 알림 줄만 있어 여기 없습니다).
+ *
+ *  stagger · staggerEnd — 흐트러짐(engine.js STAGGER_RULE, 사용자 지침 2026-11-15). 빌려 입는 기믹이 아니라
+ *  «모든 적» 이 씁니다 — 흐트러질 때(stagger) · 페이즈가 바뀌어 흐트러짐이 풀릴 때(staggerEnd).
+ *  적에 staggerLine · staggerEndLine 을 적으면 그것이 이깁니다. 새로 들어오는 적은 제 대사를 따로 적습니다. */
 const DEEP_MIX_LINES = {
   예삿말: {
     aoe:      ["한꺼번에 쓸어 주지.", "전부 엎드려라.", "다 같이 쓰러져라."],
@@ -201,7 +205,9 @@ const DEEP_MIX_LINES = {
     firstAoe: ["손쓸 틈은 없어.", "먼저 다 쓸어 버리지."],
     take:     ["너, 이리 와.", "하나는 데려가야겠어."],
     break:    ["웅크린다고 버틸 것 같아?", "숨어 봐야 소용없어."],
-    rage:     ["이제 장난은 끝이다.", "…가만 안 둬."]
+    rage:     ["이제 장난은 끝이다.", "…가만 안 둬."],
+    stagger:    ["켁!", "제길…", "크윽, 이게…!", "윽… 다리가…"],
+    staggerEnd: ["다시 해봐.", "이제부터가 진짜다.", "어림없지."]
   },
   존대: {
     aoe:      ["모두 함께 받으시지요.", "한 분도 빠짐없이요."],
@@ -212,7 +218,9 @@ const DEEP_MIX_LINES = {
     firstAoe: ["손쓰실 틈은 드리지 않겠습니다.", "먼저, 모두 정리하겠습니다."],
     take:     ["한 분만 모셔 가겠습니다.", "이쪽으로 오시지요."],
     break:    ["웅크리신다고 버티실 수는 없습니다.", "숨으셔도 소용없습니다."],
-    rage:     ["…이제 사양하지 않겠습니다.", "더는 참지 않겠습니다."]
+    rage:     ["…이제 사양하지 않겠습니다.", "더는 참지 않겠습니다."],
+    stagger:    ["아프군요.", "…이런.", "제법이시군요…", "윽… 실례했습니다."],
+    staggerEnd: ["추태를 보였군요.", "다시 가겠습니다.", "이번에는 실수하지 않겠습니다."]
   },
   괴수: {
     aoe:      ["크아아아—!", "쿠오오오오!"],
@@ -223,7 +231,9 @@ const DEEP_MIX_LINES = {
     firstAoe: ["크아아아아앙—!", "쿠오오오—!"],
     take:     ["그르르르…", "캬아악—!"],
     break:    ["쿠웅—!", "크오오!"],
-    rage:     ["크아아아아아아—!!", "쿠오오오오오!!!"]
+    rage:     ["크아아아아아아—!!", "쿠오오오오오!!!"],
+    stagger:    ["끼에엑!", "크르륵…!", "쿠어…", "캬앙—!"],
+    staggerEnd: ["크아앙!", "쿠오오오…!", "그르르르르—!"]
   }
 };
 /* 적 열쇠(FOES) → 말투. 여기 없는 적은 예삿말입니다.
@@ -235,7 +245,10 @@ const DEEP_MIX_VOICE = {
          "deathleaper", "monarch_a", "monarch_b", "tanaconda",
          "kevin",            /* 제 강타 대사가 사람 말 같은 것은 내레이션이 섞인 것 — 빌려 입는 것은 울음으로 */
          "zombie_horde", "ju3pino", "hyeolgwi", "rail3_locust", "rail3_therizino",
-         "rodan_toy", "giganotosaurus", "mutadon", "rail4_quetzal", "rail4_dirrex"]
+         "rodan_toy", "giganotosaurus", "mutadon", "rail4_quetzal", "rail4_dirrex",
+         /* 흐트러짐 대사가 모든 적에게 서면서 더한 몫(2026-11-15) — 우는 것 · 실기 시험의 같은 것 */
+         "monarch_c", "tanaconda_shadow",
+         "ju3pino_test", "rail3_locust_test", "rail3_therizino_test"]
 };
 /* 강화 선택지의 특전 — 비율은 이만큼 곱하고, 횟수·칸은 1 더합니다(deepEnhancePerk) */
 const DEEP_ENH_PERK = { mult: 1.5, plus: 1 };

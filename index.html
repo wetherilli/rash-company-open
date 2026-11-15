@@ -163,6 +163,22 @@
     font-style:normal;font-weight:700;font-size:10.5px;letter-spacing:.02em;
     vertical-align:1px;white-space:nowrap;
   }
+  /* 흐트러짐 · 흐트선 (engine.js STAGGER_RULE, 2026-11-15)
+   *  흐트선 — 적 체력바 위의 금빛 눈금. 쓴 선은 흐리게.
+   *  흐트러진 동안 — 바가 회색이 되고, 이름 옆에 「흐트러짐」 딱지. */
+  #foehp .hpbar{position:relative;}
+  #foehp .hpbar .stgline{
+    position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;
+    background:var(--gold);box-shadow:0 0 0 1px rgba(0,0,0,.55);
+  }
+  #foehp .hpbar .stgline.used{opacity:.28;}
+  #foehp.stg .hpbar i, body.battling #foehp.stg .hpbar i{background:#8b8794;}
+  #foehp .stgtag{
+    display:inline-block;margin-left:6px;padding:1px 6px;border-radius:3px;
+    border:1px solid #6e6a76;background:#2a2830;color:#e6e2ea;
+    font-style:normal;font-weight:800;font-size:10.5px;letter-spacing:.06em;
+    vertical-align:1px;white-space:nowrap;
+  }
   /* 배경 한 겹, 그 위에 사람 한 겹 */
   .scenebox{position:relative;height:var(--stageh);overflow:hidden;background:var(--bg);}
   .scenebox img.scene{
@@ -269,6 +285,29 @@
                 0 5px 0 #231603, 0 0 24px rgba(240,196,106,.9);
   }
   .scenebox .dmgfx .tag{display:block;font-size:.3em;font-weight:800;letter-spacing:.24em;margin-bottom:3px;}
+  /* 흐트러진 적 — 그림을 회색으로 가라앉히고, 그 위에 「흐트러짐」 을 피해 숫자와 같은 글씨로 띄워 둡니다.
+   * 자리는 engine.js staggerSync 가 그림을 재서 박습니다. 흐트러짐이 풀릴 때까지 떠 있습니다. */
+  .scenebox .figwrap.mid img{transition:filter .25s;}
+  .scenebox .figwrap.mid.stg img{filter:grayscale(1) brightness(.62) drop-shadow(0 5px 12px rgba(0,0,0,.6));}
+  .scenebox .stgfx{
+    position:absolute;z-index:5;pointer-events:none;white-space:nowrap;text-align:center;
+    font-family:var(--font-ui);font-weight:900;font-size:32px;line-height:1;letter-spacing:.02em;
+    color:#f1eee8;
+    /* 테두리는 살짝 주황 — 회색으로 가라앉은 그림 위에서 글자가 떠 보이게 (사용자 지침 2026-11-15) */
+    text-shadow:-2px -2px 0 #8a4318, 2px -2px 0 #8a4318, -2px 2px 0 #8a4318, 2px 2px 0 #8a4318,
+                0 4px 0 #3d1c08, 0 0 16px rgba(232,138,60,.55);
+    transform:translate(-50%,-50%) rotate(-5deg);
+    animation:stgfxIn 520ms cubic-bezier(.2,.8,.3,1) both, stgfxBob 2.4s ease-in-out 520ms infinite;
+  }
+  @keyframes stgfxIn{
+    0%  {opacity:0;transform:translate(-50%,-50%) rotate(-5deg) scale(1.8);}
+    40% {opacity:1;transform:translate(-50%,-50%) rotate(-5deg) scale(.92);}
+    100%{opacity:1;transform:translate(-50%,-50%) rotate(-5deg) scale(1);}
+  }
+  @keyframes stgfxBob{
+    0%,100%{transform:translate(-50%,-50%) rotate(-5deg);}
+    50%    {transform:translate(-50%,-56%) rotate(-5deg);}
+  }
   @keyframes dmgfx{
     0%  {opacity:0;transform:translate(-50%,-50%) scale(1.9);}
     12% {opacity:1;transform:translate(-50%,-50%) scale(.9);}
@@ -1694,6 +1733,7 @@
     /* 큰 피해 숫자도 무대가 낮아진 만큼 줄입니다 */
     .scenebox .dmgfx{font-size:34px;}
     .scenebox .dmgfx.crit{font-size:42px;}
+    .scenebox .stgfx{font-size:23px;}
     .allyhit{font-size:22px;}
     .allyhit.heavy{font-size:28px;}
     .allyhit.miss{font-size:18px;}
@@ -1971,25 +2011,25 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.29.11"></script>
-<script src="data/vault.js?v=2.29.11"></script>
-<script src="data/characters.js?v=2.29.11"></script>
-<script src="data/skills.js?v=2.29.11"></script>
-<script src="data/allies.js?v=2.29.11"></script>
-<script src="data/gifts.js?v=2.29.11"></script>
-<script src="data/pickup.js?v=2.29.11"></script>
-  <script src="data/hard.js?v=2.29.11"></script>
-<script src="data/achievements.js?v=2.29.11"></script>
-<script src="data/mail.js?v=2.29.11"></script>
-<script src="data/notice.js?v=2.29.11"></script>
-<script src="data/patch.js?v=2.29.11"></script>
-<script src="data/event.js?v=2.29.11"></script>
-<script src="data/reward.js?v=2.29.11"></script>
-<script src="data/tutorial.js?v=2.29.11"></script>
-<script src="data/foes.js?v=2.29.11"></script>
-<script src="data/story.js?v=2.29.11"></script>
-<script src="data/mirrorpacks.js?v=2.29.11"></script>
-<script src="engine.js?v=2.29.11"></script>
+<script src="data/access.js?v=2.30.0"></script>
+<script src="data/vault.js?v=2.30.0"></script>
+<script src="data/characters.js?v=2.30.0"></script>
+<script src="data/skills.js?v=2.30.0"></script>
+<script src="data/allies.js?v=2.30.0"></script>
+<script src="data/gifts.js?v=2.30.0"></script>
+<script src="data/pickup.js?v=2.30.0"></script>
+  <script src="data/hard.js?v=2.30.0"></script>
+<script src="data/achievements.js?v=2.30.0"></script>
+<script src="data/mail.js?v=2.30.0"></script>
+<script src="data/notice.js?v=2.30.0"></script>
+<script src="data/patch.js?v=2.30.0"></script>
+<script src="data/event.js?v=2.30.0"></script>
+<script src="data/reward.js?v=2.30.0"></script>
+<script src="data/tutorial.js?v=2.30.0"></script>
+<script src="data/foes.js?v=2.30.0"></script>
+<script src="data/story.js?v=2.30.0"></script>
+<script src="data/mirrorpacks.js?v=2.30.0"></script>
+<script src="engine.js?v=2.30.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

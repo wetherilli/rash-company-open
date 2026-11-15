@@ -1555,7 +1555,8 @@ const CHAPTERS = [
   { t: "d", who: "kim_duhyeon", text: "저건 좀… 멋있는데." },
   { t: "flash", text: "그리고 그것이 내려앉았다. 목이 없는 것이 일어섰다.", fx: "land" },
   { t: "d", who: "마왕 이경원", text: "케빈. 손님이다." },
-  { t: "battle", foe: "kevin",
+  /* 흐트선은 50% 하나만 — 20% 자리에는 마왕이 끼어들고, 마왕은 흐트러지지 않습니다(사용자 지침 2026-11-15) */
+  { t: "battle", foe: "kevin", stagger: [0.5],
     joinIn: { at: 0.2, foe: "mawang_lee", heal: 0.3,
               text: "마왕 이경원이 칼을 뽑아 케빈의 등에 올라탄다. 둘이 한 몸으로 움직인다." } },
 

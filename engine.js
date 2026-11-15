@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.11";
+const VERSION = "2.30.0";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2313,6 +2313,8 @@ function foeTypeTable(b) {
 /* 한 대에 붙는 배율과 로그 꼬리 — { type, mult, tag } */
 function atkTypeHit(b, w) {
   const t = atkTypeOf(w);
+  /* 흐트러진 적 — 무엇으로 쳐도 약점입니다(내성도, 유형이 없는 것도) */
+  if (staggerOn(b)) return { type: t, mult: ATK_TYPE_RULE.weakMult * (1 + boonWeakDmg()), tag: " (흐트러짐)" };
   if (!t) return { type: null, mult: 1, tag: "" };
   const ft = foeTypeTable(b);
   /* 「불스아이」 가호 — 약점 피해를 그만큼 더(×1.5 → ×1.8) */
@@ -2320,6 +2322,134 @@ function atkTypeHit(b, w) {
   if (ft.resist.indexOf(t) >= 0) return { type: t, mult: ATK_TYPE_RULE.resistMult, tag: " (내성 · " + ATK_TYPES[t].name + ")" };
   return { type: t, mult: 1, tag: "" };
 }
+/* ── 흐트러짐 · 흐트선 (사용자 지침 2026-11-15, devlog/20261115_P03_stagger.md) ──────────
+ *  원작의 흐트러짐입니다. 적 체력을 «흐트선» 까지 깎으면 적이 흐트러집니다.
+ *
+ *  ■ 흐트선 — 체력 비율의 목록. 적(FOES)이나 전투 장면에 stagger: [0.5, 0.2] 처럼 적고,
+ *    안 적으면 잡졸은 STAGGER_RULE.mob, 보스는 STAGGER_RULE.boss. stagger: [] 면 흐트선이 없습니다.
+ *    선 하나는 한 번만 씁니다. 한 대로 둘을 넘으면 흐트러짐은 한 번이고, 흐트러진 동안 넘은 선은
+ *    쓴 것으로만 칩니다. 회복으로 선 위로 돌아와도 쓴 선은 되살아나지 않습니다.
+ *  ■ 흐트러지는 순간 — 아군의 한 대가 선을 넘긴 그 자리(staggerCheck). 그 뒤의 대부터 약점입니다.
+ *  ■ 흐트러진 동안 — «그 턴 + 다음 한 턴»(안 A — 원작과 같습니다).
+ *      · 적은 행동하지 않습니다 — 그 턴에 남은 적 차례(afterAllies)와, 다음 턴의 예고(강타 · 광역 · 회복 ·
+ *        선공 · 데려가기 · 되받아치기 · 버티기 깨기 · 회피 · 표적 고정)를 전부 지웁니다(beginTurn).
+ *      · 아군의 모든 공격이 약점으로 들어갑니다(atkTypeHit) — 내성도, 유형이 없는 것도.
+ *      · 턴 셈은 그대로 흐릅니다 — 주기로 오던 강타가 흐트러진 턴에 걸리면 그대로 사라집니다.
+ *  ■ 풀리는 때 — 다음 턴이 끝난 뒤의 턴 머리(자세를 바로잡는다), 또는 페이즈가 바뀔 때(checkPhase).
+ *  ■ 말 — 흐트러질 때 · 페이즈로 풀릴 때 한마디. 적에 staggerLine · staggerEndLine(글 또는 글의 배열)을
+ *    적으면 그것을, 안 적으면 말투(예삿말 · 존대 · 괴수 — DEEP_MIX_VOICE)의 기본 대사(DEEP_MIX_LINES 의
+ *    stagger · staggerEnd)를 씁니다. 새로 들어오는 적은 제 대사를 따로 적습니다(사용자 지침).
+ *  ■ hpMult — 흐트러짐이 들어가며 «모든 적» 의 체력을 함께 올렸습니다(사용자 지침 2026-11-15, ×1.2).
+ *    startBattleFight 가 장면 덮어쓰기 뒤 · 어려움 사다리 앞에서 곱합니다. 거울 · 철도도 같습니다
+ *    (표의 값 × 이 값). 도감의 체력도 같은 값을 곱해 적습니다(foeCodexStats).
+ */
+const STAGGER_RULE = {
+  mob:    [0.8],        // 잡졸 — 80% 에 하나
+  boss:   [0.5, 0.2],   // 보스 — 50% · 20%
+  hpMult: 1.2           // 모든 적 체력 — 흐트러짐과 함께 올린 몫
+};
+function foeSrcDef(b) {
+  const f = (b && FOES[b.id]) || {};
+  return (f.src && FOES[f.src]) || f;
+}
+/* 각본 · 설득 전투 — 흐트선을 얹지 않습니다(사용자 지침 2026-11-15). 이기는 길이 «적을 눕히기» 가 아니거나
+ * (설득 · 버티기 · 물러나기), 이야기가 정해 둔 흐름(각본 결말 · 마무리 일격 · 끊기)이 있는 자리입니다.
+ * 장면에 stagger 를 직접 적으면 그것이 이깁니다. */
+function staggerScripted(scene) {
+  return !!(scene && (scene.persuade || scene.lose === "story" || scene.storyFrom || scene.leaveTurn ||
+                      scene.finishAt || scene.spare));
+}
+/* 이 전투의 흐트선 — 장면 > (각본 · 설득이면 없음) > 적 > 거울 사본의 원본 > 기본값 */
+function staggerLinesFor(b, scene) {
+  const f = (b && FOES[b.id]) || {};
+  const src = foeSrcDef(b);
+  if (!(scene && scene.stagger) && staggerScripted(scene)) return [];
+  const raw = (scene && scene.stagger) || f.stagger || src.stagger ||
+              (b && b.boss ? STAGGER_RULE.boss : STAGGER_RULE.mob);
+  return (raw || []).filter(r => r > 0 && r < 1).slice().sort((x, y) => y - x);
+}
+function staggerOn(b) { return !!(b && b.stg && b.stg.on); }
+/* 흐트러질 때 · 페이즈로 풀릴 때의 한마디 — kind: "stagger" | "staggerEnd" */
+function staggerVoiceLine(b, kind) {
+  const f = (b && FOES[b.id]) || {}, src = foeSrcDef(b);
+  const key = kind + "Line";
+  let own = (b && b[key]) || f[key] || src[key];
+  if (!own) own = (deepMixLines(f.src || (b && b.id)) || {})[kind];
+  const list = [].concat(own || []).filter(Boolean);
+  return list.length ? list[rnd(list.length)] : "";
+}
+/* 적이 하는 말 한 줄 — 페이즈 대사(checkPhase)와 같은 꼴 */
+function foeSayLine(b, line) {
+  if (!line) return;
+  const w = document.createElement("p");
+  w.className = "who";
+  w.textContent = b.name;
+  $log.appendChild(w);
+  say(line, "d");
+}
+/* 아군의 한 대가 들어간 «뒤» 에 부릅니다 — 선을 넘겼으면 흐트러뜨립니다 */
+function staggerCheck(b) {
+  const g = b && b.stg;
+  if (!g || b.hp <= 0 || !g.lines.length) return false;
+  let crossed = false;
+  g.lines.forEach((r, i) => { if (!g.used[i] && b.hp <= b.maxhp * r) { g.used[i] = true; crossed = true; } });
+  if (!crossed) return false;
+  if (g.on) { renderFoeBar(); return false; }
+  g.on = true;
+  g.until = b.turn + 1;                 // 다음 턴이 끝날 때까지
+  shakeScreen(true);
+  foeSfx("stagger");
+  say("▶ " + withJosa(b.name, "이") + " 흐트러졌다!  다음 차례가 끝날 때까지 움직이지 못하고, 모든 공격을 약점으로 받는다.", "crit");
+  foeSayLine(b, staggerVoiceLine(b, "stagger"));
+  staggerSync();
+  renderFoeBar();
+  return true;
+}
+/* why: "time"(다음 턴이 지났다) | "phase"(페이즈가 바뀌었다) */
+function staggerEnd(b, why) {
+  const g = b && b.stg;
+  if (!g || !g.on) return;
+  g.on = false;
+  if (why === "phase") {
+    say("▷ " + withJosa(b.name, "이") + " 흐트러짐을 떨치고 일어선다.", "bad");
+    foeSayLine(b, staggerVoiceLine(b, "staggerEnd"));
+  } else say("▷ " + withJosa(b.name, "이") + " 자세를 바로잡았다.", "bad");
+  staggerSync();
+  renderFoeBar();
+}
+/* 무대 — 흐트러진 동안 적 그림을 회색으로, 그 위에 「흐트러짐」 글자(피해 숫자와 같은 글씨).
+ * 무대를 다시 그리지 않고 지금 있는 그림에 붙였다 뗍니다 — 다시 그리면 그림이 깜빡입니다. */
+function staggerSync() {
+  const box = document.querySelector(".scenebox");
+  if (!box) return;
+  const on = !!(S && staggerOn(S.battle));
+  const wrap = box.querySelector(".figwrap.mid");
+  if (wrap) wrap.classList.toggle("stg", on);
+  let tag = box.querySelector(".stgfx");
+  if (!on || !wrap) { if (tag) tag.remove(); return; }
+  if (!tag) {
+    tag = document.createElement("div");
+    tag.className = "stgfx";
+    tag.textContent = "흐트러짐";
+    box.appendChild(tag);
+  }
+  const place = () => {
+    const fig = document.getElementById("figure");
+    const br = box.getBoundingClientRect();
+    let x = br.width / 2, y = br.height * 0.5;
+    if (fig && fig.style.display !== "none") {
+      const fr = fig.getBoundingClientRect();
+      if (fr.width && fr.height) { x = fr.left - br.left + fr.width / 2; y = fr.top - br.top + fr.height * 0.45; }
+    }
+    y = Math.max(30, y);
+    tag.style.left = x + "px";
+    tag.style.top  = y + "px";
+  };
+  place();
+  const fig = document.getElementById("figure");
+  if (fig && !fig.complete) fig.addEventListener("load", place, { once: true });
+}
+
 /* 전투 첫 줄 · 적 카드에 적는 말 — 「약점 관통 · 내성 타격」. 둘 다 없으면 빈 글 */
 function foeTypeText(b) {
   const ft = foeTypeTable(b);
@@ -4265,6 +4395,7 @@ function renderStage() {
   $stage.innerHTML = html;
   stageWeather();
   stageCut();
+  staggerSync();          // 흐트러진 동안이면 회색 · 「흐트러짐」 글자를 다시 붙입니다
 }
 
 /* ── 컷신 한 장을 «같은 DOM 으로» 지킵니다 (사용자 지침 2026-11-14) ──
@@ -4531,7 +4662,10 @@ const FOE_SFX = {
   counter: "assets/sound/적 되받아치기.mp3",
   breaks:  "assets/sound/적 버티기 깨기.mp3",
   take:    "assets/sound/적 데려가기.mp3",
-  miss:    "assets/sound/적 빗나감.mp3"           // 교정 · 회피로 막았을 때 — 작게(missVol)
+  miss:    "assets/sound/적 빗나감.mp3",          // 교정 · 회피로 막았을 때 — 작게(missVol)
+  /* 흐트러질 때 — 유리가 깨지는 소리. 저장소에 원본이 없어 합성해 둔 잠정 소리입니다
+   * (tools/효과음-흐트러짐.py). 실제 녹음을 구하면 같은 이름의 파일만 바꾸면 됩니다. */
+  stagger: "assets/sound/흐트러짐.mp3"
 };
 const FOE_SFX_MISS_VOL = 0.6;    // 빗나감은 설정 크기의 0.6 배로
 function foeSfxList() {
@@ -5040,6 +5174,7 @@ function renderFoeBar() {
         '<div class="row"><span class="nm">　</span><span class="stat">공 0　방 0</span></div>' +
         (label ? '<span class="ghostlabel">' + label + '</span>' : '');
     } else { $foehp.classList.remove("on", "ghost"); $foehp.innerHTML = ""; }
+    $foehp.classList.remove("stg");
     return;
   }
   $foehp.classList.add("on");
@@ -5059,10 +5194,15 @@ function renderFoeBar() {
        (rl.no + " / " + rl.total + "번째")) +
       '　' + (rl.label || railScaleText(rl.k)) +
     '</i>';
+  /* 흐트선 — 체력바 위의 눈금. 쓴 선은 흐리게. 흐트러진 동안은 바 자체가 회색입니다 */
+  const g = b.stg || { lines: [], used: [] };
+  const 흐트선 = g.lines.map((r, i) =>
+    '<b class="stgline' + (g.used[i] ? ' used' : '') + '" style="left:' + (r * 100) + '%"></b>').join("");
+  $foehp.classList.toggle("stg", !!g.on);
   $foehp.innerHTML =
-    '<div class="hpbar"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="hpbar"><i style="width:' + pct + '%"></i>' + 흐트선 + '</div>' +
     '<div class="row">' +
-      '<span class="nm">' + b.name + 눈금 + '</span>' +
+      '<span class="nm">' + b.name + (g.on ? ' <i class="stgtag">흐트러짐</i>' : '') + 눈금 + '</span>' +
       '<span class="stat">공 ' + b.atk + '　방 ' + b.def + '</span>' +
     '</div>';
 }
@@ -6576,10 +6716,16 @@ function startBattleFight(scene, f) {
    "heavyRampPct", "heavyRampMax",
    "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn", "rageImg",
    "firstEvery", "firstFrom", "firstLine", "firstWarn", "firstHeavy",
-   "firstAoeEvery", "firstAoeFrom", "firstAoeFlat", "firstAoeLine", "firstAoeWarn"].forEach(k => {
+   "firstAoeEvery", "firstAoeFrom", "firstAoeFlat", "firstAoeLine", "firstAoeWarn",
+   "staggerLine", "staggerEndLine"].forEach(k => {
     if (scene[k] != null) S.battle[k] = scene[k];
   });
   if (scene.hp != null) S.battle.maxhp = scene.hp;
+  /* 흐트러짐과 함께 올린 체력(STAGGER_RULE.hpMult) — 장면 덮어쓰기 뒤, 어려움 사다리 앞 */
+  S.battle.hp    = Math.round(S.battle.hp    * STAGGER_RULE.hpMult);
+  S.battle.maxhp = Math.round(S.battle.maxhp * STAGGER_RULE.hpMult);
+  /* 흐트선 — staggerLinesFor 머리말 */
+  S.battle.stg = { lines: staggerLinesFor(S.battle, scene), used: [], on: false, until: 0 };
   /* 「몰아친다」(ramp)·「격분」(rage)이 공격력을 올려 쓰므로, 올리기 전의 값을
    * 따로 들고 있어야 합니다 — 매 턴 b.atk 를 다시 셈할 때 이 값에서 출발합니다.
    * 그러지 않으면 올린 값 위에 또 올려 눈덩이가 됩니다 (beginTurn 참고). */
@@ -6703,6 +6849,8 @@ function checkPhase(b) {
     $log.appendChild(w);
     say(ph.line, "d");
   }
+  /* 페이즈가 바뀌면 흐트러짐이 풀립니다 — 새 페이즈의 첫 행동은 지우지 않습니다(사용자 지침 2026-11-15) */
+  if (staggerOn(b)) staggerEnd(b, "phase");
 }
 
 /* ── 표적 고정 · 광역 배수 · 광역마다 공격 증가 (8장, 사용자 지침 2026-10-25) ──────
@@ -6804,6 +6952,8 @@ function beginTurn() {
    *
    *  광역·회복·되받아치기는 겨누는 데가 «전원»·«저 자신»·«그때 가 봐야 아는
    *  하나» 라 미리 노려지는 사람이 없습니다. 그래서 aim 을 비웁니다. */
+  /* 흐트러짐 — 다음 턴까지 쉬었으면 이 턴 머리에서 일어섭니다(staggerLinesFor 머리말) */
+  if (staggerOn(b) && b.turn > b.stg.until) staggerEnd(b, "time");
   checkPhase(b);                 // 페이즈 턱을 넘었으면 이 턴부터 기믹 묶음을 갈아 끼웁니다
   const fnow = foeDef(b);
   /* 주기는 페이즈에 들어선 턴부터 셉니다(checkPhase 머리말) — 페이즈가 없으면 전투 처음부터 */
@@ -6955,7 +7105,7 @@ function beginTurn() {
    *  선공 · 회피 턴에는 표적만 고정하고 강타는 하지 않습니다. */
   const lockTurns = b.lockTurns || fnow.lockTurns || 0;
   if (!lockTurns) b.lock = null;
-  else if (b.boss && b.aim && !b.take) {
+  else if (b.boss && b.aim && !b.take && !staggerOn(b)) {
     const L = b.lock;
     if (!L || L.left <= 0 || !alive(L.who) || S.party.indexOf(L.who) < 0) {
       const others = standing.filter(w => !L || w !== L.who);
@@ -6967,6 +7117,14 @@ function beginTurn() {
     b.aim = b.lock.who;
     b.lock.left--;
     b.heavy = !b.foeFirst && !b.foeEvade;
+  }
+
+  /* 흐트러진 동안은 이 턴의 예고를 전부 지웁니다 — 아무것도 하지 않는 턴입니다.
+   * 턴 셈(tt)은 그대로 흘렀으므로, 이 턴에 걸렸던 주기 행동은 그대로 사라집니다. */
+  if (staggerOn(b)) {
+    b.aoe = b.foeHeal = b.foeFirst = b.take = b.counter = b.foeBreak = b.foeEvade = b.heavy = false;
+    b.firstHeavyNow = false;
+    b.aim = null;
   }
 
   /* ── 설득 전투 — 정해진 차례가 지나면 적을 무대에서 내립니다 ──────
@@ -7017,7 +7175,9 @@ function beginTurn() {
                : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
-  if (b.foeFirst) {
+  if (staggerOn(b)) {
+    say("▷ " + withJosa(b.name, "은") + " 흐트러져 있다.  이번 차례는 움직이지 못하고, 모든 공격을 약점으로 받는다.", "good");
+  } else if (b.foeFirst) {
     /* 선공 — 이번 차례는 적이 먼저 칩니다. 무엇으로 치는지(판 전체냐 하나냐)와
      * 함께, «차례가 뒤집힌다» 는 것을 못박아 알립니다. 방어를 깔지, 그래도
      * 치고 볼지를 고르는 자리라 알려 주지 않으면 고를 수가 없습니다. */
@@ -7449,6 +7609,7 @@ function openingVolley(next) {
                 : (memberName(w) + "의 공격 — " + dmg + " 피해")) +
           " (" + (lk.label || "일제사격") + ")" + ty.tag, crit ? "crit" : "hit", { tags: true, who: w });
       foeHit(0, dmg, crit, ty.type);
+      staggerCheck(b);
       render();
       if (b.hp <= 0) {
         if (b.scene.persuade) b.hp = 1;
@@ -7987,6 +8148,11 @@ function resolveTurn() {
     const f2 = FOES[j.foe];
     if (!f2) { say("(난입할 적을 찾지 못했습니다: " + j.foe + ")", "todo"); b.joined = true; return; }
     b.joined = true;
+    /* 끼어든 것이 흐트러지지 않는 적(stagger: [])이면 남은 흐트선을 걷고 흐트러짐도 풉니다 — 6장 마왕 이경원 */
+    if (b.stg && f2.stagger && !f2.stagger.length) {
+      b.stg.lines = []; b.stg.used = []; b.stg.on = false;
+      staggerSync();
+    }
 
     divider();
     if (f2.intro) say(f2.intro, "bad");
@@ -8069,6 +8235,7 @@ function resolveTurn() {
             (retribBonus ? " (보복 전이 +" + Math.round(retribBonus * 100) + "%)" : "") + ty.tag,
             crit ? "crit" : "hit", { tags: true, who: target });
         foeHit(0, dmg, crit, ty.type);
+        staggerCheck(b);
         stackAfterHit(target);     // 연계 추가타도 «공격» — 히트 · 염화가 쌓입니다(원작 «원호공격으로 인한 발동에도»)
         checkJoinIn();
         render();
@@ -8167,6 +8334,7 @@ function resolveTurn() {
     stackAfterHit(who);            // 히트 · 염화 — 공격을 마칠 때마다 (stackRulesFor 머리말)
 
     foeHit(0, dmg, crit, ty.type);
+    staggerCheck(b);               // 흐트선을 넘겼으면 흐트러뜨린다
     checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
     render();
 
@@ -8215,6 +8383,12 @@ function resolveTurn() {
 
     const targets = S.party.filter(w => w && alive(w));
     if (!targets.length) return defeat();
+    /* 흐트러진 적은 이 차례를 쉽니다 — 예고해 둔 것이 무엇이든 */
+    if (staggerOn(b)) {
+      say("▷ " + withJosa(b.name, "은") + " 흐트러져 움직이지 못한다.", "good");
+      render();
+      return setTimeout(afterFoe, RULE.turnGapMs);
+    }
     foeTurn(targets);
   };
 
@@ -8563,6 +8737,7 @@ function resolveTurn() {
       b.hp -= cdmg;
       say(memberName(t) + "의 반격! — " + cdmg + " 피해" + ty.tag, "crit");
       foeHit(0, cdmg, false, ty.type);
+      staggerCheck(b);
       checkJoinIn();
       render();
       if (finishReached(b)) return setTimeout(finishBlow, RULE.turnGapMs);   // 반격으로 턱을 넘어도 마무리 일격
@@ -8690,6 +8865,8 @@ function bossDownFx(b) {
  *  battleOver 는 전투가 끝나는 모든 자리(승리 · 각본 결말 · 설득 · 마무리 일격 · 패배)에서 불립니다. */
 function battleOver(b) {
   if (b) S.carryManage = b.manage;
+  if (b && b.stg) b.stg.on = false;        // 흐트러짐 표시를 걷습니다
+  staggerSync();
   if (CUR_SIDE) { CUR_SIDE = null; renderStage(); }
 }
 /* ── 전투를 «넘겼을 때» 의 업적 사건 (2026-10-25, 8장) ─────────────────
@@ -10093,9 +10270,9 @@ function foeCodexStats(k, home) {
   const f = FOES[k];
   if (home && home.kind === "rail") {
     const b = RAIL_STEPS[railRole(home.r, k, home.i)];
-    return { hp: b.hp, atk: b.atk, def: b.def, from: home.r.name + " 기준" };
+    return { hp: Math.round(b.hp * STAGGER_RULE.hpMult), atk: b.atk, def: b.def, from: home.r.name + " 기준" };
   }
-  return { hp: f.hp, atk: f.atk, def: f.def, from: "이야기 기준" };
+  return { hp: Math.round(f.hp * STAGGER_RULE.hpMult), atk: f.atk, def: f.def, from: "이야기 기준" };
 }
 /* 적의 버릇 — 노트에 태그로 늘어놓을 몫 */
 function foeCodexTraits(f) {
