@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.0";
+const VERSION = "2.31.1";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3146,7 +3146,7 @@ function eventGiveText(g) {
   g = g || {};
   const out = [];
   const p = eventGiveId(g);
-  if (p) out.push(stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name);
+  if (p) out.push(stars(p.id.star) + " " + titleName({ title: p.id.title, name: SINNERS[p.who].name }));
   else if (g.id) out.push("(인격을 찾지 못했습니다: " + [g.id.who, g.id.star, g.id.title].join(" / ") + ")");
   if (g.money) out.push(CURRENCY + " " + g.money);
   if (g.codex) out.push("황금교본 " + g.codex + "권");
@@ -3159,7 +3159,7 @@ function eventGiveText(g) {
   if (g.idTicket)      out.push("인격 선택권 " + g.idTicket + "개");
   if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
   if (g.digBrush)      out.push(DIG_BRUSH + " " + g.digBrush + "개");
-  if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
+  if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + titleName(ad) : g.advisor)); }
   return out.join("　·　") || "—";
 }
 /* 물건에 딸리는 설명 — 인격 파편 상자는 «보관함에 적힌 것과 똑같은 글» 을 씁니다.
@@ -3193,7 +3193,7 @@ function eventGiveApply(g) {
         S.equip[p.who] = p.key;
         equipHp(p.who);
       }
-      got.push(stars(p.id.star) + " " + p.id.title + " " + SINNERS[p.who].name);
+      got.push(stars(p.id.star) + " " + titleName({ title: p.id.title, name: SINNERS[p.who].name }));
     } else {
       const n = dupRefund(p.id.star);
       addFrag(p.who, n);
@@ -3223,7 +3223,7 @@ function eventGiveApply(g) {
     if (ad) {
       if (!S.advisorsOwned) S.advisorsOwned = {};
       if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); }
-      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); }
+      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + titleName(ad)); }
     }
   }
   if (g.enk) {
@@ -4256,6 +4256,15 @@ function tagTitle(title, name) {
   return add.length ? t + " " + add.join(" ") : t;
 }
 
+/* 「제목 이름」 — 교육위원 · 지원 작성위원 · 인격을 한 줄로 적을 때.
+ * 제목이 이미 그 이름으로 끝나면(「K사 E.G.O :: 카오스 원대한」 원대한) 이름을 다시 붙이지 않습니다(사용자 지침 2026-11-15). */
+function titleName(x) {
+  if (!x) return "";
+  const t = x.title || "", n = x.name || "";
+  if (!n) return t;
+  if (!t) return n;
+  return t.slice(-n.length) === n ? t : t + " " + n;
+}
 function memberName(w) {
   const m = memberOf(w);
   return m ? m.name : (w || "");
@@ -4425,16 +4434,16 @@ function moneyCard(n, sub)  { return gainCard("원고료", CURRENCY, sub || "", 
 function codexCard(n, sub)  { return gainCard("황금교본", "황금교본", sub || "", 0, n); }
 function fragBoxCard(n, sub) { return gainCard("인격 파편 상자 (선택)", "인격 파편 상자(선택)", sub || "", 0, n); }
 function idCard(who, id, sub) {
-  return gainCard(memberIconName(who), id.title + " " + SINNERS[who].name, stars(id.star) + " 인격" + (sub ? "　·　" + sub : ""), id.star);
+  return gainCard(memberIconName(who), titleName({ title: id.title, name: SINNERS[who].name }), stars(id.star) + " 인격" + (sub ? "　·　" + sub : ""), id.star);
 }
 function fragCard(who, n, sub) {
   return gainCard("인격 파편 - " + SINNERS[who].name, SINNERS[who].name + " 인격 파편", sub || "", 0, n);
 }
 function advisorCard(a, sub) {
-  return gainCard(advisorIconName(a), a.title + " " + a.name, stars(a.star) + " 보조 교육위원" + (sub ? "　·　" + sub : ""), a.star);
+  return gainCard(advisorIconName(a), titleName(a), stars(a.star) + " 보조 교육위원" + (sub ? "　·　" + sub : ""), a.star);
 }
 function supportCard(sp, sub) {
-  return gainCard(supportIconName(sp), sp.title + " " + sp.name, stars(sp.star) + " 지원 작성위원" + (sub ? "　·　" + sub : ""), sp.star);
+  return gainCard(supportIconName(sp), titleName(sp), stars(sp.star) + " 지원 작성위원" + (sub ? "　·　" + sub : ""), sp.star);
 }
 /* 유리창에 서 있는가 — 머리줄의 [우편함] · [보상] 아이콘은 유리창에서만 섭니다(renderHeader).
  * glass() 가 켜고, 다른 화면으로 넘어갈 때 부르는 clearLog() 가 끕니다. */
@@ -5652,7 +5661,7 @@ function bigWinOn(out, p) {
  * 인격은 그 인격에 적힌 짧은 말(note)만 보여 줍니다 — 이름은 뒤에 결과로 나오니까요. */
 function bigWinLine(r) {
   if (!r) return null;
-  if (r.kind === "adv") return r.adv.title + " " + r.adv.name;
+  if (r.kind === "adv") return titleName(r.adv);
   return r.id.note || null;
 }
 
@@ -9603,7 +9612,7 @@ function loadoutSlotsHTML() {
     const a = advs[i];
     h += '<div class="slot' + (a ? ' sel hasic' : '') + '" data-adv="' + i + '">' +
            (a ? iconHTML(advisorIconName(a)) + '<div><div class="nm"><span class="star">' + stars(a.star) + '</span> ' +
-                  a.title + ' ' + a.name + '</div>' + flavorHTML(a) + '<div class="sub">' + a.desc + '</div></div>'
+                  titleName(a) + '</div>' + flavorHTML(a) + '<div class="sub">' + a.desc + '</div></div>'
               : '<div class="lock">' + (i + 1) + '　비어 있음</div><div class="sub">' +
                   (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
          '</div>';
@@ -10579,7 +10588,7 @@ function noteCodexHTML() {
     supportList().slice().sort((a, b) => supportOwned(b) - supportOwned(a)).forEach(sp => {   // 함께한 사람 먼저
       if (!supportOwned(sp)) return;
       h += '<div class="slot hasic">' + iconHTML(supportIconName(sp), { star: sp.star }) + '<div>' +
-             '<div class="nm"><span class="star">' + stars(sp.star) + '</span> ' + sp.title + ' ' + sp.name +
+             '<div class="nm"><span class="star">' + stars(sp.star) + '</span> ' + titleName(sp) +
                (sp.atkType ? ' ' + atkTypeIconHTML(sp.atkType) : '') + '</div>' +
              '<div class="sub">공 ' + sp.atk + '　방 ' + sp.def + '　체 ' + sp.hp + '</div>' +
              (sp.note ? '<div class="sub">' + sp.note + '</div>' : '') + '</div></div>';
@@ -10816,7 +10825,7 @@ function openNote(back, focus) {
         /* 효과는 함께하게 된 뒤에야 읽을 수 있습니다 */
         h += '<div class="slot hasic">' + iconHTML(advisorIconName(a), { dim: !has }) + '<div>' +
                '<div class="' + (has ? 'nm' : 'lock') + '">' +
-                 '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name + '</div>' +
+                 '<span class="star">' + stars(a.star) + '</span> ' + titleName(a) + '</div>' +
                (has ? flavorHTML(a) : '') +
                '<div class="sub">' + (has ? a.desc : '미보유　— 효과는 함께한 뒤에 열립니다') + '</div>' +
              '</div></div>';
@@ -11502,7 +11511,7 @@ function openGacha(done, pk, deal) {
         if (r.kind === "adv") {
           h += '<div class="slot hasic' + (r.isNew ? ' sel' : '') + (r.isNew && r.adv.star >= 3 ? ' px3' : '') + '">' + iconHTML(advisorIconName(r.adv)) + '<div>' +
                  '<div class="nm"><span class="star">' + stars(r.adv.star) + '</span> ' +
-                   r.adv.title + ' ' + r.adv.name + '</div>' +
+                   titleName(r.adv) + '</div>' +
                  '<div class="sub">보조 교육위원' + (r.isNew ? '　— 신규' : '　— 중복') + '</div>' +
                '</div></div>';
         } else {
@@ -11671,7 +11680,7 @@ function pullAdvisorOnce() {
     S.advisorsOwned[key] = true;
     if (!advisorOnList().length) { S.advisorOn = [key]; S.advisor = key; }
   } else S.money += dupRefund(pick.star);
-  return { star: pick.star, name: pick.title + " " + pick.name, desc: pick.note || pick.desc, isNew,
+  return { star: pick.star, name: titleName(pick), desc: pick.note || pick.desc, isNew,
            ic: advisorIconName(pick) };
 }
 
@@ -15000,8 +15009,8 @@ function openMirrorResult(rec) {
   const advHTML = pad(rec.advisors, 3).map(a => {
     if (!a) return emptySlot;
     const ic = advIc(a);
-    return ic ? '<div class="slot ro hasic">' + iconHTML(ic) + '<div><div class="nm">' + a.title + ' ' + a.name + '</div></div></div>'
-              : '<div class="slot ro"><div class="nm">' + a.title + ' ' + a.name + '</div></div>';
+    return ic ? '<div class="slot ro hasic">' + iconHTML(ic) + '<div><div class="nm">' + titleName(a) + '</div></div></div>'
+              : '<div class="slot ro"><div class="nm">' + titleName(a) + '</div></div>';
   }).join('');
 
   const synText = (rec.synergies && rec.synergies.length) ? rec.synergies.join(' · ') : '없음';
@@ -15069,7 +15078,7 @@ function sayMirrorCard(rec) {
     return chip(now ? now.name : g.name, g.name, "", g.star || (now && now.star)); }).join('');
   const advs = (rec.advisors || []).map(a => {
     const ad = advisorList().find(x => x.name === a.name && x.title === a.title);
-    return chip(ad ? advisorIconName(ad) : null, a.title + " " + a.name, a.star ? stars(a.star) : ""); }).join('');
+    return chip(ad ? advisorIconName(ad) : null, titleName(a), a.star ? stars(a.star) : ""); }).join('');
   const packs = (rec.packCards || []).map((c, i) =>
     chip(c.perk ? c.perk.name : null, (i + 1) + ". " + c.name, c.perk ? "특전 「" + c.perk.name + "」" : "")).join('');
   const syn = (rec.synergies || []).length ? esc(rec.synergies.join(" · ")) : "";
@@ -15513,11 +15522,11 @@ function mailGiveText(m) {
   if (g.idTicket)      out.push(ic("idTicket") + "인격 선택권 " + g.idTicket + "개");
   if (g.syncModule)    out.push(ic("syncModule") + SYNC_MODULE.name + " " + g.syncModule + "개");
   if (g.digBrush)      out.push(ic("digBrush") + DIG_BRUSH + " " + g.digBrush + "개");
-  if (g.advisor)       { const ad = advisorById(g.advisor); out.push(ic("advisor") + "보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
+  if (g.advisor)       { const ad = advisorById(g.advisor); out.push(ic("advisor") + "보조 교육위원 " + (ad ? stars(ad.star) + " " + titleName(ad) : g.advisor)); }
   if (g.gift)          { const gf = giftById(g.gift); out.push(ic("gift") + "E.G.O 기프트 " + (gf ? stars(gf.star) + " " + gf.name : g.gift)); }
   if (g.support) {
     const sp = supportBy(SUP_PREFIX + g.support);
-    out.push(ic("support") + "지원 작성위원 " + (sp ? stars(sp.star) + " " + sp.title + " " + sp.name
+    out.push(ic("support") + "지원 작성위원 " + (sp ? stars(sp.star) + " " + titleName(sp)
                                    : g.support.replace("|", " ")));
   }
   return out.join("　·　") || "—";
@@ -15569,7 +15578,7 @@ function giveApply(g) {
     if (ad) {
       if (!S.advisorsOwned) S.advisorsOwned = {};
       if (S.advisorsOwned[g.advisor]) { S.codex += dupRefund(ad.star); got.push("이미 함께하는 교육위원이라 황금교본 " + dupRefund(ad.star) + "권"); cards.push(codexCard(dupRefund(ad.star), "이미 함께하는 교육위원")); }
-      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + ad.title + " " + ad.name); cards.push(advisorCard(ad)); }
+      else { S.advisorsOwned[g.advisor] = true; got.push("보조 교육위원 " + stars(ad.star) + " " + titleName(ad)); cards.push(advisorCard(ad)); }
     }
   }
   /* E.G.O 기프트 — 이름으로 적습니다. 이미 지녔으면 상점 배정에서 겹쳤을 때와
@@ -15604,7 +15613,7 @@ function giveApply(g) {
     if (sp) {
       if (!S.supportsOwned) S.supportsOwned = {};
       S.supportsOwned[SUP_PREFIX + g.support] = true;
-      got.push("지원 작성위원 " + stars(sp.star) + " " + sp.title + " " + sp.name);
+      got.push("지원 작성위원 " + stars(sp.star) + " " + titleName(sp));
       cards.push(supportCard(sp));
     } else got.push("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")");
   }
@@ -16347,7 +16356,7 @@ function openAdvisor(back) {
            (고를수있나 ? ' data-pick="' + k + '"' : '') + '>' +
            iconHTML(advisorIconName(a), { dim: !(고를수있나 || on) }) + '<div>' +
            '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
-             '<span class="star">' + stars(a.star) + '</span> ' + a.title + ' ' + a.name +
+             '<span class="star">' + stars(a.star) + '</span> ' + titleName(a) +
              (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
            (has ? flavorHTML(a) : '') +
            '<div class="sub">' + (has ? a.desc : '미보유') + '</div>' +
@@ -17835,13 +17844,13 @@ function openPickTicketUse(kind, back) {
         }
         h += '<div class="slot hasic" data-pick="' + i + '">' + iconHTML(memberIconName(x.who)) + '<div>' +
                '<div class="nm"><span class="star">' + stars(x.id.star) + '</span> ' +
-                 x.id.title + ' ' + SINNERS[x.who].name + '</div>' +
+                 titleName({ title: x.id.title, name: SINNERS[x.who].name }) + '</div>' +
                (x.id.note ? '<div class="sub">' + x.id.note + '</div>' : '') +
              '</div></div>';
       } else if (kind === "advisor") {
         h += '<div class="slot hasic" data-pick="' + i + '">' + iconHTML(advisorIconName(x)) + '<div>' +
                '<div class="nm"><span class="star">' + stars(x.star) + '</span> ' +
-                 x.title + ' ' + x.name + '</div>' +
+                 titleName(x) + '</div>' +
                flavorHTML(x) +
                '<div class="sub">' + x.desc + '</div>' +
                (x.note ? '<div class="sub">' + x.note + '</div>' : '') +
@@ -17862,9 +17871,9 @@ function openPickTicketUse(kind, back) {
         const x = cands[+el.dataset.pick];
         if (!x) return;
         const label = (kind === "id")
-          ? stars(x.id.star) + " " + x.id.title + " " + SINNERS[x.who].name
+          ? stars(x.id.star) + " " + titleName({ title: x.id.title, name: SINNERS[x.who].name })
           : (kind === "advisor")
-          ? stars(x.star) + " " + x.title + " " + x.name
+          ? stars(x.star) + " " + titleName(x)
           : stars(x.star) + " " + x.name;
         if (!confirm(label + "\n\n이것으로 정하시겠습니까? 선택권 한 장이 사라지고, 되돌릴 수 없습니다.")) return;
         /* 고른 뒤에 다시 한 번 확인합니다 — 창을 열어 둔 사이에 다른 자리에서
