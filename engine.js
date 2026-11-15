@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.29.10";
+const VERSION = "2.29.11";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -305,8 +305,10 @@ function vaultBody() {
     /* 동기화 모듈 — 캡슐과 같은 결의 소모품. 개수 하나만 남깁니다. SYNC_MODULE 참고. */
     syncModule: syncModuleCount(),
     /* 선택권 — 미보유 목록에서 하나를 골라 그 자리에서 받는 소모품.
-     * { advisor: 개수, gift: 개수 }. PICK_TICKETS 참고. */
-    pickTicket: S.pickTicket || { advisor: 0, gift: 0 },
+     * { advisor: 개수, gift: 개수, id: 개수 }. PICK_TICKETS 참고.
+     * id(인격 선택권)는 한 장이라도 있을 때만 적습니다 — 그 칸이 생기기 전에 나간
+     * 보관함과 모양이 같아, 옛 판과 오가도 손댐 검사(vaultSig)가 흔들리지 않습니다. */
+    pickTicket: pickTicketOut(),
     /* 이벤트 재화 — 남은 개수와 «어느 기간 것인가»(eventId)를 함께 적습니다.
      * 다음에 열 때 eventId 가 지금 기간과 다르면, 새 이야기가 나온 것으로 보고
      * 0으로 지웁니다. eventBuy(교환소에서 몇 개 바꿨는가)도 함께 비워 한도가 다시 찹니다. */
@@ -389,7 +391,8 @@ function loadVault() {
     syncModule: (+v.syncModule) || 0,
     pickTicket: {
       advisor: (v && v.pickTicket && +v.pickTicket.advisor) || 0,
-      gift:    (v && v.pickTicket && +v.pickTicket.gift)    || 0
+      gift:    (v && v.pickTicket && +v.pickTicket.gift)    || 0,
+      id:      (v && v.pickTicket && +v.pickTicket.id)      || 0
     },
     event:    (+v.event) || 0,
     eventId:  v.eventId || null,
@@ -2552,21 +2555,27 @@ function addFragBox(kind, n) {
   S.fragBox[kind] = (S.fragBox[kind] || 0) + n;
 }
 
-/* ── 선택권 (보조 교육위원 · E.G.O 기프트) ───────────────────
+/* ── 선택권 (보조 교육위원 · E.G.O 기프트 · 인격) ────────────
  *  보관함에서 바로 쓰는 소모품입니다. 뽑기와 달리 «운» 이 없습니다 —
  *  아직 못 가진 것을 죽 펴 놓고, 그중 하나를 골라 그 자리에서 받습니다.
- *  개수는 S.pickTicket = { advisor: n, gift: n } 하나로 셉니다.
+ *  개수는 S.pickTicket = { advisor: n, gift: n, id: n } 하나로 셉니다.
  *
  *  ■ 고를 수 없는 것
  *    · 이미 가진 것은 목록에 아예 안 나옵니다.
- *    · 교육위원 선택권만 — «지금 특정 배정에 걸려 있는» 교육위원은 못 고릅니다
+ *    · 교육위원 · 인격 선택권 — «지금 특정 배정에 걸려 있는» 것은 못 고릅니다
  *      (인격 교환의 pickupOnTitle 규칙을 그대로 가져왔습니다 — 돈을 주고 뽑으라고
  *      세워 둔 것을 정가로 가로채지 않게). 기프트는 특정 배정이 없어 이 규칙이
  *      없습니다.
+ *    · 인격 선택권 — 배정소 뽑기 통에 드는 인격만 나옵니다(아직 안 쓴 todo · 업적으로만
+ *      오는 hidden 은 빠집니다). 성급은 가리지 않습니다 — 교육위원 · 기프트 선택권과 같습니다.
+ *      (2026-11-15 — 자리만 만들었습니다. 아직 얻는 경로는 없습니다.)
  *    · 고를 것이 하나도 안 남으면(다 가졌거나, 남은 것이 전부 특정 배정 중이면)
  *      손잡이가 잠깁니다 — 써도 아무것도 못 받는 헛걸음을 막습니다.
  */
+/* 보관함에 이 차례로 섭니다 — 인격 선택권이 두 선택권 줄 위(사용자 지침 2026-11-15) */
 const PICK_TICKETS = [
+  { key: "id",      name: "인격 선택권",
+    desc: "아직 지니지 않은 인격 하나를 골라 받습니다. 지금 특정 배정에 걸려 있는 인격은 고를 수 없습니다." },
   { key: "advisor", name: "보조 교육위원 선택권",
     desc: "아직 함께하지 않은 보조 교육위원 하나를 골라 받습니다. 지금 특정 배정에 걸려 있는 사람은 고를 수 없습니다." },
   { key: "gift",    name: "E.G.O 기프트 선택권",
@@ -2578,11 +2587,27 @@ function addPickTicket(kind, n) {
   if (!S.pickTicket) S.pickTicket = { advisor: 0, gift: 0 };
   S.pickTicket[kind] = (S.pickTicket[kind] || 0) + n;
 }
+/* 보관함에 적을 모양 — id 는 한 장이라도 있을 때만 (vaultToObject 의 설명 참고) */
+function pickTicketOut() {
+  const t = S.pickTicket || {};
+  const o = { advisor: +t.advisor || 0, gift: +t.gift || 0 };
+  if (+t.id > 0) o.id = +t.id;
+  return o;
+}
 /* 지금 고를 수 있는 것들 — 비어 있으면 쓸 수 없습니다 */
 function pickTicketCands(kind) {
   if (kind === "advisor")
     return advisorOpenList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]) &&
                                      !pickupOnTitle(a.title));
+  /* 인격 — { who, id } 묶음으로 돌려줍니다. 배정소 뽑기 통(pullOnce)과 같은 거름입니다 */
+  if (kind === "id") {
+    const out = [];
+    Object.keys(SINNERS).forEach(who => SINNERS[who].ids.forEach(id => {
+      if (id.todo || id.hidden || S.owned[idKey(who, id)] || pickupOnTitle(id.title)) return;
+      out.push({ who, id });
+    }));
+    return out;
+  }
   return giftGachaList().filter(g => !(S.giftsOwned && S.giftsOwned[giftId(g)]));
 }
 function pickTicketUsable(kind) {
@@ -2850,6 +2875,7 @@ function eventGiveText(g) {
   if (g.fragBoxRandom) out.push("인격 파편 상자(무작위) " + g.fragBoxRandom + "개");
   if (g.advisorTicket) out.push("보조 교육위원 선택권 " + g.advisorTicket + "개");
   if (g.giftTicket)    out.push("E.G.O 기프트 선택권 " + g.giftTicket + "개");
+  if (g.idTicket)      out.push("인격 선택권 " + g.idTicket + "개");
   if (g.syncModule)    out.push(SYNC_MODULE.name + " " + g.syncModule + "개");
   if (g.digBrush)      out.push(DIG_BRUSH + " " + g.digBrush + "개");
   if (g.advisor)       { const ad = advisorById(g.advisor); out.push("보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
@@ -2900,6 +2926,7 @@ function eventGiveApply(g) {
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); }
   if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); }
   if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); }
+  if (g.idTicket)      { addPickTicket("id",      g.idTicket);      got.push("인격 선택권 " + g.idTicket + "개"); }
   if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); }
   /* 지질망치 — 우편(giveApply)과 **같은 규칙** 입니다. 탐사가 아직 안 열렸으면
    * bank 에 맡겨 두고, 처음 열 때 digSync 가 함께 줍니다. brush 를 null 에서
@@ -3698,6 +3725,7 @@ function giveIcon(g) {
   if (g.fragBoxRandom) return "인격 파편 상자 (무작위)";
   if (g.advisorTicket) return "보조 교육위원 선택권";
   if (g.giftTicket)    return "E.G.O 기프트 선택권";
+  if (g.idTicket)      return "인격 선택권";
   if (g.syncModule)    return "동기화 모듈";
   if (g.digBrush)      return "지질망치";
   if (g.enkCap)        return "엔케팔린 캡슐";
@@ -7851,7 +7879,7 @@ function checkAchievements(foeName, cleared) {
     /* E.G.O 기프트 — 이름으로. 우편과 같은 자리(giveApply)를 씁니다 — 이미 지녔으면 원고료로 (8장 업적 기프트) */
     /* 그 밖의 몫 — 기프트 · 원고료 · 황금교본 · 선택권 · 모듈 · 이벤트 재화는 우편과 같은 자리(giveApply) */
     const rest = {};
-    ["gift", "money", "codex", "advisorTicket", "giftTicket", "syncModule", "event"].forEach(k => { if (g[k]) rest[k] = g[k]; });
+    ["gift", "money", "codex", "advisorTicket", "giftTicket", "idTicket", "syncModule", "event"].forEach(k => { if (g[k]) rest[k] = g[k]; });
     if (Object.keys(rest).length) giveApply(rest).cards.forEach(c => cards.push(c));
     sayGainCards(cards, "업적 보상");
     notes.forEach(t => say(t, "sys"));
@@ -15119,6 +15147,7 @@ function mailGiveText(m) {
   if (g.enkCap) out.push(ic("enkCap") + ENK_CAPSULE.name + " " + g.enkCap + "개");
   if (g.advisorTicket) out.push(ic("advisorTicket") + "보조 교육위원 선택권 " + g.advisorTicket + "개");
   if (g.giftTicket)    out.push(ic("giftTicket") + "E.G.O 기프트 선택권 " + g.giftTicket + "개");
+  if (g.idTicket)      out.push(ic("idTicket") + "인격 선택권 " + g.idTicket + "개");
   if (g.syncModule)    out.push(ic("syncModule") + SYNC_MODULE.name + " " + g.syncModule + "개");
   if (g.digBrush)      out.push(ic("digBrush") + DIG_BRUSH + " " + g.digBrush + "개");
   if (g.advisor)       { const ad = advisorById(g.advisor); out.push(ic("advisor") + "보조 교육위원 " + (ad ? stars(ad.star) + " " + ad.title + " " + ad.name : g.advisor)); }
@@ -15139,7 +15168,7 @@ function mailWasted(m) {
   /* 캡슐·상자는 개수로 쌓이기만 하므로 상한 때문에 버려지지 않습니다 */
   if (g.money || g.codex || g.event || g.support || g.enkCap ||
       g.fragBoxSelect || g.fragBoxRandom ||
-      g.advisorTicket || g.giftTicket || g.syncModule || g.digBrush || g.advisor || g.gift) return false;   // 다른 것이 있으면 버려질 일 없습니다
+      g.advisorTicket || g.giftTicket || g.idTicket || g.syncModule || g.digBrush || g.advisor || g.gift) return false;   // 다른 것이 있으면 버려질 일 없습니다
   if (!g.enk) return false;
   enkSync();
   return enkCount() >= ENK_RULE.max;
@@ -15161,6 +15190,7 @@ function giveApply(g) {
   if (g.enkCap) { addEnkCap(g.enkCap); got.push(ENK_CAPSULE.name + " " + g.enkCap + "개"); C("엔케팔린 캡슐", ENK_CAPSULE.name, "", 0, g.enkCap); }
   if (g.advisorTicket) { addPickTicket("advisor", g.advisorTicket); got.push("보조 교육위원 선택권 " + g.advisorTicket + "개"); C("보조 교육위원 선택권", "보조 교육위원 선택권", "", 0, g.advisorTicket); }
   if (g.giftTicket)    { addPickTicket("gift",    g.giftTicket);    got.push("E.G.O 기프트 선택권 " + g.giftTicket + "개"); C("E.G.O 기프트 선택권", "E.G.O 기프트 선택권", "", 0, g.giftTicket); }
+  if (g.idTicket)      { addPickTicket("id",      g.idTicket);      got.push("인격 선택권 " + g.idTicket + "개"); C("인격 선택권", "인격 선택권", "", 0, g.idTicket); }
   if (g.syncModule)    { addSyncModule(g.syncModule);          got.push(SYNC_MODULE.name + " " + g.syncModule + "개"); C("동기화 모듈", SYNC_MODULE.name, "", 0, g.syncModule); }
   /* 지질망치 — 탐사가 아직 안 열렸으면(첫 몫을 안 받았으면) bank 에 맡겨 두고, 처음 열 때 digSync 가 함께 줍니다.
    * brush 를 null 에서 숫자로 바꿔 버리면 «처음 열 때 받는 첫 몫(brushStart)» 이 사라집니다. */
@@ -17187,7 +17217,7 @@ function openVault(back) {
 
   cut("box");
 
-  /* 선택권 둘 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
+  /* 선택권 셋 — 파편 상자와 같은 모양의 사용 손잡이를 둡니다.
    * 없거나(0개) 고를 것이 하나도 안 남았으면 손잡이를 잠급니다. */
   h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">선택권</div>' +
        '<div class="hint">운에 기대지 않고, 아직 못 가진 것 중 하나를 직접 골라 받습니다.</div>';
@@ -17205,6 +17235,8 @@ function openVault(back) {
                ? '<div class="sub" style="color:var(--gold)">' +
                  (t.key === "advisor"
                    ? '더 고를 사람이 없습니다 — 이미 다 함께하고 있거나, 남은 사람이 전부 특정 배정 중입니다.'
+                   : t.key === "id"
+                   ? '더 고를 인격이 없습니다 — 이미 다 지녔거나, 남은 인격이 전부 특정 배정 중입니다.'
                    : '더 고를 기프트가 없습니다 — 이미 전부 지니고 있습니다.') + '</div>'
                : '') +
            '</div>' +
@@ -17429,8 +17461,21 @@ function openPickTicketUse(kind, back) {
             '<div class="hint">' + meta.desc +
             '　·　보유 ' + pickTicketCount(kind) + '개</div>' +
             '<div class="grid">';
+    let lastWho = null;
     cands.forEach((x, i) => {
-      if (kind === "advisor") {
+      if (kind === "id") {
+        /* 인격은 사람마다 묶어 세웁니다 — 사람이 바뀌면 격자를 닫고 그 사람 이름을 머리로 겁니다 */
+        if (x.who !== lastWho) {
+          h += '</div><div style="margin:12px 0 6px;color:var(--text);font-weight:700">' +
+                 SINNERS[x.who].name + '</div><div class="grid">';
+          lastWho = x.who;
+        }
+        h += '<div class="slot hasic" data-pick="' + i + '">' + iconHTML(memberIconName(x.who)) + '<div>' +
+               '<div class="nm"><span class="star">' + stars(x.id.star) + '</span> ' +
+                 x.id.title + ' ' + SINNERS[x.who].name + '</div>' +
+               (x.id.note ? '<div class="sub">' + x.id.note + '</div>' : '') +
+             '</div></div>';
+      } else if (kind === "advisor") {
         h += '<div class="slot hasic" data-pick="' + i + '">' + iconHTML(advisorIconName(x)) + '<div>' +
                '<div class="nm"><span class="star">' + stars(x.star) + '</span> ' +
                  x.title + ' ' + x.name + '</div>' +
@@ -17453,15 +17498,30 @@ function openPickTicketUse(kind, back) {
       el.onclick = () => {
         const x = cands[+el.dataset.pick];
         if (!x) return;
-        const label = (kind === "advisor")
+        const label = (kind === "id")
+          ? stars(x.id.star) + " " + x.id.title + " " + SINNERS[x.who].name
+          : (kind === "advisor")
           ? stars(x.star) + " " + x.title + " " + x.name
           : stars(x.star) + " " + x.name;
         if (!confirm(label + "\n\n이것으로 정하시겠습니까? 선택권 한 장이 사라지고, 되돌릴 수 없습니다.")) return;
         /* 고른 뒤에 다시 한 번 확인합니다 — 창을 열어 둔 사이에 다른 자리에서
          * 그 사람을 얻었거나 특정 배정이 바뀌었을 수 있습니다. */
-        if (!pickTicketUsable(kind) || pickTicketCands(kind).indexOf(x) < 0) { draw(); return; }
+        const still = kind === "id"
+          ? pickTicketCands(kind).some(c => c.who === x.who && c.id === x.id)   // 묶음은 새로 빚으므로 속을 견줍니다
+          : pickTicketCands(kind).indexOf(x) >= 0;
+        if (!pickTicketUsable(kind) || !still) { draw(); return; }
         S.pickTicket[kind] -= 1;
-        if (kind === "advisor") {
+        if (kind === "id") {
+          const key = idKey(x.who, x.id);
+          S.owned[key] = true;
+          /* 뽑기 · 인격 교환과 같은 규칙 — 지금 장착한 것보다 성급이 높으면 갈아 끼웁니다 */
+          const cur = idByKey(S.equip[x.who]);
+          if (!cur || cur.star < x.id.star) {
+            S.equip[x.who] = key;
+            equipHp(x.who);
+          }
+          sayGainCards([idCard(x.who, x.id)], "인격 선택권");
+        } else if (kind === "advisor") {
           if (!S.advisorsOwned) S.advisorsOwned = {};
           S.advisorsOwned[advisorId(x)] = true;
           if (!advisorOnList().length) { S.advisorOn = [advisorId(x)]; S.advisor = advisorId(x); }

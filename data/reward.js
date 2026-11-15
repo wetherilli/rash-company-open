@@ -19,7 +19,7 @@
  *
  *  ■ give — 우편(data/mail.js)과 «같은 말» 을 씁니다
  *      money · codex · enkCap · fragBoxSelect · fragBoxRandom · syncModule ·
- *      advisorTicket · giftTicket …
+ *      advisorTicket · giftTicket · idTicket …
  *
  *  ■ 과제 열쇠(id)
  *    보관함에 진행 수가 이 글자로 남습니다. 한 주 안에서는 바꾸지 마십시오.
