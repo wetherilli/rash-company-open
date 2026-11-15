@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.3";
+const VERSION = "2.31.4";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -9386,6 +9386,10 @@ function chapterEnd() {
   divider();
   const c = curChapter();
   if (S.mirror) return mirrorClear();
+  /* 마친 자리로 못박습니다 — 「end」 장면 없이 마지막 장면을 지나 끝나는 장(0 · 1 · 2 · 3 · 7장 …)은
+   * 여태 S.ended 가 내려간 채 아래 save() 로 기록되어, [이어하기] 가 열리고 누를 때마다
+   * 이 함수가 다시 돌며 장 완료 보상(이벤트 재화 등)을 거듭 받을 수 있었습니다(사용자 보고 2026-11-15). */
+  S.ended = true;
   /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — mirrorClear()가
    * S.railSave 를 지우는 것과 같은 논리입니다. */
   S.storySave = null;
@@ -11917,7 +11921,10 @@ function saveSpotText() {
 function saveSpotDone(spot) {
   if (!spot || spot.ended) return true;
   if (spot.mirror) return false;
-  return !CHAPTERS[spot.ch];
+  const c = CHAPTERS[spot.ch];
+  if (!c) return true;
+  /* 이미 마지막 장면을 지난 기록 — v2.31.3 까지 「end」 장면 없는 장을 마치면 이렇게 남았습니다(chapterEnd 머리말) */
+  return (spot.sc || 0) >= buildScenes(c).length;
 }
 /* silent — 손으로 누르는 「기록」 손잡이를 없애고(사용자 지침 2026-09-03)
  * cont() 가 매번 조용히 부르므로, 그 자리에서는 로그에 "기록했다"를
@@ -12000,6 +12007,8 @@ function load() {
   if (!raw) return false;
   try {
     const spot = JSON.parse(raw);
+    /* 마친 자리는 이어 읽지 않습니다 — 다시 읽으면 장 완료가 한 번 더 돕니다(saveSpotDone) */
+    if (saveSpotDone(spot)) { glass(); return true; }
     S = newState();                       // 모은 것은 보관함에서
     SAVE_KEEPS.forEach(k => { if (spot[k] !== undefined) S[k] = spot[k]; });
     /* 인격을 잃었거나 이름이 바뀌었으면 기록해 둔 장착은 버립니다 */
