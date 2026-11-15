@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.2";
+const VERSION = "2.31.3";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2471,6 +2471,7 @@ function staggerSync() {
  */
 const ALLY_STAGGER_RULE = {
   base: [0.5],                        // 아무것도 안 적은 사람 · 조력자
+  support: [0.6],                     // 지원 작성위원 — 전부 60% 에 하나(사용자 지침 2026-11-15). SUPPORTS 줄에 stagger 를 적으면 그것이 이깁니다
   randomMin: 0.3, randomMax: 0.7,     // stagger: "random"
   retribHalf: 0.5,                    // 유아인 보복 12단계 — 흐트러짐 하나에 얹는 몫
   retribLevel: 12
@@ -2481,7 +2482,20 @@ function allyStaggerSrc(who) {
   if (SINNERS[who] && SINNERS[who].stagger != null) return SINNERS[who].stagger;
   const al = allyBy(who);
   if (al && al.stagger != null) return al.stagger;
+  if (isSupport(who)) {
+    const sp = supportBy(who);
+    return (sp && sp.stagger != null) ? sp.stagger : ALLY_STAGGER_RULE.support;
+  }
   return ALLY_STAGGER_RULE.base;
+}
+/* 싸우지 않을 때(유리창 · 편성) 카드에 미리 긋는 흐트선 — 전투를 열면 이 선으로 섭니다.
+ * 지금 체력이 이미 선 아래면 쓴 것으로 흐리게(들어설 때와 같은 규칙). "random"(김두현)은 전투마다
+ * 자리가 바뀌므로 미리 긋지 않습니다 — null. */
+function allyStaggerPreview(who) {
+  if (allyStaggerSrc(who) === "random") return null;
+  const lines = allyStaggerLines(who);
+  const hp = curHp(who), mx = maxHp(who);
+  return { lines, used: lines.map(r => hp <= mx * r) };
 }
 function allyStaggerLines(who) {
   const raw = allyStaggerSrc(who);
@@ -5441,7 +5455,7 @@ function renderParty() {
     if (ally) mark += ' <span class="allytag">조력</span>';
     const hideNum = !!ally && !ally.showStats;
     /* 흐트선 — 적 체력바와 같은 눈금. 수치를 감춘 조력자는 바가 늘 가득이라 긋지 않습니다 */
-    const ag = (b && !hideNum) ? allyStg(who) : null;
+    const ag = hideNum ? null : b ? allyStg(who) : allyStaggerPreview(who);   // 싸우지 않을 때도 미리 긋습니다(사용자 지침 2026-11-15)
     const 흐트선 = ag ? ag.lines.map((r, i) =>
       '<b class="stgline' + (ag.used[i] ? ' used' : '') + '" style="left:' + (r * 100) + '%"></b>').join("") : "";
     /* 조력자는 이름을 제 색으로 강조하고, 별 자리에는 idText 를 적습니다
@@ -11887,6 +11901,7 @@ function saveSpotText() {
   if (!raw) return null;
   try {
     const spot = JSON.parse(raw);
+    if (saveSpotDone(spot)) return "";      // 마친 자리 — 카드는 잠가서 세웁니다(openChapterSelect)
     if (spot.mirror) return mirrorTier(spot.mirrorTier).name + " 진행 중";
     const c = CHAPTERS[spot.ch];
     if (!c) return null;
@@ -11894,6 +11909,15 @@ function saveSpotText() {
     return c.no + (c.title ? "  " + c.title : "") +
            (total ? "　·　" + Math.min((spot.sc || 0) + 1, total) + "/" + total + "번째 장면" : "");
   } catch (e) { return null; }
+}
+/* 기록이 «마친 자리» 인가 — 장을 마쳤거나(chapterEnd) 거울 던전 · 거울굴절철도를 완주했으면(mirrorClear)
+ * S.ended 가 선 채로 기록됩니다. 그 기록을 이어 읽으면 이어 갈 장면이 없어 0장 처음으로 떨어졌습니다
+ * (사용자 보고 2026-11-15). 그런 기록이면 「이어하기」 를 잠급니다. 다음 장이나 거울을 시작하면
+ * S.ended 가 내려가 다시 열립니다. */
+function saveSpotDone(spot) {
+  if (!spot || spot.ended) return true;
+  if (spot.mirror) return false;
+  return !CHAPTERS[spot.ch];
 }
 /* silent — 손으로 누르는 「기록」 손잡이를 없애고(사용자 지침 2026-09-03)
  * cont() 가 매번 조용히 부르므로, 그 자리에서는 로그에 "기록했다"를
@@ -12182,11 +12206,16 @@ function openChapterSelect(back) {
                 : hardCall ? hr.name + '에 할 장이 남았습니다.'
                            : '눌러서 ' + (hNow ? hr.easy : hr.name) + '으로 바꿉니다.') +
       '</div></div>';
-  if (spotText || hardSlot)
+  /* spotText 가 "" 면 마친 자리 — 카드는 세우되 잠급니다(saveSpotDone) */
+  if (spotText != null || hardSlot)
     h += '<div class="grid">' +
            (spotText ? '<div class="slot" data-resume="1">' +
                          '<div class="nm">이어하기</div>' +
                          '<div class="sub">' + spotText + '</div>' +
+                       '</div>'
+            : spotText === "" ? '<div class="slot resumelock">' +
+                         '<div class="lock">이어하기</div>' +
+                         '<div class="sub">마친 자리입니다 — 이어 갈 곳이 없습니다.</div>' +
                        '</div>' : '') +
            hardSlot +
          '</div>';
@@ -17368,34 +17397,42 @@ function aboutHTML() {
 }
 
 /* 설정의 «효과음 크기» 칸 (사용자 지침 2026-10-27) — 막대를 끌면 곧바로 바뀌고, 놓을 때 보관함에 남깁니다.
- * 옆의 [들어 보기] 셋은 지금 크기로 그 유형의 효과음을 한 번 틉니다. 0 이면 꺼짐. */
+ * 한 줄에 「이름 · 막대 · 값 · [들어 보기]」(사용자 지침 2026-11-15 — 세 줄을 한 줄로, 들어 보기 단추는 하나로).
+ * [들어 보기] 는 누를 때마다 관통 → 참격 → 타격 → 적 공격(강타) 차례로 하나씩, 지금 크기로 틉니다. 0 이면 꺼짐. */
 function sfxVolText(v) { return v <= 0 ? "꺼짐" : Math.round(v * 100) + ""; }
+let SFX_TRY_I = 0;
+function sfxTryList() {
+  return Object.keys(ATK_TYPES).filter(k => ATK_TYPES[k].sfx)
+    .map(k => ({ name: ATK_TYPES[k].name, src: ATK_TYPES[k].sfx }))
+    .concat([{ name: "적 공격", src: FOE_SFX.heavy }]);   // 적 쪽은 강타 소리로 들려 드립니다
+}
 function sfxSettingHTML() {
   const v = sfxVol();
   return '<div class="setsfx">' +
-           '<div class="setsfxhead"><b>효과음 크기</b><span id="sfxval">' + sfxVolText(v) + '</span></div>' +
-           '<input type="range" id="sfxrange" min="0" max="100" step="' + SFX_RULE.step + '" value="' + Math.round(v * 100) + '">' +
-           '<div class="setsfxtry">' +
-             Object.keys(ATK_TYPES).filter(k => ATK_TYPES[k].sfx).map(k =>
-               '<button class="ghost" data-sfx="' + k + '">' + ATK_TYPES[k].name + ' 들어 보기</button>').join("") +
-             '<button class="ghost" data-sfx="foe">적 공격 들어 보기</button>' +
+           '<div class="setsfxrow">' +
+             '<b>효과음 크기</b>' +
+             '<input type="range" id="sfxrange" min="0" max="100" step="' + SFX_RULE.step + '" value="' + Math.round(v * 100) + '">' +
+             '<span id="sfxval">' + sfxVolText(v) + '</span>' +
+             '<button class="ghost" id="sfxtry">들어 보기</button>' +
            '</div>' +
-           '<div class="hint">아군 공격이 맞을 때 공격 유형(관통 · 참격 · 타격)마다 나는 소리와, 적이 칠 때 나는 소리입니다. 기본은 작게 두었습니다.</div>' +
-         '</div>';
+         '</div>';   /* 설명 줄은 걷었습니다(사용자 지침 2026-11-15) */
 }
 function sfxSettingBind() {
   const r = document.getElementById("sfxrange"), lab = document.getElementById("sfxval");
   if (!r) return;
   r.oninput  = () => { S.sfxVol = Number(r.value) / 100; lab.textContent = sfxVolText(S.sfxVol); };
   r.onchange = () => { S.sfxVol = Number(r.value) / 100; saveVault(); };
-  $sheet.querySelectorAll("[data-sfx]").forEach(b => {
-    b.onclick = () => {
-      const v = sfxVol();
-      if (v <= 0) { lab.textContent = "꺼짐 — 막대를 올려 주십시오"; return; }
-      if (b.dataset.sfx === "foe") return playSfx(FOE_SFX.heavy, v);   // 적 쪽은 강타 소리로 들려 드립니다
-      playSfx(ATK_TYPES[b.dataset.sfx].sfx, v);
-    };
-  });
+  const tb = document.getElementById("sfxtry");
+  if (tb) tb.onclick = () => {
+    const v = sfxVol();
+    if (v <= 0) { lab.textContent = "꺼짐"; return; }
+    const list = sfxTryList();
+    const x = list[SFX_TRY_I++ % list.length];
+    tb.textContent = x.name;                         // 무엇이 났는지 잠깐 보여 줍니다
+    clearTimeout(tb._t);
+    tb._t = setTimeout(() => { tb.textContent = "들어 보기"; }, 900);
+    playSfx(x.src, v);
+  };
 }
 
 /* 유리창 배경 고르기 — 예전에는 설정 화면 그 자체였는데, 따로 떼어 [설정] → [유리창 배경] 으로 엽니다

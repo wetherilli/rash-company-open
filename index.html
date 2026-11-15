@@ -285,12 +285,22 @@
   .setabout .cred{display:grid;gap:4px;font-size:13px;}
   .setabout .cred .rl{color:var(--muted);display:inline-block;min-width:9.5em;}
   .setabout .cred .nm{color:var(--text);}
-  /* 설정의 «효과음 크기» — 막대 하나와 [들어 보기] 셋 (engine.js sfxSettingHTML) */
+  /* 설정의 «효과음 크기» — 한 줄에 이름 · 막대 · 값 · [들어 보기] (engine.js sfxSettingHTML, 2026-11-15) */
   .setsfx{margin:16px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;}
-  .setsfxhead{display:flex;justify-content:space-between;align-items:baseline;color:var(--text);}
-  .setsfxhead span{color:var(--gold);font-variant-numeric:tabular-nums;}
-  .setsfx input[type=range]{width:100%;margin:10px 0 8px;accent-color:var(--gold);}
-  .setsfxtry{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+  .setsfxrow{display:flex;align-items:center;gap:10px;color:var(--text);}
+  .setsfxrow b{flex:none;white-space:nowrap;}
+  .setsfxrow input[type=range]{flex:1 1 auto;min-width:60px;width:auto;margin:0;accent-color:var(--gold);}
+  .setsfxrow #sfxval{flex:none;width:2.6em;text-align:right;color:var(--gold);font-variant-numeric:tabular-nums;}
+  .setsfxrow #sfxtry{flex:none;width:5.6em;white-space:nowrap;padding-left:0;padding-right:0;}
+  /* 아주 좁은 화면(320px 언저리) — 칸 사이를 좁히고 단추를 줄여 한 줄을 지킵니다 */
+  @media (max-width:360px){
+    .setsfx{padding:10px 10px;}
+    .setsfxrow{gap:6px;}
+    .setsfxrow b{font-size:13px;}
+    .setsfxrow input[type=range]{min-width:36px;}
+    .setsfxrow #sfxval{width:2.2em;}
+    .setsfxrow #sfxtry{width:4.6em;font-size:12px;}
+  }
   /* 큰 피해 숫자 — 한 방에 RULE.bigHitMin(100) 이상 들어가면 적이 선 자리에 크게
    * 떴다가 떠오르며 사라집니다(engine.js showBigDamage, 사용자 지침 2026-09-11).
    * 자리(left/top)는 엔진이 적 그림을 재서 박고, 여기서는 가운데 맞춤과 움직임만 줍니다.
@@ -1053,6 +1063,8 @@
   .slot.hardtoggle.on{border-color:var(--red);background:linear-gradient(90deg,#241214,var(--panel) 70%);}
   .slot.hardtoggle.on .nm{color:#ff9a90;}
   .slot.hardtoggle.lockd{opacity:.5;cursor:default;}
+  /* 운전석 「이어하기」 — 마친 자리라 이어 갈 곳이 없을 때(engine.js saveSpotDone) */
+  .slot.resumelock{opacity:.5;cursor:default;pointer-events:none;}
   .slot.hardon{border-color:#8a2b2b;background:linear-gradient(90deg,#1f1113,var(--panel) 72%);}
   .slot.hardon .nm{color:#ff9a90;}
   .slot.hardon.harddone{border-color:var(--red);}
@@ -2039,25 +2051,25 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.31.2"></script>
-<script src="data/vault.js?v=2.31.2"></script>
-<script src="data/characters.js?v=2.31.2"></script>
-<script src="data/skills.js?v=2.31.2"></script>
-<script src="data/allies.js?v=2.31.2"></script>
-<script src="data/gifts.js?v=2.31.2"></script>
-<script src="data/pickup.js?v=2.31.2"></script>
-  <script src="data/hard.js?v=2.31.2"></script>
-<script src="data/achievements.js?v=2.31.2"></script>
-<script src="data/mail.js?v=2.31.2"></script>
-<script src="data/notice.js?v=2.31.2"></script>
-<script src="data/patch.js?v=2.31.2"></script>
-<script src="data/event.js?v=2.31.2"></script>
-<script src="data/reward.js?v=2.31.2"></script>
-<script src="data/tutorial.js?v=2.31.2"></script>
-<script src="data/foes.js?v=2.31.2"></script>
-<script src="data/story.js?v=2.31.2"></script>
-<script src="data/mirrorpacks.js?v=2.31.2"></script>
-<script src="engine.js?v=2.31.2"></script>
+<script src="data/access.js?v=2.31.3"></script>
+<script src="data/vault.js?v=2.31.3"></script>
+<script src="data/characters.js?v=2.31.3"></script>
+<script src="data/skills.js?v=2.31.3"></script>
+<script src="data/allies.js?v=2.31.3"></script>
+<script src="data/gifts.js?v=2.31.3"></script>
+<script src="data/pickup.js?v=2.31.3"></script>
+  <script src="data/hard.js?v=2.31.3"></script>
+<script src="data/achievements.js?v=2.31.3"></script>
+<script src="data/mail.js?v=2.31.3"></script>
+<script src="data/notice.js?v=2.31.3"></script>
+<script src="data/patch.js?v=2.31.3"></script>
+<script src="data/event.js?v=2.31.3"></script>
+<script src="data/reward.js?v=2.31.3"></script>
+<script src="data/tutorial.js?v=2.31.3"></script>
+<script src="data/foes.js?v=2.31.3"></script>
+<script src="data/story.js?v=2.31.3"></script>
+<script src="data/mirrorpacks.js?v=2.31.3"></script>
+<script src="engine.js?v=2.31.3"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

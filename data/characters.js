@@ -1230,6 +1230,8 @@ const RAIL_LINES_BY_TIER = {
  *    atk/def/hp  수치. 3성 평균은 26 / 12 / 100 입니다
  *    portrait 초상 (없으면 null)
  *    note     한 줄 설명
+ *    stagger  흐트선(체력 비율의 목록). 안 적으면 전부 [0.6] — 60% 에 하나(engine.js ALLY_STAGGER_RULE.support,
+ *             사용자 지침 2026-11-15). 다른 꼴이 필요한 사람은 설계할 때 여기에 적습니다.
  * ------------------------------------------------------------- */
 const SUPPORTS = [
   { name: "김준성", title: "쥐는 자", star: 3, tier: 3.1,
