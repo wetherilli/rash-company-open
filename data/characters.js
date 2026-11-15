@@ -369,10 +369,18 @@ const EXTRA_PORTRAITS = {
  *    주는 자리는 data/achievements.js 의 give.id 입니다. 자세한 것은
  *    engine.js 의 idHidden 머리말을 보십시오.
  * ------------------------------------------------------------- */
+/* SINNERS 의 사람마다 (2026-11-15, 아군 흐트러짐 — engine.js ALLY_STAGGER_RULE · devlog/20261115_P04_ally_stagger.md)
+ *    stagger      흐트선 — 체력 비율의 목록, 2개까지. "random" 이면 전투마다 0.3 ~ 0.7 한 줄. [] 면 흐트러지지 않음
+ *    staggerLine  흐트러질 때 한마디(글 또는 글의 배열)
+ *  인격 줄(ids)에 적으면 그 인격을 낀 동안 덮어씁니다 — stagger · staggerLine, 그리고
+ *    staggerSkill: { recoverEnd: n }   차례가 끝날 때 흐트러진 상태면 곧바로 풀린다 · 전투당 n회(강자급 인격 몫)
+ */
 const SINNERS = {
   park_suo: {
     no: 1, name: "박수오", ego: "나로호 승무원 아크로칸토사우루스",
     atkType: "pierce",
+    stagger: [0.7],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…윽. 계산이 틀렸어.", "아직… 안 끝났어."],
     portrait: "assets/portrait/park_suo.png",
     quote: "사과에 먹힌 유리를 아시오?",
     caution: ["망상"],
@@ -398,6 +406,8 @@ const SINNERS = {
   lee_hanbeom: {
     no: 2, name: "이한범", ego: "지질망치를 든 바리오닉스",
     atkType: "blunt",
+    stagger: [0.25],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["큭… 조금 늦었습니다.", "…이거, 생각보다 아프군요."],
     portrait: "assets/portrait/lee_hanbeom.png",
     quote: "작성위원은 글을 쓰는 한, 말아먹는 법입니다.",
     caution: ["다혈질", "변신로봇"],
@@ -436,6 +446,8 @@ const SINNERS = {
   cha_minjun: {
     no: 3, name: "차민준", ego: "디나모사우루스",
     atkType: "pierce",
+    stagger: [0.5],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["지성이형… 잠깐만, 다리가…!", "아직이야… 아직 안 끝났다고!"],
     portrait: "assets/portrait/cha_minjun.png",
     quote: "닿을 수 없는 호감에 도달하기 위하여!",
     caution: ["과도한 열정", "[보안 검열]", "과대망상"],
@@ -459,6 +471,8 @@ const SINNERS = {
   lee_sojeong: {
     no: 4, name: "이소정", ego: "맑은 눈의 아누로그나투스",
     atkType: "slash",
+    stagger: [0.6, 0.3],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…하. 이건 진짜 취향 아니야.", "칫… 됐어, 금방 일어나."],
     portrait: "assets/portrait/lee_sojeong.png",
     quote: "덜 떨어진 일반인들이 강철과 털의 아름다움을 알 리가 없지.",
     caution: ["미적 감각", "간접흡연"],
@@ -487,6 +501,8 @@ const SINNERS = {
   chu_minsu: {
     no: 5, name: "추민수", ego: "하얀 스피노사우루스",
     atkType: "blunt",
+    stagger: [0.4],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…설명은 나중에. 지금은 버틴다.", "큭… 아직, 처리할 게 남았다."],
     portrait: "assets/portrait/chu_minsu.png",
     quote: "오늘, 교육위원을 죽였다. 아니, 어쩌면 작성위원일지도.",
     caution: ["판단 거부"],
@@ -505,6 +521,8 @@ const SINNERS = {
   yu_ain: {
     no: 6, name: "유아인", ego: "개심한 브라키오사우루스",
     atkType: "slash",
+    stagger: [0.5, 0.15],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…흐트러지면 안 되는데요.", "엄격하지 못했네요… 저부터."],
     portrait: "assets/portrait/yu_ain.png",
     quote: "방송 안에도 사람이 있고, 버튜버에도 졸업은 있는 법이죠.",
     caution: ["현실감각"],
@@ -534,6 +552,8 @@ const SINNERS = {
   lee_gyeongwon: {
     no: 7, name: "이경원", ego: "데이노수쿠스",
     atkType: "blunt",
+    stagger: [0.66, 0.33],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…여기서 끝인가.", "…나는, 아직…"],
     portrait: "assets/portrait/lee_gyeongwon.png",
     quote: "내가 한 게 아니야. 네가, 고질라를 찢으면서 내 마음까지 찢어놓은 거야.",
     caution: ["연락두절", "내적열등감"],
@@ -558,6 +578,8 @@ const SINNERS = {
   seong_siyun: {
     no: 8, name: "성시윤", ego: "안킬로사우루스",
     atkType: "pierce",
+    stagger: [0.9],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["아… 이러면 완벽하지 않잖아요.", "…계산에 없던 일이에요."],
     portrait: "assets/portrait/seong_siyun.png",
     quote: "저를 성시윤이라고 불러주세요.",
     caution: ["완벽주의"],
@@ -578,6 +600,8 @@ const SINNERS = {
   song_hamin: {
     no: 9, name: "송하민", ego: "중간관리직 타르보사우루스",
     atkType: "slash",
+    stagger: [0.5],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…아, 이건 좀 아프네.", "잠깐… 미뤄 둘 수가 없네, 이건."],
     portrait: "assets/portrait/song_hamin.png",
     quote: "그래도 언제까지나 미뤄둘 순 없잖아.",
     caution: ["거리감"],
@@ -599,6 +623,8 @@ const SINNERS = {
   kim_taeseong: {
     no: 11, name: "김태성", ego: "아케로랍토르",
     atkType: "blunt",
+    stagger: [0.75, 0.4],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["으… 잠, 잠깐만요…", "이건… 제가 연구할 자국이 아닌데요…"],
     portrait: "assets/portrait/kim_taeseong.png",
     quote: "어느 날 창조론이 라거슈타트 한가운데에서 시작되었다.",
     caution: ["연약함", "창조 혐오"],
@@ -619,6 +645,8 @@ const SINNERS = {
   kim_haju: {
     no: 12, name: "김하주", ego: "기가노토사우루스",
     atkType: "pierce",
+    stagger: [0.45],              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…운이 없었다고 생각하자.", "하, 이건 계획에 없던 건데."],
     portrait: "assets/portrait/kim_haju.png",
     quote: "그림엔 목적이 있었지…",
     caution: ["교활함"],
@@ -643,6 +671,8 @@ const SINNERS = {
   kim_duhyeon: {
     no: 13, name: "김두현", ego: "울티마사우루스",
     atkType: "slash",
+    stagger: "random",              // 흐트선 (engine.js ALLY_STAGGER_RULE · devlog P04)
+    staggerLine: ["…근데 이상하네. 몸이 안 움직여.", "카오스 이펙트… 지금 이러면 안 되는데."],
     portrait: "assets/portrait/kim_duhyeon.png",
     quote: "악몽에서 깨어났을때 카오스 이펙트가 사라져있었다.",
     caution: ["갑작스러운 '카오스 이펙트' 발작"],

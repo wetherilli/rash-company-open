@@ -179,6 +179,33 @@
     font-style:normal;font-weight:800;font-size:10.5px;letter-spacing:.06em;
     vertical-align:1px;white-space:nowrap;
   }
+  /* 아군 흐트러짐 (engine.js ALLY_STAGGER_RULE, 2026-11-15) — 카드 체력바의 흐트선, 흐트러진 카드의 회색조 덮개와 글자 */
+  .pcard .hpbar{position:relative;}
+  .pcard .hpbar .stgline{
+    position:absolute;top:-2px;bottom:-2px;width:2px;margin-left:-1px;
+    background:var(--gold);box-shadow:0 0 0 1px rgba(0,0,0,.55);
+  }
+  .pcard .hpbar .stgline.used{opacity:.28;}
+  .pcard.stg .hpbar i{background:#8b8794;}
+  .pcard .pstg{
+    position:absolute;inset:0;z-index:4;pointer-events:none;border-radius:inherit;
+    background:rgba(128,126,136,.28);
+    -webkit-backdrop-filter:grayscale(.9);backdrop-filter:grayscale(.9);
+    display:flex;align-items:center;justify-content:center;font-style:normal;
+  }
+  .pcard .pstg b{
+    font-family:var(--font-ui);font-weight:900;font-size:19px;line-height:1;letter-spacing:.02em;white-space:nowrap;
+    color:#f1eee8;
+    text-shadow:-1.5px -1.5px 0 #8a4318, 1.5px -1.5px 0 #8a4318, -1.5px 1.5px 0 #8a4318, 1.5px 1.5px 0 #8a4318,
+                0 3px 0 #3d1c08, 0 0 10px rgba(232,138,60,.5);
+    transform:rotate(-5deg);
+  }
+  .pcard .pstg b.in{animation:pstgIn 520ms cubic-bezier(.2,.8,.3,1) both;}
+  @keyframes pstgIn{
+    0%  {opacity:0;transform:rotate(-5deg) scale(1.8);}
+    40% {opacity:1;transform:rotate(-5deg) scale(.92);}
+    100%{opacity:1;transform:rotate(-5deg) scale(1);}
+  }
   /* 배경 한 겹, 그 위에 사람 한 겹 */
   .scenebox{position:relative;height:var(--stageh);overflow:hidden;background:var(--bg);}
   .scenebox img.scene{
@@ -1734,6 +1761,7 @@
     .scenebox .dmgfx{font-size:34px;}
     .scenebox .dmgfx.crit{font-size:42px;}
     .scenebox .stgfx{font-size:23px;}
+    .pcard .pstg b{font-size:15px;}
     .allyhit{font-size:22px;}
     .allyhit.heavy{font-size:28px;}
     .allyhit.miss{font-size:18px;}
@@ -2011,25 +2039,25 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.30.0"></script>
-<script src="data/vault.js?v=2.30.0"></script>
-<script src="data/characters.js?v=2.30.0"></script>
-<script src="data/skills.js?v=2.30.0"></script>
-<script src="data/allies.js?v=2.30.0"></script>
-<script src="data/gifts.js?v=2.30.0"></script>
-<script src="data/pickup.js?v=2.30.0"></script>
-  <script src="data/hard.js?v=2.30.0"></script>
-<script src="data/achievements.js?v=2.30.0"></script>
-<script src="data/mail.js?v=2.30.0"></script>
-<script src="data/notice.js?v=2.30.0"></script>
-<script src="data/patch.js?v=2.30.0"></script>
-<script src="data/event.js?v=2.30.0"></script>
-<script src="data/reward.js?v=2.30.0"></script>
-<script src="data/tutorial.js?v=2.30.0"></script>
-<script src="data/foes.js?v=2.30.0"></script>
-<script src="data/story.js?v=2.30.0"></script>
-<script src="data/mirrorpacks.js?v=2.30.0"></script>
-<script src="engine.js?v=2.30.0"></script>
+<script src="data/access.js?v=2.31.0"></script>
+<script src="data/vault.js?v=2.31.0"></script>
+<script src="data/characters.js?v=2.31.0"></script>
+<script src="data/skills.js?v=2.31.0"></script>
+<script src="data/allies.js?v=2.31.0"></script>
+<script src="data/gifts.js?v=2.31.0"></script>
+<script src="data/pickup.js?v=2.31.0"></script>
+  <script src="data/hard.js?v=2.31.0"></script>
+<script src="data/achievements.js?v=2.31.0"></script>
+<script src="data/mail.js?v=2.31.0"></script>
+<script src="data/notice.js?v=2.31.0"></script>
+<script src="data/patch.js?v=2.31.0"></script>
+<script src="data/event.js?v=2.31.0"></script>
+<script src="data/reward.js?v=2.31.0"></script>
+<script src="data/tutorial.js?v=2.31.0"></script>
+<script src="data/foes.js?v=2.31.0"></script>
+<script src="data/story.js?v=2.31.0"></script>
+<script src="data/mirrorpacks.js?v=2.31.0"></script>
+<script src="engine.js?v=2.31.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

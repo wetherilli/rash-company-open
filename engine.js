@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.30.0";
+const VERSION = "2.31.0";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -2339,14 +2339,11 @@ function atkTypeHit(b, w) {
  *  ■ 말 — 흐트러질 때 · 페이즈로 풀릴 때 한마디. 적에 staggerLine · staggerEndLine(글 또는 글의 배열)을
  *    적으면 그것을, 안 적으면 말투(예삿말 · 존대 · 괴수 — DEEP_MIX_VOICE)의 기본 대사(DEEP_MIX_LINES 의
  *    stagger · staggerEnd)를 씁니다. 새로 들어오는 적은 제 대사를 따로 적습니다(사용자 지침).
- *  ■ hpMult — 흐트러짐이 들어가며 «모든 적» 의 체력을 함께 올렸습니다(사용자 지침 2026-11-15, ×1.2).
- *    startBattleFight 가 장면 덮어쓰기 뒤 · 어려움 사다리 앞에서 곱합니다. 거울 · 철도도 같습니다
- *    (표의 값 × 이 값). 도감의 체력도 같은 값을 곱해 적습니다(foeCodexStats).
+ *  ■ 적 체력 — v2.30.0 에 흐트러짐과 함께 «모든 적 ×1.2» 를 얹었다가 v2.30.1 에 걷었습니다(사용자 지침 2026-11-15).
  */
 const STAGGER_RULE = {
   mob:    [0.8],        // 잡졸 — 80% 에 하나
-  boss:   [0.5, 0.2],   // 보스 — 50% · 20%
-  hpMult: 1.2           // 모든 적 체력 — 흐트러짐과 함께 올린 몫
+  boss:   [0.5, 0.2]    // 보스 — 50% · 20%
 };
 function foeSrcDef(b) {
   const f = (b && FOES[b.id]) || {};
@@ -2449,6 +2446,160 @@ function staggerSync() {
   const fig = document.getElementById("figure");
   if (fig && !fig.complete) fig.addEventListener("load", place, { once: true });
 }
+
+/* ── 아군 흐트러짐 (사용자 지침 2026-11-15, devlog/20261115_P04_ally_stagger.md) ──────────
+ *  적의 흐트러짐을 아군에도 겁니다. 아군이 서는 «모든» 전투(각본 · 설득 전투도)에 걸립니다.
+ *
+ *  ■ 흐트선 — 사람마다 다릅니다. 인격 줄(ids)의 stagger > 작성위원(SINNERS)의 stagger >
+ *    조력자(ALLIES)의 stagger > ALLY_STAGGER_RULE.base. "random" 이면 전투마다 randomMin ~ randomMax
+ *    사이 한 줄(김두현 — 카오스 이펙트 발작). [] 면 흐트러지지 않습니다(베르렐리우스).
+ *    작성위원 · 인격은 2개까지(tools/check.js 가 짚습니다). 조력자는 예외(아멜리아 셋).
+ *  ■ 흐트러뜨리는 것 — «적의 공격» 뿐입니다. 판정은 적의 피해 줄(resolveTurn 의 foeTurn)에서만 부릅니다.
+ *    스스로 깎는 것(시너지 스택 selfDmg · 연계 효과의 체력 대가)은 setHp 를 거쳐도 판정을 타지 않습니다.
+ *    방어 · 교정을 했어도 선을 넘으면 흐트러집니다(사용자 지침 — 체력 관리가 무거워지도록).
+ *  ■ 흐트러지지 않는 한 대 — 반격(김하주) · 책임(추민수) · 도발(송하민)이 걸린 한 대, 8장 흑수 갑의 대신 받기.
+ *    그 한 대로 선 아래로 떨어져도 **선은 쓰지 않고 남깁니다** — 다음에 맞는 한 대에 흐트러집니다.
+ *  ■ 흐트러진 동안 — 적과 같은 «그 턴 + 다음 한 턴»(until = 그 턴 + 1). 명령을 못 고르고(b.cmds = "stagger"),
+ *    적에게 받는 피해가 약점처럼 ×ATK_TYPE_RULE.weakMult 입니다(못박은 광역 aoeFlat 은 그대로).
+ *    적 차례에 넘기면 사실상 다음 차례 한 번을 쉽니다. 선공에 넘기면 그 턴부터 쉽니다.
+ *  ■ 풀림 — until 이 지난 턴 머리 · 쓰러지면 · 인격 능력 staggerSkill.recoverEnd(차례가 끝날 때 곧바로, 전투당 n회).
+ *  ■ 되살아나기 — 퇴고 · 흡혈 · 회복으로 차올라도 쓴 선은 그대로. 쓰러졌다 일어서면(첨삭 · 되살리는 기프트)
+ *    일어선 체력보다 아래의 선이 살아납니다.
+ *  ■ 유아인 「보복」 — 동기화 12단계부터 아군이 흐트러질 때도 반 스택(retribGain × 0.5).
+ *  ■ 상태는 b.allyStg[who] = { lines, used, on, until, fx }. 전투를 열 때 세우고(allyStaggerInit),
+ *    도중에 들어온 사람은 처음 볼 때 세웁니다 — 그때 이미 선 아래면 그 선은 쓴 것입니다.
+ */
+const ALLY_STAGGER_RULE = {
+  base: [0.5],                        // 아무것도 안 적은 사람 · 조력자
+  randomMin: 0.3, randomMax: 0.7,     // stagger: "random"
+  retribHalf: 0.5,                    // 유아인 보복 12단계 — 흐트러짐 하나에 얹는 몫
+  retribLevel: 12
+};
+function allyStaggerSrc(who) {
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  if (id && id.stagger != null) return id.stagger;
+  if (SINNERS[who] && SINNERS[who].stagger != null) return SINNERS[who].stagger;
+  const al = allyBy(who);
+  if (al && al.stagger != null) return al.stagger;
+  return ALLY_STAGGER_RULE.base;
+}
+function allyStaggerLines(who) {
+  const raw = allyStaggerSrc(who);
+  if (raw === "random") {
+    const R = ALLY_STAGGER_RULE;
+    return [Math.round((R.randomMin + Math.random() * (R.randomMax - R.randomMin)) * 100) / 100];
+  }
+  return (raw || []).filter(r => r > 0 && r < 1).slice().sort((x, y) => y - x);
+}
+/* 지금 낀 인격의 흐트러짐 능력 — { recoverEnd: n } */
+function allyStaggerSkill(who) {
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  return (id && id.staggerSkill) || null;
+}
+function allyStg(who) {
+  const b = S && S.battle;
+  if (!b || !who) return null;
+  if (!b.allyStg) b.allyStg = {};
+  let g = b.allyStg[who];
+  if (!g) {
+    const lines = allyStaggerLines(who);
+    const hp = curHp(who), mx = maxHp(who);
+    g = b.allyStg[who] = { lines, used: lines.map(r => hp <= mx * r), on: false, until: 0, fx: false };
+  }
+  return g;
+}
+function allyStaggerInit() {
+  if (S.battle) S.battle.allyStg = {};
+  S.party.forEach(w => { if (w) allyStg(w); });
+}
+function allyStaggerOn(who) {
+  const b = S && S.battle;
+  const g = b && b.allyStg && b.allyStg[who];
+  return !!(g && g.on && alive(who));
+}
+/* 흐트러질 때 한마디 — 인격 > 작성위원 > 조력자의 staggerLine(글 또는 글의 배열). 없으면 기록칸만 */
+function allyStaggerLine(who) {
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  const al = allyBy(who);
+  const own = (id && id.staggerLine) || (SINNERS[who] && SINNERS[who].staggerLine) || (al && al.staggerLine);
+  const list = [].concat(own || []).filter(Boolean);
+  return list.length ? list[rnd(list.length)] : "";
+}
+/* 적의 한 대가 들어간 «뒤» 에 부릅니다. noStg — 반격 · 책임 · 도발 · 대신 받기가 걸린 한 대(선은 남김) */
+function allyStaggerCheck(who, noStg) {
+  const b = S.battle;
+  if (!b || !who || !alive(who) || noStg) return false;
+  const g = allyStg(who);
+  if (!g || !g.lines.length) return false;
+  const hp = curHp(who), mx = maxHp(who);
+  let crossed = false;
+  g.lines.forEach((r, i) => { if (!g.used[i] && hp <= mx * r) { g.used[i] = true; crossed = true; } });
+  if (!crossed || g.on) return false;
+  g.on = true;
+  g.until = b.turn + 1;
+  g.fx = false;                                  // 카드의 「흐트러짐」 글자가 한 번 튀어 오르게
+  /* 명령은 건드리지 않습니다 — 그 턴의 기록 줄이 (방어) · (교정) 을 읽습니다. 선공 턴에는 allyPhase 가 흐트러진 사람을 뺍니다 */
+  foeSfx("stagger");
+  say("▶ " + withJosa(memberName(who), "이") + " 흐트러졌다!  다음 차례가 끝날 때까지 움직이지 못하고, 받는 피해가 커진다.", "bad");
+  const line = allyStaggerLine(who);
+  if (line) battleSay(who, line);
+  allyStaggerRetrib(who);
+  return true;
+}
+/* 유아인 「보복」 동기화 12단계 — 아군이 흐트러질 때도 반 스택(쓰러질 때와 같은 배수를 반으로) */
+function allyStaggerRetrib(who) {
+  if (who === "yu_ain" || !S.party || S.party.indexOf("yu_ain") < 0 || !alive("yu_ain")) return;
+  if (syncLevel("yu_ain") < ALLY_STAGGER_RULE.retribLevel) return;
+  if (!S.arc) S.arc = { kills: 0, retribution: {} };
+  if (!S.arc.retribution) S.arc.retribution = {};
+  S.arc.retribution.yu_ain = (S.arc.retribution.yu_ain || 0) + retribGain(who) * ALLY_STAGGER_RULE.retribHalf;
+}
+/* why: "time"(다음 차례가 지났다) | "skill"(인격 능력 recoverEnd) | "down"(쓰러졌다 — 말 없이) */
+function allyStaggerEnd(who, why, label) {
+  const g = S.battle && S.battle.allyStg && S.battle.allyStg[who];
+  if (!g || !g.on) return;
+  g.on = false;
+  if (why === "skill") say("▷ " + withJosa(memberName(who), "이") + " 곧바로 자세를 바로잡았다." + (label ? " (" + label + ")" : ""), "good");
+  else if (why === "time") say("▷ " + withJosa(memberName(who), "이") + " 자세를 바로잡았다.", "good");
+}
+/* 쓰러졌다 일어설 때 — 일어선 체력보다 아래의 선이 살아납니다 */
+function allyStaggerRevive(who) {
+  const g = S.battle && S.battle.allyStg && S.battle.allyStg[who];
+  if (!g) return;
+  g.on = false;
+  const hp = curHp(who), mx = maxHp(who);
+  let back = false;
+  g.lines.forEach((r, i) => { if (g.used[i] && hp > mx * r) { g.used[i] = false; back = true; } });
+  if (back) setTimeout(() => { if (S.battle && S.battle.allyStg && S.battle.allyStg[who] === g) say("　" + memberName(who) + "의 흐트선이 다시 그어진다.", "sys"); }, 0);
+}
+/* 턴 머리(beginTurn) — 차례가 끝날 때의 인격 능력 · 때가 지난 흐트러짐 풀기 · 이번 차례를 쉴 사람 정하기.
+ * b.turn 이 이미 이번 턴으로 올라간 뒤에 부릅니다. */
+function allyStaggerTurn(b) {
+  S.party.forEach(w => {
+    if (!w || !b.allyStg || !b.allyStg[w]) return;
+    const g = b.allyStg[w];
+    if (!g.on) return;
+    if (!alive(w)) { g.on = false; return; }
+    if (b.turn > g.until) return allyStaggerEnd(w, "time");
+    /* recoverEnd — «차례가 끝날 때 흐트러진 상태면 곧바로 풀린다 · 전투당 n회» */
+    const sk = allyStaggerSkill(w);
+    const n = sk && sk.recoverEnd;
+    const usedKey = w + "_recoverEnd";
+    if (n && (b.persist[usedKey] || 0) < n) {
+      b.persist[usedKey] = (b.persist[usedKey] || 0) + 1;
+      const id = idByKey(S.equip[w]);
+      return allyStaggerEnd(w, "skill", id ? id.title : "");
+    }
+  });
+  S.party.forEach(w => {
+    if (w && allyStaggerOn(w)) {
+      b.cmds[w] = "stagger";
+      say("▷ " + withJosa(memberName(w), "은") + " 흐트러져 이번 차례를 쉰다.", "bad");
+    }
+  });
+}
+/* 적의 피해 셈 맨 끝에 곱합니다 — 흐트러진 사람은 약점처럼 */
+function allyStaggerMult(who) { return allyStaggerOn(who) ? ATK_TYPE_RULE.weakMult : 1; }
 
 /* 전투 첫 줄 · 적 카드에 적는 말 — 「약점 관통 · 내성 타격」. 둘 다 없으면 빈 글 */
 function foeTypeText(b) {
@@ -3530,6 +3681,7 @@ function setHp(who, v) {
   S.hp[who] = Math.max(0, Math.min(maxHp(who), Math.round(v)));
   if (wasAlive && S.hp[who] <= 0 && stackGuardSave(who)) return;   // 스택을 태워 버팀 (stackGuard)
   if (wasAlive && S.hp[who] <= 0) { onAllyDown(who); reviveFirstDown(who); emberRevive(who); }
+  else if (!wasAlive && S.hp[who] > 0) allyStaggerRevive(who);     // 첨삭 — 일어선 체력 아래의 흐트선이 살아납니다
 }
 
 /* E.G.O 기프트 effect.reviveFirst (사용자 지침 2026-10-14).
@@ -3567,6 +3719,7 @@ function reviveFirstDown(who) {
   if (allyLoseOnDown(who)) return;     // 작성위원이 아닌 조력자는 일으키지 않습니다 (allyLoseOnDown 참고)
   b.persist._reviveUsed = true;
   S.hp[who] = Math.max(1, Math.round(maxHp(who) * ratio));
+  allyStaggerRevive(who);
   const hp = S.hp[who];
   setTimeout(() => {
     if (S.battle !== b) return;
@@ -3644,6 +3797,7 @@ function onAllyDown(who) {
   /* 페이즈마다 누가 쓰러졌는지 — 업적 «phaseClean:n» 이 봅니다 (battleSuccess) */
   if (S.battle) { const b = S.battle; (b.downIn = b.downIn || {})[b.phaseNo || 0] = true; }
   stackOnDown(who);                // 히트 · 염화 — 쓰러지면 잃음(keepStack 제외)
+  { const g = S.battle && S.battle.allyStg && S.battle.allyStg[who]; if (g) g.on = false; }   // 흐트러짐도 함께 풀립니다
   if (!S.arc) S.arc = { kills: 0, retribution: {} };
   if (!S.arc.retribution) S.arc.retribution = {};
   if (who === "yu_ain") S.arc.retribution.yu_ain = perkSum().retribFloor;   // 평소 0 — 테마팩 특전 retribFloor 가 있으면 그 수
@@ -5229,7 +5383,8 @@ function renderParty() {
     const 판전체 = !!(b && (b.aoe || (b.foeBreak && (b.breakSplash || foeDef(b).breakSplash))));
     const aimed  = !!(b && hp > 0 && (판전체 || b.aim === who));
     const acting = !!(b && b.cur === who && hp > 0);
-    const ready  = !!(cmd && !acting && hp > 0);
+    const stgd   = !!(b && hp > 0 && allyStaggerOn(who));              // 흐트러짐 (ALLY_STAGGER_RULE)
+    const ready  = !!(cmd && cmd !== "stagger" && !stgd && !acting && hp > 0);
     const sup    = supportBy(who);
     const ally   = allyBy(who);
     const div = document.createElement("div");
@@ -5238,6 +5393,7 @@ function renderParty() {
                     (sup ? " sup" : "") + (ally ? " ally" : "") +
                     (acting ? " acting" : "") +
                     (aimed  ? " aimed"  : "") +
+                    (stgd   ? " stg"    : "") +
                     (ready ? (cmd === "guard" ? " cmd-guard" : " cmd-attack") : "");
     let mark = "";
     /* 꼬리표는 넓은 화면에서는 이름 옆 글줄에, 폰에서는 카드 오른쪽 위 구석에 겹쳐 짧은 글자로 섭니다(v2.28.9, 사용자 지침).
@@ -5275,6 +5431,10 @@ function renderParty() {
     if (sup)  mark += ' <span class="suptag">지원</span>';
     if (ally) mark += ' <span class="allytag">조력</span>';
     const hideNum = !!ally && !ally.showStats;
+    /* 흐트선 — 적 체력바와 같은 눈금. 수치를 감춘 조력자는 바가 늘 가득이라 긋지 않습니다 */
+    const ag = (b && !hideNum) ? allyStg(who) : null;
+    const 흐트선 = ag ? ag.lines.map((r, i) =>
+      '<b class="stgline' + (ag.used[i] ? ' used' : '') + '" style="left:' + (r * 100) + '%"></b>').join("") : "";
     /* 조력자는 이름을 제 색으로 강조하고, 별 자리에는 idText 를 적습니다
      * (베르렐리우스라면 「길잡이 짧은시선」). data/allies.js 참고. */
     const nameHTML = ally
@@ -5297,7 +5457,7 @@ function renderParty() {
       /* 조력자는 수치를 감춥니다 — 실제로는 그대로 쓰이지만 화면에는 ??? 로.
        * 얼마나 센지 모르는 편이 «와 준 사람» 답습니다. 다만 showStats 를 단 조력자
        * (8장 아멜리아 — 지켜야 하는 사람)는 수치를 그대로 보입니다(사용자 지침 2026-10-25). */
-      '<div class="hpbar"><i style="width:' + (hideNum ? 100 : Math.round(hp / mx * 100)) + '%"></i></div>' +
+      '<div class="hpbar"><i style="width:' + (hideNum ? 100 : Math.round(hp / mx * 100)) + '%"></i>' + 흐트선 + '</div>' +
       /* 좁은 화면에서는 ostat(공·방)을 감춥니다 — 체력만 남깁니다 */
       /* 고른 명령은 이름 옆 «공격»·«방어» 로 이미 보입니다.
        * 아래에 줄을 하나 더 붙이면 카드 높이가 들쭉날쭉해져 눌리는 자리가 흔들립니다. */
@@ -5308,6 +5468,13 @@ function renderParty() {
     if (ready) div.insertAdjacentHTML("beforeend", '<i class="pxmark" data-pxm="' + (cmd === "guard" ? "guard" : "attack") + '"></i>');
     /* 공격 유형(관통 · 참격 · 타격) — 카드 오른쪽 아래 구석에 작게(사용자 지침 2026-11-13, v2.28.11). 조력자처럼 유형이 없으면 빈 글 */
     div.insertAdjacentHTML("beforeend", atkTypeIconHTML(atkTypeOf(who)));
+    /* 흐트러진 사람 — 카드를 살짝 회색조로 덮고 그 위에 「흐트러짐」(사용자 지침 2026-11-15).
+     * 카드는 자주 다시 그려지므로, 튀어 오르는 연출은 흐트러진 처음 한 번만(g.fx) */
+    if (stgd) {
+      const g = b.allyStg[who];
+      const fresh = !g.fx; g.fx = true;
+      div.insertAdjacentHTML("beforeend", '<i class="pstg"><b' + (fresh ? ' class="in"' : '') + '>흐트러짐</b></i>');
+    }
     $party.appendChild(div);
   });
   pxMarkTick();
@@ -6721,9 +6888,6 @@ function startBattleFight(scene, f) {
     if (scene[k] != null) S.battle[k] = scene[k];
   });
   if (scene.hp != null) S.battle.maxhp = scene.hp;
-  /* 흐트러짐과 함께 올린 체력(STAGGER_RULE.hpMult) — 장면 덮어쓰기 뒤, 어려움 사다리 앞 */
-  S.battle.hp    = Math.round(S.battle.hp    * STAGGER_RULE.hpMult);
-  S.battle.maxhp = Math.round(S.battle.maxhp * STAGGER_RULE.hpMult);
   /* 흐트선 — staggerLinesFor 머리말 */
   S.battle.stg = { lines: staggerLinesFor(S.battle, scene), used: [], on: false, until: 0 };
   /* 「몰아친다」(ramp)·「격분」(rage)이 공격력을 올려 쓰므로, 올리기 전의 값을
@@ -6782,6 +6946,7 @@ function startBattleFight(scene, f) {
   if (scene.hint) say(scene.hint, "recall");
 
   if (!S.party.some(alive)) S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+  allyStaggerInit();             // 아군 흐트선 — 사람마다(ALLY_STAGGER_RULE 머리말). 들어설 때 이미 선 아래면 그 선은 쓴 것
 
   /* '계속'을 연타하다 전투에 들어온 것을 놓치지 않도록,
    * 잠깐 버튼을 잠가 둡니다. 그 사이 눌린 것은 아무 일도 하지 않습니다. */
@@ -6924,6 +7089,8 @@ function beginTurn() {
       say("특전이 전원의 숨을 돌려놓는다 — 체력 " + Math.round(ps.healRatio * 100) + "% 회복.", "good");
     }
   }
+  /* 아군 흐트러짐 — 풀 사람은 풀고, 아직 흐트러진 사람은 이번 차례를 쉽니다(allyStaggerTurn) */
+  allyStaggerTurn(b);
 
   /* 이번 턴에 적이 누구를 노리는지 먼저 알려 준다.
    * 노려진 사람을 방어시키거나 교정해 두는 판단을 하라는 뜻입니다.
@@ -7764,7 +7931,7 @@ function renderUniqueSkillInfo(who) {
   if (!S.battle || !skill || level < 1) { box.innerHTML = ""; return; }
   const v = skillTierValue(skill, level);
   /* 능력 이름 앞에 그 작성위원 아이콘(사용자 지침 2026-11-13) — 누구의 능력인지 한눈에 */
-  box.innerHTML = '<span class="uskill">' + iconMini(memberIconName(who)) + '<b>' + skill.name + '</b> ' + skill.desc(v) + '</span>';
+  box.innerHTML = '<span class="uskill">' + iconMini(memberIconName(who)) + '<b>' + skill.name + '</b> ' + skill.desc(v, level) + '</span>';
 }
 
 function askNext() {
@@ -8196,7 +8363,7 @@ function resolveTurn() {
     if (b.turn < start || (b.turn - start) % ls.every !== 0) return next();
 
     const pool = S.party.filter(w =>
-      w && w !== ls.who && alive(w) && memberTitle(w).indexOf(ls.pickTag) >= 0);
+      w && w !== ls.who && alive(w) && !allyStaggerOn(w) && memberTitle(w).indexOf(ls.pickTag) >= 0);   // 흐트러진 사람은 추가타를 못 칩니다
     if (!pool.length) return next();
     const target = pool[rnd(pool.length)];
 
@@ -8396,7 +8563,7 @@ function resolveTurn() {
    * 목록을 여기서 다시 세는 것은 선공에 맞고 쓰러진 사람을 빼기 위해서입니다. */
   const allyPhase = () => {
     if (!same()) return;
-    hitters = S.party.filter(w => w && alive(w) && b.cmds[w] === "attack");
+    hitters = S.party.filter(w => w && alive(w) && b.cmds[w] === "attack" && !allyStaggerOn(w));   // 선공에 흐트러진 사람도 뺍니다
     i = 0;
     if (!hitters.length) setTimeout(afterAllies, RULE.foePauseMs);
     else swing();
@@ -8466,7 +8633,8 @@ function resolveTurn() {
                       b.aoeFlat || fdef.aoeFlat || 0;
       if (flatAoe) b.mods._scriptedHit = true;   // «반드시 전멸» — 되살리는 기프트가 듣지 않습니다 (reviveFirstDown)
       const aoeK = aoeMultNow(b);
-      const hitOne = t => {
+      /* noStg — 책임으로 추민수에게 모을 몫. 흐트러짐 배수는 «맞는 사람»(추민수) 쪽에서 한 번 곱합니다 */
+      const hitOne = (t, noStg) => {
         if (flatAoe) return flatAoe;
         const st = effStats(t);
         let dmg = b.atk * aoeK + rnd(4) - st.def;
@@ -8481,6 +8649,7 @@ function resolveTurn() {
         if (b.mods[t + "_immune"]) dmg *= (1 - b.mods[t + "_immune"]);
         if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
         { const lc = lowHpCut(t); if (lc) dmg *= (1 - lc); }       // 화석 기프트 「키티파티」
+        if (!noStg) dmg *= allyStaggerMult(t);                    // 흐트러진 사람 — 약점처럼 (ALLY_STAGGER_RULE)
         return Math.max(1, Math.floor(dmg));
       };
 
@@ -8490,15 +8659,19 @@ function resolveTurn() {
         /* 각자 몫을 계산해 경감한 뒤, 전부 추민수 한 명에게 몬다 */
         let total = 0;
         targets.forEach(t => {
-          const dmg = heroPct ? Math.max(1, Math.floor(hitOne(t) * (1 - heroPct / 100))) : hitOne(t);
+          const dmg = heroPct ? Math.max(1, Math.floor(hitOne(t, true) * (1 - heroPct / 100))) : hitOne(t, true);
           total += dmg;
         });
+        const heroStg = allyStaggerOn(hero) && !flatAoe;
+        if (heroStg) total = Math.floor(total * allyStaggerMult(hero));
         setHp(hero, curHp(hero) - total);
         hits.push({ who: hero, dmg: total, tag: "책임" });
-        say("　" + memberName(hero) + "이 전원의 몫을 대신 받았다 — " + total + " 피해 (책임)", "heavy");
+        say("　" + memberName(hero) + "이 전원의 몫을 대신 받았다 — " + total + " 피해 (책임)" + (heroStg ? " (흐트러짐)" : ""), "heavy");
         if (!alive(hero)) say(withJosa(memberName(hero), "이") + " 쓰러졌다.", "bad");
+        /* 책임으로 받은 한 대는 흐트러뜨리지 않습니다 — 선은 남깁니다 (ALLY_STAGGER_RULE 머리말) */
       } else {
         targets.forEach(t => {
+          const stgNow = allyStaggerOn(t) && !flatAoe;
           const dmg = hitOne(t);
           setHp(t, curHp(t) - dmg);
           /* 무엇이 덜었는지 하나 — 교정 > 방어. 교정이면 숫자를 파랗게(allyHitFx 의 blue) */
@@ -8508,9 +8681,11 @@ function resolveTurn() {
               (b.cmds[t] === "guard" ? " (방어)" : "") +
               (b.mods[t + "_guard"] ? " (교정)" : "") +
               (b.mods[t + "_immune"] ? " (갑주)" : "") +
-              (b.mods[t + "_fragile"] ? " (강공)" : ""), "heavy");
+              (b.mods[t + "_fragile"] ? " (강공)" : "") +
+              (stgNow ? " (흐트러짐)" : ""), "heavy");
           if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
           lockKillCheck(b, t);
+          allyStaggerCheck(t);
         });
       }
       render();
@@ -8612,13 +8787,17 @@ function resolveTurn() {
         if (!웅) dmg *= splash;
         if (b.mods[t + "_immune"])  dmg *= (1 - b.mods[t + "_immune"]);
         if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
+        const stgNow = allyStaggerOn(t);
+        dmg *= allyStaggerMult(t);                                 // 흐트러진 사람 — 약점처럼
         dmg = Math.max(1, Math.floor(dmg));
         setHp(t, curHp(t) - dmg);
         hits.push({ who: t, dmg: dmg, splash: !웅 });
         say("　" + memberName(t) + "에게 " + dmg + " 피해　" + (웅 ? "(웅크린 것이 듣지 않았다)" : "(여파)") +
             (b.mods[t + "_immune"] ? " (갑주)" : "") +
-            (b.mods[t + "_fragile"] ? " (강공)" : ""), "heavy");
+            (b.mods[t + "_fragile"] ? " (강공)" : "") +
+            (stgNow ? " (흐트러짐)" : ""), "heavy");
         if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+        allyStaggerCheck(t);
       });
       render();
       foeSfx("breaks");
@@ -8695,6 +8874,8 @@ function resolveTurn() {
     if (t === hero && heroPct) dmg *= (1 - heroPct / 100);
     if (tookFor) dmg *= (1 - tookFor);
     { const lc = lowHpCut(t); if (lc) dmg *= (1 - lc); }         // 화석 기프트 「키티파티」
+    const stgNow = allyStaggerOn(t);
+    dmg *= allyStaggerMult(t);                                     // 흐트러진 사람 — 약점처럼
     dmg = Math.max(1, Math.floor(dmg));
     setHp(t, curHp(t) - dmg);
 
@@ -8713,10 +8894,14 @@ function resolveTurn() {
         (b.mods[t + "_fragile"] ? " (강공)" : "") +
         (t === hero && heroPct ? " (책임)" : "") +
         (covered ? " (대신 받음)" : "") +
-        (tookFor ? " (−" + Math.round(tookFor * 100) + "%)" : ""), heavy ? "heavy" : "bad", { tags: true });
+        (tookFor ? " (−" + Math.round(tookFor * 100) + "%)" : "") +
+        (stgNow ? " (흐트러짐)" : ""), heavy ? "heavy" : "bad", { tags: true });
 
     if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
     lockKillCheck(b, t);
+    /* 흐트러짐 — 반격 · 책임 · 도발 · 대신 받기가 걸린 한 대는 흐트러뜨리지 않습니다(선은 남김) */
+    allyStaggerCheck(t, t === hero || !!b.mods[t + "_taunt"] || !!covered ||
+                        !!(b.mods[t + "_counter"] && alive(t)));
     render();
     /* 작은 글씨 — 강타면 「강타」, 그리고 무엇이 피해를 덜었는지 하나(교정 > 방어 > 책임).
      * 교정으로 덜었으면 숫자를 파랗게 — 파티 카드의 교정 딱지(.corrtag)와 같은 결의
@@ -10270,9 +10455,9 @@ function foeCodexStats(k, home) {
   const f = FOES[k];
   if (home && home.kind === "rail") {
     const b = RAIL_STEPS[railRole(home.r, k, home.i)];
-    return { hp: Math.round(b.hp * STAGGER_RULE.hpMult), atk: b.atk, def: b.def, from: home.r.name + " 기준" };
+    return { hp: b.hp, atk: b.atk, def: b.def, from: home.r.name + " 기준" };
   }
-  return { hp: Math.round(f.hp * STAGGER_RULE.hpMult), atk: f.atk, def: f.def, from: "이야기 기준" };
+  return { hp: f.hp, atk: f.atk, def: f.def, from: "이야기 기준" };
 }
 /* 적의 버릇 — 노트에 태그로 늘어놓을 몫 */
 function foeCodexTraits(f) {
@@ -13659,6 +13844,7 @@ function emberRevive(who) {
   if (allyLoseOnDown(who)) return;
   S.railSave.boons.emberUsed = true;
   S.hp[who] = maxHp(who);
+  allyStaggerRevive(who);
   const hp = S.hp[who];
   setTimeout(() => {
     if (S.battle !== b) return;
@@ -16368,7 +16554,7 @@ function openSync(back) {
                (maxed ? '' : '　·　다음 단계에 <b>' + cost + '</b>개') + '</div>' +
              (skill
                ? '<div class="sub"><span class="uskill"><b>' + skill.name + '</b> ' +
-                   (lv >= 1 ? skill.desc(skillTierValue(skill, lv))
+                   (lv >= 1 ? skill.desc(skillTierValue(skill, lv), lv)
                             : '<span style="color:var(--dim)">동기화 1단계에서 열립니다.</span>') +
                  '</span></div>'
                : '') +
