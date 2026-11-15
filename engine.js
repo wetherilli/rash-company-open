@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.1";
+const VERSION = "2.31.2";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -1816,7 +1816,7 @@ function giftGroupsHTML(list, row, opt) {
     h += grp("fossil", '화석', '화석 탐사의 생물군 세트 완성 보상 · 한 번에 ' + GIFT_FOSSIL_MAX + '개만', 화석);
   return h;
 }
-const GIFT_GRP_SHUT = { pick: {}, vault: {} };   // scope → { 묶음 key: 접혔나 } — 판이 도는 동안만
+const GIFT_GRP_SHUT = { pick: {} };   // scope → { 묶음 key: 접혔나 } — 판이 도는 동안만
 function giftGroupsBind(root, scope) {
   if (!GIFT_GRP_SHUT[scope]) GIFT_GRP_SHUT[scope] = {};
   root.querySelectorAll("details.giftfold[data-gfold]").forEach(el => {
@@ -17538,8 +17538,6 @@ function giftWorkBind(root, back) {
   });
 }
 
-/* 보관함의 기프트 목록을 펼쳐 두었는가 — 보관함을 닫으면 다시 접힙니다 */
-let VAULT_GIFT_OPEN = false;
 
 function openVault(back) {
   $modal.classList.add("on");
@@ -17548,7 +17546,7 @@ function openVault(back) {
           '인격은 편성 화면의 [인격 장착]에서 봅니다.</div>';
 
   /* ── 늘어놓는 차례 (사용자 지침 2026-10-16) ──────────────────────
-   *  재화 → E.G.O 기프트(접힘) → [기프트 강화] · [기프트 합성] 한 줄 → 엔케팔린 캡슐 → 동기화 모듈
+   *  재화 → E.G.O 기프트(보유 수 한 줄) → [기프트 강화] · [기프트 합성] 한 줄 → 엔케팔린 캡슐 → 동기화 모듈
    *  → 인격 파편 → 인격 파편 상자 → 선택권.
    *  칸마다 h 에 따로 쌓은 뒤(sec) 맨 끝에서 이 차례로 잇습니다 — 칸을 짓는 코드는 예전 차례 그대로입니다. */
   const head = h, sec = {};
@@ -17661,36 +17659,17 @@ function openVault(back) {
 
   cut("mod");
 
-  /* E.G.O 기프트 — 지닌 것만, 높은 성급부터. 지니고 내려놓는 것은 편성의 기프트 고르기에서 하고,
-   * 올리고 합치는 것은 목록 아래 [E.G.O 기프트 강화] · [합성] 줄로 엽니다(giftWorkHTML — 유리창의 [강화] 를 쪼갠 것). */
-  const vGifts = (typeof GIFTS !== "undefined" ? GIFTS : [])
-    .filter(g => S.giftsOwned && S.giftsOwned[giftId(g)])
-    .slice().sort((a, b) => b.star - a.star);
-  const vGiftAll = giftGachaList().length + vGifts.filter(g => g.noGacha).length;
+  /* E.G.O 기프트 — 보관함에는 강화 · 합성 두 줄만 둡니다(사용자 지침 2026-11-15).
+   * 목록은 노트의 [도감] → [E.G.O 기프트](지닌 것의 지금 효과)와 편성의 [E.G.O 기프트](지니고 내려놓기)에서 봅니다.
+   * 예전에는 여기 접힌 목록(<details>)이 있었습니다 — 같은 목록이 세 곳에 있었습니다. */
+  const vGiftN = (typeof GIFTS !== "undefined" ? GIFTS : []).filter(g => S.giftsOwned && S.giftsOwned[giftId(g)]).length;
+  const vGiftAll = giftGachaList().length + (typeof GIFTS !== "undefined" ? GIFTS : [])
+    .filter(g => g.noGacha && S.giftsOwned && S.giftsOwned[giftId(g)]).length;
   h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">E.G.O 기프트</div>' +
-       '<div class="hint" data-tut="vault-gift">보유 ' + vGifts.length + ' / ' + vGiftAll +
-       '　·　지니고 내려놓는 것은 편성 화면에서 합니다.</div>';
-  if (!vGifts.length) h += '<div class="rwnote small">아직 가진 기프트가 없습니다.<br>상점에서 원고료로 뽑습니다.</div>';
-  else {
-    /* 목록이 길어 <details> 로 접어 둡니다 — 기본은 닫힌 채(사용자 지침 2026-10-16).
-     * 캡슐을 쓰는 등 보관함을 다시 그릴 때는 펼쳐 둔 것을 이어 갑니다. */
-    h += '<details class="vfold" id="vgiftfold"' + (VAULT_GIFT_OPEN ? ' open' : '') + '>' +
-         '<summary>기프트 목록 (' + vGifts.length + '개)</summary>';
-    /* 성급별로 묶고, 화석 기프트는 맨 아래 따로 (사용자 지침 2026-11-06 — giftGroupsHTML) */
-    h += giftGroupsHTML(vGifts, g0 => {
-      const g  = giftView(g0);
-      const on = giftIsOn(giftId(g));
-      return '<div class="slot ro hasic' + (on ? ' sel' : '') + '">' + giftIconHTML(g) +
-             '<div><div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) +
-               (on ? ' <span class="sub">· 지님</span>' : '') + '</div>' +
-             flavorHTML(g) +
-             '<div class="sub">' + g.desc + '</div></div>' +
-           '</div>';
-    }, { scope: "vault", count: m => m.length + '개' });
-    h += '</details>';
-  }
+       '<div class="hint" data-tut="vault-gift">보유 ' + vGiftN + ' / ' + vGiftAll +
+       '　·　목록은 노트의 [도감] 과 편성의 [E.G.O 기프트] 에서 봅니다.</div>';
 
-  /* 접힌 목록 «아래» 에 [기프트 강화] · [기프트 합성] 한 줄 */
+  /* [기프트 강화] · [기프트 합성] 한 줄 */
   h += giftWorkHTML();
   cut("gift");
   h = head + sec.cur + sec.gift + sec.cap + sec.mod + sec.frag + sec.box + sec.ticket;
@@ -17713,9 +17692,7 @@ function openVault(back) {
     openVault(back);   // 개수와 눈금이 바뀌었으니 다시 그립니다
   };
 
-  const vgf = document.getElementById("vgiftfold");
-  if (vgf) vgf.ontoggle = () => { if ($modal.classList.contains("on")) VAULT_GIFT_OPEN = vgf.open; };
-  document.getElementById("vclose").onclick = () => { VAULT_GIFT_OPEN = false; closeModal(); render(); if (back) back(); };
+  document.getElementById("vclose").onclick = () => { closeModal(); render(); if (back) back(); };
   $sheet.querySelectorAll("[data-box]").forEach(el => {
     el.onclick = () => openFragBoxUse(el.dataset.box, back);
   });
@@ -17723,7 +17700,6 @@ function openVault(back) {
     el.onclick = () => openPickTicketUse(el.dataset.ticket, back);
   });
   giftWorkBind($sheet, () => openVault(back));
-  giftGroupsBind($sheet, "vault");
   const vmod = document.getElementById("vsyncmod");
   if (vmod) vmod.onclick = () => openSyncModuleUse(back);
   tutorOnce("vault");   /* 보관함에 처음 들어왔을 때 한 번 */
