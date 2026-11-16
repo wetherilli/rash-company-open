@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.4";
+const VERSION = "2.31.5";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -339,6 +339,7 @@ function vaultBody() {
      * 지키려는 값이 아니라 보는 취향이라서요. */
     font:     S.font || null,
     sfxVol:   S.sfxVol != null ? S.sfxVol : null,   // 효과음 크기 — 안 건드렸으면 비워 둡니다(기본값을 고치면 따라가게)
+    bgmVol:   S.bgmVol != null ? S.bgmVol : null,   // 배경음 크기 — 같은 결
     /* 유리창 배경 — 설정에서 고른 «장 묶음» 의 열쇠(openSettings 참고). 글꼴과 같은 결로
      * vaultSig() 에는 넣지 않고, 보관함을 비워도 남깁니다. 비어 있으면 기본값(마지막으로
      * 마친 장)을 씁니다 — 그 값은 S.cleared 에서 알아내므로 여기 적을 것이 없습니다. */
@@ -405,6 +406,7 @@ function loadVault() {
     mirrorRecords: v.mirrorRecords || [],
     font:     v.font || null,
     sfxVol:   v.sfxVol != null ? v.sfxVol : null,
+    bgmVol:   v.bgmVol != null ? v.bgmVol : null,
     glassBg:  v.glassBg || null,
     dig:      v.dig || null,          // 화석 탐사 — newState 의 digClean 이 거릅니다
     foeLog:   v.foeLog || null,       // 적 도감 — newState 의 foeLogClean 이 거릅니다
@@ -618,11 +620,13 @@ function clearVault() {
    * 나중에 그 장을 다시 마치면 고른 것이 그대로 살아납니다. */
   const glassBg = S && S.glassBg;
   const sfxV = S && S.sfxVol;          // 효과음 크기도 보는(듣는) 취향이라 남깁니다
+  const bgmV = S && S.bgmVol;          // 배경음 크기도
   Store.del(VAULT_KEY);
   Store.del(SAVE_KEY);      // 어디까지 읽었나 하는 기록도 함께
   S = newState();           // 머릿속도 같이 비워야 곧바로 되살아나지 않습니다
-  if (font || glassBg || sfxV != null) {
+  if (font || glassBg || sfxV != null || bgmV != null) {
     if (font) S.font = font; if (glassBg) S.glassBg = glassBg; if (sfxV != null) S.sfxVol = sfxV;
+    if (bgmV != null) S.bgmVol = bgmV;
     saveVault();
   }
   enkSync();
@@ -1431,6 +1435,7 @@ function newState() {
     mirrorRecords: (v && v.mirrorRecords) || [],   // 거울굴절철도 결과 카드 — 최근 세 판
     font: fontClean(v && v.font),                  // 화면 글꼴 — 못 알아보는 값은 처음 값으로
     sfxVol: (v && v.sfxVol != null) ? sfxVolClean(v.sfxVol) : null,   // 효과음 크기 — null 이면 기본값(sfxVol)
+    bgmVol: (v && v.bgmVol != null) ? bgmVolClean(v.bgmVol) : null,   // 배경음 크기 — 같은 결(bgmVol)
     /* 유리창 배경 — 여기서는 거르지 않습니다. 쓸 수 있는 묶음인지는 볼 때마다
      * glassBgKey() 가 보고, 못 쓰면 기본값으로 물러납니다(고른 값은 지우지 않습니다). */
     glassBg: (v && v.glassBg) || null,
@@ -4796,6 +4801,7 @@ function unlockSounds() {
       else stop();
     } catch (e) { /* 못 쥐어 두면 그만 — 연출 자리에서 손잡이로 받습니다 */ }
   });
+  bgmSync(); bgmStart();   // 배경음 — 이 순간에야 틀 수 있습니다
 }
 document.addEventListener("pointerdown", unlockSounds, true);
 document.addEventListener("keydown",     unlockSounds, true);
@@ -4889,9 +4895,134 @@ function playSound(src, onBlocked) {
     try { a.currentTime = 0; } catch (e) {}   // 다시 만나도 처음부터
     const p = a.play();
     if (p && p.catch) p.catch(() => { if (onBlocked) onBlocked(); });
+    bgmDuck(a);    // 등장 음성이 울리는 동안 배경음을 줄입니다
     return a;
   } catch (e) { if (onBlocked) onBlocked(); return null; }
 }
+
+/* ── 배경음악 (사용자 지침 2026-11-16 — 곡은 나중에, 틀부터) ─────────────
+ *  곡 표와 «어디서 무엇을» 은 data/bgm.js 머리말에 있습니다. 여기는 재생만 맡습니다.
+ *
+ *  - render() 마다 bgmSync() 가 지금 있어야 할 곡(bgmWant)을 골라, 다르면 천천히 갈아 끼웁니다.
+ *  - 곡마다 Audio 하나를 쥐어 두고(BGM_EL) 멈출 때 되감지 않습니다 — 전투 뒤 이야기 곡이 끊긴 자리부터.
+ *  - 크기는 Web Audio 의 GainNode 로 겁니다. 아이폰 사파리는 Audio.volume 을 무시해서
+ *    그대로 두면 설정과 상관없이 최대 크기로 울립니다. file:// 에서는 GainNode 가 소리를
+ *    비워 버리므로(교차 출처) 그때만 Audio.volume 으로 겁니다.
+ *  - 크기는 설정의 «배경음 크기»(S.bgmVol, 0 ~ 1, 보관함에 남음)의 제곱 × 곡의 vol. 0 이면 멈춤.
+ *  - 첫 조작 전에는 틀지 않습니다(브라우저가 막음) — unlockSounds 가 깨운 뒤 bgmStart.
+ *  - 탭을 내리면 멈추고, 돌아오면 이어 틉니다.
+ *  - 상태는 var 입니다 — 읽어 들이는 도중 render() 가 먼저 불려도 TDZ 에 걸리지 않게(mgHelpOpen 과 같은 까닭). */
+var BGM_RULE = { defaultVol: 0.4, step: 5, fadeMs: 1200, levelMs: 200, duck: 0.25 };
+var BGM_EL = {};            // 열쇠 → { a: Audio, g: GainNode | null, lv: 지금 크기, t: 페이드 타이머 }
+var BGM_NOW = null;         // 지금 틀어야 할 곡의 열쇠 (null = 조용히)
+var BGM_DUCKS = 0;          // 울리고 있는 등장 음성 수
+function bgmVolClean(v) {
+  const n = Number(v);
+  return (v == null || v === "" || isNaN(n)) ? BGM_RULE.defaultVol : Math.max(0, Math.min(1, n));
+}
+function bgmVol() { return bgmVolClean(S && S.bgmVol); }
+function bgmTrack(key) { return (key && typeof BGM !== "undefined" && BGM[key]) || null; }
+function bgmHas() { return typeof BGM !== "undefined" && Object.keys(BGM).length > 0; }
+
+/* 지금 있어야 할 곡 — 차례는 data/bgm.js 머리말 「고르는 차례」 */
+function bgmWant() {
+  if (!bgmHas() || !S) return null;
+  const P = (typeof BGM_PICK !== "undefined" && BGM_PICK) || {};
+  const pick = (...ks) => { for (const k of ks) if (P[k]) return P[k]; return null; };
+  if (AT_GLASS || !inPlay()) return pick("glass");
+  const rule = S.mirror ? mirrorRuleNow() : null;
+  const b = S.battle;
+  if (b) {
+    const sc = SCENES[S.sc - 1];
+    if (sc && sc.t === "battle" && "bgm" in sc) return sc.bgm;
+    const f = FOES[b.id];
+    if (f && "bgm" in f) return f.bgm;
+    return S.mirror ? (b.boss ? pick("mirrorBoss", "boss") : pick("mirrorBattle", "battle"))
+                    : (b.boss ? pick("boss") : pick("battle"));
+  }
+  /* 지나온 장면 중 마지막 bgm — 전투 장면의 것은 그 전투에만 */
+  for (let i = Math.min(S.sc, SCENES.length) - 1; i >= 0; i--) {
+    const s = SCENES[i];
+    if (s && s.t !== "battle" && "bgm" in s) return s.bgm;
+  }
+  if (S.mirror) {
+    if (rule && "bgm" in rule) return rule.bgm;
+    return rule && rule.group === "rail" ? pick("rail") : pick("mirror");
+  }
+  const ch = CHAPTERS[S.ch];
+  if (ch && "bgm" in ch) return ch.bgm;
+  return pick("story");
+}
+
+function bgmEl(key) {
+  if (BGM_EL[key]) return BGM_EL[key];
+  const t = bgmTrack(key);
+  const a = new Audio(assetURL(t.src));
+  a.loop = true; a.preload = "auto";
+  let g = null;
+  const ctx = location.protocol === "file:" ? null : sfxCtx();
+  if (ctx && ctx.createMediaElementSource) {
+    try { g = ctx.createGain(); g.gain.value = 0; ctx.createMediaElementSource(a).connect(g); g.connect(ctx.destination); }
+    catch (e) { g = null; }
+  }
+  if (!g) a.volume = 0;
+  return (BGM_EL[key] = { a, g, lv: 0, t: 0 });
+}
+function bgmSet(e, v) { e.lv = v; if (e.g) e.g.gain.value = v; else e.a.volume = Math.max(0, Math.min(1, v)); }
+/* 크기를 ms 동안 to 로 옮깁니다. 0 으로 내려가면 멈춥니다(되감지 않음) */
+function bgmFade(e, to, ms) {
+  clearInterval(e.t);
+  const from = e.lv, n = Math.max(1, Math.round(ms / 50));
+  let i = 0;
+  e.t = setInterval(() => {
+    i++;
+    bgmSet(e, from + (to - from) * (i / n));
+    if (i >= n) { clearInterval(e.t); if (to <= 0) e.a.pause(); }
+  }, 50);
+}
+/* 지금 곡이 가야 할 크기 */
+function bgmGain(key) {
+  const t = bgmTrack(key), v = bgmVol();
+  if (!t || v <= 0) return 0;
+  return v * v * (t.vol != null ? t.vol : 1) * (BGM_DUCKS > 0 ? BGM_RULE.duck : 1);
+}
+/* 지금 곡을 틀거나 크기를 맞춥니다 — 틀 수 없는 때(첫 조작 전 · 탭 내림 · 크기 0)면 멈춰 둡니다 */
+function bgmStart(ms) {
+  if (!BGM_NOW || !bgmTrack(BGM_NOW)) return;
+  const e = bgmEl(BGM_NOW), to = bgmGain(BGM_NOW);
+  if (!SOUND_UNLOCKED || document.hidden || to <= 0) { if (!e.a.paused) bgmFade(e, 0, BGM_RULE.levelMs); return; }
+  if (e.g) { const c = sfxCtx(); if (c && c.state === "suspended") c.resume().catch(() => {}); }
+  if (e.a.paused) {
+    const key = BGM_NOW;
+    const p = e.a.play();
+    const go = () => { if (BGM_NOW === key) bgmFade(e, bgmGain(key), ms != null ? ms : BGM_RULE.fadeMs); };
+    if (p && p.then) p.then(go, () => {}); else go();
+  } else bgmFade(e, to, ms != null ? ms : BGM_RULE.levelMs);
+}
+function bgmSync() {
+  const want = bgmTrack(bgmWant()) ? bgmWant() : null;
+  if (want === BGM_NOW) return;
+  if (BGM_NOW && BGM_EL[BGM_NOW]) bgmFade(BGM_EL[BGM_NOW], 0, BGM_RULE.fadeMs);
+  BGM_NOW = want;
+  bgmStart();
+}
+/* 등장 음성 a 가 울리는 동안 줄입니다. 다시 쓰는 Audio 라 한 번 틀 때마다 한 번만 셉니다 */
+function bgmDuck(a) {
+  if (!a || a._bgmDuck) return;
+  a._bgmDuck = true;
+  BGM_DUCKS++; bgmStart();
+  const up = () => {
+    if (!a._bgmDuck) return;
+    a._bgmDuck = false;
+    BGM_DUCKS = Math.max(0, BGM_DUCKS - 1); bgmStart();
+    ["ended", "pause", "error"].forEach(k => a.removeEventListener(k, up));
+  };
+  ["ended", "pause", "error"].forEach(k => a.addEventListener(k, up));
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { for (const k in BGM_EL) { clearInterval(BGM_EL[k].t); BGM_EL[k].a.pause(); bgmSet(BGM_EL[k], 0); } }
+  else bgmStart();
+});
 
 /* 맞는 연출 — 참격이 한 번 그어지고, 적이 좌우로 흔들리며 점멸한다.
  * dmg · crit 를 넘기면 그 피해가 크면(RULE.bigHitMin 이상) 숫자도 크게 띄웁니다 —
@@ -5726,9 +5857,9 @@ function renderAdvisors() {
         ' <span class="star">' + stars(a.star) + '</span></div>' +
       '<div class="id">' + a.title + '</div>' +
     '</div>').join("") +
-    /* 이야기 · 전투 중에는 빈 자리도 세 칸을 채웁니다 — 가운데 ▲ 만 있는 빈 칸(사용자 지침 2026-11-13, v2.28.10).
+    /* 이야기 · 전투 · 유리창에서는 빈 자리도 세 칸을 채웁니다 — 가운데 ▲ 만 있는 빈 칸(사용자 지침 2026-11-13, v2.28.10 · 유리창 2026-11-16).
      * 교육위원을 하나도 안 데려가도 줄이 서 있어, 판마다 아래 단추 자리가 같습니다. 빈 칸 높이는 진짜 칸과 같게(이름 · 직함 두 줄을 감춰 둠). */
-    (inPlay() ? Array.from({ length: Math.max(0, 3 - list.length) }, () =>
+    ((AT_GLASS || inPlay()) ? Array.from({ length: Math.max(0, 3 - list.length) }, () =>
       '<div class="acard aghost"><div class="nm">' + iconMini("원고료") + '　</div><div class="id">　</div><i>▲</i></div>').join("") : "");
 }
 
@@ -5836,6 +5967,7 @@ function renderSynergy() {
 
 function render() {
   renderMood(); renderHeader(); renderFoeBar(); renderParty(); renderAdvisors(); renderGifts(); renderSynergy(); renderManage();
+  bgmSync();   // 화면이 바뀌면 곡도 — 같은 곡이면 아무것도 안 합니다
   /* 고유 능력 설명 칸은 askNext()가 그 차례에만 채운다 — 전투 밖에서는 비워 둔다 */
   if (!S.battle) { const box = document.getElementById("uniqueskills"); if (box) box.innerHTML = ""; }
 }
@@ -17348,7 +17480,7 @@ function openSettings(back) {
               '<summary><b>색 테마</b>　지금 「' + cur.name + '」</summary>' +
               '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
             '</details>' +
-            sfxSettingHTML() +
+            sfxSettingHTML() + bgmSettingHTML() +
             '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
             '<div class="grid">' +
               slot("bg", "유리창 배경", "마친 장의 배경으로 갈아 끼웁니다 — 지금 「" +
@@ -17367,6 +17499,7 @@ function openSettings(back) {
     $sheet.innerHTML = h;
     paletteBind(draw);
     sfxSettingBind();
+    bgmSettingBind();
     const here = () => openSettings(back);
     const go = k => $sheet.querySelector('[data-go="' + k + '"]');
     go("bg").onclick    = () => openGlassBgPick(here);
@@ -17442,6 +17575,27 @@ function sfxSettingBind() {
     tb._t = setTimeout(() => { tb.textContent = "들어 보기"; }, 900);
     playSfx(x.src, v);
   };
+}
+
+/* 설정의 «배경음 크기» 칸 — 효과음 줄과 같은 꼴(.setsfxrow). 곡이 하나도 없으면(data/bgm.js) 숨깁니다 —
+ * 움직여도 아무 소리가 안 나는 막대는 고장으로 보이니까요. 듣기는 막대를 놓을 때 지금 곡의 크기를 바로 맞추는 것으로 합니다. */
+function bgmSettingHTML() {
+  if (!bgmHas()) return "";
+  const v = bgmVol();
+  return '<div class="setsfx">' +
+           '<div class="setsfxrow">' +
+             '<b>배경음 크기</b>' +
+             '<input type="range" id="bgmrange" min="0" max="100" step="' + BGM_RULE.step + '" value="' + Math.round(v * 100) + '">' +
+             '<span id="bgmval">' + sfxVolText(v) + '</span>' +
+             '<button class="ghost" tabindex="-1" aria-hidden="true" style="visibility:hidden">들어 보기</button>' +   // 효과음 줄과 막대 길이를 맞추는 빈 자리
+           '</div>' +
+         '</div>';
+}
+function bgmSettingBind() {
+  const r = document.getElementById("bgmrange"), lab = document.getElementById("bgmval");
+  if (!r) return;
+  r.oninput  = () => { S.bgmVol = Number(r.value) / 100; lab.textContent = sfxVolText(S.bgmVol); bgmStart(); };
+  r.onchange = () => { S.bgmVol = Number(r.value) / 100; saveVault(); bgmStart(); };
 }
 
 /* 유리창 배경 고르기 — 예전에는 설정 화면 그 자체였는데, 따로 떼어 [설정] → [유리창 배경] 으로 엽니다
