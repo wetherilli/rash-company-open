@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.5";
+const VERSION = "2.31.6";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4769,10 +4769,39 @@ function soundEl(src) {
   if (!SOUND_CACHE[src]) {
     const a = new Audio(assetURL(src));
     a.preload = "auto";
+    /* 크기 손잡이 — 배경음(bgmEl)과 똑같은 방식입니다. 아이폰 사파리는 Audio.volume 을
+     * 무시해서, 쓸 수 있으면 GainNode 를 끼우고 못 쓰면 volume 으로 물러납니다.
+     * createMediaElementSource 는 한 요소에 한 번만 걸 수 있어 여기(만드는 자리)서 겁니다. */
+    const ctx = location.protocol === "file:" ? null : sfxCtx();
+    if (ctx && ctx.createMediaElementSource) {
+      try {
+        const g = ctx.createGain();
+        ctx.createMediaElementSource(a).connect(g);
+        g.connect(ctx.destination);
+        a._g = g;
+      } catch (e) { a._g = null; }
+    }
     SOUND_CACHE[src] = a;
   }
   return SOUND_CACHE[src];
 }
+
+/* ── 등장 음성의 크기 (사용자 지침 2026-11-17) ───────────────────────
+ *  보스가 설 때 한 번 울리는 음악(FOES 의 sound)입니다. 예전에는 크기 손잡이가
+ *  아예 없어 늘 최대로 울렸습니다 — 「쥬3피노 등장 음악을 들어보니 좀 크더라」.
+ *  **배경음악과 같은 막대(S.bgmVol)** 를 따르게 했습니다(사용자 지침 — 「앞으로
+ *  추가될 배경음악과 같은 줄로 묶이도록」). 거는 식도 배경음·효과음과 같은 제곱입니다.
+ *  곡의 vol 배수(bgmGain)는 곡 표에 있는 것이라 여기서는 안 씁니다. */
+function cueGain() { const v = bgmVol(); return v * v; }
+function cueVolSet(a) {
+  if (!a) return;
+  const g = cueGain();
+  if (a._g) a._g.gain.value = g; else a.volume = Math.max(0, Math.min(1, g));
+}
+/* 설정에서 막대를 끄는 동안, 지금 울리고 있는 등장 음성도 곧바로 따라옵니다 */
+function cueVolApply() { for (const k in SOUND_CACHE) cueVolSet(SOUND_CACHE[k]); }
+/* 등장 음성을 가진 적이 하나라도 있는가 — 곡이 없어도 설정의 막대를 세울 까닭이 됩니다 */
+function cueHas() { return soundsToUnlock().length > 0; }
 
 /* 미리 쥐어 둘 소리 목록 — FOES 에 sound 를 적어 둔 적의 것 전부 */
 function soundsToUnlock() {
@@ -4892,6 +4921,9 @@ function playSound(src, onBlocked) {
     const a = soundEl(src);
     a.pause();
     a.muted = false;
+    cueVolSet(a);                             // 설정의 «배경음 크기» (cueGain 머리말)
+    /* GainNode 를 끼웠으면 소리가 그 길로만 나갑니다 — 잠든 ctx 를 깨워야 들립니다 */
+    if (a._g) { const c = sfxCtx(); if (c && c.state === "suspended") c.resume().catch(() => {}); }
     try { a.currentTime = 0; } catch (e) {}   // 다시 만나도 처음부터
     const p = a.play();
     if (p && p.catch) p.catch(() => { if (onBlocked) onBlocked(); });
@@ -4912,7 +4944,9 @@ function playSound(src, onBlocked) {
  *  - 첫 조작 전에는 틀지 않습니다(브라우저가 막음) — unlockSounds 가 깨운 뒤 bgmStart.
  *  - 탭을 내리면 멈추고, 돌아오면 이어 틉니다.
  *  - 상태는 var 입니다 — 읽어 들이는 도중 render() 가 먼저 불려도 TDZ 에 걸리지 않게(mgHelpOpen 과 같은 까닭). */
-var BGM_RULE = { defaultVol: 0.4, step: 5, fadeMs: 1200, levelMs: 200, duck: 0.25 };
+/* defaultVol — 0.4 에서 0.3 으로 내렸습니다 (사용자 지침 2026-11-17 — 효과음과 같은 값으로.
+ * 쥬3피노 등장 음악이 그냥 틀면 너무 컸습니다). 이미 손수 맞춰 둔 분의 값은 그대로 남습니다. */
+var BGM_RULE = { defaultVol: 0.3, step: 5, fadeMs: 1200, levelMs: 200, duck: 0.25 };
 var BGM_EL = {};            // 열쇠 → { a: Audio, g: GainNode | null, lv: 지금 크기, t: 페이드 타이머 }
 var BGM_NOW = null;         // 지금 틀어야 할 곡의 열쇠 (null = 조용히)
 var BGM_DUCKS = 0;          // 울리고 있는 등장 음성 수
@@ -5706,6 +5740,8 @@ function buttons(list) {
     }
     if (b.key) el.dataset.key = b.key.toLowerCase();
     if (b.cls) el.className = b.cls;
+    /* 마우스를 올리면 뜨는 한 줄 — [스토리 넘기기] 가 어디로 보내는지 적는 자리입니다 */
+    if (b.title) el.title = b.title;
     if (b.disabled) el.disabled = true;
     else el.onclick = b.fn;
     $actions.appendChild(el);
@@ -6541,13 +6577,141 @@ function canLeaveHere() {
   return prev.t === "rest" || prev.t === "railExpressRest";  // 거울굴절철도의 쉼표
 }
 
+/* ── 스토리 넘기기 (사용자 지침 2026-11-17) ───────────────────────────
+ *  마친 장을 다시 돌 때, 이미 읽은 이야기를 걷어 내고 «싸우는 자리» 로 바로
+ *  보냅니다. [계속] 과 같은 줄 맨 오른쪽에 섭니다(.rightend — index.html).
+ *
+ *  ■ 어디로 보내는가 — «읽는 줄» 만 걷습니다.
+ *      SKIP_READ  나레이션 · 대사 · 장소 · 컷신 · 암전 · 번개 · 회상 들머리와 끝 ·
+ *                 집필 예정 · 표(label) — 찍지 않고 지나칩니다.
+ *      SKIP_RUN   인격 지급 · 황금교본 · 이야기 특전 · 보조 교육위원 · 조력자 ·
+ *                 중간 저장 — «조용히 치르고» 지나갑니다. 넘겼다고 받을 것을
+ *                 잃지 않습니다(play() 를 그대로 불러 치릅니다).
+ *    그 둘이 아닌 **첫 장면이 멈추는 자리**입니다 —
+ *      전투 · 보스 등장 연출 · 편성 · 갈림길 · 사진 · 요리 · 장 끝 ·
+ *      꾸러미가 더한 장면(SCENE_EXT)까지 모두.
+ *    전투 바로 앞에 편성을 손보는 자리({t:"party"})가 있으면 **거기서** 멈춥니다
+ *    (사용자 지침 2026-11-17 — 「편성을 손보기 직전 위치로」). 전투로 바로
+ *    들이받지 않으므로, 넘긴 뒤에도 편성을 고쳐 들어갈 수 있습니다.
+ *
+ *  ■ 어느 장에 서는가
+ *      · 장에 skip: true 가 적혀 있고 (data/story.js)
+ *      · **이미 마친 장**이고 (S.cleared — 아직 못 마친 장에는 아예 안 섭니다)
+ *      · 거울 던전 · 거울굴절철도가 아니고
+ *      · 지금 자리에서 넘길 줄이 하나라도 있을 때
+ *    아직 안 나간 장(wip/)에는 skip 을 적지 않습니다 — 옮겨 붙일 때 멈추는
+ *    자리를 눈으로 보고 그때 적습니다(wip/README.md 「옮겨 붙이기」 · TODO.md).
+ *
+ *  ■ 배경음 · 날씨 — 배경음은 손댈 것이 없습니다(bgmWant 가 S.sc 에서 되감아
+ *    찾으므로, 넘긴 뒤 render() 한 번이면 맞는 곡으로 갑니다). 날씨(CUR_WX)와
+ *    무대는 되감지 않고 그때그때 세우는 것이라 skipStage 가 다시 입힙니다.
+ */
+const SKIP_READ = { n: 1, d: 1, place: 1, cut: 1, dark: 1, flash: 1,
+                    recallStart: 1, recallEnd: 1, TODO: 1, label: 1 };
+const SKIP_RUN  = { gain: 1, codex: 1, perk: 1, advisor: 1, ally: 1, save: 1 };
+
+function canStorySkip() {
+  if (!(typeof SCENES !== "undefined" && SCENES && SCENES.length)) return false;
+  if (S.mirror) return false;                                 // 거울 갈래에는 안 섭니다
+  const c = curChapter();
+  if (!c || !c.skip) return false;                            // 장이 허락한 것만
+  return !!(S.cleared && S.cleared[c.id]);                    // 마친 장에만
+}
+
+/* 지금 자리에서 넘기면 어디에 서는가 — 넘길 것이 없으면 null(손잡이도 안 섭니다) */
+function storySkipTo() {
+  if (!canStorySkip()) return null;
+  let i = S.sc;                                               // 다음에 나올 장면
+  while (i < SCENES.length) {
+    const s = SCENES[i];
+    if (!s || !(SKIP_READ[s.t] || SKIP_RUN[s.t])) break;
+    i++;
+  }
+  if (i <= S.sc) return null;                                 // 바로 앞이 이미 멈추는 자리
+  return { to: i, scene: SCENES[i] || null };
+}
+
+/* 손잡이에 적어 둘 «어디로 가는지» 한 마디 */
+function storySkipWhere(t) {
+  const s = t && t.scene;
+  if (!s) return "장의 끝";
+  switch (s.t) {
+    case "battle":
+    case "bossCine": { const f = FOES[s.foe]; return f ? f.name + " 전투" : "다음 전투"; }
+    case "party":    return "편성 고치는 자리";
+    case "choice":   return "갈림길";
+    case "camera":   return "사진 찍는 자리";
+    case "cook":     return "요리하는 자리";
+    case "end":      return "장의 끝";
+    default:         return "다음 자리";
+  }
+}
+
+/* 넘기는 동안 지나친 «무대» 장면은 차례대로 다시 입힙니다 — 글은 찍지 않습니다.
+ * 배경을 안 입히면 바로 열리는 전투가 엉뚱한 곳에서 벌어집니다(전투는 깔려 있는
+ * 배경을 그대로 씁니다 — startBattleFight 참고). 돌려주는 값은 마지막 장소 이름입니다. */
+function skipStage(list) {
+  let where = null;
+  list.forEach(s => {
+    switch (s.t) {
+      case "place":
+        CUR_WX = s.wx || null;                                // 날씨도 장소를 따릅니다
+        showCard(s.img || (curChapter() || {}).img, s.name, s.name);
+        where = s.name; break;
+      case "cut":
+        showCut(s.img || null, s.name || null); break;
+      case "dark":
+        dropSpeaker();
+        $stage.className = "on";
+        $stage.innerHTML = '<div class="scenebox blackout"></div>'; break;
+      case "recallStart":
+        $log.classList.add("recalling");
+        if (s.img) { showCard(s.img, s.name); where = "회상 · " + s.name; }
+        break;
+      case "recallEnd": {
+        $log.classList.remove("recalling");
+        const c = curChapter() || {};
+        showCard(c.img, c.no);
+        where = null; break;
+      }
+    }
+  });
+  stageWeather();
+  return where;
+}
+
+function storySkip() {
+  const t = storySkipTo();
+  if (!t) return cont();                                      // 그새 넘길 것이 없어졌으면 그대로
+  /* 넘긴다는 말을 «먼저» 적습니다 — 지나는 길에 받은 것(인격 · 황금교본 …)이
+   * 그 아래에 찍혀야 무엇 때문에 받았는지가 읽힙니다. */
+  divider();
+  say("이미 지나온 이야기를 넘겼다 — " + withJosa(storySkipWhere(t), "으로") + ".", "sys");
+  const 무대 = [];
+  while (S.sc < t.to) {
+    const s = SCENES[S.sc++];
+    if (SKIP_RUN[s.t]) { play(s); continue; }                 // 받을 것은 받고 지나갑니다
+    무대.push(s);                                             // 나머지는 무대만 챙깁니다
+  }
+  const where = skipStage(무대);
+  if (where) say("▶ " + where, "place");
+  render();
+  save(true);
+  next();                                                     // 멈추는 자리를 그대로 엽니다
+}
+
 /* 계속 버튼 — 손으로 누르는 「기록」 손잡이는 없앴습니다(사용자 지침
  * 2026-09-03). 그 자리에서 매번 조용히 자동 저장합니다 — save() 참고. */
 function cont() {
   render();
   save(true);
+  /* 마친 장을 다시 돌 때만 서는 [스토리 넘기기] — 줄 맨 오른쪽에(storySkipTo 머리말) */
+  const skipTo = storySkipTo();
   buttons([{ label: "계속", cls: "primary", key: "p", fn: next },
-           canLeaveHere() ? { label: "유리창", cls: "ghost", fn: () => toGlass(() => cont()) } : null]);
+           canLeaveHere() ? { label: "유리창", cls: "ghost", fn: () => toGlass(() => cont()) } : null,
+           skipTo ? { label: "스토리 넘기기", cls: "ghost rightend", key: "s",
+                      title: "이미 지나온 이야기를 걷고 " + withJosa(storySkipWhere(skipTo), "으로") + " 갑니다",
+                      fn: storySkip } : null]);
 }
 
 /* 유리창(메인 화면)으로 돌아가기 — 매번 자동 저장되므로 더는 물어보지
@@ -15821,8 +15985,14 @@ function openMail(back, note) {
   const all = mailList();
   const 기다림 = mailWaiting();
 
+  /* **받았다는 줄은 안 띄웁니다** (사용자 지침 2026-11-17 — 「받았습니다 — 원고료 200　·
+   * 유전자 100」처럼 받은 것을 한 번 더 보여 주는 줄은 완전히 치워 달라). 출석 · 주간 보상
+   * 창에서 같은 줄을 걷은 것과 같은 결입니다(v2.29.10). 받은 것은 칸이 「✓ 받았습니다」로
+   * 바뀌는 것과 기록칸의 「… 획득.」이 이미 말해 줍니다.
+   * **못 받은 까닭(note.ok === false)은 그대로** — 달리 알릴 자리가 없습니다
+   * (엔케팔린이 가득 차서 못 받는 자리 등). */
   let h = '<h2>우 편 함</h2>' +
-    (note ? '<div class="mailnote' + (note.ok ? ' ok' : ' no') + '">' + note.msg + '</div>' : '') +
+    (note && !note.ok ? '<div class="mailnote no">' + note.msg + '</div>' : '') +
           /* 안내는 상자에, 한 줄에 하나씩 (사용자 지침 2026-11-06) */
           '<div class="rwnote">불편을 끼쳤을 때 얹어 드리는 자리입니다.<br>' +
           '하나에 한 번씩만 받습니다.</div>' +
@@ -16057,10 +16227,12 @@ function openReward(back, note) {
     '<div class="rwnote">매일 출석은 원고료, 주간 보상은 키우는 재료입니다.<br>' +
     '하루는 0시에, 주는 <b>월요일 0시</b>에 갈립니다.<br>' +
     '받지 않은 주간 보상은 그때 사라집니다.</div>';
-  /* 받을 것이 둘 이상이면 한 번에 — 둘 중 하나를 골라야 하는 「모두 달성」 보상만 빼고(v2.28.14, 사용자 지침) */
+  /* 받을 것이 둘 이상이면 한 번에 — 둘 중 하나를 골라야 하는 「모두 달성」 보상만 빼고(v2.28.14, 사용자 지침).
+   * 손잡이는 여기서 글만 지어 두고, 자리는 아래 «매일 출석» 칸 밑의 지질망치 줄 오른쪽 끝입니다
+   * (사용자 지침 2026-11-17 — 예전에는 맨 위 안내 상자 바로 아래에 혼자 섰습니다). */
   const allN = rewardWaiting() - (rewardAllFull() && !r.wk.all ? 1 : 0);
-  if (allN >= 2)
-    h += '<div class="rwallrow"><button id="rwall" class="primary">받을 수 있는 것 모두 받기 (' + allN + ')</button></div>';
+  const allBtn2 = allN >= 2
+    ? '<button id="rwall" class="primary">받을 수 있는 것 모두 받기 (' + allN + ')</button>' : '';
 
   /* ── 매일 출석 — 일곱 칸 ── */
   const L = ATTEND_DAYS.length;
@@ -16079,9 +16251,14 @@ function openReward(back, note) {
   /* 「오늘 몫은 받았습니다. 내일 0시에 다음 칸이 열립니다.」 는 걷었습니다 (사용자 지침 2026-11-06) —
    * 받은 칸에는 「받음」 이 뜨고, 0시에 갈리는 것은 맨 위 안내에 있습니다.
    * 화석 탐사가 열렸으면 «출석마다 지질망치» 한 줄만 남깁니다. */
-  if (digOpen())
-    h += '<div class="hint" style="margin:6px 0 0">' + iconMini(DIG_BRUSH) + '매일 출석할 때마다 ' + DIG_BRUSH + ' ' +
-         DIG_RULE.brushDaily + '개를 함께 받습니다.</div>';
+  /* 이 줄 «오른쪽 끝» 에 [모두 받기] 가 붙습니다 (사용자 지침 2026-11-17 — .rwallrow).
+   * 탐사가 아직 안 열려 설명 줄이 없으면 손잡이만 그 자리에 섭니다. */
+  const digHint = digOpen()
+    ? iconMini(DIG_BRUSH) + '매일 출석할 때마다 ' + DIG_BRUSH + ' ' + DIG_RULE.brushDaily + '개를 함께 받습니다.'
+    : '';
+  if (digHint || allBtn2)
+    h += '<div class="rwallrow">' + (digHint ? '<span class="hint">' + digHint + '</span>' : '') +
+         allBtn2 + '</div>';
 
   /* ── 이번 주 — 첫 상자 · 누적 출석 ── */
   const row = (key, title, sub, g, state) =>
@@ -17577,25 +17754,47 @@ function sfxSettingBind() {
   };
 }
 
-/* 설정의 «배경음 크기» 칸 — 효과음 줄과 같은 꼴(.setsfxrow). 곡이 하나도 없으면(data/bgm.js) 숨깁니다 —
- * 움직여도 아무 소리가 안 나는 막대는 고장으로 보이니까요. 듣기는 막대를 놓을 때 지금 곡의 크기를 바로 맞추는 것으로 합니다. */
+/* 설정의 «배경음 크기» 칸 — 효과음 줄과 같은 꼴(.setsfxrow). 듣기는 막대를 놓을 때 지금 곡의
+ * 크기를 바로 맞추는 것으로 합니다.
+ *
+ * 곡이 하나도 없어도(data/bgm.js 가 빈 표) **보스 등장 음성이 있으면 세웁니다**
+ * (사용자 지침 2026-11-17 — 그 막대가 등장 음성의 크기이기도 하므로, 숨기면 쥬3피노를
+ * 줄일 길이 없습니다). 둘 다 없을 때만 숨깁니다 — 움직여도 아무 소리가 안 나는 막대는
+ * 고장으로 보이니까요. */
 function bgmSettingHTML() {
-  if (!bgmHas()) return "";
+  if (!bgmHas() && !cueHas()) return "";
   const v = bgmVol();
   return '<div class="setsfx">' +
            '<div class="setsfxrow">' +
              '<b>배경음 크기</b>' +
              '<input type="range" id="bgmrange" min="0" max="100" step="' + BGM_RULE.step + '" value="' + Math.round(v * 100) + '">' +
              '<span id="bgmval">' + sfxVolText(v) + '</span>' +
-             '<button class="ghost" tabindex="-1" aria-hidden="true" style="visibility:hidden">들어 보기</button>' +   // 효과음 줄과 막대 길이를 맞추는 빈 자리
+             /* 자리를 비워 두던 칸에 [들어 보기] 를 넣었습니다 (사용자 지침 2026-11-17) —
+              * 보스 등장 음성을 한 번 틀어 지금 크기를 귀로 견줍니다. 길게 흐르는 소리라
+              * 다시 누르면 멈춥니다. 들려줄 것이 없으면 예전처럼 빈 자리로 둡니다. */
+             (cueHas() ? '<button class="ghost" id="bgmtry">들어 보기</button>'
+                       : '<button class="ghost" tabindex="-1" aria-hidden="true" style="visibility:hidden">들어 보기</button>') +
            '</div>' +
          '</div>';
 }
 function bgmSettingBind() {
   const r = document.getElementById("bgmrange"), lab = document.getElementById("bgmval");
   if (!r) return;
-  r.oninput  = () => { S.bgmVol = Number(r.value) / 100; lab.textContent = sfxVolText(S.bgmVol); bgmStart(); };
-  r.onchange = () => { S.bgmVol = Number(r.value) / 100; saveVault(); bgmStart(); };
+  r.oninput  = () => { S.bgmVol = Number(r.value) / 100; lab.textContent = sfxVolText(S.bgmVol); bgmStart(); cueVolApply(); };
+  r.onchange = () => { S.bgmVol = Number(r.value) / 100; saveVault(); bgmStart(); cueVolApply(); };
+  const tb = document.getElementById("bgmtry");
+  if (!tb) return;
+  const 멈춤 = () => { tb.textContent = "들어 보기"; };
+  tb.onclick = () => {
+    const cur = SOUND_CACHE[tb._src];
+    if (cur && !cur.paused) { try { cur.pause(); cur.currentTime = 0; } catch (e) {} return 멈춤(); }
+    if (bgmVol() <= 0) { lab.textContent = "꺼짐"; return; }
+    tb._src = soundsToUnlock()[0];
+    const a = playSound(tb._src);
+    if (!a) return;
+    tb.textContent = "멈추기";
+    a.addEventListener("ended", 멈춤, { once: true });
+  };
 }
 
 /* 유리창 배경 고르기 — 예전에는 설정 화면 그 자체였는데, 따로 떼어 [설정] → [유리창 배경] 으로 엽니다

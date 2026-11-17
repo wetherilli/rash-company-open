@@ -17,6 +17,10 @@
  *             «들어가 볼 마음이 들게» 하는 자리라, 이야기의 반전은 적지 않고
  *             누가 어디로 가서 무엇을 하려는지 — 들머리까지만 적습니다.
  *             안 적으면 summary 한 줄이 대신 섭니다.
+ *    skip     true 면 «그 장을 마친 사람에게» [스토리 넘기기] 손잡이가 섭니다
+ *             (사용자 지침 2026-11-17 — engine.js 의 storySkipTo 머리말에 어디로
+ *             보내는지 적혀 있습니다). 아직 안 나간 장(wip/)에는 적지 않습니다 —
+ *             옮겨 붙일 때 멈추는 자리를 눈으로 보고 그때 적습니다(wip/README.md).
  *    glassNote 한 줄. 유리창(메인 화면)에 그 장의 배경이 걸렸을 때 뜨는 나레이션입니다
  *             (사용자 지침 2026-09-12). 배경 낱장마다가 아니라 «장 한 묶음에 한 줄» 입니다 —
  *             [설정] 의 유리창 배경 묶음과 같은 단위입니다. 안 적으면 그 줄만 비고
@@ -89,7 +93,7 @@ const CHAPTERS = [
 
 /* ═══════════════ 0장 ═══════════════════════════════════════ */
 {
-  id: "ch0", no: "0장", title: "돌아갈 수 없는", lead: "manager",
+  id: "ch0", no: "0장", title: "돌아갈 수 없는", lead: "manager", skip: true,
   img: "assets/scene/메카고질라 내부.jpg",
   glassNote: "K사 앞은 언제든 한적하다. 카페에 들러볼까?",
   summary: "관리자가 되다.",
@@ -118,7 +122,7 @@ const CHAPTERS = [
 
 /* ═══════════════ 1장 ═══════════════════════════════════════ */
 {
-  id: "ch1", no: "1장", title: "공식 설정에 속하지 못하는", lead: "kim_duhyeon",
+  id: "ch1", no: "1장", title: "공식 설정에 속하지 못하는", lead: "kim_duhyeon", skip: true,
   img: "assets/scene/구C사 지하실.jpg",
   place: "구C사",
   glassNote: "구C사의 지하는 아직도 눅눅하다. 여기서 유리 양을 잃었다.",
@@ -354,7 +358,7 @@ const CHAPTERS = [
 
 /* ═══════════════ 2장 ═══════════════════════════════════════ */
 {
-  id: "ch2", no: "2장", title: "합류할 수 없는", lead: "song_hamin",
+  id: "ch2", no: "2장", title: "합류할 수 없는", lead: "song_hamin", skip: true,
   img: "assets/scene/공룡의날 광장.jpg",
   place: "올림피아드 / 공룡의 날",
   glassNote: "축제 소리가 멀리서 들려온다. 저 인파 어딘가에 한범군이 서 있었다.",
@@ -416,7 +420,7 @@ const CHAPTERS = [
 
 /* ═══════════════ 3장 ═══════════════════════════════════════ */
 {
-  id: "ch3", no: "3장", title: "대응하지 않는", lead: "kim_taeseong",
+  id: "ch3", no: "3장", title: "대응하지 않는", lead: "kim_taeseong", skip: true,
   img: "assets/scene/P사 광장.jpg",
   place: "P사",
   glassNote: "치우고 난 광장에도 탄 냄새는 남는다.",
@@ -509,7 +513,7 @@ const CHAPTERS = [
  *    갑각류는 대게와 꽃게 «둘 다» 에 걸어 두었습니다 — 하나만 걸면 앞뒤가 안 맞습니다.
  * ══════════════════════════════════════════════════════════ */
 {
-  id: "ch3_5", no: "3.5장", title: "영덕의 밤", side: true,
+  id: "ch3_5", no: "3.5장", title: "영덕의 밤", side: true, skip: true,
   img: "assets/scene/영덕 평상시.jpg",
   place: "영덕",
   glassNote: "영덕의 밤은 여전히 고소하다. 갑판이 또 부엌이 될 것 같다.",
@@ -726,7 +730,7 @@ const CHAPTERS = [
  *  원문에 없던 대사만 TODO 로 비워 두었습니다.
  * ══════════════════════════════════════════════════════════ */
 {
-  id: "ch4", no: "4장", title: "동심이 변하지 않는", lead: "park_suo",
+  id: "ch4", no: "4장", title: "동심이 변하지 않는", lead: "park_suo", skip: true,
   img: "assets/scene/F사 내부.jpg",
   place: "F사",
   glassNote: "진열장의 불은 밤에도 꺼지지 않는다. 화석은 아무것도 묻지 않는다.",
@@ -874,7 +878,7 @@ const CHAPTERS = [
  *  대사는 아직 손볼 여지가 많습니다. 고칠 때는 이 장만 보면 됩니다.
  */
 {
-  id: "ch5", no: "5장", title: "바다로 갈 수 없는", lead: "seong_siyun",
+  id: "ch5", no: "5장", title: "바다로 갈 수 없는", lead: "seong_siyun", skip: true,
   img: "assets/scene/5장 바다 배경.jpg",
   place: "U사",
   glassNote: "파도 소리가 갑판까지 올라온다. 바다는 여전히 아무 말이 없다.",
@@ -1110,7 +1114,7 @@ const CHAPTERS = [
  *      이름이 밝혀지는 자리는 아래 «이름이 붙는 자리» 표시가 있는 곳입니다.
  * ══════════════════════════════════════════════════════════ */
 {
-  id: "ch5_5", no: "5.5장", title: "육참골탄", side: true,
+  id: "ch5_5", no: "5.5장", title: "육참골탄", side: true, skip: true,
   img: "assets/scene/G사 골목.jpg",
   place: "G사 외곽",
   glassNote: "포탄 자국이 아직 메워지지 않았다.",
@@ -1264,7 +1268,7 @@ const CHAPTERS = [
  *    편성을 바꿔 가며 다시 읽을 거리로 둔 것이니, 이야기의 뼈대에는 걸지 마십시오.
  * ══════════════════════════════════════════════════════════ */
 {
-  id: "ch6", no: "6장", title: "기대가 어긋나는", lead: "lee_gyeongwon",
+  id: "ch6", no: "6장", title: "기대가 어긋나는", lead: "lee_gyeongwon", skip: true,
   img: "assets/scene/모나크 저택.jpg",
   place: "G사",
   glassNote: "불을 꺼 두어도 이 집은 비싸 보인다.",
@@ -1617,7 +1621,7 @@ const CHAPTERS = [
 
 /* ═══════════════ 6.5장 「괴수살인괴수」 ═══════════════════════ */
 {
-  id: "ch6_5", no: "6.5장", title: "괴수살인괴수", side: true,
+  id: "ch6_5", no: "6.5장", title: "괴수살인괴수", side: true, skip: true,
   img: "assets/scene/G사 골목.jpg",
   /* 운전석 카드에 뜨는 배너 — 없으면 첫 place 장면(G사 골목)을 대신 씁니다.
    * 배수로 그림이 더 강렬해 사용자 지침으로 이걸로 골랐습니다 */
@@ -1819,7 +1823,7 @@ const CHAPTERS = [
   ]
 },
   {
-    id: "ch6_5_busan", no: "6.5장", title: "부산행", side: true,
+    id: "ch6_5_busan", no: "6.5장", title: "부산행", side: true, skip: true,
     img: "assets/scene/고속열차 내부.jpg",
     place: "급행열차",
     require: ["cha_minjun"],
@@ -1981,7 +1985,7 @@ const CHAPTERS = [
     ]
   },
   {
-    id: "ch7", no: "7장", title: "호감이 끝나는", lead: "cha_minjun",
+    id: "ch7", no: "7장", title: "호감이 끝나는", lead: "cha_minjun", skip: true,
     img: "assets/scene/신해수랜드 대치중.jpg",
     place: "P사",
     glassNote: "기괴한 노래가 흘러나온다.",
@@ -2394,7 +2398,7 @@ const CHAPTERS = [
     ]
   },
   {
-    id: "ch7_5_gwonmosulsu", no: "7.5장", title: "권모술수가 난무하는", side: true,
+    id: "ch7_5_gwonmosulsu", no: "7.5장", title: "권모술수가 난무하는", side: true, skip: true,
     img: "assets/scene/메카고질라 내부.jpg",
     banner: "assets/scene/공격받은 메카고질라.jpg",
     place: "메카고질라",
@@ -2743,7 +2747,7 @@ const CHAPTERS = [
     ]
   },
   {
-    id: "ch7_5_codered", no: "7.5장", title: "코드레드", side: true,
+    id: "ch7_5_codered", no: "7.5장", title: "코드레드", side: true, skip: true,
     img: "assets/scene/메카고질라 내부.jpg",
     place: "H사",
     summary: "새 매니저를 뽑는 밤, 시험이 아닌 것이 먼저 찾아왔다.",

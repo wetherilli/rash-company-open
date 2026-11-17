@@ -908,6 +908,9 @@
   .uskillbox:not(:empty){border-top:1px dashed var(--line);padding-top:8px;}
 
   #actions{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;}
+  /* [스토리 넘기기] 는 그 줄 «맨 오른쪽 끝» 에 섭니다 (사용자 지침 2026-11-17).
+   * [계속] 과 같은 줄이지만 멀리 떨어뜨려, 넘길 생각이 없을 때 손이 미끄러져 눌리지 않게. */
+  #actions button.rightend{margin-left:auto;}
   button{
     background:var(--panel-2);border:1px solid var(--line-2);color:var(--text-2);
     font-family:inherit;font-size:13.5px;padding:7px 15px;cursor:pointer;
@@ -1213,7 +1216,10 @@
     50%{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 0 12px var(--gold);}
   }
   @media (prefers-reduced-motion:reduce){ .slot.rwready{animation:none;box-shadow:0 0 0 1px var(--gold);} }
-  .rwallrow{display:flex;justify-content:flex-end;margin:10px 0 2px;}
+  /* «출석마다 지질망치» 설명 줄과 [모두 받기] 가 한 줄에 — 설명은 왼쪽, 손잡이는 오른쪽 끝
+   * (사용자 지침 2026-11-17). 설명이 없을 때는 손잡이 혼자 오른쪽 끝에 섭니다. */
+  .rwallrow{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin:8px 0 2px;}
+  .rwallrow .hint{margin:0;margin-right:auto;}
   .grid.rwgrid{grid-template-columns:repeat(4,1fr);}
   /* 주간 과제 진행 게이지 — 다 채우면 금빛 */
   .rwgauge{display:inline-block;vertical-align:middle;width:calc(100% - 56px);height:7px;background:var(--panel-2);border:1px solid var(--line-2);}
@@ -2051,26 +2057,26 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.31.5"></script>
-<script src="data/vault.js?v=2.31.5"></script>
-<script src="data/characters.js?v=2.31.5"></script>
-<script src="data/skills.js?v=2.31.5"></script>
-<script src="data/allies.js?v=2.31.5"></script>
-<script src="data/gifts.js?v=2.31.5"></script>
-<script src="data/pickup.js?v=2.31.5"></script>
-  <script src="data/hard.js?v=2.31.5"></script>
-<script src="data/achievements.js?v=2.31.5"></script>
-<script src="data/mail.js?v=2.31.5"></script>
-<script src="data/notice.js?v=2.31.5"></script>
-<script src="data/patch.js?v=2.31.5"></script>
-<script src="data/event.js?v=2.31.5"></script>
-<script src="data/reward.js?v=2.31.5"></script>
-<script src="data/tutorial.js?v=2.31.5"></script>
-<script src="data/foes.js?v=2.31.5"></script>
-<script src="data/story.js?v=2.31.5"></script>
-<script src="data/mirrorpacks.js?v=2.31.5"></script>
-<script src="data/bgm.js?v=2.31.5"></script>
-<script src="engine.js?v=2.31.5"></script>
+<script src="data/access.js?v=2.31.6"></script>
+<script src="data/vault.js?v=2.31.6"></script>
+<script src="data/characters.js?v=2.31.6"></script>
+<script src="data/skills.js?v=2.31.6"></script>
+<script src="data/allies.js?v=2.31.6"></script>
+<script src="data/gifts.js?v=2.31.6"></script>
+<script src="data/pickup.js?v=2.31.6"></script>
+  <script src="data/hard.js?v=2.31.6"></script>
+<script src="data/achievements.js?v=2.31.6"></script>
+<script src="data/mail.js?v=2.31.6"></script>
+<script src="data/notice.js?v=2.31.6"></script>
+<script src="data/patch.js?v=2.31.6"></script>
+<script src="data/event.js?v=2.31.6"></script>
+<script src="data/reward.js?v=2.31.6"></script>
+<script src="data/tutorial.js?v=2.31.6"></script>
+<script src="data/foes.js?v=2.31.6"></script>
+<script src="data/story.js?v=2.31.6"></script>
+<script src="data/mirrorpacks.js?v=2.31.6"></script>
+<script src="data/bgm.js?v=2.31.6"></script>
+<script src="engine.js?v=2.31.6"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
