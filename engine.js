@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.6";
+const VERSION = "2.31.7";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -82,6 +82,9 @@ const RULE = {
    * 짧은 대기(ms) — 초상이 바뀌는 것도, 대사를 읽는 것도 눈에 들어오게
    * 한 줄씩 끊어 보여 줍니다(사용자 지침 2026-09-02, battleSay 참고). */
   dialogueGapMs: 650,
+  /* 흐트러질 때 · 흐트러짐을 떨칠 때의 한마디가 머무는 시간(ms) — 그동안 전투의 다음 걸음(다음 사람의 공격 ·
+   * 적 차례 · 턴 넘김)을 붙들어 둡니다(사용자 지침 2026-11-18 — «읽을 새도 없이 지나간다»). battleHold · holdMs 참고. */
+  staggerLineMs: 1300,
   /* 전투 «중» 끼어드는 대사(연계 선창·대답, 연계 호령, 설득전 대사)가 한 줄에
    * 머무는 시간(ms) — 읽을 틈이 있어야 한다는 지침(2026-09-11)으로 2초입니다.
    * 위 dialogueGapMs 와 달리, 이 대기 동안 손잡이는 잠기지 않습니다. 행동을
@@ -1745,8 +1748,14 @@ function slotCount(kind) {
   (SLOT_RULE[kind] || []).forEach(r => {
     if (!r.needCleared || (S && S.cleared && S.cleared[r.needCleared])) n = Math.max(n, r.n);
   });
+  /* 어비스 거울 던전의 제약 — 열린 칸 가운데 «마지막 칸» 을 잠급니다(MIRROR_BINDS).
+   * 칸 수를 여기서 줄이므로 편성 창 · 고르는 창 · 효과 셈이 모두 함께 따라옵니다.
+   * S.giftOn · S.advisorOn 은 건드리지 않습니다 — 판이 끝나면 그 칸이 그대로 돌아옵니다. */
+  if (bindOn(kind)) n = Math.max(0, n - 1);
   return n;
 }
+/* 제약으로 잠긴 칸이 있는가 — 편성 창이 잠긴 칸을 한 장 더 세울 때 봅니다 */
+function slotBound(kind) { return bindOn(kind); }
 function giftSlots()    { return slotCount("gift"); }
 function advisorSlots() { return slotCount("advisor"); }
 
@@ -1921,6 +1930,8 @@ function giftHits(e, who) {
   if (e.advisorWho) {                       // 그 사람을 교육위원으로 세웠는가 (제목은 가리지 않습니다)
     return equippedAdvisors().some(adv => adv.name === e.advisorWho);
   }
+  /* atkTypeIs — 지금 그 공격 유형으로 치는 사람(낀 인격의 유형 → 그 사람의 기본. atkTypeOf) */
+  if (e.atkTypeIs && atkTypeOf(who) === e.atkTypeIs) return true;
   const id = idByKey(S.equip[who]);
   const title = tagTitle(id ? id.title : (isSupport(who) ? (supportBy(who) || {}).title : ""),
                          memberName(who));
@@ -1976,8 +1987,52 @@ function giftBonusFor(who) {
        * atkPerMember · hpPerMember 를 더하면 됩니다. */
       if (e.defPerMember) out.def += e.defPerMember * giftHitCount(e);
     }
+    /* typeTrio — 편성에 관통 · 참격 · 타격이 모두 서 있으면 전원에게 (「맥가이버칼」) */
+    if (e.typeTrio && partyTypeTrio()) {
+      out.atk += e.typeTrio.atk || 0; out.def += e.typeTrio.def || 0; out.hp += e.typeTrio.hp || 0;
+    }
   });
   return out;
+}
+/* 편성에 세 공격 유형이 모두 있는가 — 조력자는 유형이 있을 때만 셉니다 */
+function partyTypeTrio() {
+  if (!S || !S.party) return false;
+  const seen = {};
+  S.party.forEach(w => { const t = w && atkTypeOf(w); if (t) seen[t] = 1; });
+  return Object.keys(ATK_TYPES).every(t => seen[t]);
+}
+/* ── 공격 유형 · 흐트러짐을 건드리는 효과 (8장과 함께 나가는 기프트 — 사용자 지침 2026-11-18) ──
+ *  기프트 effect 와 특전(테마팩 · 이야기) effect 가 같은 칸을 씁니다. 배율은 모두 atkTypeHit 한 곳에서 곱합니다.
+ *    typeDmg: { slash: 0.2 }        그 유형으로 주는 피해 +20% (맨 끝에 곱함 — 적어 둔 20% 가 그대로 20%)
+ *    weakAdd: 0.2                   약점 배율에 더함 (×1.5 → ×1.7). 흐트러진 적도 약점으로 맞으므로 함께 오릅니다
+ *    resistMult: 1.0                내성 배율을 이 값으로 (×0.75 → ×1.0 이면 «내성 무시»). 여럿이면 큰 쪽
+ *    staggerDmg: 0.25               흐트러진 적에게 주는 피해 +25%
+ *    defIgnore: { type: "pierce", cut: 0.5 }   그 유형으로 치는 사람은 적 방어의 절반을 무시 (foeDefFor)
+ *    staggerRecover: 1              흐트러진 아군이 차례가 끝날 때 곧바로 풀림 — 편성 전체에 전투당 n회(「페이스메이커」).
+ *                                   인격이 같은 능력(staggerSkill.recoverEnd)을 지녔으면 이쪽은 듣지 않습니다
+ *    atkTypeIs: "slash"             (기프트만) atk · def · hp 를 그 유형으로 치는 사람에게 — giftHits
+ *    typeTrio: { atk: 0.15 }        (기프트만) 편성에 세 유형이 모두 있으면 전원에게 — giftBonusFor */
+function typeFx() {
+  const o = { dmg: {}, weakAdd: 0, resistMult: ATK_TYPE_RULE.resistMult, staggerDmg: 0, defIgnore: {}, staggerRecover: 0, recoverBy: "" };
+  const take = (e, name) => {
+    if (!e) return;
+    if (e.typeDmg) Object.keys(e.typeDmg).forEach(t => { o.dmg[t] = (o.dmg[t] || 0) + e.typeDmg[t]; });
+    if (e.weakAdd) o.weakAdd += e.weakAdd;
+    if (e.resistMult != null) o.resistMult = Math.max(o.resistMult, e.resistMult);
+    if (e.staggerDmg) o.staggerDmg += e.staggerDmg;
+    if (e.defIgnore && e.defIgnore.type)
+      o.defIgnore[e.defIgnore.type] = Math.min(0.9, (o.defIgnore[e.defIgnore.type] || 0) + (e.defIgnore.cut || 0));
+    if (e.staggerRecover && e.staggerRecover > o.staggerRecover) { o.staggerRecover = e.staggerRecover; o.recoverBy = name || ""; }
+  };
+  equippedGifts().forEach(g => take(g.effect, g.name));
+  activePerks().forEach(p => take(p.effect, p.name));
+  return o;
+}
+/* 그 사람이 칠 때 보는 적 방어 — foeDefNow 에 «방어 무시»(defIgnore)를 얹습니다 */
+function foeDefFor(b, who) {
+  const cut = typeFx().defIgnore[atkTypeOf(who)] || 0;
+  const d = foeDefNow(b);
+  return cut ? Math.round(d * (1 - cut)) : d;
 }
 
 /* ── 작성위원 고유 능력 보정 — E.G.O 기프트 / 보조 교육위원 ──────────
@@ -2318,14 +2373,17 @@ function foeTypeTable(b) {
 /* 한 대에 붙는 배율과 로그 꼬리 — { type, mult, tag } */
 function atkTypeHit(b, w) {
   const t = atkTypeOf(w);
+  const fx = typeFx();                                   // 기프트 · 특전이 얹는 몫 (typeFx 머리말)
+  const own = 1 + ((t && fx.dmg[t]) || 0);               // 그 유형으로 주는 피해
+  const weak = (ATK_TYPE_RULE.weakMult + fx.weakAdd) * (1 + boonWeakDmg());   // 「불스아이」 가호 — 약점 피해를 그만큼 더
   /* 흐트러진 적 — 무엇으로 쳐도 약점입니다(내성도, 유형이 없는 것도) */
-  if (staggerOn(b)) return { type: t, mult: ATK_TYPE_RULE.weakMult * (1 + boonWeakDmg()), tag: " (흐트러짐)" };
+  if (staggerOn(b)) return { type: t, mult: weak * (1 + fx.staggerDmg) * own, tag: " (흐트러짐)" };
   if (!t) return { type: null, mult: 1, tag: "" };
   const ft = foeTypeTable(b);
-  /* 「불스아이」 가호 — 약점 피해를 그만큼 더(×1.5 → ×1.8) */
-  if (ft.weak.indexOf(t) >= 0)   return { type: t, mult: ATK_TYPE_RULE.weakMult * (1 + boonWeakDmg()), tag: " (약점 · " + ATK_TYPES[t].name + ")" };
-  if (ft.resist.indexOf(t) >= 0) return { type: t, mult: ATK_TYPE_RULE.resistMult, tag: " (내성 · " + ATK_TYPES[t].name + ")" };
-  return { type: t, mult: 1, tag: "" };
+  if (ft.weak.indexOf(t) >= 0)   return { type: t, mult: weak * own, tag: " (약점 · " + ATK_TYPES[t].name + ")" };
+  if (ft.resist.indexOf(t) >= 0) return { type: t, mult: fx.resistMult * own,
+                                          tag: fx.resistMult >= 1 ? " (내성 무시 · " + ATK_TYPES[t].name + ")" : " (내성 · " + ATK_TYPES[t].name + ")" };
+  return { type: t, mult: own, tag: "" };
 }
 /* ── 흐트러짐 · 흐트선 (사용자 지침 2026-11-15, devlog/20261115_P03_stagger.md) ──────────
  *  원작의 흐트러짐입니다. 적 체력을 «흐트선» 까지 깎으면 적이 흐트러집니다.
@@ -2368,7 +2426,10 @@ function staggerLinesFor(b, scene) {
   if (!(scene && scene.stagger) && staggerScripted(scene)) return [];
   const raw = (scene && scene.stagger) || f.stagger || src.stagger ||
               (b && b.boss ? STAGGER_RULE.boss : STAGGER_RULE.mob);
-  return (raw || []).filter(r => r > 0 && r < 1).slice().sort((x, y) => y - x);
+  const lines = (raw || []).filter(r => r > 0 && r < 1).slice().sort((x, y) => y - x);
+  /* 어비스 거울 던전의 제약 「굳은 자세」 — 첫 번째(가장 높은) 흐트선을 걷습니다.
+   * 잡졸(80% 하나)은 흐트선이 없어지고, 보스(50% · 20%)는 20% 하나만 남습니다. */
+  return bindOn("stagger") ? lines.slice(1) : lines;
 }
 function staggerOn(b) { return !!(b && b.stg && b.stg.on); }
 /* 흐트러질 때 · 페이즈로 풀릴 때의 한마디 — kind: "stagger" | "staggerEnd" */
@@ -2380,6 +2441,16 @@ function staggerVoiceLine(b, kind) {
   const list = [].concat(own || []).filter(Boolean);
   return list.length ? list[rnd(list.length)] : "";
 }
+/* ── 한마디를 읽을 틈 (사용자 지침 2026-11-18) ──────────────────────────
+ *  흐트러짐 대사는 공격이 이어지는 «도중» 에 나와, 다음 사람의 공격 줄에 곧바로 밀려 올라갔습니다.
+ *  대사가 나온 자리에서 battleHold(b) 로 «언제까지» 를 적어 두고, 전투의 다음 걸음을 거는 setTimeout 들이
+ *  holdMs(평소 간격) 으로 그때까지 기다립니다 — 대사가 없으면 평소 간격 그대로입니다.
+ *  턴 머리에서 페이즈로 흐트러짐을 떨칠 때는 beginTurn 이 같은 틈을 두고 나머지를 잇습니다(turnBody). */
+function battleHold(b, ms) {
+  if (b) b._holdUntil = Math.max(b._holdUntil || 0, Date.now() + (ms || RULE.staggerLineMs));
+}
+function holdLeft(b) { return (b && b._holdUntil) ? Math.max(0, b._holdUntil - Date.now()) : 0; }
+function holdMs(base) { return Math.max(base || 0, holdLeft(S && S.battle)); }
 /* 적이 하는 말 한 줄 — 페이즈 대사(checkPhase)와 같은 꼴 */
 function foeSayLine(b, line) {
   if (!line) return;
@@ -2402,7 +2473,7 @@ function staggerCheck(b) {
   shakeScreen(true);
   foeSfx("stagger");
   say("▶ " + withJosa(b.name, "이") + " 흐트러졌다!  다음 차례가 끝날 때까지 움직이지 못하고, 모든 공격을 약점으로 받는다.", "crit");
-  foeSayLine(b, staggerVoiceLine(b, "stagger"));
+  { const line = staggerVoiceLine(b, "stagger"); foeSayLine(b, line); if (line) battleHold(b); }
   staggerSync();
   renderFoeBar();
   return true;
@@ -2414,7 +2485,9 @@ function staggerEnd(b, why) {
   g.on = false;
   if (why === "phase") {
     say("▷ " + withJosa(b.name, "이") + " 흐트러짐을 떨치고 일어선다.", "bad");
-    foeSayLine(b, staggerVoiceLine(b, "staggerEnd"));
+    const line = staggerVoiceLine(b, "staggerEnd");
+    foeSayLine(b, line);
+    if (line) battleHold(b);
   } else say("▷ " + withJosa(b.name, "이") + " 자세를 바로잡았다.", "bad");
   staggerSync();
   renderFoeBar();
@@ -2561,7 +2634,7 @@ function allyStaggerCheck(who, noStg) {
   foeSfx("stagger");
   say("▶ " + withJosa(memberName(who), "이") + " 흐트러졌다!  다음 차례가 끝날 때까지 움직이지 못하고, 받는 피해가 커진다.", "bad");
   const line = allyStaggerLine(who);
-  if (line) battleSay(who, line);
+  if (line) { battleSay(who, line); battleHold(b); }
   allyStaggerRetrib(who);
   return true;
 }
@@ -2602,12 +2675,16 @@ function allyStaggerTurn(b) {
     if (b.turn > g.until) return allyStaggerEnd(w, "time");
     /* recoverEnd — «차례가 끝날 때 흐트러진 상태면 곧바로 풀린다 · 전투당 n회» */
     const sk = allyStaggerSkill(w);
-    const n = sk && sk.recoverEnd;
-    const usedKey = w + "_recoverEnd";
+    /* 인격의 능력이 먼저입니다(사람마다 전투당 n회). 그것이 없는 사람에게만 기프트 · 특전의
+     * staggerRecover(「페이스메이커」)가 듣고, 그쪽은 «편성 전체에» 전투당 n회입니다(사용자 지침 2026-11-18) */
+    const own = sk && sk.recoverEnd;
+    const fx = own ? null : typeFx();
+    const n = own || (fx && fx.staggerRecover);
+    const usedKey = own ? w + "_recoverEnd" : "_giftRecover";
     if (n && (b.persist[usedKey] || 0) < n) {
       b.persist[usedKey] = (b.persist[usedKey] || 0) + 1;
       const id = idByKey(S.equip[w]);
-      return allyStaggerEnd(w, "skill", id ? id.title : "");
+      return allyStaggerEnd(w, "skill", own ? (id ? id.title : "") : fx.recoverBy);
     }
   });
   S.party.forEach(w => {
@@ -3848,7 +3925,7 @@ function retribGain(who) {
  *  그 시너지가 켜져 있는 동안만). S.arc.stacks[key][who] 라 갈래(본편 장 · 거울 한 판) 동안 이어집니다.
  *  쓰러지면 0 — E.G.O 기프트 keepStack: key 를 지녔으면 남깁니다(혈염도).
  *  기프트 · 특전 effect 칸 —
- *    stackMult: { key: 2 }           쌓는 몫 × 2 (상납받은 전자담배 · 가속탄)
+ *    stackMult: { key: 2 }           쌓는 몫 × 2 (상납받은 탄약 · 가속탄)
  *    keepStack: key                  쓰러져도 그 스택을 잃지 않음
  *    stackGuard: { key, need }       쓰러질 피해를 받으면 그 스택 need 를 태워 체력 1 로 버팀(각본 피해에는 안 들음)
  *  인격 줄 stackLine: { key, min, text } — 그 스택이 min 이상인 채 공격할 때 한마디(송하민 「전탄, 격발.」). */
@@ -7441,6 +7518,11 @@ function beginTurn() {
   /* 흐트러짐 — 다음 턴까지 쉬었으면 이 턴 머리에서 일어섭니다(staggerLinesFor 머리말) */
   if (staggerOn(b) && b.turn > b.stg.until) staggerEnd(b, "time");
   checkPhase(b);                 // 페이즈 턱을 넘었으면 이 턴부터 기믹 묶음을 갈아 끼웁니다
+  /* 페이즈로 흐트러짐을 떨치며 한마디 했으면, 읽을 틈을 두고 나머지(예고 · 연계 · 손잡이)를 잇습니다 (battleHold) */
+  if (holdLeft(b) > 0) return setTimeout(() => { if (S.battle === b && !b.done) turnBody(); }, holdLeft(b));
+  return turnBody();
+  /* ↓ 턴 머리의 나머지 — 들여쓰기는 예전 그대로 둡니다(이력이 통째로 바뀌지 않게) */
+  function turnBody() {
   const fnow = foeDef(b);
   /* 주기는 페이즈에 들어선 턴부터 셉니다(checkPhase 머리말) — 페이즈가 없으면 전투 처음부터 */
   const tt = b.phaseStart ? b.turn - b.phaseStart + 1 : b.turn;
@@ -7652,11 +7734,15 @@ function beginTurn() {
     const nowEvade = b.evadeImg || f.evadeImg || null;
     const nowBreak = b.breakImg || f.breakImg || nowHeavy;
     const nowScale = b.imgScale || f.imgScale || null;
+    /* 선공 턴에도 제 그림을 둘 수 있습니다 — firstImg (2026-11-18, 8장 북극티렉스).
+     * 안 적으면 예전대로 — 강타 선공만 강타 그림, 나머지는 평소 그림입니다. */
+    const nowFirst = b.firstImg || f.firstImg || null;
     const want = (b.aoe && nowAoe) ? nowAoe
                : (b.counter && nowCtr) ? nowCtr
                : (b.take && nowTake) ? nowTake
                : (b.foeBreak && nowBreak) ? nowBreak
                : (b.foeEvade && nowEvade) ? nowEvade
+               : (b.foeFirst && nowFirst) ? nowFirst
                : ((b.heavy || b.firstHeavyNow) && nowHeavy) ? nowHeavy
                : nowImg;
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
@@ -7789,6 +7875,7 @@ function beginTurn() {
      * 머리에서 한꺼번에 나옵니다. */
     askNext();
   }
+  }   // turnBody
 }
 
 /* ── 연계 효과 ──────────────────────────────────────────────────
@@ -7829,7 +7916,7 @@ function battleSay(who, text, portraitSrc) {
                  nameOf(who) === S.battle.name ||
                  (!!pt && (pt === f.img || pt === f.heavyImg || pt === f.aoeImg ||
                            pt === f.counterImg || pt === f.takeImg || pt === f.evadeImg ||
-                           pt === f.breakImg || pt === S.battle.shown));
+                           pt === f.breakImg || pt === f.firstImg || pt === S.battle.shown));
   if (!적본인 && pt) showSpeaker(pt, nameOf(who));
 }
 /* ── 전투 중 끼어드는 대사 ──────────────────────────────────────────
@@ -8085,7 +8172,7 @@ function openingVolley(next) {
     if (!w) return fire(qi + 1, 0);
     if (alive(w)) {
       const st = effStats(w);
-      let dmg = st.atk + rnd(4) - b.def;
+      let dmg = st.atk + rnd(4) - Math.round(b.def * (1 - (typeFx().defIgnore[atkTypeOf(w)] || 0)));   // 방어 무시(defIgnore)
       const crit = Math.random() < critRate();
       if (crit) dmg *= critMultFor(w) * critDmgMult();
       const ty = atkTypeHit(b, w);               // 공격 유형 — 약점 ×1.5 · 내성 ×0.75 (맨 끝에)
@@ -8099,10 +8186,10 @@ function openingVolley(next) {
       render();
       if (b.hp <= 0) {
         if (b.scene.persuade) b.hp = 1;
-        else return setTimeout(victory, RULE.turnGapMs);
+        else return setTimeout(victory, holdMs(RULE.turnGapMs));
       }
     }
-    setTimeout(() => fire(qi, i + 1), RULE.allyStepMs);
+    setTimeout(() => fire(qi, i + 1), holdMs(RULE.allyStepMs));
   };
   fire(0, 0);
 }
@@ -8657,6 +8744,7 @@ function resolveTurn() {
     if (f2.takeImg) b.takeImg = f2.takeImg;
     if (f2.evadeImg) b.evadeImg = f2.evadeImg;
     if (f2.breakImg) b.breakImg = f2.breakImg;
+    if (f2.firstImg) b.firstImg = f2.firstImg;
     if (f2.imgScale) b.imgScale = f2.imgScale;
     say("체력 " + b.hp + " / " + b.maxhp + "　공격 " + b.atk + "　방어 " + b.def, "sys");
     shakeScreen(true);
@@ -8700,7 +8788,7 @@ function resolveTurn() {
       setTimeout(() => {
         if (!same()) return;
         const st = effStats(target);
-        const fdef = foeDefNow(b);
+        const fdef = foeDefFor(b, target);
         /* 흑수들의 왕 시너지가 3명 이상으로 걸려 있으면, 유아인이 보복으로
          * 지금 받고 있는 공격력 상승률을 이 추가타를 치는 사람에게도
          * 그대로 얹습니다(사용자 지침 2026-09-02) — 기본 need(2명)보다
@@ -8725,7 +8813,8 @@ function resolveTurn() {
         stackAfterHit(target);     // 연계 추가타도 «공격» — 히트 · 염화가 쌓입니다(원작 «원호공격으로 인한 발동에도»)
         checkJoinIn();
         render();
-        if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
+        if (b.hp <= 0) return setTimeout(afterAllies, holdMs(RULE.turnGapMs));
+        if (holdLeft(b) > 0) return setTimeout(() => { if (same()) next(); }, holdLeft(b));   // 흐트러짐 대사를 읽을 틈
         next();
       }, RULE.dialogueGapMs);
     }, RULE.dialogueGapMs);
@@ -8749,13 +8838,13 @@ function resolveTurn() {
           withJosa(b.name, "이") + " 몸을 틀어 흘려보냈다.", "sys");
       foeMiss(0);
       i++;
-      return setTimeout(swing, RULE.allyStepMs);
+      return setTimeout(swing, holdMs(RULE.allyStepMs));
     }
 
     const st = effStats(who);
     /* 체포는 이번 턴 «적 방어» 를 깎습니다. 뺄셈 피해라 방어 한 점이 크게 먹히므로,
      * 방어가 두꺼운 상대에게 걸수록 효과가 큽니다. */
-    const fdef = foeDefNow(b);       // 체포 · 이야기 특전의 보스 방어 감소까지 (foeDefNow)
+    const fdef = foeDefFor(b, who);  // 체포 · 이야기 특전의 보스 방어 감소 · 기프트의 방어 무시까지 (foeDefNow · foeDefFor)
     /* 강공·겹살 — 공격력 배율. 연계 효과 — LINK_SKILLS 가 건 별도 배율.
      * 제1발톱 — 이번 차례에 공격을 골랐고, 그게 턴 머리에서 무작위로
      * 내려온 지령 그대로였다면 이 공격에만 배율이 붙는다(claw1SynergyBonus
@@ -8824,14 +8913,16 @@ function resolveTurn() {
     checkJoinIn();                 // 체력이 내려가면 난입할 것이 있는지 본다
     render();
 
-    if (b.hp <= 0) return setTimeout(afterAllies, RULE.turnGapMs);
+    if (b.hp <= 0) return setTimeout(afterAllies, holdMs(RULE.turnGapMs));
 
     /* 겹살 — 같은 사람이 한 번 더 친다(공격력은 이미 깎인 채로) */
     if (b.mods[who + "_double"] && !b.mods[who + "_doubleDone"]) {
       b.mods[who + "_doubleDone"] = true;
-      return setTimeout(swing, RULE.allyStepMs);   // i는 그대로 — 같은 사람을 다시
+      return setTimeout(swing, holdMs(RULE.allyStepMs));   // i는 그대로 — 같은 사람을 다시
     }
-    checkLinkBonus(who, () => { i++; setTimeout(swing, RULE.allyStepMs); });
+    const linkNext = () => checkLinkBonus(who, () => { i++; setTimeout(swing, holdMs(RULE.allyStepMs)); });
+    if (holdLeft(b) > 0) return setTimeout(() => { if (same()) linkNext(); }, holdLeft(b));   // 흐트러짐 대사를 읽을 틈
+    linkNext();
   };
 
   /* ② 다 때렸으면 결판을 본다 */
@@ -8863,7 +8954,7 @@ function resolveTurn() {
     /* 선공 턴이면 적은 이 턴에 이미 쳤습니다 — 여기서 또 치게 두면 한 턴에
      * 두 번 맞습니다. 아군 차례까지 끝난 것이므로 그대로 턴 머리로 갑니다. */
     if (b.foeFirst) {
-      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
       return setTimeout(() => { if (same()) beginTurn(); }, RULE.turnGapMs);
     }
 
@@ -8873,7 +8964,7 @@ function resolveTurn() {
     if (staggerOn(b)) {
       say("▷ " + withJosa(b.name, "은") + " 흐트러져 움직이지 못한다.", "good");
       render();
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
     foeTurn(targets);
   };
@@ -8926,7 +9017,7 @@ function resolveTurn() {
           (오른몫 > 0 ? "체력 " + 오른몫 + " 회복" : "더 채울 곳이 없다") +
           "　(" + b.hp + " / " + b.maxhp + ")", 오른몫 > 0 ? "heavy" : "sys");
       render();
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
 
     if (b.aoe) {
@@ -9012,8 +9103,8 @@ function resolveTurn() {
       foeSfx("aoe");
       hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: h.tag, heavy: !!flatAoe, blue: h.blue }));
       afterAoe(b);                    // 광역 배수 증가 · 광역마다 공격 증가
-      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
 
     /* ── 데려가기 ─────────────────────────────────────────────────
@@ -9044,7 +9135,7 @@ function resolveTurn() {
         render();
         foeSfx("miss");
         allyHitFx(t, 0, { miss: true });
-        return setTimeout(afterFoe, RULE.turnGapMs);
+        return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
       }
       shakeScreen(true);
       /* 무엇을 하는 짓인지는 적마다 다릅니다 — 들어 올리는 것, 삼키는 것,
@@ -9065,8 +9156,8 @@ function resolveTurn() {
       } else {
         say(withJosa(memberName(t), "이") + " 그 입에서 빠져나왔다.", "good");
       }
-      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
 
     /* ── 버티기 깨기 ──────────────────────────────────────────────
@@ -9093,7 +9184,7 @@ function resolveTurn() {
       if (!웅크린.length && !선사람.length) {
         say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
         render();
-        return setTimeout(afterFoe, RULE.turnGapMs);
+        return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
       }
       const mult = b.breakMult || foeDef(b).breakMult || RULE.breakMult;
       shakeScreen(true);
@@ -9121,8 +9212,8 @@ function resolveTurn() {
       render();
       foeSfx("breaks");
       hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: !h.splash, tag: h.splash ? "여파" : "버티기 깨기" }));
-      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
 
     /* ── 되받아치기 ───────────────────────────────────────────────
@@ -9140,7 +9231,7 @@ function resolveTurn() {
     if (b.counter && !되받음) {
       say("▶ " + withJosa(b.name, "이") + " 웅크린 채 그대로 있다. 되받아칠 것이 없었다.", "sys");
       render();
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
 
     /* 턴 머리에서 예고한 그 표적을 그대로 친다.
@@ -9170,8 +9261,8 @@ function resolveTurn() {
       render();
       foeSfx("miss");
       allyHitFx(t, 0, { miss: true });
-      if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
-      return setTimeout(afterFoe, RULE.turnGapMs);
+      if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
 
     const st = effStats(t);
@@ -9244,12 +9335,12 @@ function resolveTurn() {
       staggerCheck(b);
       checkJoinIn();
       render();
-      if (finishReached(b)) return setTimeout(finishBlow, RULE.turnGapMs);   // 반격으로 턱을 넘어도 마무리 일격
-      if (b.hp <= 0) return setTimeout(victory, RULE.turnGapMs);
+      if (finishReached(b)) return setTimeout(finishBlow, holdMs(RULE.turnGapMs));   // 반격으로 턱을 넘어도 마무리 일격
+      if (b.hp <= 0) return setTimeout(victory, holdMs(RULE.turnGapMs));
     }
 
-    if (partyLost()) return setTimeout(defeat, RULE.turnGapMs);
-    setTimeout(afterFoe, RULE.turnGapMs);
+    if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
+    setTimeout(afterFoe, holdMs(RULE.turnGapMs));
   };
 
   /* ── 차례를 뒤집는다 (선공) ─────────────────────────────────────
@@ -9931,6 +10022,7 @@ function loadoutSlotsHTML() {
                   (advCount ? '눌러서 고르십시오' : '아직 함께하는 교육위원이 없습니다') + '</div>') +
          '</div>';
   }
+  if (slotBound("advisor")) h += bindSlotHTML("advisor", advCap + 1);
   h += '</div>';
 
   /* E.G.O 기프트 */
@@ -9950,8 +10042,15 @@ function loadoutSlotsHTML() {
                    (gfCount ? '눌러서 고르십시오' : '아직 가진 기프트가 없습니다') + '</div>') +
          '</div>';
   }
+  if (slotBound("gift")) h += bindSlotHTML("gift", gfCap + 1);
   h += '</div>';
   return h;
+}
+/* 제약으로 잠긴 칸 — 열린 칸들 뒤에 붉은 칸 한 장(누를 수 없습니다) */
+function bindSlotHTML(kind, no) {
+  const d = bindDef(kind) || {};
+  return '<div class="slot ro bindlock"><div class="lock">' + no + '　잠김</div>' +
+         '<div class="sub">제약 「' + (d.name || "") + '」 — 이 판이 끝날 때까지 쓸 수 없습니다</div></div>';
 }
 function bindLoadoutSlots(redraw) {
   $sheet.querySelectorAll(".slot[data-adv]").forEach(el => {
@@ -14207,6 +14306,51 @@ function boonApply(ids) {
   if (ids.indexOf("ember") >= 0) say("▶ 특전 「" + MIRROR_EMBER_PERK.name + "」을 얻었다.", "gain");
 }
 
+/* ── 제약 (사용자 지침 2026-11-18) ─────────────────────────────
+ *  가호의 반대 — 스스로 거는 불리한 조건입니다. **어비스 거울 던전에만** 섭니다(rule.deep).
+ *  돌입 준비 화면의 가호 줄 아래에 같은 꼴의 붉은 카드로 서고, 켠 채로 [입장] 하면 그 판 끝까지 갑니다
+ *  (S.railSave.binds — 층을 넘길 때 railSave 를 새로 지으면서 함께 옮깁니다, deepPackDone).
+ *  값은 내지 않습니다. 하나 걸 때마다 «완주 보상» 이 MIRROR_BIND_RULE.reward 만큼 늡니다(mirrorClear —
+ *  원고료 · 황금교본 · 파편 상자 · 이벤트 재화. 층마다 받는 몫(DEEP_PAY)과 지질망치는 그대로).
+ *  [이어하기] 는 그 판에서 건 제약이 그대로 갑니다 — 도중에 풀거나 더 걸 수 없습니다.
+ *
+ *    gift     E.G.O 기프트 칸 하나 잠금 — 열린 칸 가운데 마지막 칸(셋이면 3번, 둘이면 2번). slotCount
+ *    advisor  보조 교육위원 칸 하나 잠금 — 같은 규칙. slotCount
+ *    stagger  적의 첫 번째 흐트선 걷기. staggerLinesFor
+ *
+ *  icon 은 assets/icon/<icon>.png — 배포 거르개가 글자 그대로 찾으므로 이름을 조립하지 않습니다. */
+const MIRROR_BIND_RULE = { reward: 0.5 };
+const MIRROR_BINDS = [
+  { id: "gift",    name: "빈 주머니", icon: "제약 - 빈 주머니",
+    desc: "E.G.O 기프트 칸 하나가 잠깁니다 — 열린 칸 가운데 마지막 칸." },
+  { id: "advisor", name: "빈 교탁",   icon: "제약 - 빈 교탁",
+    desc: "보조 교육위원 칸 하나가 잠깁니다 — 열린 칸 가운데 마지막 칸." },
+  { id: "stagger", name: "굳은 자세", icon: "제약 - 굳은 자세",
+    desc: "모든 적의 첫 번째 흐트선이 사라집니다." }
+];
+/* 돌입 준비 화면에서 켜 둔 제약 — 가호처럼 창을 닫았다 열어도 남고, 새로고침하면 다 꺼집니다 */
+let MIRROR_BIND_PICK = {};
+function bindDef(id) { return MIRROR_BINDS.find(x => x.id === id) || null; }
+/* 지금 판에 걸린 제약인가 — 거울 안이고, 이 갈래의 진행(railSave)에 실렸을 때만.
+ * slotCount 가 판 밖에서도 부르므로 S 부터 차례로 봅니다. */
+function bindOn(id) {
+  if (!S || !S.mirror || !S.railSave || !S.railSave.binds) return false;
+  if ((S.railSave.binds.ids || []).indexOf(id) < 0) return false;
+  const rule = mirrorRuleNow();
+  return !!(rule && rule.deep && S.railSave.key === rule.key);
+}
+function bindPickedIds() { return MIRROR_BINDS.filter(x => MIRROR_BIND_PICK[x.id]).map(x => x.id); }
+/* 완주 보상에 곱하는 몫 — 하나마다 +50% (셋이면 ×2.5) */
+function bindRewardMult(ids) { return 1 + MIRROR_BIND_RULE.reward * ((ids || []).length); }
+function bindNames(ids) { return (ids || []).map(id => (bindDef(id) || {}).name).filter(Boolean); }
+/* [입장] 을 누른 자리 — 진행에 싣습니다(startMirror 가 railSave 를 지은 뒤 부릅니다) */
+function bindApply(ids) {
+  if (!ids || !ids.length || !S.railSave) return;
+  S.railSave.binds = { ids: ids.slice() };
+  say("제약 — " + bindNames(ids).map(n => "「" + n + "」").join(" · ") +
+      "　(완주 보상 +" + Math.round((bindRewardMult(ids) - 1) * 100) + "%)", "bad");
+}
+
 function openMirrorGate(tier, back) {
   const rule = mirrorTier(tier);
   $modal.classList.add("on");
@@ -14318,6 +14462,26 @@ function openMirrorGate(tier, back) {
                        '</b>　·　지닌 것 ' + S.codex + '</div>' : '');
       if (boonMsg) h += '<div class="mgnote red">' + boonMsg + '</div>';
     }
+    /* 제약 — 가호 줄 바로 아래, 같은 꼴의 붉은 카드. 어비스 거울 던전에만 (사용자 지침 2026-11-18) */
+    if (rule.deep) {
+      const bindN = bindPickedIds().length;
+      h += '<div class="mghead">제약</div>' +
+           '<div class="mgboonsub">스스로 거는 불리한 조건입니다. 하나 걸 때마다 <b>완주 보상이 ' +
+             Math.round(MIRROR_BIND_RULE.reward * 100) + '%</b> 늘어납니다. 건 채로 입장하면 그 판이 끝날 때까지 풀 수 없습니다.</div>' +
+           '<div class="grid mgboons mgbinds">' +
+           MIRROR_BINDS.map(x => {
+             const on = !!MIRROR_BIND_PICK[x.id];
+             return '<div class="slot hasic boon bind' + (on ? ' sel' : '') + '" data-bind="' + x.id + '">' +
+                      iconHTML(x.icon, { dim: !on }) + '<div>' +
+                      '<div class="nm">' + x.name + '<span class="boonsw' + (on ? ' on' : '') + '">' + (on ? 'ON' : 'OFF') + '</span></div>' +
+                      '<div class="sub">' + x.desc + '</div>' +
+                      '<div class="sub boonc">완주 보상 +' + Math.round(MIRROR_BIND_RULE.reward * 100) + '%</div>' +
+                    '</div></div>';
+           }).join('') +
+           '</div>' +
+           (bindN ? '<div class="mgnote red">건 제약 <b>' + bindN + '개</b>　·　완주 보상 <b>×' +
+                    bindRewardMult(bindPickedIds()) + '</b></div>' : '');
+    }
 
     if (MIRROR_PREP_ACTIONS.length) {
       h += '<div class="mghead">할 수 있는 일</div>' +
@@ -14383,6 +14547,13 @@ function openMirrorGate(tier, back) {
         draw(null);
       };
     });
+    $sheet.querySelectorAll(".slot[data-bind]").forEach(el => {
+      el.onclick = () => {
+        const id = el.dataset.bind;
+        MIRROR_BIND_PICK[id] = !MIRROR_BIND_PICK[id];
+        draw(null);
+      };
+    });
     const more = document.getElementById("mgmore");
     if (more) more.ontoggle = () => { MG_MORE = more.open; };
     document.getElementById("mgback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
@@ -14391,7 +14562,7 @@ function openMirrorGate(tier, back) {
       /* 가호 값은 여기서 봅니다 — 모자라면 입장을 막고 창에 붉게 알립니다 */
       const boons = rule.packRounds ? boonPickedIds() : [];
       if (boons.length && S.codex < boonPickedCost()) { draw(null, "황금교본이 부족합니다."); return; }
-      closeModal(); startMirror(rule.key, scouted, boons);
+      closeModal(); startMirror(rule.key, scouted, boons, rule.deep ? bindPickedIds() : []);
     };
     if (saved) document.getElementById("mgresume").onclick = () => { closeModal(); resumeMirror(); };
   };
@@ -14728,7 +14899,7 @@ function packGateChoices(rule, round, clearedPacks, shown, heardId, picking, g) 
       fn: () => packGateChoices(rule, round, clearedPacks, shown, heardId, false, g) }] : []));
 }
 
-function startMirror(tier, preIds, boons) {
+function startMirror(tier, preIds, boons, binds) {
   rail4Release();                     // 새 판에 들어설 때는 지난 편도(4호선)의 금지를 풀고 0부터
   const rule = mirrorTier(tier);
   const hard = rule !== MIRROR_RULE;   // 「보통이 아니다」— 글월에만 씁니다
@@ -14765,6 +14936,12 @@ function startMirror(tier, preIds, boons) {
     S.ended = false;
     S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
     S.railSave = { key: rule.key, round: 1, clearedPacks: [], arc: arcCopy(S.arc) };
+    /* 제약(어비스) — 칸이 잠기면 체력 상한이 달라질 수 있어, 싣고 나서 체력을 한 번 더 맞춥니다 */
+    const bindIds = rule.deep ? (binds || []).filter(id => bindDef(id)) : [];
+    if (bindIds.length) {
+      S.railSave.binds = { ids: bindIds.slice() };
+      S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
+    }
     /* 가호는 엔케팔린을 낸 뒤에 냅니다 — 들어서지 못하면 황금교본도 그대로입니다 */
     const boonIds = (boons || []).filter(id => boonDef(id));
     const boonOk = boonIds.length && S.codex >= boonIds.reduce((t, id) => t + boonDef(id).cost, 0);
@@ -14778,6 +14955,7 @@ function startMirror(tier, preIds, boons) {
     say(ENK_RULE.name + " " + rule.cost + " 소모.  (남은 것 " + enkCount() +
         " / " + ENK_RULE.max + ")", "sys");
     if (boonOk) { boonApply(boonIds); saveVault(); }
+    if (bindIds.length) { bindApply(bindIds); saveVault(); }
     divider();
     render();
     openPackGate(rule, 1, []);
@@ -15192,7 +15370,7 @@ function railFork(rule, cycle) {
  *
  *  packIds — 테마팩 갈래에서 이번 판에 고른 팩 id 목록(순서대로).
  *  거울굴절철도 등 팩이 없는 갈래는 null 을 넘깁니다. */
-function mirrorRecordBuild(rule, packIds, enhIds) {
+function mirrorRecordBuild(rule, packIds, enhIds, bindIds) {
   const party = S.party.map(w => {
     if (!w) return null;
     const id = idByKey(S.equip[w]);
@@ -15238,6 +15416,7 @@ function mirrorRecordBuild(rule, packIds, enhIds) {
     skips: rule.express ? ((S.rail3 && S.rail3.skipped) || 0) : null,   // 3호선 — 지나친 역 수
     railK: rule.express ? railExpressScale(rule) : null,               // 3호선 — 끝낸 배수
     fallen: rule.grave ? rail4State().fallen.length : null,            // 4호선 — 이 선로에서 내린 사람 수
+    binds: bindNames(bindIds),                                         // 어비스 — 건 제약(이름만 얼려 둡니다)
     party, advisors, gifts, picks, synergies, packs, perks, packCards
   };
 }
@@ -15287,6 +15466,7 @@ function mirrorRecordText(rec) {
   if (rec.packs && rec.packs.length) lines.push("테마팩 " + rec.packs.join(" → "));
   if (rec.perks && rec.perks.length) lines.push("테마팩 특전 " + rec.perks.join(" · "));
   if (pickStr) lines.push("특전 " + pickStr);
+  if (rec.binds && rec.binds.length) lines.push("제약 " + rec.binds.join(" · "));
   lines.push("v" + rec.ver + "　" + mirrorRecordDateText(rec.at));
   return lines.join("\n");
 }
@@ -15372,6 +15552,7 @@ function openMirrorResult(rec) {
       '<div class="mrclear">' + rec.name + ' 클리어</div>' +
       '<div class="mrstats"><b class="mrturn">' + rec.turns + '턴</b>' +
         (rec.cycles ? '<span class="mrcyc">' + rec.cycles + '순환</span>' : '') +
+        (rec.binds && rec.binds.length ? '<span class="mrcyc mrbind">제약 ' + rec.binds.join(" · ") + '</span>' : '') +
       '</div>' +
       '<div class="mrlabel">편성</div>' +
       '<div class="grid three mrparty">' + partyHTML + '</div>' +
@@ -15420,6 +15601,7 @@ function sayMirrorCard(rec) {
   const stats = [rec.turns + "턴"]
     .concat(rec.cycles ? [rec.cycles + "순환"] : [])
     .concat(rec.fallen != null ? ["내린 사람 " + rec.fallen + "명"] : [])
+    .concat(rec.binds && rec.binds.length ? ["제약 " + rec.binds.join(" · ")] : [])
     .concat(rec.railK != null ? ["운행 " + railScaleText(rec.railK) + " · 지나친 역 " + (rec.skips || 0)] : []);
   const box = document.createElement("div");
   box.className = "mirlog";
@@ -15482,6 +15664,9 @@ function mirrorClear() {
   /* 어비스 — 강화로 넘은 팩. 결과 카드가 강화된 특전 글로 보이게 함께 떠 둡니다 */
   const clearedEnh = (rule.deep && S.railSave && S.railSave.key === rule.key)
     ? (S.railSave.enh || []).slice() : [];
+  /* 어비스 — 이번 판에 건 제약. railSave 를 지우기 전에 떠 둡니다(완주 보상 배수 · 결과 카드) */
+  const clearedBinds = (rule.deep && S.railSave && S.railSave.key === rule.key && S.railSave.binds)
+    ? (S.railSave.binds.ids || []).filter(id => bindDef(id)) : [];
   /* 완주했으므로 저장해 둔 이어하기 자리는 이제 필요 없습니다 — 임시 데이터라
    * 여기서 지웁니다(saveVault() 는 이 함수 뒤 어디선가 자연히 한 번 더 돌아
    * 보관함에도 반영됩니다). */
@@ -15503,10 +15688,16 @@ function mirrorClear() {
    *  2호선에서 순환마다 고를 수 있는 넷 중 하나입니다. 고른 수만큼
    *  받는 몫이 늘어납니다 — 원고료 · 황금교본 · 파편 상자 · 이벤트 재화 모두.
    *  다른 갈래에서는 railBonus() 가 0 을 돌려주므로 곱해도 그대로입니다. */
-  const 덤 = 1 + railBonus().reward;
+  const 부적 = 1 + railBonus().reward;
+  /* 제약(어비스) — 하나마다 완주 보상 +50% (MIRROR_BIND_RULE) */
+  const 제약 = bindRewardMult(clearedBinds);
+  const 덤 = 부적 * 제약;
   const 몫 = n => Math.round((n || 0) * 덤);
-  if (덤 > 1)
-    say("행운의 부적이 몫을 " + Math.round((덤 - 1) * 100) + "% 늘린다.", "gain");
+  if (부적 > 1)
+    say("행운의 부적이 몫을 " + Math.round((부적 - 1) * 100) + "% 늘린다.", "gain");
+  if (제약 > 1)
+    say("제약 " + bindNames(clearedBinds).map(n => "「" + n + "」").join(" · ") + " — 완주 보상이 " +
+        Math.round((제약 - 1) * 100) + "% 늘어난다.", "gain");
 
   /* 원고료는 «처음 완주할 때만» 나옵니다. 고정값이라 earn() 을 타지 않으므로,
    * 들머리 칸에 적힌 수가 그대로 들어옵니다. */
@@ -15549,7 +15740,7 @@ function mirrorClear() {
    * 같고, 남는 개수(pushMirrorRecord 의 slice(0,3))도 함께 셉니다.
    * S.rail2 를 지우기 전에(바로 아래) 만들어야 순환 수·특전을 읽을 수 있습니다. */
   const record = (rule.group === "rail" || rule.packRounds)
-    ? mirrorRecordBuild(rule, clearedPackIds, clearedEnh) : null;
+    ? mirrorRecordBuild(rule, clearedPackIds, clearedEnh, clearedBinds) : null;
   if (record) pushMirrorRecord(record);
   saveVault();
   Cloud.push().catch(() => {});   // 거울을 마쳤으니 구름에도
@@ -17035,7 +17226,7 @@ function openGiftUp(back) {
       const cost  = maxed ? 0 : giftUpCost(g0, lv + 1);
       const nextDesc = (!maxed && g0.up[lv]) ? g0.up[lv].desc : null;
       h += '<div class="syncrow"' + (first ? ' data-tut="gup-row"' : '') + '>' + giftIconHTML(g) +
-             (maxed ? '<button disabled>' + (lv >= top ? '최대' : '상한 도달') + '</button>'
+             (maxed ? '<button disabled>' + (g0.noUp ? '강화 불가' : lv >= top ? '최대' : '상한 도달') + '</button>'
                     : '<button data-gup="' + giftId(g) + '">강화　교본 ' + cost + '권</button>') +
              '<div class="body">' +
                '<div class="nm"><span class="star">' + stars(g.star) + '</span> ' + giftLabel(g) + '</div>' +
@@ -20775,7 +20966,8 @@ SCENE_EXT.deepPackDone = function (s) {
   }
 
   S.railSave = { key: rule.key, round: floor + 1, clearedPacks: cleared, enh: enh, arc: arcCopy(S.arc),
-                 turns: S.mirrorRunTurns || 0, boons: rs.boons || null };   // 가호는 판 끝까지(mirrorPackDone 과 같게)
+                 turns: S.mirrorRunTurns || 0, boons: rs.boons || null,     // 가호는 판 끝까지(mirrorPackDone 과 같게)
+                 binds: rs.binds || null };                                 // 제약도 판 끝까지
   if (floor >= rule.packRounds) return mirrorClear();
   saveVault();
   openPackGate(rule, floor + 1, cleared);

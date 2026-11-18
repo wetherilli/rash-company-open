@@ -60,6 +60,17 @@
  *                                 engine.js giftSkillAtkFor · useUniqueSkill · effStats
  *    retribBase: 1                유아인 「보복」 이 언제나 이 수부터(쓰러져 0 이 되어도) — who/tag 로 유아인을
  *                                 가리킬 때만. 보복 자체가 동기화 1단계부터라 그 아래에선 효과 없음 (engine.js retribNow)
+ *    ── 공격 유형 · 흐트러짐 (engine.js typeFx 머리말 — 8장과 함께 나가는 기프트) ──
+ *    typeDmg: { slash: 0.2 }      그 유형(pierce · slash · blunt)으로 주는 피해 +20%
+ *    weakAdd: 0.2                 약점 배율에 더함 (×1.5 → ×1.7, 흐트러진 적에게도)
+ *    resistMult: 1.0              내성 배율을 이 값으로 (1.0 = 내성 무시)
+ *    staggerDmg: 0.25             흐트러진 적에게 주는 피해 +25%
+ *    defIgnore: { type: "pierce", cut: 0.5 }   그 유형으로 치는 사람은 적 방어의 절반을 무시
+ *    staggerRecover: 1            흐트러진 아군이 차례 끝에 곧바로 풀림(편성 전체에 전투당 n회 — 같은 능력의 인격에는 안 들음)
+ *    atkTypeIs: "slash", def: 0.2 그 유형으로 치는 사람에게만 atk · def · hp (tag · who 와 같은 «가리는» 칸)
+ *    typeTrio: { atk: 0.15 }      편성에 세 유형이 모두 있으면 전원에게
+ *
+ *  ■ noUp: true — 강화하지 않는 기프트. up 을 적지 않습니다(강화 창에 「강화 불가」).
  *
  *  ■ 화면에 뜨는 글 — flavor / desc (사용자 지침 2026-09-06)
  *    flavor   그 기프트다운 한 줄(이탤릭체로, desc 위에 뜹니다).

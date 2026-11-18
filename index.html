@@ -1544,6 +1544,17 @@
   .boonsw.on{border-color:var(--gold-line);background:var(--gold-bg);color:var(--gold);}
   .mgboons .boonc{margin-top:3px;}
   .mgboons .boonc .icmini{vertical-align:-4px;}
+  /* 제약 — 가호와 같은 카드, 색만 붉게 (2026-11-18). 어비스 거울 던전에만 섭니다 */
+  .mgbinds .slot.bind{border-color:#5e2a28;background:#1c1214;}
+  .mgbinds .slot.bind.sel{border-color:var(--red);background:#2a1416;}
+  .mgbinds .slot.bind .nm{color:#d9705f;}
+  .mgbinds .slot.bind.sel .nm{color:var(--red);}
+  .mgbinds .slot.bind .boonc{color:#d9705f;font-weight:700;}
+  .mgbinds .boonsw.on{border-color:var(--red);background:#3a1a1c;color:#f0a090;}
+  @media (hover:hover){ .mgbinds .slot.bind:hover{border-color:var(--red);} }
+  .slot.bindlock{border-color:#5e2a28;background:#1c1214;}
+  .slot.bindlock .lock{color:#d9705f;font-weight:700;}
+  .mrbind{color:#d9705f;}
   /* 자세히 — 기본 접힘 */
   .mgmore{margin:2px 0 10px;border:1px solid var(--line);background:var(--sheet);border-radius:3px;}
   .mgmore > summary{
@@ -2057,26 +2068,26 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.31.6"></script>
-<script src="data/vault.js?v=2.31.6"></script>
-<script src="data/characters.js?v=2.31.6"></script>
-<script src="data/skills.js?v=2.31.6"></script>
-<script src="data/allies.js?v=2.31.6"></script>
-<script src="data/gifts.js?v=2.31.6"></script>
-<script src="data/pickup.js?v=2.31.6"></script>
-  <script src="data/hard.js?v=2.31.6"></script>
-<script src="data/achievements.js?v=2.31.6"></script>
-<script src="data/mail.js?v=2.31.6"></script>
-<script src="data/notice.js?v=2.31.6"></script>
-<script src="data/patch.js?v=2.31.6"></script>
-<script src="data/event.js?v=2.31.6"></script>
-<script src="data/reward.js?v=2.31.6"></script>
-<script src="data/tutorial.js?v=2.31.6"></script>
-<script src="data/foes.js?v=2.31.6"></script>
-<script src="data/story.js?v=2.31.6"></script>
-<script src="data/mirrorpacks.js?v=2.31.6"></script>
-<script src="data/bgm.js?v=2.31.6"></script>
-<script src="engine.js?v=2.31.6"></script>
+<script src="data/access.js?v=2.31.7"></script>
+<script src="data/vault.js?v=2.31.7"></script>
+<script src="data/characters.js?v=2.31.7"></script>
+<script src="data/skills.js?v=2.31.7"></script>
+<script src="data/allies.js?v=2.31.7"></script>
+<script src="data/gifts.js?v=2.31.7"></script>
+<script src="data/pickup.js?v=2.31.7"></script>
+  <script src="data/hard.js?v=2.31.7"></script>
+<script src="data/achievements.js?v=2.31.7"></script>
+<script src="data/mail.js?v=2.31.7"></script>
+<script src="data/notice.js?v=2.31.7"></script>
+<script src="data/patch.js?v=2.31.7"></script>
+<script src="data/event.js?v=2.31.7"></script>
+<script src="data/reward.js?v=2.31.7"></script>
+<script src="data/tutorial.js?v=2.31.7"></script>
+<script src="data/foes.js?v=2.31.7"></script>
+<script src="data/story.js?v=2.31.7"></script>
+<script src="data/mirrorpacks.js?v=2.31.7"></script>
+<script src="data/bgm.js?v=2.31.7"></script>
+<script src="engine.js?v=2.31.7"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
