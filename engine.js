@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.7";
+const VERSION = "2.31.8";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -14351,6 +14351,105 @@ function bindApply(ids) {
       "　(완주 보상 +" + Math.round((bindRewardMult(ids) - 1) * 100) + "%)", "bad");
 }
 
+/* ── 테마팩 도감 (사용자 지침 2026-11-18) ───────────────────────
+ *  거울 던전에 서는 모든 테마팩과 그 특전을 한자리에서 봅니다. 돌입 준비 화면의 엔케팔린 줄
+ *  오른쪽 [테마팩 도감] 으로 엽니다(테마팩 갈래 — 노말 · 하드 · 익스트림 · 어비스).
+ *
+ *  ■ 갈래(필터) — 전체 · 일반 · 상층부 전용(railOnly — 익스트림 마지막 갈림길) · 어비스 전용(deepOnly — 4·5층)
+ *  ■ 가림 — «들어가 본 팩» 만 보입니다(사용자 지침 2026-11-18). 갈림길에서 그 팩을 고른 적이 있으면(enterPack —
+ *    깨지 못했어도) S.mirrorDone 의 「pack:<id>」 에 남고, 없으면 이름 · 상대 · 특전을 ？？？ 로 가립니다.
+ *  ■ 팩 데이터를 그대로 읽어 그립니다 — 새 팩을 지으면 저절로 늘어납니다. 손댈 곳이 없습니다. */
+const PACK_CODEX_TABS = [
+  { key: "all",    name: "전체" },
+  { key: "normal", name: "일반" },
+  { key: "upper",  name: "상층부 전용" },
+  { key: "deep",   name: "어비스 전용" }
+];
+let PACK_CODEX_TAB = "all";
+function packCodexKind(p) { return p.deepOnly ? "deep" : p.railOnly ? "upper" : "normal"; }
+/* 들어가 본 팩인가 — S.mirrorDone 에 「pack:<id>」 로 적습니다(enterPack). mirrorDone 은 이미 보관함 · 구름 · 손댐 검사에
+ * 실리는 표라 칸을 새로 열지 않았습니다(어비스의 「mirrorDeep:f3」 과 같은 결). */
+function packSeenKey(id) { return "pack:" + id; }
+function packSeen(p) { return !!(S && S.mirrorDone && S.mirrorDone[packSeenKey(p.id)]); }
+function packSeenMark(id) {
+  if (!S.mirrorDone) S.mirrorDone = {};
+  S.mirrorDone[packSeenKey(id)] = true;
+}
+/* 이 기록이 생기기 전(v2.31.8 전)에 들어가 본 팩 — 남아 있는 흔적에서 되살립니다.
+ * 결과 카드(최근 세 판의 팩 이름)와 어비스에서 넘긴 거울굴절철도 팩(「mirrorDeep:rail:<id>」)뿐이라 다 되살리지는 못합니다. */
+function packSeenBackfill() {
+  if (!S || typeof MIRROR_PACKS === "undefined") return;
+  (S.mirrorRecords || []).forEach(r => (r.packs || []).forEach(nm => {
+    const p = MIRROR_PACKS.find(x => x.name === nm || x.id === nm);
+    if (p) packSeenMark(p.id);
+  }));
+  Object.keys(S.mirrorDone || {}).forEach(k => {
+    if (k.indexOf("mirrorDeep:rail:") === 0) packSeenMark(k.slice("mirrorDeep:rail:".length));
+  });
+}
+function openPackCodex(back) {
+  $modal.classList.add("on");
+  packSeenBackfill();
+  const packs = (typeof MIRROR_PACKS !== "undefined") ? MIRROR_PACKS : [];
+  const kindName = { normal: "일반", upper: "상층부 전용", deep: "어비스 전용" };
+  const kindSub  = { normal: "노말 · 하드 · 익스트림의 모든 갈림길",
+                     upper:  "익스트림 마지막(상층부) 갈림길 · 어비스 4·5층",
+                     deep:   "어비스 거울 던전 4·5층" };
+  const draw = () => {
+    const inTab = p => PACK_CODEX_TAB === "all" || packCodexKind(p) === PACK_CODEX_TAB;
+    const cnt = k => { const l = packs.filter(p => k === "all" || packCodexKind(p) === k);
+                       return l.filter(packSeen).length + " / " + l.length; };
+    let h = '<h2>테 마 팩   도 감</h2>' +
+            '<div class="hint">거울 던전의 갈림길에 서는 테마팩과, 그 팩을 고르면 얻는 특전입니다. ' +
+            '팩 안의 상대는 «잡졸 → 보스 → 큰보스» 차례로 섭니다. <b>들어가 본 팩</b>만 보이고, 아직 들어가 본 적 없는 팩은 가려져 있습니다.</div>' +
+            '<div class="achtabs">' +
+            PACK_CODEX_TABS.map(t => '<button data-pctab="' + t.key + '" class="' + (PACK_CODEX_TAB === t.key ? 'on' : '') + '">' +
+              t.name + '<span class="n">' + cnt(t.key) + '</span></button>').join('') +
+            '</div>';
+    const deepSeen = mirrorUnlocked(MIRROR_DEEP);   // 어비스가 열린 사람에게만 강화된 특전 글을 함께
+    ["normal", "upper", "deep"].forEach(kind => {
+      const list = packs.filter(p => packCodexKind(p) === kind && inTab(p));
+      if (!list.length) return;
+      h += '<div class="pchead"><b>' + kindName[kind] + '</b><span>' + kindSub[kind] + '</span></div>' +
+           '<div class="grid pcgrid">';
+      list.forEach(p => {
+        const no = packs.indexOf(p) + 1;
+        if (!packSeen(p)) {
+          h += '<div class="slot ro pccard shut"><div class="pcno">' + no + '</div>' +
+                 '<div class="nm">？？？</div>' +
+                 '<div class="sub">아직 들어가 본 적 없는 팩입니다.</div></div>';
+          return;
+        }
+        const k = p.perk;
+        const foes = p.foes.map((id, i) => {
+          const f = FOES[id] || {};
+          return '<span class="pcfoe' + (i === p.foes.length - 1 ? ' big' : '') + '">' + (f.name || id) + '</span>';
+        }).join('<i>→</i>');
+        const enh = (k && deepSeen) ? deepPerkOf(p, true) : null;
+        h += '<div class="slot ro pccard' + (kind === "deep" ? ' deep' : kind === "upper" ? ' upper' : '') + '">' +
+               '<div class="pcno">' + no + '</div>' +
+               '<div class="nm">' + p.name + '</div>' +
+               '<div class="pcfoes">' + foes + '</div>' +
+               (k ? '<div class="pgperk">' + iconHTML(k.name) +
+                      '<div><div class="pgname">' + k.name + '</div><div class="sub">' + k.desc + '</div>' +
+                      (enh && enh.desc !== k.desc ? '<div class="sub pcenh">' + enh.desc + '</div>' : '') +
+                    '</div></div>'
+                  : '<div class="sub">특전 없음</div>') +
+             '</div>';
+      });
+      h += '</div>';
+    });
+    h += '<div class="modalfoot"><button id="pcback" class="primary">돌아가기</button></div>';
+    $sheet.innerHTML = h;
+    $sheet.scrollTop = 0;
+    $sheet.querySelectorAll("[data-pctab]").forEach(el => {
+      el.onclick = () => { PACK_CODEX_TAB = el.dataset.pctab; draw(); };
+    });
+    document.getElementById("pcback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
+  };
+  draw();
+}
+
 function openMirrorGate(tier, back) {
   const rule = mirrorTier(tier);
   $modal.classList.add("on");
@@ -14402,7 +14501,9 @@ function openMirrorGate(tier, back) {
      * (사용자 지침 2026-10-27 — 게이지로). 수만 적는 것보다 «몇 칸 남았나» 가
      * 한눈에 들어오고, 세 화면이 같은 꼴을 쓰니 따로 익힐 것이 없습니다.
      * 모자랄 때만 그 아래에 붉게 한 줄 더합니다 — 입장 칸도 함께 붉어집니다. */
-    h += '<div class="mgenk">' + enkBarHTML() + '</div>';
+    /* 테마팩 갈래에는 줄 오른쪽 끝에 [테마팩 도감] (사용자 지침 2026-11-18 — openPackCodex) */
+    h += '<div class="mgenk' + (rule.packRounds ? ' hasbtn' : '') + '">' + enkBarHTML() +
+           (rule.packRounds ? '<button id="mgcodex" class="ghost">테마팩 도감</button>' : '') + '</div>';
     if (!canGo)
       h += '<div class="mgnote red">' + ENK_RULE.name + '이 모자랍니다 — ' +
            '이 갈래는 ' + rule.cost + ', 지금 ' + enkCount() + '.</div>';
@@ -14557,6 +14658,8 @@ function openMirrorGate(tier, back) {
     const more = document.getElementById("mgmore");
     if (more) more.ontoggle = () => { MG_MORE = more.open; };
     document.getElementById("mgback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
+    const codexBtn = document.getElementById("mgcodex");
+    if (codexBtn) codexBtn.onclick = () => openPackCodex(() => openMirrorGate(tier, back));
     const enterBtn = document.getElementById("mgenter");
     if (canGo) enterBtn.onclick = () => {
       /* 가호 값은 여기서 봅니다 — 모자라면 입장을 막고 창에 붉게 알립니다 */
@@ -14790,6 +14893,7 @@ function enterPack(rule, pack, round) {
     S.railSave.arc = arcCopy(S.arc);
     S.railSave.current = pack.id;
   }
+  packSeenMark(pack.id);         // 테마팩 도감 — 들어가 본 팩(openPackCodex)
   grantPackPerk(pack.id);
   MIRROR = { id: rule.key, no: rule.name, title: "", subtitle: rule.sub,
              scenes: buildPackRunScenes(rule, pack, round) };
