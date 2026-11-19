@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.8";
+const VERSION = "2.31.9";
 const VERSION_NAME = "공식 설정에 속하지 못하는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -56,6 +56,7 @@ const RULE = {
    * 방어·교정의 경감이 아예 안 걸립니다 — 그게 이 기믹의 전부입니다.
    * 적마다 breakMult 로 따로 적을 수 있습니다 (FOES 의 breakEvery 머리말 참고). */
   breakMult:   1.5,
+  finishLineMs: 3000,  // 각본 마무리 일격(finishBlow) — 대사(finishLine)를 읽을 틈. 이 뒤에 일격이 떨어집니다(사용자 지침 2026-11-19)
   startMoney:  400,    // 보관함이 아예 없을 때 손에 쥐고 시작하는 원고료
   /* 장을 마칠 때 주는 원고료. «처음 마칠 때만» 나옵니다 (storyPays 참고).
    * 장마다 다르게 주고 싶으면 그 장에 clearPay 를 적으면 그것이 이깁니다. */
@@ -84,7 +85,7 @@ const RULE = {
   dialogueGapMs: 650,
   /* 흐트러질 때 · 흐트러짐을 떨칠 때의 한마디가 머무는 시간(ms) — 그동안 전투의 다음 걸음(다음 사람의 공격 ·
    * 적 차례 · 턴 넘김)을 붙들어 둡니다(사용자 지침 2026-11-18 — «읽을 새도 없이 지나간다»). battleHold · holdMs 참고. */
-  staggerLineMs: 1300,
+  staggerLineMs: 1500,   // 1300 → 1500(사용자 지침 2026-11-19 — 아군 흐트러짐 대사도 다음 차례 전에 1.5초)
   /* 전투 «중» 끼어드는 대사(연계 선창·대답, 연계 호령, 설득전 대사)가 한 줄에
    * 머무는 시간(ms) — 읽을 틈이 있어야 한다는 지침(2026-09-11)으로 2초입니다.
    * 위 dialogueGapMs 와 달리, 이 대기 동안 손잡이는 잠기지 않습니다. 행동을
@@ -2488,7 +2489,7 @@ function staggerEnd(b, why) {
     const line = staggerVoiceLine(b, "staggerEnd");
     foeSayLine(b, line);
     if (line) battleHold(b);
-  } else say("▷ " + withJosa(b.name, "이") + " 자세를 바로잡았다.", "bad");
+  } else if (why !== "phaseQuiet") say("▷ " + withJosa(b.name, "이") + " 자세를 바로잡았다.", "bad");
   staggerSync();
   renderFoeBar();
 }
@@ -3827,6 +3828,28 @@ function alive(who) { return curHp(who) > 0; }
 
 /* 조력자 가운데 loseOnDown 을 단 사람(data/allies.js — 8장 아멜리아)은 «쓰러지면 그 전투가 진다» 입니다.
  * 작성위원이 아니라 첨삭으로 일으킬 수 없는 사람이라서입니다(사용자 지침 2026-10-25). */
+/* 조력자 강타 — data/allies.js 에 heavy: { from: 4, every: 3, mult: 1.5, label: "강타", lines: ["…", "…"] } 를 적으면
+ * 전투 from 번째 차례부터 every 차례마다(from 을 안 적으면 every 번째부터) 그 공격이 mult 배가 되고, lines 를 번갈아 한마디 합니다(사용자 지침 2026-11-19 — 아멜리아). */
+function allyHeavyFor(b, w) {
+  if (!b || !isAlly(w)) return null;
+  const a = allyBy(w), h = a && a.heavy;
+  const from = h.from || h.every;
+  if (!h.every || b.turn < from || (b.turn - from) % h.every) return null;
+  const ls = h.lines || [];
+  const n = (b.turn - from) / h.every;
+  return { mult: h.mult || 1.5, label: h.label || "강타", line: ls.length ? ls[n % ls.length] : null };
+}
+/* 스스로 고르는 조력자(selfCmd) — 플레이어가 공격 · 방어를 고르지 않습니다(사용자 지침 2026-11-19 — 아멜리아).
+ * 강타 차례(allyHeavyFor)에는 공격, 그 밖에는 공격 · 방어 중 무작위. 흐트러진 차례는 이미 "stagger" 가 서 있어 건드리지 않습니다. */
+function allySelfCmd(b, w) {
+  if (!b || !isAlly(w) || b.cmds[w]) return;
+  const a = allyBy(w);
+  if (!a || !a.selfCmd) return;
+  b.cmds[w] = allyHeavyFor(b, w) ? "attack" : (rnd(2) ? "attack" : "guard");
+}
+/* 버티기 깨기를 피하는 조력자(dodgeBreak) — 그 차례에는 웅크렸든 아니든 맞지 않습니다.
+ * 버티기 깨기는 교정으로도 지켜 줄 수 없어, 쓰러지면 지는 조력자에게는 손쓸 길이 없기 때문입니다(사용자 지침 2026-11-19). */
+function allyDodgesBreak(w) { const a = isAlly(w) && allyBy(w); return !!(a && a.dodgeBreak); }
 function allyLoseOnDown(w) { const a = allyBy(w); return !!(a && a.loseOnDown); }
 function fallenKeyAlly() { return S.party.find(w => w && allyLoseOnDown(w) && !alive(w)) || null; }
 /* 이 전투를 졌는가 — 전원이 쓰러졌거나, 쓰러지면 지는 조력자가 쓰러졌거나.
@@ -4258,7 +4281,7 @@ function forcePartyPop() {
  *  금지된 사람은 chapterNeeds(장의 require)에서도 잠깐 빠집니다 — 그래야
  *  「이 장은 ○○이 없이는 진행할 수 없다」는 확정 검사에 걸리지 않습니다.
  *  openParty() 의 작성위원 칸·확정 손잡이가 S.partyBan 을 함께 봅니다. */
-function banParty(list) {
+function banParty(list, quiet) {   // quiet — «전열에서 빠진다» 줄을 내지 않습니다({t:"party", ban, quiet:true})
   const arr = (Array.isArray(list) ? list : [list]).filter(Boolean);
   arr.forEach(w => { if (S.partyBan.indexOf(w) < 0) S.partyBan.push(w); });
   const left = [];
@@ -4267,7 +4290,7 @@ function banParty(list) {
     left.push(w);
     return false;
   });
-  if (left.length) { divider(); say(withJosa(nameList(left), "이") + " 전열에서 빠진다.", "sys"); }
+  if (left.length && !quiet) { divider(); say(withJosa(nameList(left), "이") + " 전열에서 빠진다.", "sys"); }
 }
 function unbanParty(list) {
   const arr = Array.isArray(list) ? list : [list];
@@ -4491,6 +4514,31 @@ function turnHead(n, name, hp, max) {
   hpEl.textContent = hp + " / " + max;
   f.appendChild(nm); f.appendChild(hpEl);
   $log.appendChild(f);
+  $log.scrollTop = $log.scrollHeight;
+}
+/* 끝맺음 머리 — «8-1 종료» · «8장 종료» · «n순환 종료» 를 턴 머리(turnHead)처럼 가운데 큰 글씨, 양옆 구분선으로(사용자 지침 2026-11-19).
+ * 예전 «── 8-1 종료 ──» place 한 줄을 대신합니다. 모양은 index.html #log .endhead */
+function endHead(label) {
+  const h = document.createElement("div");
+  h.className = "turnhead endhead";
+  const t = document.createElement("span");
+  t.className = "tn";
+  t.textContent = label;
+  h.appendChild(t);
+  $log.appendChild(h);
+  $log.scrollTop = $log.scrollHeight;
+}
+/* 편성 자리 안내 — «매니저 선발전에 들어선다 — 편성을 손보십시오. 유아인은 반드시 서야 합니다.» 같은 글을
+ * « — » 와 문장 끝에서 줄을 바꿔 상자 하나에 담습니다(사용자 지침 2026-11-19). 모양은 index.html #log .partybox */
+function partyNote(text) {
+  const box = document.createElement("div");
+  box.className = "partybox";
+  String(text).split(/\s+—\s+|(?<=[.!?。])\s+/).filter(Boolean).forEach(line => {
+    const p = document.createElement("p");
+    p.textContent = line;
+    box.appendChild(p);
+  });
+  $log.appendChild(box);
   $log.scrollTop = $log.scrollHeight;
 }
 function divider() {
@@ -5701,13 +5749,14 @@ function renderParty() {
     const 흐트선 = ag ? ag.lines.map((r, i) =>
       '<b class="stgline' + (ag.used[i] ? ' used' : '') + '" style="left:' + (r * 100) + '%"></b>').join("") : "";
     /* 조력자는 이름을 제 색으로 강조하고, 별 자리에는 idText 를 적습니다
+     * cardTitle 을 적으면 카드에는 title 대신 그것을 씁니다 — id(allyId) 는 title 그대로라 기록이 갈리지 않습니다(아멜리아 «Hololive -Myth-»).
      * (베르렐리우스라면 「길잡이 짧은시선」). data/allies.js 참고. */
     const nameHTML = ally
       ? '<span class="allyname" style="color:' + (ally.color || "#e07aa8") + '">' +
           memberName(who) + '</span>'
       : memberName(who);
     const idHTML = ally
-      ? ally.title + (ally.idText ? ' 「' + ally.idText + '」' : "")
+      ? (ally.cardTitle || ally.title) + (ally.idText ? ' 「' + ally.idText + '」' : "")
       : '<span class="star">' +
           (sup ? stars(sup.star) : (id ? stars(id.star) : "")) + '</span> ' +
         (sup ? sup.title : (id ? id.title : "인격 없음"));
@@ -6193,7 +6242,7 @@ function chapterGate(i, miss) {
   $log.classList.remove("recalling");
   showCard(c.img || null, c.no + "  " + c.title);
   divider();
-  say(c.no + "  " + c.title, "place");
+  say(c.no + "  " + c.title, "place chtitle");   // 장 제목 — 크게 · 굵게(사용자 지침 2026-11-19, index.html #log .chtitle)
   if (c.subtitle) say("— " + c.subtitle + " —", "sys");
   divider();
   say("이 장은 " + withJosa(nameList(miss), "이") + " 편성되어 있어야 들어갈 수 있다.", "bad");
@@ -6238,7 +6287,7 @@ function startChapter(i) {
     $log.classList.remove("recalling");
     showCard(c.img || null, c.no + "  " + c.title);
     divider();
-    say(c.no + "  " + c.title, "place");
+    say(c.no + "  " + c.title, "place chtitle");   // 장 제목 — 크게 · 굵게(사용자 지침 2026-11-19, index.html #log .chtitle)
     if (c.subtitle) say("— " + c.subtitle + " —", "sys");
     if (c.place)    say("무대: " + c.place, "sys");
     const needs = chapterNeeds(c);
@@ -6409,7 +6458,9 @@ function play(s) {
      *   { t:"n", text:"…", shake:true }    한 번 흔들림
      *   { t:"n", text:"…", shake:"hard" }  크게 흔들림 (강타와 같은 세기)
      *   { t:"flash" }                       번쩍인 뒤 크게 흔들립니다 */
-    case "n":     { const x = applyAlt(s); say(x.text, "n");
+    case "n":     { const x = applyAlt(s);
+                    /* box:true — 편성 안내처럼 줄을 끊어 상자에 담습니다(partyNote, 사용자 지침 2026-11-19) */
+                    if (s.box) partyNote(x.text); else say(x.text, "n");
                     if (s.shake) shakeScreen(s.shake === "hard");
                     /* 서술 한 줄에 얹는 연출 — fx 는 무대 바닥에 한 번(stageOnce), wx 는 이 줄부터 다음 장소까지의 날씨 */
                     if (s.fx) stageOnce(s.fx);
@@ -6550,13 +6601,13 @@ function play(s) {
      * 편성 창을 다시 띄웁니다 — 장 전체의 require 와 달리 이 장면 하나만
      * 겨눈 검사입니다(7장 「호감이 끝나는」, G안 최종전 앞). */
     case "party": {
-      if (s.ban) banParty(s.ban);
+      if (s.ban) banParty(s.ban, s.quiet);
       if (s.unban) unbanParty(s.unban);
       /* 장이 길어질수록(7장부터) 편성을 고치는 자리마다 조용히 중간 저장을
        * 남겨 둡니다(S.storySave) — 이 장에서 패배하면 처음부터나 그 전투를
        * 그대로 다시 하는 대신 이 자리로 돌아갑니다(defeat() 참고). */
       storyCheckpoint();
-      say(s.text || "편성을 조정하십시오.", "sys");
+      partyNote(s.text || "편성을 조정하십시오.");
       S.waiting = true;
       const need = s.require ? (Array.isArray(s.require) ? s.require : [s.require]) : [];
       const satisfied = () => !need.filter(w => S.party.indexOf(w) < 0).length;
@@ -7271,7 +7322,7 @@ function startBattleFight(scene, f) {
    "lockTurns", "lockKillAtk", "aoeMult", "aoeMultStep", "aoeAtkGain",
    "aoeEvery", "aoeFrom", "aoeFlat", "aoeLine", "aoeWarn",
    "healEvery", "healFrom", "healAtk", "healLine", "healWarn",
-   "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn",
+   "counterEvery", "counterFrom", "counterMult", "counterLine", "counterWarn", "counterIdleAoe", "counterIdleName", "aoeBreakNth",
    "evadeEvery", "evadeFrom", "evadeLine", "evadeWarn",
    "takeEvery", "takeFrom", "takeOnce", "takeLine", "takeWarn", "takeHit",
    "breakEvery", "breakFrom", "breakAt", "breakMult", "breakSplash", "breakLine", "breakWarn",
@@ -7313,7 +7364,11 @@ function startBattleFight(scene, f) {
 
   /* startBossCine 을 거쳐 온 전투는 등장 연출에서 이미 판을 비우고 등장 대사·음성까지
    * 냈습니다 — 여기서 또 지우거나 되풀이하면 방금 본 대사가 사라지거나 음성이 겹칩니다. */
-  if (!scene.cineDone) {
+  /* resume — 앞 단계에서 이어 붙는 같은 적의 전투(8장 지와 2 · 3단계). 판을 비우거나 소개 · 등장 대사를 되풀이하지 않고
+   * resumeLine 한 줄로 다시 붙습니다(사용자 지침 2026-11-19 — 10 · 20턴에서 끊겨 보이던 것). 체력 · 공격 줄은 그대로 냅니다(값이 바뀌므로). */
+  const resume = !!scene.resume;
+  if (resume) divider();
+  if (!scene.cineDone && !resume) {
     /* 전투에 들어서면 판을 한 번 비운다 —
      * 앞서 이야기하던 사람의 초상과 그때까지의 대화록이 남아 있으면 정신이 없다. */
     clearLog();
@@ -7328,7 +7383,7 @@ function startBattleFight(scene, f) {
   }
   showFoe(f.img || null, f.name, f.imgScale || null);   // 적은 배경 가운데에 선다
   S.battle.shown = f.img || null;          // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
-  say("▶ " + withJosa(f.name, "이") + " 나타났다!", "bad");
+  say(resume ? (scene.resumeLine || ("▶ " + withJosa(f.name, "이") + " 다시 자세를 잡는다!")) : ("▶ " + withJosa(f.name, "이") + " 나타났다!"), "bad");
   /* FOES 원본이 아니라 «이 전투의» 값을 적습니다 — 장면에서 hp·atk·def 를
    * 덮어쓴 전투(위 «이 전투 하나만 다르게» 자리)는 둘이 다릅니다.
    * 여태 원본을 적고 있어서, 7.5장 로단처럼 덮어쓴 전투는 실제로 1150/50/19
@@ -7339,7 +7394,7 @@ function startBattleFight(scene, f) {
    * (사용자 지침 2026-09-23). 버티는 전투(storyFrom)·설득 전투처럼
    * 「적을 눕히는 것」이 목표가 아닌 자리에 답니다. 전투 장면에 적습니다.
    *     { t:"battle", foe:"…", hint:"… 버텨야 한다." } */
-  if (scene.hint) say(scene.hint, "recall");
+  if (scene.hint && !resume) say(scene.hint, "recall");
 
   if (!S.party.some(alive)) S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
   allyStaggerInit();             // 아군 흐트선 — 사람마다(ALLY_STAGGER_RULE 머리말). 들어설 때 이미 선 아래면 그 선은 쓴 것
@@ -7372,9 +7427,9 @@ function startBattleFight(scene, f) {
  *  ■ heavyEvery — 강타 주기(안 적으면 3턴). 페이즈가 아니어도 FOES 에 적을 수 있습니다. */
 const FOE_CYCLE_KEYS = [
   "noHeavy", "heavyEvery", "lockTurns", "lockKillAtk",
-  "aoeEvery", "aoeFrom", "aoeFlat", "aoeMult", "aoeMultStep", "aoeAtkGain",
+  "aoeEvery", "aoeFrom", "aoeFlat", "aoeMult", "aoeMultStep", "aoeAtkGain", "aoeFastAtk", "aoeFastEvery",
   "healEvery", "healFrom", "healAtk",
-  "counterEvery", "counterFrom", "counterMult",
+  "counterEvery", "counterFrom", "counterMult", "counterIdleAoe", "aoeBreakNth",
   "evadeEvery", "evadeFrom",
   "takeEvery", "takeFrom", "takeOnce",
   "breakEvery", "breakFrom", "breakAt", "breakMult", "breakSplash",
@@ -7411,7 +7466,8 @@ function checkPhase(b) {
     say(ph.line, "d");
   }
   /* 페이즈가 바뀌면 흐트러짐이 풀립니다 — 새 페이즈의 첫 행동은 지우지 않습니다(사용자 지침 2026-11-15) */
-  if (staggerOn(b)) staggerEnd(b, "phase");
+  /* 페이즈 대사(line)가 있으면 그 대사가 곧 «떨치는» 장면이라, 떨침 줄 · 떨침 대사를 또 내지 않고 조용히 풉니다(사용자 지침 2026-11-19 — 8-4 이창수) */
+  if (staggerOn(b)) staggerEnd(b, ph.line ? "phaseQuiet" : "phase");
 }
 
 /* ── 표적 고정 · 광역 배수 · 광역마다 공격 증가 (8장, 사용자 지침 2026-10-25) ──────
@@ -7441,6 +7497,7 @@ function aoeMultNow(b) {
 function afterAoe(b) {
   const f = foeDef(b);
   b.aoeUses = (b.aoeUses || 0) + 1;
+  b.lastAoeTurn = b.turn;                 // 공격력이 넘으면 광역 주기를 당길 때 셉니다(aoeFastAtk)
   const gain = b.aoeAtkGain || f.aoeAtkGain || 0;
   if (gain) {
     addFoeAtk(b, gain);
@@ -7623,6 +7680,18 @@ function beginTurn() {
   if (b.atk0 != null) b.atk = Math.round(b.atk0 * atkK);
 
   b.aoe      = !!(b.boss && (주기(aoeEvery, aoeFrom) || (rageAoe && 주기(rageAoe, null))));
+  /* aoeFastAtk · aoeFastEvery — 공격력이 aoeFastAtk 이상이 되면 광역 주기를 aoeFastEvery 로 당깁니다(사용자 지침 2026-11-19 — 8-4 이창수 200 · 2).
+   * 페이즈 주기 대신 «지난 광역에서 몇 차례 지났나»(b.lastAoeTurn — afterAoe)로 셉니다. 넘어선 첫 턴에 한 번 알립니다(aoeFastWarn). */
+  const fastAtk = b.aoeFastAtk || fnow.aoeFastAtk;
+  if (b.boss && fastAtk && b.atk >= fastAtk) {
+    if (!b.aoeFastOn) {
+      b.aoeFastOn = true;
+      say("▷ " + withJosa(b.name, "이") + " " + (b.aoeFastWarn || fnow.aoeFastWarn || "더는 숨을 고르지 않는다.  광역 공격이 잦아질 것 같다.") +
+          "　(공격 " + b.atk + ")", "bad");
+    }
+    const fe = b.aoeFastEvery || fnow.aoeFastEvery || 2;
+    b.aoe = b.lastAoeTurn == null ? b.aoe : (b.turn - b.lastAoeTurn >= fe);
+  }
   b.foeHeal  = !b.aoe && !!(b.boss && 주기(hEvery, hFrom));
   /* 선공 — 이 턴만 차례가 뒤집혀 적이 먼저 칩니다(resolveTurn 참고).
    * 둘로 갈립니다. 광역 선공이 단일 선공보다 위입니다 — 둘 다 걸리는 턴이면
@@ -7660,6 +7729,15 @@ function beginTurn() {
   b.heavy   = !b.aoe && !b.foeHeal && !b.foeFirst && !b.take && !b.counter && !b.foeBreak &&
               !b.foeEvade &&
               !(b.noHeavy || fnow.noHeavy) && !!(b.boss && tt % rageHeavy === 0);
+  /* aoeBreakNth — n 번째로 쓰는 광역을 버티기 깨기로 바꿉니다(사용자 지침 2026-11-19 — 8장 쥬공티렉스 셋째 광역).
+   * 그림 · 외침은 breakImg · breakLine 으로 광역과 같게 맞춥니다. 그 한 번도 광역 횟수(aoeUses)에 셉니다 —
+   * 그래서 넷째 광역의 배수는 셋째 자리를 건너뛰어 이어지고, 같은 자리가 다시 바뀌지 않습니다. */
+  const abN = b.aoeBreakNth || fnow.aoeBreakNth;
+  if (abN && b.aoe && !선공광역 && (b.aoeUses || 0) + 1 === abN) {
+    b.aoe = false;
+    b.foeBreak = true;
+    b.aoeUses = (b.aoeUses || 0) + 1;
+  }
   /* 데려가기는 «한 사람» 을 집는 것이라 노려진 사람이 있습니다.
    * 버티기 깨기는 웅크린 사람들이 대상이라 미리 정해진 하나가 없습니다. */
   b.aim     = (b.aoe || b.foeHeal || b.counter || b.foeBreak) ? null
@@ -7679,8 +7757,8 @@ function beginTurn() {
       const others = standing.filter(w => !L || w !== L.who);
       const who = (others.length ? others : standing)[rnd((others.length ? others : standing).length)];
       b.lock = { who: who, left: lockTurns };
-      say("▷ " + withJosa(b.name, "이") + " " + memberName(who) + "에게 눈을 고정했다.  " +
-          lockTurns + "턴 동안 이 사람만 노린다.", "bad");
+      /* 몇 턴 동안 노리는지는 알리지 않습니다(사용자 지침 2026-11-19) — 눈을 고정했다는 것만 */
+      say("▷ " + withJosa(b.name, "이") + " " + memberName(who) + "에게 눈을 고정했다.", "bad");
     }
     b.aim = b.lock.who;
     b.lock.left--;
@@ -7782,7 +7860,8 @@ function beginTurn() {
     const f = foeDef(b);
     say("▷ " + withJosa(b.name, "이") + " " + (b.counterWarn || f.counterWarn ||
         "몸을 웅크린 채 이쪽을 본다.  되받아칠 준비를 하고 있다."), "bad");
-    say("　지금 공격하는 것은 위험할 것 같다.", "bad");
+    say("　지금 공격하는 것은 위험할 것 같다." +
+        ((b.counterIdleAoe || f.counterIdleAoe) ? "  가만히 있어도 " + withJosa(b.counterIdleName || f.counterIdleName || "여파", "은") + " 닿는다." : ""), "bad");
   } else if (b.take) {
     /* 데려가기 — 막을 길이 있는 짓이라 반드시 미리, 누구인지까지 알립니다.
      * 교정으로 지켜 두거나 그 사람이 회피를 고르면 놓칩니다 (foeTurn 참고). */
@@ -8342,6 +8421,7 @@ function renderUniqueSkillInfo(who) {
 
 function askNext() {
   const b = S.battle;
+  S.party.forEach(w => { if (w && alive(w)) allySelfCmd(b, w); });   // 스스로 고르는 조력자는 손잡이 없이 먼저 정합니다
   const pending = S.party.filter(w => w && alive(w) && !b.cmds[w]);
   if (!pending.length) { resolveTurn(); return; }
   b.cur = pending[0];
@@ -8857,7 +8937,9 @@ function resolveTurn() {
      * 그 공격 한 번에만 쓰고 지운다(아래 evadeBonus와 같은 결). */
     const vampBonus = b.persist[who + "_vampBonus"] || 0;
     const claw1Mult = (b.mods[who + "_claw1Order"] === "attack") ? (1.5 + claw1SynergyBonus()) : 1;
-    const atkMult = skillMult * linkMult * claw1Mult;
+    const heavy = allyHeavyFor(b, who);      // 조력자 강타 — every 차례마다 한마디와 함께 배율(data/allies.js heavy)
+    if (heavy && heavy.line) battleSay(who, heavy.line);
+    const atkMult = skillMult * linkMult * claw1Mult * (heavy ? heavy.mult : 1);
     /* 지령을 따랐을 때, 그 인격을 낀 사람 몫의 한마디를 공격 직전에
      * 한 번 보여 준다 — data/characters.js 의 id(또는 SUPPORTS 항목)
      * 에 적힌 claw1Line 을 그대로 읽는다(claw1LineFor 참고). */
@@ -8885,6 +8967,7 @@ function resolveTurn() {
         (skillMult !== 1 ? " (" + UNIQUE_SKILLS[who].name + ")" : "") +
         (linkMult !== 1 ? " (" + b.mods[who + "_linkLabel"] + ")" : "") +
         (claw1Mult !== 1 ? " (지령)" : "") +
+        (heavy ? " (" + heavy.label + ")" : "") +
         (vampBonus ? " (흡혈 과잉회복 +" + vampBonus + ")" : "") +
         (evadeBonus ? " (회피 보상)" : "") +
         (!evadeBonus && forceCrit ? " (" + b.mods[who + "_critLabel"] + ")" : "") + ty.tag,
@@ -9178,17 +9261,26 @@ function resolveTurn() {
      *  맞습니다(0.5 면 반). 그러면 아무도 웅크리지 않아도 판 전체가 맞습니다
      *  (2026-10-24, 사용자 지침). 회피·책임은 광역처럼 안 걸립니다. */
     if (b.foeBreak) {
-      const 웅크린 = targets.filter(t => b.cmds[t] === "guard" || b.mods[t + "_guard"]);
+      const 피함 = targets.filter(allyDodgesBreak);                    // dodgeBreak 조력자 — 이 한 대는 맞지 않습니다
+      const 피한줄 = () => 피함.forEach(t => {                          // 적의 외침 «뒤» 에 섭니다
+        const dl = (allyBy(t) || {}).dodgeLine;                         // 피할 때 한마디(아멜리아 «그거 재밌네»)
+        if (dl) battleSay(t, dl);
+        say("　" + withJosa(memberName(t), "이") + " 몸을 틀어 피했다.", "sys");
+      });
+      const 맞을 = targets.filter(t => 피함.indexOf(t) < 0);
+      const 웅크린 = 맞을.filter(t => b.cmds[t] === "guard" || b.mods[t + "_guard"]);
       const splash = b.breakSplash || foeDef(b).breakSplash || 0;
-      const 선사람 = splash ? targets.filter(t => 웅크린.indexOf(t) < 0) : [];
+      const 선사람 = splash ? 맞을.filter(t => 웅크린.indexOf(t) < 0) : [];
       if (!웅크린.length && !선사람.length) {
-        say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
+        if (!피함.length) say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
+        else { say("▶ " + withJosa(b.name, "이") + " 내리친다!", "heavy"); 피한줄(); }
         render();
         return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
       }
       const mult = b.breakMult || foeDef(b).breakMult || RULE.breakMult;
       shakeScreen(true);
       say("▶ " + withJosa(b.name, "이") + " " + (웅크린.length ? "웅크린 자리를 그대로 뚫는다!" : "판 전체를 내리친다!"), "heavy");
+      피한줄();
       const hits = [];
       웅크린.concat(선사람).forEach(t => {
         const st = effStats(t);
@@ -9205,7 +9297,7 @@ function resolveTurn() {
         say("　" + memberName(t) + "에게 " + dmg + " 피해　" + (웅 ? "(웅크린 것이 듣지 않았다)" : "(여파)") +
             (b.mods[t + "_immune"] ? " (갑주)" : "") +
             (b.mods[t + "_fragile"] ? " (강공)" : "") +
-            (stgNow ? " (흐트러짐)" : ""), "heavy");
+            (stgNow ? " (흐트러짐)" : ""), "heavy", { tags: true });   // 괄호를 태그 상자로(사용자 지침 2026-11-19)
         if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
         allyStaggerCheck(t);
       });
@@ -9228,6 +9320,36 @@ function resolveTurn() {
      *  하는 것들은 걸리지 않습니다. 방어·교정·갑주·책임은 그대로 먹습니다.
      *  적은 쪽이 이득이 되지 않도록 회복·광역과 마찬가지로 보스만 씁니다. */
     const 되받음 = !!b.counter && S.party.some(w => w && b.cmds[w] === "attack");
+    /* counterIdleAoe — 아무도 치지 않아 되받아칠 것이 없어도, 그 배수만큼 판 전체가 맞습니다(사용자 지침 2026-11-19 — 8장 북극티렉스
+     * «얼음 폭풍» 0.2). 방어 · 교정 · 적의 방어 계산 없이 그대로 들어가는 잔 피해입니다 — 웅크려도 닿는다는 것이 이 기믹입니다.
+     * 이름은 counterIdleName(안 적으면 «여파»). 갑주 · 강공 · 흐트러짐은 그대로 먹습니다. */
+    const ciK = b.counter && !되받음 ? (b.counterIdleAoe || foeDef(b).counterIdleAoe || 0) : 0;
+    if (ciK) {
+      const nm = b.counterIdleName || foeDef(b).counterIdleName || "여파";
+      shakeScreen(true);
+      say("▶ " + withJosa(b.name, "이") + " 웅크린 채 그대로 있다. 대신 " + withJosa(nm, "이") + " 판 전체에 몰아친다!", "heavy");
+      const hits = [];
+      targets.forEach(t => {
+        const stgNow = allyStaggerOn(t);
+        let dmg = b.atk * ciK + rnd(4);
+        if (b.mods[t + "_immune"])  dmg *= (1 - b.mods[t + "_immune"]);
+        if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
+        dmg *= allyStaggerMult(t);
+        dmg = Math.max(1, Math.floor(dmg));
+        setHp(t, curHp(t) - dmg);
+        hits.push({ who: t, dmg: dmg });
+        say("　" + memberName(t) + "에게 " + dmg + " 피해　(" + nm + ")" +
+            (b.mods[t + "_immune"] ? " (갑주)" : "") + (b.mods[t + "_fragile"] ? " (강공)" : "") +
+            (stgNow ? " (흐트러짐)" : ""), "heavy", { tags: true });
+        if (!alive(t)) say(withJosa(memberName(t), "이") + " 쓰러졌다.", "bad");
+        allyStaggerCheck(t);
+      });
+      render();
+      foeSfx("aoe");
+      hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: nm }));
+      if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
+    }
     if (b.counter && !되받음) {
       say("▶ " + withJosa(b.name, "이") + " 웅크린 채 그대로 있다. 되받아칠 것이 없었다.", "sys");
       render();
@@ -9567,7 +9689,7 @@ function finishBlow() {
       render();
       cont();
     }, RULE.turnGapMs);
-  }, RULE.dialogueGapMs);
+  }, line ? Math.max(RULE.dialogueGapMs, RULE.finishLineMs) : RULE.dialogueGapMs);   // 마무리 대사를 읽을 틈(사용자 지침 2026-11-19)
 }
 
 /* 설득으로 끝나는 전투 — 정해진 턴수를 버텨 이긴 것으로 칩니다.
@@ -9586,7 +9708,11 @@ function persuadeEnd() {
   /* 초상을 먼저 내립니다 — showFoe 가 무대를 다시 그리므로, 그 전에 비워 두지 않으면
    * 마지막 설득 대사의 초상이 새 무대에 그대로 다시 그려집니다. */
   dropSpeaker();
-  showFoe(null, null, null);
+  /* persuade.keepFoe — 같은 적과 단계를 나눠 이어 싸우는 설득(8장 지와 10턴 × 셋)은 그 사이 대화에도 적이 그대로 섭니다.
+   * 비웠다가 다음 단계에서 다시 «나타났다» 하면 끊겨 보입니다(사용자 지침 2026-11-19). endText 를 적으면 한 줄 맺습니다. */
+  const ps = b.scene.persuade || {};
+  if (ps.endText) { divider(); say(ps.endText, "n"); }
+  if (!ps.keepFoe) showFoe(null, null, null);
   healParty(winHealRatio(b, RULE.winHeal), null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
@@ -9770,9 +9896,8 @@ function defeat() {
 
 /* ── 장 종료 ──────────────────────────────────────────────── */
 function chapterEnd() {
-  divider();
   const c = curChapter();
-  if (S.mirror) return mirrorClear();
+  if (S.mirror) { divider(); return mirrorClear(); }
   /* 마친 자리로 못박습니다 — 「end」 장면 없이 마지막 장면을 지나 끝나는 장(0 · 1 · 2 · 3 · 7장 …)은
    * 여태 S.ended 가 내려간 채 아래 save() 로 기록되어, [이어하기] 가 열리고 누를 때마다
    * 이 함수가 다시 돌며 장 완료 보상(이벤트 재화 등)을 거듭 받을 수 있었습니다(사용자 보고 2026-11-15). */
@@ -9793,7 +9918,7 @@ function chapterEnd() {
     if (!S.clearedHard) S.clearedHard = {};
     S.clearedHard[c.id] = true;
   }
-  say("── " + c.no + " 종료 ──", "place");
+  endHead(c.no + " 종료");
   /* 장 묶음 — 마지막 부분을 마치면 묶음 자체도 마친 것으로 칩니다(partOf 머리말).
    * 아래 «처음 마쳤을 때» 알림들은 이 장 id 와 묶음 id 를 함께 봅니다(newly) —
    * SLOT_RULE·SYNC_RULE 처럼 "ch8" 을 가리키는 표가 마지막 부분에서 걸리게 하려는 것입니다. */
@@ -9809,7 +9934,7 @@ function chapterEnd() {
       c.sub = hardRule().name + " 첫 완주" + (c.sub ? "　·　" + c.sub : ""); endCards.push(c); });
   if (groupDone) {
     S.cleared[gid] = true;
-    say("── " + groupMeta(gid).no + " 종료 ──", "place");
+    endHead(groupMeta(gid).no + " 종료");
   }
   const newly = [first ? c.id : null, firstGroup ? gid : null].filter(Boolean);
   /* 마칠 때 주는 원고료 — 처음 마칠 때만. 장에 clearPay 를 적으면 그것이 이깁니다.
@@ -12335,7 +12460,7 @@ function save(silent) {
     const raw = JSON.stringify(c);
     if (raw !== readSave()) Store.set(SAVE_KEY, raw);
     saveVault();                     // 기록할 때 모은 것도 함께 굳혀 둡니다
-    if (!silent) say("기록했다. (" + curChapter().no + ")", "sys");
+    if (!silent) say("기록했다. (" + curChapter().no + ")", "sys saved");   // 오른쪽 정렬(사용자 지침 2026-11-19) — index.html #log .saved
   } catch (e) { if (!silent) say("기록 실패.", "todo"); }
 }
 /* 기록(이어하기)에는 «어디까지 읽었나» 만 들어 있어야 합니다.
@@ -15325,8 +15450,7 @@ SCENE_EXT.railCamp = function (s) {
                  checkpoint: S.mirrorCheckpoint, turns: S.mirrorRunTurns || 0, arc: S.arc };
   saveVault();
 
-  divider();
-  say("── " + s.cycle + "순환 종료 ──", "place");
+  endHead(s.cycle + "순환 종료");
   setBackdrop(mirrorBG(rule), rule.name);
 
   /* 캠프를 지키는 사람 — 편성한 교육위원이 있으면 그쪽입니다(railSpeaker).

@@ -456,6 +456,7 @@
   #log .hit   {color:var(--text-2);font-size:14px;}
   #log .gain  {color:var(--gold);}
   #log .place {color:var(--gold);letter-spacing:.18em;font-size:13px;margin:14px 0 8px;}
+  #log .chtitle{font-size:18px;font-weight:800;letter-spacing:.12em;margin:18px 0 6px;}   /* 장 제목 줄(8-3  심판의 방) — 크게 · 굵게(사용자 지침 2026-11-19) */
   #log .todo  {color:var(--off);font-style:italic;font-size:13px;border-left:2px solid #333;padding-left:10px;}
   #log .recall{color:#8a7fa8;}
   #log.recalling{background:#0d0b12;}
@@ -465,6 +466,13 @@
   #log .turnhead::before, #log .turnhead::after{content:"";flex:1;border-top:2px solid var(--line-2);}
   /* «TURN n» — Orbitron(사용자 지침 2026-11-13). 글꼴이 아직 안 왔거나 못 받으면 고딕 굵게로 */
   #log .turnhead .tn{color:var(--hi);font-family:"Orbitron",var(--font-ui);font-weight:800;font-size:14px;letter-spacing:.16em;}
+  /* 끝맺음 머리(engine.js endHead) — «8-1 종료» 같은 줄. 턴 머리와 같은 틀에 한글이라 고딕 굵게, 조금 더 크게 */
+  #log .endhead{margin:30px 0 14px;}
+  /* 편성 자리 안내(engine.js partyNote) — 줄마다 끊어 상자 안에 */
+  #log .partybox{border:1px solid var(--line-2);background:var(--panel);border-radius:4px;padding:10px 14px;margin:10px 0;color:var(--text-2);font-size:13.5px;}
+  #log .partybox p{margin:0;line-height:1.7;}
+  #log .saved{text-align:right;}   /* «기록했다. (8-1)» — 오른쪽 정렬(사용자 지침) */
+  #log .endhead .tn{font-family:var(--font-ui);font-size:17px;letter-spacing:.12em;}
   #log .turnfoe{text-align:left;margin:0 0 8px;font-size:13.5px;}   /* 적 이름 · 체력은 왼쪽 정렬(사용자 지침) */
   #log .turnfoe b{color:var(--hi);font-weight:700;}
   #log .turnfoe .hp{margin-left:8px;color:var(--gold-hi);font-weight:700;font-variant-numeric:tabular-nums;}
@@ -804,6 +812,9 @@
   .packgate .pgpath{color:var(--gold);font-size:11px;letter-spacing:.14em;margin-bottom:3px;}
   .packgate .pgcard .nm{font-size:15px;margin-bottom:9px;}
   .packgate .pgperk{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding-top:9px;}
+  /* 8-2 카드 갈림길의 빈 칸 — 반드시 고를 카드만 남았거나 남은 카드가 모자랄 때. 보이되 눌리지 않습니다 */
+  .packgate .pgcard.blank{border-style:dashed;opacity:.4;cursor:default;pointer-events:none;}
+  .packgate .pgcard.blank .nm{color:var(--dim);}
   .packgate .pgcard.enh{border-color:var(--red);}   /* 어비스 거울 던전 — «뒤섞인» 강화 선택지 */
   .packgate .pgcard.enh .pgpath,.packgate .pgcard.enh .nm,.packgate .pgcard.enh .pgname{color:var(--red);}
   .packgate .pgname{color:var(--text-2);font-weight:700;font-size:12.5px;margin-bottom:2px;}
@@ -2088,26 +2099,26 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.31.8"></script>
-<script src="data/vault.js?v=2.31.8"></script>
-<script src="data/characters.js?v=2.31.8"></script>
-<script src="data/skills.js?v=2.31.8"></script>
-<script src="data/allies.js?v=2.31.8"></script>
-<script src="data/gifts.js?v=2.31.8"></script>
-<script src="data/pickup.js?v=2.31.8"></script>
-  <script src="data/hard.js?v=2.31.8"></script>
-<script src="data/achievements.js?v=2.31.8"></script>
-<script src="data/mail.js?v=2.31.8"></script>
-<script src="data/notice.js?v=2.31.8"></script>
-<script src="data/patch.js?v=2.31.8"></script>
-<script src="data/event.js?v=2.31.8"></script>
-<script src="data/reward.js?v=2.31.8"></script>
-<script src="data/tutorial.js?v=2.31.8"></script>
-<script src="data/foes.js?v=2.31.8"></script>
-<script src="data/story.js?v=2.31.8"></script>
-<script src="data/mirrorpacks.js?v=2.31.8"></script>
-<script src="data/bgm.js?v=2.31.8"></script>
-<script src="engine.js?v=2.31.8"></script>
+<script src="data/access.js?v=2.31.9"></script>
+<script src="data/vault.js?v=2.31.9"></script>
+<script src="data/characters.js?v=2.31.9"></script>
+<script src="data/skills.js?v=2.31.9"></script>
+<script src="data/allies.js?v=2.31.9"></script>
+<script src="data/gifts.js?v=2.31.9"></script>
+<script src="data/pickup.js?v=2.31.9"></script>
+  <script src="data/hard.js?v=2.31.9"></script>
+<script src="data/achievements.js?v=2.31.9"></script>
+<script src="data/mail.js?v=2.31.9"></script>
+<script src="data/notice.js?v=2.31.9"></script>
+<script src="data/patch.js?v=2.31.9"></script>
+<script src="data/event.js?v=2.31.9"></script>
+<script src="data/reward.js?v=2.31.9"></script>
+<script src="data/tutorial.js?v=2.31.9"></script>
+<script src="data/foes.js?v=2.31.9"></script>
+<script src="data/story.js?v=2.31.9"></script>
+<script src="data/mirrorpacks.js?v=2.31.9"></script>
+<script src="data/bgm.js?v=2.31.9"></script>
+<script src="engine.js?v=2.31.9"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
