@@ -873,7 +873,7 @@ function importVaultFile(file) {
  *  ■ 실패하면 게임은 그대로 갑니다. 오프라인·서버 혼잡(busy)이면 조용히 넘어가고,
  *    [기록] 화면에 마지막으로 맞춘 때만 보여 줍니다.
  */
-const KZ_API       = "https://script.google.com/macros/s/AKfycbx31dJJkQYDuh2zFt9MjkEWApB5DkDdbTMsR-pEHnBVYS9k7BDrqDKhYVhO04Ypm88/exec";
+const KZ_API       = "https://konzentrat-next.dinozexal315.workers.dev/api";
 const KZ_TOKEN_KEY = "rash_company_kz_token";   // 콘첸트라트 로그인 토큰
 const KZ_USER_KEY  = "rash_company_kz_user";    // 연결한 이름 (보여 주기용)
 const KZ_AT_KEY    = "rash_company_kz_at";      // 마지막으로 구름과 맞춘 때 — 서버가 준 updatedAt 그대로
