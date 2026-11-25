@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "3.0.0";
+const VERSION = "3.0.1";
 const VERSION_NAME = "그리워할 수 밖에 없는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4111,8 +4111,11 @@ function alive(who) { return curHp(who) > 0; }
 function allyHeavyFor(b, w) {
   if (!b || !isAlly(w)) return null;
   const a = allyBy(w), h = a && a.heavy;
+  /* heavy 를 안 적은 조력자(베르렐리우스 · 하축론)는 여기서 돌아갑니다 — 예전에는 h.from 에서 TypeError 가 나
+   * 그 사람이 낀 전투가 공격 차례마다 «…» 로 잠긴 채 멈췄습니다(v2.28.13 지원 · 조력자 아이콘 멈춤과 같은 갈래) */
+  if (!h || !h.every) return null;
   const from = h.from || h.every;
-  if (!h.every || b.turn < from || (b.turn - from) % h.every) return null;
+  if (b.turn < from || (b.turn - from) % h.every) return null;
   const ls = h.lines || [];
   const n = (b.turn - from) / h.every;
   return { mult: h.mult || 1.5, label: h.label || "강타", line: ls.length ? ls[n % ls.length] : null };
@@ -4596,17 +4599,20 @@ function giveIcon(g) {
 }
 /* 작성위원 한 사람의 아이콘 — 파편과 같은 색으로 그린 그 사람의 표지(사용자 지침 2026-10-14).
  * 노트·편성·인격 장착·동기화 화면이 씁니다. 도안은 tools/아이콘-도안.js 의 MEMBER. */
-function memberIconName(who) { return "작성위원 - " + SINNERS[who].name; }
+/* 작성위원이 아닌 열쇠(지원 · 조력자)가 들어오면 편성 칸 규칙(partyIconName)으로 돌립니다 — 이 함수를 부르는 자리가 스무 곳이 넘어,
+ * 지원 · 조력자가 닿는 자리를 하나라도 놓치면 TypeError 로 전투가 멈췄습니다(v2.28.13 · 2026-11-25 6장 베르렐리우스). */
+function memberIconName(who) { return SINNERS[who] ? "작성위원 - " + SINNERS[who].name : partyIconName(who); }
 /* 지원 작성위원은 사람마다가 아니라 성급마다 한 장 — 2성 은빛 십자, 3성 금빛 십자 */
 function supportIconName(sp) { return "지원 작성위원 - " + (sp.star >= 3 ? 3 : 2) + "성"; }
 /* 보조 교육위원은 사람마다 한 장, 테두리만 성급마다 — 2성 은빛·3성 금빛 방패 명찰.
  * 같은 사람의 여러 인격 카드가 함께 씁니다. 도안은 tools/아이콘-도안.js 의 ADVISOR. */
 function advisorIconName(a) { return "교육위원 - " + a.name + " - " + (a.star >= 3 ? 3 : 2) + "성"; }
-/* 조력자는 따로 그리지 않고, 같은 사람의 교육위원 명찰(금빛)을 빌려 씁니다.
+/* 조력자는 data/allies.js 의 icon 을 먼저 봅니다. 없으면 같은 사람의 교육위원 명찰(금빛)을 빌려 씁니다.
  * 베르렐리우스 = CREW.guide「배길수 / 이승찬」, 하축론 = CREW.driver「이정빈」 —
  * CREW 의 본명 가운데 교육위원 이름과 맞는 것을 찾습니다. 못 찾으면 null(그림 없이 섭니다). */
 function allyIconName(ally) {
   if (!ally) return null;
+  if (ally.icon) return ally.icon;          // data/allies.js 의 icon 이 이깁니다(아멜리아처럼 교육위원이 아닌 사람)
   const real = [ally.name];
   for (const k in CREW) if (CREW[k].codename === ally.name || CREW[k].name === ally.name)
     real.push(...String(CREW[k].name).split("/").map(s => s.trim()));
