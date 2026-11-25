@@ -18,7 +18,7 @@
   try { var p = localStorage.getItem("rash_company_palette_v1");
         if (p && /^[a-z]+$/.test(p) && p !== "ink") document.documentElement.setAttribute("data-palette", p);
         /* 밝은 테마 — engine.js PALETTES 의 light: true 와 같게 */
-        if (/^(chalk|rouge|sakura|sorna)$/.test(p || "")) document.documentElement.setAttribute("data-tone", "light"); } catch (e) {}
+        if (/^(chalk|rouge|sakura|sorna|snow)$/.test(p || "")) document.documentElement.setAttribute("data-tone", "light"); } catch (e) {}
 </script>
 <link rel="icon" type="image/png" href="assets/icon/라슈 컴퍼니-큰.png">
 <!-- 앱으로 설치 — manifest.json · sw.js · assets/app/ (그림은 tools/아이콘-굽기.js 가 굽습니다).
@@ -114,6 +114,24 @@
     touch-action:pan-x pan-y;   /* 밀어 넘기기만 — 손가락 확대 · 두 번 눌러 확대를 막습니다(맨 위 viewport 주석) */
   }
   #app{max-width:960px;margin:0 auto;padding:14px 14px 40px;}
+
+  /* ── 스크롤 막대 ─────────────────────────
+   * 화면에 보이는 자리는 전부 같은 결로 (사용자 지침 2026-11-21). 굴러가는 자리는 일곱 —
+   * 페이지 자체 · #modal(창) · #log(기록칸) · .maplist .rows(탐사 지도) 가 세로,
+   * #gifts · #synergy(전투 줄) · .eqsyn(시너지 거르개) 가 가로입니다.
+   *
+   * ⚠ scrollbar-width 를 적어 둔 자리에서는 크롬이 ::-webkit-scrollbar 를 통째로 무시합니다.
+   *   그래서 아래 세 가로줄의 ::-webkit-scrollbar-thumb 색이 한 번도 걸리지 않고
+   *   브라우저 기본 밝은 막대가 서 있었습니다. 색은 반드시 표준 쪽(scrollbar-color)에 적습니다.
+   *   webkit 규칙은 옛 사파리 몫으로 남겨 둡니다.
+   *
+   * scrollbar-color 는 «물려받는» 성질이라 html 에 한 번 적으면 안쪽 자리까지 함께 따릅니다
+   * (테마를 갈면 --line-2 가 바뀌므로 막대 색도 저절로 따라갑니다).
+   * 페이지 자체는 길어서 집기 쉬워야 하니 굵기를 건드리지 않고, 안쪽 칸만 가늘게 둡니다. */
+  html{scrollbar-color:var(--line-2) transparent;}
+  #modal,#log,.maplist .rows{scrollbar-width:thin;}
+  #modal::-webkit-scrollbar,#log::-webkit-scrollbar{width:8px;}
+  #modal::-webkit-scrollbar-thumb,#log::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px;}
 
   /* ── 머리 ─────────────────────────────── */
   header{
@@ -285,21 +303,40 @@
   .setabout .cred{display:grid;gap:4px;font-size:13px;}
   .setabout .cred .rl{color:var(--muted);display:inline-block;min-width:9.5em;}
   .setabout .cred .nm{color:var(--text);}
-  /* 설정의 «효과음 크기» — 한 줄에 이름 · 막대 · 값 · [들어 보기] (engine.js sfxSettingHTML, 2026-11-15) */
-  .setsfx{margin:16px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;}
-  .setsfxrow{display:flex;align-items:center;gap:10px;color:var(--text);}
-  .setsfxrow b{flex:none;white-space:nowrap;}
-  .setsfxrow input[type=range]{flex:1 1 auto;min-width:60px;width:auto;margin:0;accent-color:var(--gold);}
-  .setsfxrow #sfxval{flex:none;width:2.6em;text-align:right;color:var(--gold);font-variant-numeric:tabular-nums;}
-  .setsfxrow #sfxtry{flex:none;width:5.6em;white-space:nowrap;padding-left:0;padding-right:0;}
+  /* 설정의 소리 칸 — 효과음 · 배경음 두 줄을 한 상자에(engine.js sfxSettingHTML · bgmSettingHTML, 사용자 지침 2026-11-20).
+   * 상자 하나를 네 칸 격자로 두고 줄은 display:contents 라, 이름 · 막대 · 값 · [들어 보기] 가 두 줄에서 같은 자리에 섭니다. */
+  .setsfx{margin:16px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;
+    display:grid;grid-template-columns:max-content minmax(60px,1fr) 2.6em 5.6em;gap:12px 10px;align-items:center;}
+  .setsfxrow{display:contents;color:var(--text);}
+  .setsfxrow b{white-space:nowrap;color:var(--text);}
+  .setsfxrow input[type=range]{width:100%;min-width:0;margin:0;accent-color:var(--gold);}
+  .setsfxrow .vval{text-align:right;color:var(--gold);font-variant-numeric:tabular-nums;}
+  .setsfxrow .vtry{width:100%;white-space:nowrap;padding-left:0;padding-right:0;}
+  /* 설정 안의 안내 묶음 (사용자 지침 2026-11-20)
+   *  .hintlist — 안내를 한 줄씩(유리창 배경 고르기)
+   *  .bgempty  — 고를 배경이 하나도 없을 때 줄 전체를 쓰는 칸
+   *  .infobox  — 한 상자에 «이름 | 짧은 줄들»(기록 · 내보내기). 좁은 화면에서는 이름 아래로 */
+  .hintlist{margin:0 0 12px;padding:0;list-style:none;color:var(--dim);font-size:12.5px;line-height:1.75;}
+  /* 글머리는 편성 안내 상자와 같은 금빛 «·»(사용자 지침 2026-11-20) — 줄이 접혀도 글머리 뒤로 들여 씀 */
+  .hintlist li{padding-left:1.1em;text-indent:-1.1em;}
+  .hintlist li::before{content:"·";display:inline-block;width:1.1em;text-indent:0;color:var(--gold);font-weight:800;}
+  .hintlist b{color:var(--text);font-weight:600;}
+  .slot.bgempty{padding:16px 18px;cursor:default;}
+  .slot.bgempty .nm{margin-bottom:6px;}
+  .slot.bgempty .sub{line-height:1.75;}
+  .infobox{margin:16px 0 6px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;display:grid;gap:12px;}
+  .infobox .ib{display:grid;grid-template-columns:7.5em 1fr;gap:12px;font-size:12.5px;line-height:1.7;color:var(--muted);}
+  .infobox .ib > b{color:var(--text);font-weight:600;}
+  .infobox .ib .dim{color:var(--dim);}
+  .infobox .ib .warn{color:var(--red);}
+  @media (max-width:520px){
+    .infobox .ib{grid-template-columns:1fr;gap:2px;}
+  }
   /* 아주 좁은 화면(320px 언저리) — 칸 사이를 좁히고 단추를 줄여 한 줄을 지킵니다 */
   @media (max-width:360px){
-    .setsfx{padding:10px 10px;}
-    .setsfxrow{gap:6px;}
+    .setsfx{padding:10px 10px;gap:10px 6px;grid-template-columns:max-content minmax(36px,1fr) 2.2em 4.6em;}
     .setsfxrow b{font-size:13px;}
-    .setsfxrow input[type=range]{min-width:36px;}
-    .setsfxrow #sfxval{width:2.2em;}
-    .setsfxrow #sfxtry{width:4.6em;font-size:12px;}
+    .setsfxrow .vtry{font-size:12px;}
   }
   /* 큰 피해 숫자 — 한 방에 RULE.bigHitMin(100) 이상 들어가면 적이 선 자리에 크게
    * 떴다가 떠오르며 사라집니다(engine.js showBigDamage, 사용자 지침 2026-09-11).
@@ -470,7 +507,9 @@
   #log .endhead{margin:30px 0 14px;}
   /* 편성 자리 안내(engine.js partyNote) — 줄마다 끊어 상자 안에 */
   #log .partybox{border:1px solid var(--line-2);background:var(--panel);border-radius:4px;padding:10px 14px;margin:10px 0;color:var(--text-2);font-size:13.5px;}
-  #log .partybox p{margin:0;line-height:1.7;}
+  /* 줄마다 앞에 금빛 «·»(상점 배정 상자와 같음) — 줄이 접혀도 글머리가 맞게 내어쓰기(사용자 지침 2026-11-20) */
+  #log .partybox p{margin:0;line-height:1.7;padding-left:1.1em;text-indent:-1.1em;}
+  #log .partybox p::before{content:"·";display:inline-block;width:1.1em;text-indent:0;color:var(--gold);font-weight:800;}
   #log .saved{text-align:right;}   /* «기록했다. (8-1)» — 오른쪽 정렬(사용자 지침) */
   #log .endhead .tn{font-family:var(--font-ui);font-size:17px;letter-spacing:.12em;}
   #log .turnfoe{text-align:left;margin:0 0 8px;font-size:13.5px;}   /* 적 이름 · 체력은 왼쪽 정렬(사용자 지침) */
@@ -609,9 +648,23 @@
   .slot .synon{color:var(--gold);font-size:11px;letter-spacing:.06em;font-weight:400;}
 
   /* ── 인격 장착 — 접었다 폈다 ──────────── */
+  /* .eqbar 는 창 여섯이 함께 쓰는 손잡이 줄입니다 — 인격 장착 · 도감 갈래 · 교육위원 둘 · 기프트 고르기 ·
+   * 그 밖에 하나. 그러니 기본 꼴은 그대로 두고, 오른쪽에 모으는 것은 .eqend 를 단 줄만 합니다
+   * (사용자 지침 2026-11-21 — 인격 장착의 「보유중/전부」 · 모두 펴기 · 모두 접기). */
   .eqbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 4px;}
+  .eqbar.eqend{justify-content:flex-end;}
+  .eqbar.eqend button.on{border-color:var(--gold);color:var(--gold);}
   .eqchk{display:inline-flex;align-items:center;gap:6px;color:var(--text-2);font-size:13px;cursor:pointer;}
   .eqchk input{accent-color:var(--red);width:15px;height:15px;cursor:pointer;}
+  /* 시너지 거르개 — 지금 가진 인격으로 켤 수 있는 시너지만 섭니다(engine.js equipSynList).
+   * 손잡이가 많아도 «줄 하나» 를 지킵니다 — 넘치면 줄을 늘리지 않고 옆으로 밀어 봅니다. */
+  .eqsyn{display:flex;gap:6px;margin:10px 0 6px;overflow-x:auto;overflow-y:hidden;
+         padding-bottom:5px;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+         scrollbar-width:thin;scrollbar-color:var(--gold-line-2) transparent;}
+  .eqsyn button{flex:none;white-space:nowrap;padding:4px 10px;font-size:12px;}
+  .eqsyn button.on{border-color:var(--gold);color:var(--gold);}
+  .eqsyn::-webkit-scrollbar{height:6px;}
+  .eqsyn::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px;}
   .eqhead{
     display:flex;align-items:baseline;gap:9px;cursor:pointer;
     border:1px solid var(--line);background:var(--panel);padding:8px 11px;margin-top:8px;
@@ -641,11 +694,21 @@
   .syncgrid .slot .icmini{width:36px;height:36px;margin:0;}   /* 작성위원 아이콘 — 18px 그림의 2배 */
   @media (max-width:640px){ .syncgrid{gap:6px;} .syncgrid .slot{padding:9px 4px;font-size:12px;} .syncgrid .slot .lv{font-size:18px;} }
   /* 고른 사람의 설명 칸 — 칸 아래에 하나만 */
-  .syncpick{border:1px solid var(--gold-line);background:var(--gold-bg);padding:12px 14px;margin-top:10px;}
-  .syncpick .nm{color:var(--text);font-weight:700;font-size:15px;}
+  /* 고른 사람 칸 — 이름과 파편 줄은 왼쪽, 동기화 손잡이는 그 오른쪽 빈자리에 섭니다.
+   * 고유 능력(보라색) 줄은 그 아래에서 줄을 다 씁니다 (사용자 지침 2026-11-21 — 손잡이 몫의 줄을 따로 두지 않습니다). */
+  .syncpick{border:1px solid var(--gold-line);background:var(--gold-bg);padding:12px 14px;margin-top:10px;
+    display:grid;grid-template-columns:1fr auto;column-gap:12px;align-items:start;}
+  .syncpick .nm{grid-column:1;color:var(--text);font-weight:700;font-size:15px;}
   .syncpick .nm .lv{color:var(--gold);font-weight:800;margin-left:8px;}
-  .syncpick .sub{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.6;}
-  .syncpick .act{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .syncpick .sub{grid-column:1;color:var(--muted);font-size:12px;margin-top:4px;line-height:1.6;}
+  .syncpick .sub.skill{grid-column:1/-1;}
+  .syncpick .act{grid-column:2;grid-row:1/span 2;align-self:center;margin:0;
+    display:flex;gap:8px;align-items:center;}
+  /* 좁은 화면에서는 한 칸으로 되돌리고, 손잡이만 오른쪽 끝에 */
+  @media (max-width:520px){
+    .syncpick{grid-template-columns:1fr;}
+    .syncpick .act{grid-column:1;grid-row:auto;margin-top:10px;justify-content:flex-end;}
+  }
   .syncrow{
     display:flex;align-items:center;gap:12px;
     border:1px solid var(--line);background:var(--panel);padding:9px 11px;margin-top:8px;
@@ -653,7 +716,21 @@
   .syncrow button{flex:none;white-space:nowrap;order:2;}
   .syncrow .body{flex:1;min-width:0;order:1;}
   .syncrow .nm{color:var(--text);font-weight:700;}
-  .syncrow .sub{color:var(--muted);font-size:12.5px;margin-top:2px;}
+  /* 좁은 화면에서 기프트 이름이 낱말 가운데서 끊기던 것 — 한글은 기본값이 아무 데서나 끊깁니다.
+   * keep-all 로 띄어쓰기에서만 끊고, 한 낱말이 줄보다 길 때만 break-word 로 물러섭니다. */
+  .syncrow .sub{color:var(--muted);font-size:12.5px;margin-top:2px;
+            word-break:keep-all;overflow-wrap:break-word;}
+  /* 좁은 화면에서는 손잡이를 아랫줄 오른쪽으로 내립니다(사용자 지침 2026-11-21) —
+   * 한 줄에 그림 · 글 · 손잡이를 다 세우면 글칸이 159px 까지 좁아져, 합성 창의 재료 줄이
+   * 칸 밖으로 넘치고 기프트 이름이 낱말 가운데서 끊겼습니다. 그림이 없는 줄(보관함 소모품)은
+   * 글이 두 칸을 다 씁니다. */
+  @media (max-width:520px){
+    .syncrow{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;row-gap:8px;}
+    .syncrow > .ic{grid-row:1;}
+    .syncrow > .body{grid-row:1;min-width:0;}
+    .syncrow:not(:has(> .ic)) > .body{grid-column:1 / -1;}
+    .syncrow > button{grid-column:1 / -1;grid-row:2;justify-self:end;}
+  }
 
   .pcard .nm{color:var(--text);font-weight:700;}
   .pcard .id{color:var(--muted);font-size:12.5px;margin:1px 0 5px;}
@@ -691,7 +768,8 @@
   @media (max-width:640px){ #gifts{min-height:26px;box-sizing:border-box;} }
   /* 기프트 줄과 시너지 줄은 줄바꿈 없이 한 줄로 — 넘치면 손가락으로 옆으로 밀어 봅니다
    * (사용자 지침 2026-10-16). 시너지 줄은 아래 #synergy 에 같은 규칙이 있습니다 */
-  #gifts{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+  #gifts{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;
+         scrollbar-width:thin;scrollbar-color:var(--line-2) transparent;}
   #gifts > *{flex:0 0 auto;white-space:nowrap;}
   #gifts::-webkit-scrollbar{height:4px;}
   #gifts::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px;}
@@ -707,6 +785,13 @@
   }
   #chipinfo .nm{color:var(--text);font-weight:700;margin-bottom:3px;}
   #chipinfo .sub{color:var(--muted);line-height:1.6;}
+  /* 고유 능력 쪽지만 따로 — 흰 글씨에, 줄마다 한 칸씩 (사용자 지침 2026-11-25: «눈에 너무 안 보인다»).
+   * 기프트 · 재화 쪽지는 위 .sub 그대로 둡니다 — 거기 글은 짧아 흐린 색으로도 읽힙니다. */
+  #chipinfo.abil .sub{color:var(--text);line-height:1.7;}
+  #chipinfo.abil .ablab{color:var(--muted);font-size:10.5px;letter-spacing:.06em;margin-bottom:5px;}
+  #chipinfo.abil .abl{margin-top:9px;}
+  #chipinfo.abil .abl:first-of-type{margin-top:0;}
+  #chipinfo.abil .abk{display:block;color:var(--hi);font-weight:700;margin-bottom:2px;}
   /* 머리줄 재화 — 아이콘과 양만, 누르면 #chipinfo (engine.js renderHeader · WALLET_INFO) */
   /* 머리줄은 글자 밑선(baseline)에 맞춰 서서, 재화 아이콘 · 수와 오른쪽 아이콘 손잡이의 세로 가운데가 어긋났습니다.
    * 오른쪽 덩이만 세로 가운데로 묶습니다 (사용자 지침 2026-10-17) */
@@ -734,7 +819,8 @@
 
   /* ── 시너지 ───────────────────────────── */
   #synergy{margin-top:8px;display:flex;flex-wrap:nowrap;gap:6px;align-items:center;
-           overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch;padding-bottom:2px;}
+           overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;
+           scrollbar-width:thin;scrollbar-color:var(--line-2) transparent;}
   #synergy > *{flex:0 0 auto;white-space:nowrap;}
   #synergy::-webkit-scrollbar{height:4px;}
   #synergy::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px;}
@@ -813,13 +899,31 @@
   .packgate .pgcard .nm{font-size:15px;margin-bottom:9px;}
   .packgate .pgperk{display:flex;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding-top:9px;}
   /* 8-2 카드 갈림길의 빈 칸 — 반드시 고를 카드만 남았거나 남은 카드가 모자랄 때. 보이되 눌리지 않습니다 */
-  .packgate .pgcard.blank{border-style:dashed;opacity:.4;cursor:default;pointer-events:none;}
-  .packgate .pgcard.blank .nm{color:var(--dim);}
+  /* 테두리는 다른 카드와 똑같이(실선 · 같은 색) 두고 글만 흐리게 — 점선 · 통째 흐림은 걷음(사용자 지침 2026-11-20) */
+  .packgate .pgcard.blank{cursor:default;pointer-events:none;}
+  .packgate .pgcard.blank .nm{color:var(--dim);opacity:.6;}
+  /* 8-2 — 반드시 가야 할 카드 하나만 남은 자리(9번). 붉게만, 글은 더하지 않습니다(사용자 지침 2026-11-20) */
+  .packgate .pgcard.must{border-color:var(--red);box-shadow:0 0 0 1px var(--red) inset;}
+  .packgate .pgcard.must .nm{color:var(--red);}
   .packgate .pgcard.enh{border-color:var(--red);}   /* 어비스 거울 던전 — «뒤섞인» 강화 선택지 */
   .packgate .pgcard.enh .pgpath,.packgate .pgcard.enh .nm,.packgate .pgcard.enh .pgname{color:var(--red);}
   .packgate .pgname{color:var(--text-2);font-weight:700;font-size:12.5px;margin-bottom:2px;}
   .packgate .pgperk .sub{font-size:12px;line-height:1.45;}
   .packgate .pgic{display:none;}             /* 좁은 화면에서만 — 아래 @media */
+  /* 특전 합성 귀띔 — 이 팩을 고르면 지닌 특전과 합쳐질 때(fuseHintHTML, 사용자 지침 2026-11-23) */
+  /* 카드를 세로로 쌓아 합성 줄을 상자 아래쪽에 맞춥니다 — 세 카드의 글 길이가 달라도 줄이 한 높이에(사용자 지침 2026-11-23) */
+  .packgate .pgcard{display:flex;flex-direction:column;}
+  .packgate .pgcard:has(.pgfuse) .pgperk{margin-bottom:8px;}
+  .packgate .pgfuse{display:flex;gap:6px;align-items:center;margin-top:auto;padding:5px 8px;
+                    border:1px solid var(--gold-line);background:var(--gold-bg);border-radius:3px;
+                    font-size:11.5px;line-height:1.4;color:var(--text-2);}
+  .packgate .pgfuse b{color:var(--gold);}
+  .packgate .pgfuse .fzshort{display:none;color:var(--gold);font-weight:700;}
+  /* 8-2 카드 갈림길 — 카드 아이콘은 넓은 화면에서도 늘 보입니다(테마팩 카드의 .pgic 는 좁은 화면에서만) */
+  .routegate .pgcard{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;min-height:96px;}
+  .routegate .rcic{margin-bottom:6px;}
+  .routegate .pgcard .nm{margin:0;word-break:keep-all;}
+  .routegate .pgcard.blank{cursor:default;}   /* 빈 길 — 테두리는 다른 카드와 똑같이, 글만 흐리게(사용자 지침 2026-11-20) */
   #log .crit{color:#f0c46a;font-weight:700;}
   #log .heavy{color:#f05a50;font-weight:700;font-size:14.5px;}
   body.battling #log .heavy{color:var(--b-heavy);}
@@ -904,6 +1008,14 @@
   /* 손잡이(#actions)는 둥근 모서리 · 두꺼운 테두리 — 아래 설명 칸(관리력 · 고유 능력)과 한눈에 갈리게(사용자 지침 2026-11-13, v2.28.11).
    * 이야기 · 유리창 · 전투 모두 같은 꼴이라 화면이 바뀌어도 단추 높이가 같습니다. */
   #actions button{border-width:2px;border-radius:8px;}
+  /* 처음 온 판(아직 마친 장이 없음)의 유리창 — [운전석] 만 붉게 깜빡이고 나머지는 잠급니다(engine.js glass · FIRST_LOCK, 사용자 지침 2026-11-20) */
+  /* 3초에 한 번, 짧게 — 평소엔 제 테두리로 있다가 잠깐만 붉게 켜집니다(사용자 지침 2026-11-20 — 늘 붉게 서 있어 보이던 것) */
+  #actions button.firstgo{animation:firstgo 3s ease-in-out infinite;}
+  @keyframes firstgo{
+    0%,60%,100%{box-shadow:none;}
+    75%{border-color:var(--red);box-shadow:0 0 0 2px var(--red),0 0 14px var(--red);}
+  }
+  @media (prefers-reduced-motion:reduce){ #actions button.firstgo{animation:none;border-color:var(--red);box-shadow:0 0 0 2px var(--red);} }
   #actions.console{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;}
   #actions.console button{
     min-width:0;padding-left:4px;padding-right:4px;display:flex;align-items:center;justify-content:center;
@@ -1083,11 +1195,30 @@
   .slot.hardon .nm{color:#ff9a90;}
   .slot.hardon.harddone{border-color:var(--red);}
   .slot.hardnone{opacity:.45;cursor:default;}
-  /* 상점 알림 — 줄이 많아 창이 길어지므로 칸을 바짝 붙입니다(사용자 지침 2026-11-14).
-   * 여기서만 좁힙니다 — 다른 창의 .slot 은 누르는 칸이라 지금 크기를 지켜야 합니다. */
-  .noticebody .nthead{margin:10px 0 4px;color:var(--text);font-weight:700;}
+  /* 상점 알림 — 2026-11-14 에는 창이 길어지는 것을 막으려고 칸을 바짝 붙였는데,
+   * 그만큼 글이 빽빽해져 읽기가 힘들어졌습니다. 다시 띄웁니다(사용자 지침 2026-11-21) —
+   * 무리와 무리 사이에 가는 선 · 글머리 줄 사이 틈 · 줄 간격을 넓혔습니다.
+   * 여기서만 고칩니다 — 다른 창의 .slot 은 누르는 칸이라 지금 크기를 지켜야 합니다. */
+  .noticebody .nthead{margin:26px 0 9px;padding-top:18px;border-top:1px solid var(--line-2);
+            color:var(--text);font-weight:700;letter-spacing:.2px;}
+  .noticebody .nthead:first-child{margin-top:8px;padding-top:0;border-top:none;}
   .noticebody .grid.one{gap:4px;}
-  .noticebody .grid.one .slot{padding:6px 10px;}
+  .noticebody .grid.one .slot{padding:11px 13px;}
+  /* 한 줄을 칸 여럿으로 나눠 적을 때(data/notice.js 의 lines 에 배열) — 좁으면 아래로 접힙니다 */
+  .noticebody .ntcells{display:flex;flex-wrap:wrap;gap:9px;}
+  .noticebody .ntcell{flex:1 1 180px;border:1px solid var(--line-2);background:var(--panel-2);border-radius:4px;padding:9px 11px;line-height:1.75;}
+  .noticebody .ntcell > b:first-child{color:var(--hi);font-weight:700;}   /* 칸 제목 — 흰 글씨 굵게(밝은 테마에서는 --hi 가 검정) */
+  /* box: true 무리 — 한 상자에 줄마다 금빛 «·» 글머리(편성 안내 상자 #log .partybox p 와 같은 결) */
+  /* 패치 노트 머리 — 「지금 판은 …」 줄 오른쪽에 [알림 보기](engine.js openPatch) */
+  .pthead{display:flex;align-items:flex-start;gap:10px;}
+  .pthead .hint{flex:1;}
+  .pthead #ptnotice{flex:none;padding:4px 10px;font-size:12px;}
+  .noticebody .ntbox,.noticebody .ntbox:hover{cursor:default;border-color:var(--line);}   /* 누르는 칸이 아니라 붉은 hover 테두리를 끕니다 */
+  .noticebody .ntbox .ntcells{margin:11px 0;}   /* 상자 안 칸 줄 — 위아래 글머리 줄과 띄움 */
+  .noticebody .icmini{margin:0 3px 0 1px;vertical-align:-4px;}   /* 글 안 아이콘({ic:이름}) — 글줄 높이에 맞춰 */
+  .noticebody .ntbox p{margin:0;line-height:1.85;padding-left:1.1em;text-indent:-1.1em;color:var(--text-2);}
+  .noticebody .ntbox p + p{margin-top:9px;}   /* 글머리 줄 사이 — 여러 줄을 먹는 줄이 섞여도 어디서 끊기는지 보이도록 */
+  .noticebody .ntbox p::before{content:"·";display:inline-block;width:1.1em;text-indent:0;color:var(--gold);font-weight:800;}
   /* 어려움에 할 것이 남았는데 일반으로 보고 있을 때 — 받을 우편(.rwready)과 같은 결로
    * 테두리가 천천히 점멸합니다. 색만 난이도의 붉은빛입니다(사용자 지침 2026-11-14). */
   .slot.hardtoggle.hardcall{animation:hardcall 1.4s ease-in-out infinite;}
@@ -1098,6 +1229,15 @@
   @media (prefers-reduced-motion:reduce){
     .slot.hardtoggle.hardcall{animation:none;box-shadow:0 0 0 1px var(--red);}
   }
+
+  /* [스토리 넘기기] 의 암전 — 화면을 통째로 덮었다 걷습니다(engine.js fadeThrough).
+   * 덮인 동안 누름도 막습니다. 시간은 RULE.skipFadeMs 가 inline 으로 적습니다. */
+  .fadeveil{
+    position:fixed;inset:0;z-index:50;background:#05050a;opacity:0;
+    transition:opacity 260ms ease;pointer-events:auto;
+  }
+  .fadeveil.on{opacity:1;}
+  @media (prefers-reduced-motion:reduce){ .fadeveil{transition-duration:1ms !important;} }
 
   .flashfx{
     position:fixed;inset:0;z-index:40;pointer-events:none;
@@ -1197,6 +1337,19 @@
   .sheet{max-width:900px;margin:0 auto;background:var(--sheet);border:1px solid var(--line-2);padding:18px 20px;}
   .sheet h2{margin:0 0 4px;color:var(--red);font-size:16px;letter-spacing:.14em;}
   .sheet .hint{color:var(--dim);font-size:12.5px;margin-bottom:14px;}
+  /* 안내 상자 — 창 맨 위에서 줄 하나를 다 씁니다. 색은 테마마다 바뀌는 금빛 짝을 그대로 씁니다.
+   *   .partnote  장 묶음의 부분 고르기 창(engine.js partNoteHTML) — 머리말 아래, 부분 칸들 위
+   *   .hintbox   그 밖의 창(동기화 …) — 할 말이 여럿이면 안에 .hintlist 로 한 줄씩 나눠 적습니다 */
+  .partnote,.hintbox{border-left:3px solid var(--gold-line-2);background:var(--gold-bg);
+            padding:10px 13px;font-size:12.5px;line-height:1.75;color:var(--gold-hi);}
+  .partnote{margin:0 0 14px;}
+  .hintbox{margin:10px 0 14px;}
+  .partnote p,.hintbox p{margin:0;}
+  /* 좁은 화면에서 줄이 넘어갈 때 끝 글자 한 자만 떨어지지 않게 — 두 줄 길이를 고르게 나눕니다
+   * (사용자 지침 2026-11-21). 안 되는 브라우저에서는 그냥 여느 줄바꿈으로 돌아갑니다. */
+  .partnote p,.hintbox p,.hintbox .hintlist li{text-wrap:balance;}
+  .hintbox .hintlist{margin:0;color:inherit;font-size:inherit;line-height:inherit;}
+  .hintbox .hintlist b{color:var(--text);}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;}
   /* 글이 긴 칸은 창 너비를 다 씁니다 — 우편함처럼 줄글이 들어가는 곳 */
   .grid.one{grid-template-columns:1fr;}
@@ -1267,7 +1420,9 @@
   .giftgrp:has(+ .grid .ic.sf){border-bottom-color:#8a5a22;}
   /* 업적 분류 탭 — 진행도 줄 바로 아래 (engine.js ACH_CATS · 2026-11-05). 좁은 화면에서는 두 줄로 접힙니다 */
   .achtabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;}
-  .achtabs button{padding:5px 10px;font-size:12.5px;}
+  /* flex:none — 좁은 화면에서 칸이 줄어들며 글이 잘리던 것을 막습니다(사용자 지침 2026-11-21).
+   * 줄바꿈(flex-wrap:wrap)이 이미 켜져 있어, 못 줄이면 아랫줄로 내려갑니다. */
+  .achtabs button{padding:5px 10px;font-size:12.5px;flex:none;}
   .achtabs button .n{margin-left:5px;color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums;}
   .achtabs button.on{border-color:var(--gold);color:var(--gold);}
   .achtabs button.on .n{color:var(--gold);}
@@ -1285,7 +1440,9 @@
   /* 좁은 화면에서는 네 칸씩 두 줄을 꽉 채웁니다 (사용자 지침 2026-11-05) — 줄바꿈에 맡기면 줄 끝이 들쭉날쭉했습니다 */
   @media (max-width:640px){
     .achtabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;}
-    .achtabs button{padding:5px 2px;font-size:12px;white-space:nowrap;}
+    /* 칸을 넷으로 나누면 한 칸이 74px 뿐이라 「상층부 전용 0 / 6」 같은 긴 갈피는 글이 잘렸습니다.
+     * 줄을 나누게 두면 네 칸이 같은 높이로 늘어나 그대로 다 보입니다(사용자 지침 2026-11-21). */
+    .achtabs button{padding:5px 4px;font-size:12px;white-space:normal;line-height:1.35;word-break:keep-all;}
     .achtabs button .n{margin-left:3px;font-size:11px;}
     .achtabs .st.done{margin-left:0;}
   }
@@ -1316,6 +1473,7 @@
   .rwnote ul.dots{list-style:none;margin:0;padding:0;}
   .rwnote ul.dots li{position:relative;padding-left:13px;}
   .rwnote ul.dots li + li{margin-top:2px;}
+  /* 글머리는 금빛 «·» — 편성 안내 · 유리창 배경 안내도 이것으로 통일(사용자 지침 2026-11-20) */
   .rwnote ul.dots li::before{content:"·";position:absolute;left:3px;top:0;color:var(--gold);font-weight:800;}
   .rwnote ul.dots .more{display:block;color:var(--dim);font-size:11px;}
   /* 주간 과제 최종 보상 둘(선택권)은 좁은 화면에서도 한 줄에 나란히 (사용자 지침 2026-11-06) */
@@ -1324,6 +1482,25 @@
     .rwpick button{flex:1 1 0;min-width:0;justify-content:center;padding:5px 6px;font-size:10.5px;white-space:nowrap;gap:3px;}
   }
   .slot{border:1px solid var(--line);background:var(--panel);padding:9px 11px;cursor:pointer;font-size:13px;}
+  /* 고유 능력 네모 — 편성 칸 오른쪽 아래의 작은 연두색 사각형(engine.js abilityDotHTML, 사용자 지침 2026-11-21).
+   * 누르면 #chipinfo 로 설명이 뜹니다. 칸 자체의 누름은 engine.js 쪽에서 막습니다. */
+  /* 네모가 걸리는 자리는 «인격 줄»(.sub 안에 .star 가 있는 줄) 입니다 — engine.js 의 세 곳이
+   * 그 줄 안에 적습니다. 칸마다 줄 수가 달라(지금 편성 두 줄 · 작성위원 칸 네 줄) 칸을 기준으로
+   * 잡으면 인격 줄에 설 수가 없었습니다(사용자 지침 2026-11-21).
+   * 가로는 오른쪽 위 공격 유형 아이콘(.slot.idcard .atkic — right:7px · 20px)과 «같은 열» —
+   * .idcard 는 padding-right 가 32px 이라 줄 오른쪽 끝에서 22px 더 나가야 가운데가 맞습니다
+   * (줄 오른쪽 = 칸 오른쪽 −32, 네모 가운데 = 칸 오른쪽 −17). 공격 유형 아이콘이 없는 칸은
+   * 칸 여백(11px)에 맞춰 줄 끝에 섭니다.
+   * 가운데 하얀 십자는 배경 그림 두 줄(세로 2×8 · 가로 8×2)로 긋습니다 —
+   * 글자나 보조 칸을 쓰지 않아 12px 짜리에서도 또렷합니다. */
+  .slot .sub:has(> .abildot){position:relative;}
+  .slot.idcard .abildot{right:-21px;}
+  .abildot{position:absolute;right:0;top:50%;margin-top:-6px;width:12px;height:12px;padding:0;
+    border:1px solid #6f9d4e;background-color:#8fcf5a;border-radius:2px;cursor:pointer;flex:none;
+    background-image:linear-gradient(#fff,#fff),linear-gradient(#fff,#fff);
+    background-size:2px 8px,8px 2px;background-position:center,center;background-repeat:no-repeat;}
+  .abildot:hover{background-color:#a9e377;border-color:#8fcf5a;}
+  :root[data-tone="light"] .abildot{border-color:#4e7a2f;background-color:#6fae3c;}
   @media (hover:hover){ .slot:hover{border-color:var(--red);} }
   .slot.sel{border-color:var(--gold);background:var(--panel-2);}
   /* 인격 카드 오른쪽 위의 공격 유형 아이콘 (engine.js atkTypeIconHTML) — 이름줄이 밑으로 파고들지 않게 오른쪽을 비웁니다 */
@@ -1373,6 +1550,37 @@
   .evrow.can{cursor:pointer;}
   @media (hover:hover){ .evrow.can:hover{border-color:var(--red);} }
   .evrow .rw .cost{color:var(--gold-hi);font-size:14px;}
+  /* 여러 개 한꺼번에 (engine.js openEventShop · openShop 교환) — 줄 오른쪽 아래 작은 단추 둘 */
+  /* 불릿 상자 (engine.js bulletBox) — 교환 창 머리의 안내. 상점 알림 .ntbox 와 같은 금빛 «·» 글머리 */
+  .bulletbox{margin:8px 0 12px;padding:10px 14px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);}
+  .bulletbox p{margin:0;line-height:1.75;padding-left:1.1em;text-indent:-1.1em;color:var(--text-2);font-size:13px;}
+  .bulletbox p + p{margin-top:4px;}
+  .bulletbox p::before{content:"·";display:inline-block;width:1.1em;text-indent:0;color:var(--gold);font-weight:800;}
+  /* 특정 배정의 선택 획득 줄 (engine.js openGacha · openPickupSpark) — 정보 상자와 배정 단추 사이 */
+  .sparkrow{display:flex;gap:12px;align-items:center;margin:8px 0;padding:10px 14px;
+    border:1px solid var(--line);border-radius:6px;background:var(--panel-2);}
+  .sparkrow .body{flex:1;min-width:0;}
+  .sparkrow .nm{color:var(--text);font-weight:700;}
+  .sparkrow .nm b{color:var(--gold-hi);}
+  .sparkrow .sub{color:var(--muted);font-size:12px;margin-top:2px;}
+  .sparkrow button{flex:none;}
+  /* 산 줄 — 테두리만 한 번 금빛으로 (글줄 알림 대신, 자리가 움직이지 않게) */
+  .evrow.gotnow, .slot.gotnow{animation:gotnow .7s ease-out;}
+  @keyframes gotnow{0%{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold);}100%{box-shadow:0 0 0 0 transparent;}}
+  /* 수량 고르기 창 (engine.js openQtyPick) — 단추 줄 · 값 줄은 늘 같은 자리, 수만 바뀝니다 */
+  .qtyhead{display:flex;gap:12px;align-items:center;margin:6px 0 16px;}
+  .qtyhead .nm{color:var(--text);font-weight:700;}
+  .qtyhead .sub{color:var(--muted);font-size:12px;}
+  .qtyrow{display:flex;gap:6px;justify-content:center;align-items:center;margin:8px 0;}
+  .qtyrow button{min-width:54px;}
+  .qtyrow input{width:90px;text-align:center;font-size:18px;font-weight:700;padding:6px;
+    background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;}
+  /* 숫자 칸의 위아래 화살표 단추는 뺍니다 — 옆의 ±1 · ±10 이 그 일을 합니다(사용자 지침 2026-11-25) */
+  .qtyrow input{-moz-appearance:textfield;appearance:textfield;}
+  .qtyrow input::-webkit-outer-spin-button, .qtyrow input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  .qtyends button{min-width:116px;}
+  .qtypay{text-align:center;margin:16px 0 4px;font-size:14px;color:var(--text);min-height:1.6em;}
+  .qtyhave{text-align:center;}
   /* ── 도트 아이콘 칸 (engine.js iconHTML) ──────────────────────
    *  18×18 그림을 2배로 키워 씁니다 — pixelated 라 점이 번지지 않습니다.
    *  테두리 색이 성급입니다(s1~s4). dim 은 «없는 것» — 그림자로만 남깁니다. */
@@ -1553,6 +1761,33 @@
   .pccard.deep{border-color:#5e2a28;}
   .pccard.shut{opacity:.6;}
   .pccard.shut .nm{color:var(--dim);letter-spacing:.2em;}
+  /* 테마팩 도감 「특전 합성」 (packCodexFuseHTML, 사용자 지침 2026-11-23) */
+  /* 재료 둘은 늘 한 줄에 — 칸이 모자라면 이름을 줄임표로 줄이고, 다 읽는 것은 title(사용자 지침 2026-11-23) */
+  .fzcard .fzparts{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin:2px 0 8px;font-size:12px;min-width:0;}
+  .fzcard .fzpart{display:flex;align-items:center;gap:4px;color:var(--text);flex:0 1 auto;min-width:0;}
+  .fzcard .fzpart .icmini{flex:none;}
+  .fzcard .fzpart > span{min-width:0;}
+  .fzcard .fzpart > span,.fzcard .fzpart i{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .fzcard .fzpart i{display:block;font-style:normal;color:var(--dim);font-size:10.5px;}
+  .fzcard .fzplus{flex:none;}
+  .fzcard .fzpart.shut{color:var(--dim);letter-spacing:.1em;}
+  .fzcard .fzplus{color:var(--gold);}
+  .fzcard .fztags{display:flex;gap:5px;margin-bottom:8px;}
+  .fzcard .fztag{font-size:10.5px;padding:1px 6px;border:1px solid var(--line);border-radius:3px;color:var(--muted);}
+  .fzcard .fztag.deep{border-color:#5e2a28;color:#d9705f;}
+  .fzcard .fztag.done{border-color:var(--gold-line);color:var(--gold);}
+  .fzcard .pgperk{border-top:1px solid var(--line);padding-top:8px;}
+  /* 세로 크기 — 글 길이와 상관없이 모든 카드를 한 높이로 고정합니다(사용자 지침 2026-11-23).
+   * 가장 긴 효과 글이 어느 화면 폭(한 칸 ~ 다섯 칸 배치)에서도 넘치지 않는 높이입니다 — 효과 글은 네 줄 안쪽으로 씁니다.
+   * 재 보니 가장 높은 카드가 239px 이었습니다. 합성 특전을 더 길게 지으면 이 값도 함께 봅니다 */
+  .grid.fzgrid{grid-auto-rows:244px;}
+  .fzcard{height:244px;overflow:hidden;}
+  /* 한 칸 배치(.grid 가 1fr 로 바뀌는 640px 아래)는 카드가 넓어 글이 짧게 접히므로 따로 고정 — 340px 폭에서 가장 높은 카드가 195px */
+  @media (max-width:640px){ .grid.fzgrid{grid-auto-rows:200px;} .fzcard{height:200px;} }
+  .fzcard{display:flex;flex-direction:column;}
+  .pccard.fzcard.shut{opacity:1;}
+  .pccard.fzcard.shut .pgname{color:var(--dim);letter-spacing:.2em;}
+  .pccard.fzcard.done{border-color:var(--gold-line);}
   /* [입장] 손잡이 안의 엔케팔린 아이콘 — 글자 밑선에 맞춰 세웁니다 */
   .modalfoot button .icmini{margin:0 1px 0 0;vertical-align:-4px;}
   /* 짚는 줄 — 보유 · 저장 · 경고 */
@@ -1585,7 +1820,14 @@
   @media (hover:hover){ .mgbinds .slot.bind:hover{border-color:var(--red);} }
   .slot.bindlock{border-color:#5e2a28;background:#1c1214;}
   .slot.bindlock .lock{color:#d9705f;font-weight:700;}
-  .mrbind{color:#d9705f;}
+  /* 결과 카드의 「건 제약」 줄 — 편성칸 바로 위에 붉은 칸으로 섭니다(engine.js openMirrorResult) */
+  .mrbinds .slot.bindlock .nm{color:#d9705f;font-weight:700;}
+  .mrbinds .slot .sub{text-wrap:balance;word-break:keep-all;overflow-wrap:break-word;}
+  .mrbmult{color:var(--red);font-weight:700;letter-spacing:0;}
+  /* 갈림길마다 다시 세우는 「건 제약」 줄 (engine.js drawPackGate) */
+  .packgate .pgbind .pglabel{color:#d9705f;}
+  .packgate .pgbind .perk{border-color:#5e2a28;background:#1c1214;color:#d9705f;}
+  .packgate .pgbind .pgbmult{color:var(--red);font-size:11.5px;font-weight:700;}
   /* 자세히 — 기본 접힘 */
   .mgmore{margin:2px 0 10px;border:1px solid var(--line);background:var(--sheet);border-radius:3px;}
   .mgmore > summary{
@@ -1918,6 +2160,9 @@
     #log .packgate .pgic{display:block;margin-bottom:5px;}
     #log .packgate .pgpath,#log .packgate .pgperk{display:none;}
     #log .packgate .pgcard > .sub{display:none;}     /* «특전 없음» */
+    #log .packgate .pgfuse{margin-top:5px;padding:2px 6px;}
+    #log .packgate .pgfuse .fzlong{display:none;}
+    #log .packgate .pgfuse .fzshort{display:inline;}
     #log .packgate .pgcard .nm{font-size:12.5px;margin:0;line-height:1.35;word-break:keep-all;}
     #log .packgate .pgcard.heard{border-color:var(--gold);}   /* 「들어 봄」 글이 감춰지니 테두리로 */
     .grid.rwgrid{grid-template-columns:1fr;}
@@ -1999,6 +2244,12 @@
     --gold:#ffd83d; --gold-hi:#ffea94; --gold-mid:#c0912c; --gold-bg:#602611; --gold-line:#89551d; --gold-line-2:#b78729;
     --red:#ff8a5c; --hi:#ffffff;
   }
+  :root[data-palette="snow"]{   /* 설원 — 밝은 바탕 · 얼음 청색(8장을 마치면, 사용자 지침 2026-11-20) */
+    --bg:#eaf0f5; --sheet:#f2f6f9; --panel:#fafcfe; --panel-2:#e1e9f0; --line:#cfdbe5; --line-2:#b0c2d1;
+    --text:#17222d; --text-2:#25323f; --text-3:#3f5061; --muted:#566879; --dim:#64788b; --off:#9fb0bf;
+    --gold:#1f6f9f; --gold-hi:#145378; --gold-mid:#2e6f96; --gold-bg:#dcebf5; --gold-line:#a9cbe2; --gold-line-2:#6fa6cc;
+    --red:#b3372f; --hi:#000000;
+  }
   /* 밝은 테마(백악 · 오르크튀르 루르주 · 벚꽃놀이 · 여전히 살아있다)에서 따로 손볼 것 — 변수만으로는 안 뒤집히는 자리들.
    * 예전에는 백악 하나뿐이라 data-palette 가 chalk 일 때만 걸었는데, 밝은 테마가 늘어 data-tone="light" 에 겁니다
    * (engine.js applyPalette · index.html 머리의 미리 칠하기가 함께 답니다). */
@@ -2014,6 +2265,15 @@
   :root[data-tone="light"] .hpbar{ background:#e3ddd6; border-color:#cdbfb8; }
   :root[data-tone="light"] .syn.full{ background:#f3e3b4; box-shadow:0 0 0 1px #dcc48c inset; }
   :root[data-tone="light"] .syn .eff{ color:#7a5a1c; }
+  /* 그림 띠(특정 배정 · 상점 알림 · 상점 칸 머리)와 무대 지명 — 어두운 테마는 그림을 검게 눌러 흰 글씨를 띄우지만,
+   * 밝은 테마에서는 그 검은 장막이 혼자 떠 보입니다. 서리처럼 밝게 덮고 글씨를 짙게 뒤집습니다(사용자 지침 2026-11-20). */
+  :root[data-tone="light"] .pkline.pic::before{ background:rgba(255,255,255,.42); }
+  :root[data-tone="light"] .pkline.small::before{ background:rgba(255,255,255,.22); }
+  :root[data-tone="light"] .pkline.small.blank::before{ background:none; }
+  :root[data-tone="light"] .pkline.pic{ color:var(--gold-hi); text-shadow:0 1px 6px rgba(255,255,255,.95), 0 0 16px rgba(255,255,255,.85); }
+  :root[data-tone="light"] .pkline .pksub{ color:var(--text); }
+  :root[data-tone="light"] .pkline.small span{ color:var(--text); text-shadow:0 1px 6px rgba(255,255,255,.95), 0 0 14px rgba(255,255,255,.9); }
+  :root[data-tone="light"] .scenebox .placename{ background:linear-gradient(to top, rgba(250,250,250,.92), rgba(250,250,250,0)); }
   :root[data-tone="light"] .uskill{ background:#efe6f8; border-color:#a07cc4; color:#4a2f66; }
   :root[data-tone="light"] .uskill b{ color:#5f3a8c; }
   :root[data-tone="light"] .tag2{ background:#f6e4e0; border-color:#d9a79f; color:#8d3b36; }
@@ -2099,26 +2359,26 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=2.31.9"></script>
-<script src="data/vault.js?v=2.31.9"></script>
-<script src="data/characters.js?v=2.31.9"></script>
-<script src="data/skills.js?v=2.31.9"></script>
-<script src="data/allies.js?v=2.31.9"></script>
-<script src="data/gifts.js?v=2.31.9"></script>
-<script src="data/pickup.js?v=2.31.9"></script>
-  <script src="data/hard.js?v=2.31.9"></script>
-<script src="data/achievements.js?v=2.31.9"></script>
-<script src="data/mail.js?v=2.31.9"></script>
-<script src="data/notice.js?v=2.31.9"></script>
-<script src="data/patch.js?v=2.31.9"></script>
-<script src="data/event.js?v=2.31.9"></script>
-<script src="data/reward.js?v=2.31.9"></script>
-<script src="data/tutorial.js?v=2.31.9"></script>
-<script src="data/foes.js?v=2.31.9"></script>
-<script src="data/story.js?v=2.31.9"></script>
-<script src="data/mirrorpacks.js?v=2.31.9"></script>
-<script src="data/bgm.js?v=2.31.9"></script>
-<script src="engine.js?v=2.31.9"></script>
+<script src="data/access.js?v=3.0.0"></script>
+<script src="data/vault.js?v=3.0.0"></script>
+<script src="data/characters.js?v=3.0.0"></script>
+<script src="data/skills.js?v=3.0.0"></script>
+<script src="data/allies.js?v=3.0.0"></script>
+<script src="data/gifts.js?v=3.0.0"></script>
+<script src="data/pickup.js?v=3.0.0"></script>
+  <script src="data/hard.js?v=3.0.0"></script>
+<script src="data/achievements.js?v=3.0.0"></script>
+<script src="data/mail.js?v=3.0.0"></script>
+<script src="data/notice.js?v=3.0.0"></script>
+<script src="data/patch.js?v=3.0.0"></script>
+<script src="data/event.js?v=3.0.0"></script>
+<script src="data/reward.js?v=3.0.0"></script>
+<script src="data/tutorial.js?v=3.0.0"></script>
+<script src="data/foes.js?v=3.0.0"></script>
+<script src="data/story.js?v=3.0.0"></script>
+<script src="data/mirrorpacks.js?v=3.0.0"></script>
+<script src="data/bgm.js?v=3.0.0"></script>
+<script src="engine.js?v=3.0.0"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {

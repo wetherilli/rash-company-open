@@ -48,6 +48,7 @@
  *
  *    give    보상으로 주는 것
  *      support   지원 작성위원 — "제목|이름"
+ *                이미 함께하는 사람이면 인격 선택권 1개로 돌아옵니다(engine.js SUPPORT_DUP, 사용자 지침 2026-11-20).
  *      id        작성위원의 인격 — { who: "열쇠", star: 3, title: "제목" }
  *                (data/characters.js SINNERS 의 열쇠·성급·제목 그대로)
  *                이미 지닌 인격이면 배정에서 겹쳤을 때와 같이 파편으로 돌아옵니다.
@@ -282,10 +283,19 @@ const ACHIEVEMENTS = [
     /* 1·2·3호선과 같게 — 종점에 무엇이 서 있는지는 적지 않습니다. */
     name: "편도 승차권",
     desc: "거울굴절철도 4호선을 종점까지 끝낸다.",
-    reward: "인격 ★★★ 태백층군 발굴캠프 (이한범) · 지원 작성위원 ★★★ 공룡의날 래퍼 김강민",
+    /* 김강민은 「공룡의날 순회공연」 으로 옮겼습니다(사용자 지침 2026-11-20). 이미 받은 분은 그대로입니다. */
+    reward: "인격 ★★★ 태백층군 발굴캠프 (이한범)",
     when: { clear: "railLine4" },
-    give: { id: { who: "lee_hanbeom", star: 3, title: "태백층군 발굴캠프" },
-            support: "공룡의날 래퍼|김강민" }
+    give: { id: { who: "lee_hanbeom", star: 3, title: "태백층군 발굴캠프" } }
+  },
+  {
+    /* 사용자 지침(2026-11-20) — 「공룡의 날」 시너지(공룡의날 인격 2명)를 켠 채 어비스 거울 던전을 끝까지 */
+    name: "공룡의날 순회공연",
+    desc: "「공룡의 날」 시너지가 발동한 채로 어비스 거울 던전을 끝까지 마친다.",
+    reward: "지원 작성위원 ★★★ 공룡의날 래퍼 김강민",   /* 이미 함께하면 인격 선택권 — 모든 지원 작성위원 공통(SUPPORT_DUP)이라 따로 적지 않음 */
+    when: { clear: "mirrorDeep", synergy: "공룡의 날" },
+    /* 「편도 승차권」 으로 이미 받은 분께는 인격 선택권 — 지원 작성위원 중복은 늘 그렇습니다(SUPPORT_DUP) */
+    give: { support: "공룡의날 래퍼|김강민" }
   },
   {
     name: "정시 운행",
@@ -353,5 +363,36 @@ const ACHIEVEMENTS = [
     /* synergy 는 시너지의 «이름» — data/characters.js SYNERGIES 의 "섞인 것" (사용자 지침 2026-11-14) */
     when: { kill: "구C사 이사 원대한", where: ["mirrorExtreme", "mirrorDeep"], synergy: "섞인 것" },
     give: { support: "구C사 E.G.O :: 꿰뚫린 혀|원대한" }
+  },
+  {
+    name: "이른 이별",
+    desc: "아멜리아가 쓰러져 전투에서 진다.",
+    reward: "E.G.O 기프트 ★★ 잃어버린 돋보기",
+    when: { clear: "allyDown:아멜리아" },
+    give: { gift: "잃어버린 돋보기" }
+  },
+  {
+    name: "총알값 아까운 놈들",
+    desc: "이야기에서 이창수를 상대로, 1페이즈에 아무도 쓰러지지 않고 넘어선다.",
+    reward: "E.G.O 기프트 ★★ 식지 않은 총열",
+    when: { clear: "phaseClean:1", kill: "이창수", where: "story" },
+    give: { gift: "식지 않은 총열" }
+  },
+  {
+    name: "초절정맹호",
+    desc: "익스트림 난이도 이상의 거울 던전에서 제2발톱 카포IIII 이창수를 쓰러뜨린다.",
+    reward: "지원 작성위원 ★★★ 제1발톱 전령 김태민",
+    when: { kill: "이창수", where: ["mirrorExtreme", "mirrorDeep"] },
+    give: { support: "제1발톱 전령|김태민" }
+  },
+  /* 사용자 지침(2026-11-20) — 어비스 거울 던전에서 «B구역» 시너지를 켠 채 지와 처치, 보상 E.G.O 기프트 선택권.
+   * «B구역» 이 든 시너지는 「흑수들의 왕」(tag 흑수 · B구역) 하나라 그것으로 겁니다. 지와는 어비스 4층 팩 「죽음의 문답」 의 큰보스.
+   * 이름도 사용자 지침. */
+  {
+    name: "뭘 물어보겠다고?",
+    desc: "어비스 거울 던전에서 「흑수들의 왕」 시너지가 발동한 채 옥룡 지와를 쓰러뜨린다.",
+    reward: "E.G.O 기프트 선택권 1개",
+    when: { kill: "지와", where: "mirrorDeep", synergy: "흑수들의 왕" },
+    give: { giftTicket: 1 }
   }
 ];

@@ -75,6 +75,21 @@ const CURRENCY = "원고료";
  *  준비 중인 장의 특전은 wip/<장>/package.js 에 「@wip into: data/story.js · STORY_PERKS」 로.
  */
 const STORY_PERKS = {
+  ch8_ice: {
+    name: "만년한철",
+    desc: "공격력 +10%, 치명타 배율 +100%.",
+    effect: { all: { atk: 0.10 }, critMult: 1.0 }
+  },
+  ch8_badge: {
+    name: "부매니저 징표",
+    desc: "보스를 상대할 때 공격력 +30%. 지원 작성위원은 +50%.",
+    effect: { bossAtk: 0.30, bossAtkSupport: 0.50 }
+  },
+  ch8_ballot: {
+    name: "잊혀진 투표용지",
+    desc: "상대하는 보스의 방어력 −50%. 체포를 쓰면 방어력을 0으로 한다.",
+    effect: { bossDefCut: 0.5, arrestZero: true }
+  }
 };
 
 /* ── 적 ───────────────────────────────────────────────────────
@@ -86,8 +101,13 @@ const STORY_PERKS = {
  *  title    이야기 제목 — 「공식 설정에 속하지 못하는」 처럼. 장의 주인공(작성위원) 이름을 적지 않습니다
  *           (사용자 지침 2026-11-09 — 예전 본편은 title 이 «김두현», 제목이 subtitle 에 있었습니다).
  *           주인공은 lead 에 열쇠로 적습니다.
- *  subtitle 한 줄 소개(있으면) — 장 묶음의 부분(8-1 「폭풍전야가 지나간 다음 날」)처럼 제목 밑에 붙는 말.
- *           이야기 제목을 여기 적지 않습니다.
+ *  subtitle 한 줄 소개(있으면) — 제목 밑에 붙는 말. 이야기 제목을 여기 적지 않습니다.
+ *           지금 이것을 쓰는 장은 하나도 없습니다(사용자 지침 2026-11-20 — 8-1 · 8-2 에만 붙어 있어
+ *           여섯 칸 중 둘만 한 줄이 길었습니다). 엔진 쪽 자리는 그대로이니 적으면 그대로 섭니다.
+ *  partNote 장 묶음에만 — 부분 고르기 창 맨 위의 안내 상자(engine.js partNoteHTML). 글 줄을 배열로 적습니다.
+ *           「누가 반드시 편성되어야 하는가」 처럼 장 전체에 걸리는 말을 여기 한 번만 적고,
+ *           부분마다 되풀이하지 않습니다 — 되풀이하면 그 줄이 빠진 부분이 곧 스포일러가 됩니다.
+ *  require  그 장에 반드시 편성되어야 하는 사람 — 전투가 있는 부분에만 적습니다(chapterNeeds).
  *  data/event.js 의 chapter 는 이 title 과 같아야 합니다(curEvent). */
 const CHAPTERS = [
 
@@ -980,7 +1000,10 @@ const CHAPTERS = [
     { t: "d", who: "lee_hanbeom", text: "어서 한 점씩 먹죠." },
     { t: "d", who: "lee_hanbeom", text: "기다리는 게 있으니까요." },
     { t: "n", text: "그리고 냄새를 맡고 바다 건너에서 무언가가 쫓아왔다." },
-    { t: "d", who: "제3발톱 작은형님 이서진", text: "…상어고기 냄새가 나는데." },
+    /* 이서진의 곡은 그의 첫 대사부터 (사용자 지침 2026-11-26). 전투에 들어서도
+     * FOES.lee_seojin_shark 의 bgm 이 같은 곡을 가리켜 끊기지 않고, 그가 바다로
+     * 돌아간 뒤(아래 «이겼군요») 비전투로 물립니다. */
+    { t: "d", who: "제3발톱 작은형님 이서진", text: "…상어고기 냄새가 나는데.", bgm: "이서진" },
     { t: "d", who: "lee_hanbeom", text: "왔군요." },
     { t: "d", who: "제3발톱 작은형님 이서진", text: "상을 차렸으면 값을 치러야지." },
     { t: "n", text: "제3발톱 작은형님이자, 현생동물 카르텔 어류파의 두목, 이서진이었다." },
@@ -1007,7 +1030,7 @@ const CHAPTERS = [
     { t: "d", who: "과학드림", text: "제가 이쪽에 볼 일이 있어서요." },
     { t: "d", who: "제3발톱 작은형님 이서진", text: "쳇, 제3발톱은 반드시 기억한다. 나중에 꼭 갚게 될 거야." },
     { t: "n", text: "이서진은 다시 바다로 돌아갔다." },
-    { t: "d", who: "lee_hanbeom", text: "이겼군요. 이 개입은 예상하지 못했지만." },
+    { t: "d", who: "lee_hanbeom", text: "이겼군요. 이 개입은 예상하지 못했지만.", bgm: "비전투" },   // 이서진의 곡은 여기까지
     { t: "d", who: "kim_duhyeon", text: "…무력으로 이긴 게 아니잖아." },
     { t: "d", who: "lee_hanbeom", text: "이긴 건 이긴 거야..." },
 
@@ -1826,7 +1849,9 @@ const CHAPTERS = [
     id: "ch6_5_busan", no: "6.5장", title: "부산행", side: true, skip: true,
     img: "assets/scene/고속열차 내부.jpg",
     place: "급행열차",
-    require: ["cha_minjun"],
+    /* require 를 두지 않습니다(사용자 지침 2026-11-20) — 바로 아래 forceParty 가 들어서자마자
+     * 편성을 «차민준 혼자» 로 갈아 끼웁니다(engine.js forcePartyPush). 검사는 그보다 먼저 도는 탓에,
+     * 어차피 바뀔 편성을 두고 「편성을 고치고 다시 들어오십시오」 로 한 번 막을 뿐이었습니다. */
     forceParty: ["cha_minjun"],   // 이 장은 처음부터 끝까지 차민준 혼자다 — 원작 그대로
     glassNote: "선로 이음매가 규칙적으로 발밑을 친다.",
     summary: "다행히, 사상자는 없었다.",
@@ -2949,8 +2974,9 @@ const CHAPTERS = [
       { t: "n", text: "여관의 뒷문이 화려한 폭발과 함께.", fx: "boom" },
       { t: "n", text: "익숙한 얼굴이 등장한다." },
       { t: "d", who: "튼튼한 조직원", text: "형님 여기입니다!" },
+      /* 이서진의 곡은 그의 첫 대사부터 (사용자 지침 2026-11-26) — 아래 ⑧ 머리에서 물립니다 */
       { t: "d", who: "제3발톱 큰형님 이서진", portrait: "assets/enemy/큰형님 이서진.png",
-        text: "그래, 라슈컴 녀석들 공룡 우리 속에 숨어있었나!" },
+        bgm: "이서진", text: "그래, 라슈컴 녀석들 공룡 우리 속에 숨어있었나!" },
       { t: "d", who: "manager", text: "공룡 우리?" },
       { t: "d", who: "제3발톱 큰형님 이서진", portrait: "assets/enemy/큰형님 이서진.png",
         text: "이런 일은 제3발톱 H사 지부에 연락해도 되지만" },
@@ -2975,7 +3001,7 @@ const CHAPTERS = [
         text: "넌 뭐냐!" },
 
       /* ── ⑧ 진짜 최종전 — 기가노토사우루스 ───────────────────── */
-      { t: "n", text: "다시 쿵쿵 소리가 들린다.", shake: true },
+      { t: "n", text: "다시 쿵쿵 소리가 들린다.", shake: true, bgm: "비전투" },   // 이서진의 곡은 여기까지
       { t: "d", who: "manager", text: "또 뭐가 있어?" },
       { t: "d", who: "song_hamin", text: "레전드 개판이네.." },
       { t: "n", text: "지붕이 날아갔다.", shake: "hard" },
@@ -3043,6 +3069,833 @@ const CHAPTERS = [
       { t: "codex" },
       { t: "end", text: "7.5장 종료 — 그날 밤, 라거슈타트는 조금 젖은 채로 잠들었다." }
 
+    ]
+  },
+  /* ═══════════════ 8장 ═══════════════════════════════════════ */
+  {
+    id: "ch8_1", no: "8-1", title: "참가등록", part: "ch8",
+    img: "assets/scene/H사 전경.jpg",          // 장 그림 — 첫 장소 전의 머리말 · 장 목록은 H사 전경으로
+    group: { no: "8장", title: "그리워할 수 밖에 없는",
+      summary: "그리운 과거와 오만한 실수를 만난다.",
+      pitch: ["누군가는 지배자가 되고, 누군가는 지배를 받는다."],
+      /* 부분 고르기 창 맨 위의 안내 상자 — 줄 하나를 다 씁니다(사용자 지침 2026-11-20, engine.js partNoteHTML).
+       * 부분마다 되풀이되던 「유아인 편성 필요」 를 여기 한 번으로 모았습니다. 되풀이를 걷으면
+       * 유아인을 편성할 수 없는 8-5 에만 그 줄이 빠지는 일도 없어집니다 — 그 빠짐이 곧 스포일러입니다. */
+      partNote: ["8장의 이야기에서는 유아인이 반드시 편성되어 있어야 합니다.",
+                 "주요 이야기를 진행하는 데 3성 편성 조합과 6단계 이상의 동기화를 권장합니다."],
+      /* 유리창 한 줄 — 둘 중 하나를 고릅니다(사용자 지침 2026-11-20, engine.js glassNote) */
+      glassNote: ["오늘 날씨는 춥다. 눈이 내리고, 공기는 차다.", "싸늘한 공기가 그리움을 불러오는 듯하다."] },
+    lead: "yu_ain",                            // 전투가 없는 부분이라 장 require 를 두지 않습니다(사용자 지침 2026-11-20)
+    scenes: [
+      { t: "n", text: "비 내리는 낮이었다. 지난 밤의 폭우가 아직 멈추지 않은 탓에, 창 밖에도 비가 내리고 있었다." },
+      { t: "d", who: "guide", text: "그래… 이번 선발전은…" },
+      { t: "d", who: "사스", text: "…형도 과거의 죄를 직시해야 될거야." },
+      { t: "d", who: "guide", text: "그렇겠지." },
+      { t: "d", who: "guide", text: "그게, B구역에 필요한 것이 무엇인지 묻는 것이라고 할 수 있겠지." },
+      { t: "d", who: "guide", text: "우리 애들은 뭐, 밤을 잘 보냈을련지?" },
+      { t: "d", who: "사스", text: "이제 형도 그런 것들에 너무 신경쓰지 않는 게 좋아." },
+      { t: "d", who: "사스", text: "이제는 라거슈타트도 상어를 스스로 잡을 나이일텐데." },
+      { t: "d", who: "guide", text: "그래야겠지." },
+      { t: "n", text: "폭우와 사이렌과, 기가노토사우루스와 함께한 다음 날 아침." },
+      { t: "place", name: "라거슈타트의 숙소", img: "assets/scene/라거슈타트의 숙소.jpg" },
+      { t: "d", who: "김연준", text: "어쩔 수 없었다고는 하지만…" },
+      { t: "d", who: "김연준", text: "내 방에서 13명을 갑작스레 추가로 재우는 건 정말 말도 안되는 일이었어." },
+      { t: "n", text: "물론 원래는 김연준과 도규민의 숙소였다." },
+      { t: "d", who: "manager", text: "그건, 미안하게 생각해." },
+      { t: "d", who: "lee_hanbeom", text: "그렇다고 이 인원들을 폭우 한가운데서 비 맞게 두는 것은 교육위원의 도리가 아니죠." },
+      { t: "d", who: "김연준", text: "교육위원의 돌희?" },
+      { t: "d", who: "kim_duhyeon", text: "도리… 요." },
+      { t: "d", who: "도규민", text: "그래, 한범아. 네가 교육위원이 되는 날이 기대되는구나." },
+      { t: "d", who: "lee_hanbeom", text: "그것은…" },
+      { t: "d", who: "seong_siyun", text: "그래도 방이 아주 좁지는 않았어서 다행이죠." },
+      { t: "d", who: "chu_minsu", text: "마치 애초부터 큰 방을 준비했던 것 같은데." },
+      { t: "d", who: "song_hamin", text: "잘 잤으면 됐지." },
+      { t: "d", who: "kim_taeseong", text: "새벽 5시까지는 놀고 싶었는데에…" },
+      { t: "d", who: "manager", text: "우리 놀러온 게 아니라고…" },
+      { t: "d", who: "seong_siyun", text: "그렇죠… 매니저 선발전…" },
+      { t: "d", who: "yu_ain", text: "그리고 선발전의 결과가 B구역의 많은 것을 바꿀거에요." },
+      { t: "n", text: "B구역의 행방. 그것 자체로도 라거슈타트와 인터넷의 고생물 세계에 큰 영향을 미칠 터였다." },
+      { t: "d", who: "lee_hanbeom", text: "그걸 위해서, 저희가 다음으로 할 일은…" },
+      { t: "d", who: "kim_duhyeon", text: "참가등록?" },
+      { t: "d", who: "lee_hanbeom", text: "참가등록이에요." },
+      { t: "n", text: "이한범이 두현군을 째려보았다." },
+      { t: "d", who: "kim_duhyeon", text: "…왜? 뻔하잖아." },
+      { t: "d", who: "kim_haju", text: "참가 등록장에서도 크고 작은 다툼이 있을 수가 있어." },
+      { t: "d", who: "manager", text: "그럼 일단 참가 등록 장소로 가면 되는 건가?" },
+      { t: "d", who: "yu_ain", text: "그런데…" },
+      { t: "d", who: "manager", text: "?" },
+      { t: "d", who: "yu_ain", text: "누가 나가는 거에요?" },
+      { t: "d", who: "lee_hanbeom", text: "본사에서는…" },
+      { t: "d", who: "kim_haju", text: "당연히…" },
+      { t: "d", who: "lee_hanbeom", text: "유아인 작성위원이 출마하는 것으로 되어 있습니다." },
+      { t: "d", who: "yu_ain", text: "제가요?" },
+      { t: "d", who: "yu_ain", text: "저는 무언가를 이끄는 데는 소질이 없어요." },
+      { t: "d", who: "yu_ain", text: "저보다 나은 사람들도 많고… 또…" },
+      { t: "d", who: "lee_hanbeom", text: "정말 매니저를 해야된다는 것은 아니야." },
+      { t: "d", who: "kim_haju", text: "매니저 선발전에 참여하는 학생들의 의욕을 고취시키고…" },
+      { t: "d", who: "kim_haju", text: "행사 참가자들에게 적절한 보상을 하기 위해서, B구역에서 자체적으로 상품을 준비하도록 되어 있는데," },
+      { t: "d", who: "lee_hanbeom", text: "맞아요. 그 상품 중에 황금교본이 있습니다." },
+      { t: "d", who: "yu_ain", text: "그렇지만…" },
+      { t: "d", who: "kim_haju", text: "우리는 2등 정도를 하면 돼." },
+      { t: "d", who: "yu_ain", text: "… 알았어요." },
+      { t: "d", who: "yu_ain", text: "어차피 라슈에서 저 말고는 할 사람도 없잖아요." },
+      { t: "d", who: "manager", text: "힘든 일일 수도 있지만…" },
+      { t: "d", who: "manager", text: "내가 지금까지 봐온 아인군은 강해." },
+      { t: "d", who: "manager", text: "잘 할 수 있을 거야." },
+      { t: "d", who: "yu_ain", text: "…." },
+      { t: "place", name: "참가등록장", img: "assets/scene/참가등록장.jpg" },
+      { t: "n", text: "참가등록장에서," },
+      { t: "d", who: "kim_taeseong", text: "렐상?" },
+      { t: "n", text: "길잡이는 참가등록장의 단상 위, 다른 심사위원들과 함께 있었다." },
+      { t: "d", who: "manager", text: "심사… 위원으로 있는 건가?" },
+      { t: "d", who: "lee_hanbeom", text: "난동을 부리는 참가자들을 제압하는 경비를 겸하는 것일 겁니다." },
+      { t: "d", who: "kim_haju", text: "아무래도 렐상이 직접 심사에 참가하는 것은 형평성에도 어긋나고." },
+      { t: "d", who: "lee_gyeongwon", text: "적어도 우리가 실격당하게 하진 않겠죠." },
+      { t: "d", who: "kim_taeseong", text: "아앗!" },
+      { t: "d", who: "디아", text: "뭐야?", shake: true },
+      { t: "n", text: "태성군이 뒤에서 나타난 디아와 부딪혀 밀쳐진다." },
+      { t: "d", who: "디아", text: "똑바로 보고 다녀!" },
+      { t: "n", text: "그러나 디아는 곧 자신의 등 뒤에서," },
+      { t: "n", text: "단상 위에서 자신을 매섭게 노려보는 짧은 시선을 느낀다." },
+      { t: "cut", img: "assets/cut/째려보는 짧은 시선.png" },   // 컷신 ① 덮음
+      { t: "n", text: "단상 멀리서, 디아를 바라보고 있는 짧은 시선의 매서운 눈빛." },   // 컷신 ① 「8장 길잡이의 눈빛」 — 이 줄 앞에서 덮고 «죄… 죄송합니다» 뒤에 걷음 (NOTES 4-4)
+      { t: "d", who: "디아", text: "아…" },
+      { t: "d", who: "디아", text: "죄… 죄송합니다…." },
+      { t: "cut" },   // 컷신 ① 걷음
+      { t: "d", who: "kim_taeseong", text: "어… 자연에서는 흔한 일이지요~" },
+      { t: "d", who: "kim_duhyeon", text: "뭔가를 느꼈…나?" },
+      { t: "d", who: "디아", text: "아, 아닙니다." },
+      { t: "d", who: "lee_gyeongwon", text: "그것보다 분명… 어젯밤에 죽었던 거 아닌가?" },
+      { t: "d", who: "디아", text: "고작 그정도로 나를 죽일 수는!" },
+      { t: "d", who: "lee_hanbeom", text: "B구역에서는 활동정지가 되면… 일정 시간 후에 다시 활동할 수 있게 됩니다." },
+      { t: "d", who: "kim_duhyeon", text: "안 죽는다고?" },
+      { t: "d", who: "lee_hanbeom", text: "대신 상태에 따라서 얼만큼, 어디에서 활동을 재개하는지에 차이가 있는 거죠." },
+      { t: "d", who: "kim_haju", text: "정도가 심하면, 영원히 살아나지 못할 수도 있고." },
+      { t: "d", who: "kim_haju", text: "그게 아니라면 추방될 수도 있는 거고." },
+      { t: "d", who: "kim_duhyeon", text: "어 그럼… B구역에서는 일단 살아날 수 있는 건가?" },
+      { t: "n", text: "김두현은 누가 생각났다는듯이 뒤를 돌아봤다." },
+      { t: "d", who: "이형우", text: "왜, 뭐." },
+      { t: "d", who: "kim_duhyeon", text: "아닙니다~" },
+      { t: "d", who: "김연준", text: "오이샌드위ㅊ… 헉헉." },
+      { t: "d", who: "이형우", text: "연준아 잠깐 나 좀 보자~ 얘들아, 일 보고 있어." },
+      { t: "n", text: "이형우는 김연준의 귀를 잡아당기고 등록장 밖으로 나갔다." },
+      { t: "d", who: "디아", text: "보아하니, 너희도 매니저 선발전에 참가하려 왔구만." },
+      { t: "d", who: "디아", text: "하지만 이번에는 단념하는 게 좋을 거야." },
+      { t: "d", who: "디아", text: "내가… 돈을 좀 많이 썼거든." },
+      { t: "d", who: "이창수", text: "그릏게 됐응께." },
+      { t: "d", who: "이창수", text: "잘~부탁헌다 소정아." },
+      { t: "n", text: "붉은 코트를 입은 남자가 불쑥 나타나," },
+      { t: "n", text: "이소정에게 익숙하다는듯 인사를 건넨다." },
+      { t: "d", who: "lee_sojeong", text: "너는….!" },
+      { t: "n", text: "그러나 이소정에게는 반갑지 않은 만남이었는듯, 소정양은 팍 인상을 쓰며 검에 손을 얹는다." },
+      { t: "d", who: "이창수", text: "허! 니 목 딸라꼬 온거 아닝께 그 손 얌~전히 띠어~" },
+      { t: "d", who: "이창수", text: "비지니스. 알제? 돈 받아가꼬 일하러 온것이여~" },
+      { t: "d", who: "manager", text: "저 사람이 누군데?" },
+      { t: "d", who: "lee_sojeong", text: "제2발톱의 카포 콰트로… " },
+      { t: "d", who: "manager", text: "엄청나게 강한 거야?" },
+      { t: "d", who: "lee_hanbeom", text: "남부에서는 거의 최상위권의 강자입니다." },
+      { t: "d", who: "manager", text: "지금 우리가 싸우면?" },
+      { t: "d", who: "lee_hanbeom", text: "지난 밤 만난 상어맨…보다 강할 겁니다." },
+      { t: "n", text: "지난밤 상어맨이 보여준 강함은 확실히 전투가 더 이어졌다면 위험했을터였다." },
+      { t: "n", text: "그보다 강하다고?" },
+      { t: "d", who: "이창수", text: "아야. 으른을 앞에 딱~ 세워놓고 뭐 고로코롬 쫑알대고 있냐잉? 잉?" },
+      { t: "n", text: "이창수의 표정이 팍 구겨진다." },
+      { t: "d", who: "lee_sojeong", text: "꺼져." },
+      { t: "d", who: "이창수", text: "아따 오랜만에 보니 더 독기 있어불구마잉." },
+      { t: "d", who: "이창수", text: "그 칼... 그 이후로 뽑은적 없제잉?" },
+      { t: "n", text: "이창수는 소정양의 허리춤에 있던 대태도를 보며 물었다." },
+      { t: "d", who: "lee_sojeong", text: "절대로 뽑을 일 없어." },
+      { t: "d", who: "이창수", text: "것도 조만간이여~ 곧 보것제잉." },
+      { t: "n", text: "이소정은 화를 내며 무언가 말을 했지만, 웅얼거리는 소리는 잘 들리지 않았다." },
+      { t: "d", who: "이창수", text: "그럼 나중에 저시기들이랑 모여서 그시기 하자고!" },
+      { t: "n", text: "그리고 이창수는 몸을 휙 돌리더니, 자리를 비켜 사라졌다." },
+      { t: "d", who: "디아", text: "아, 같이 가!" },
+      { t: "d", who: "디아", text: "내가 고용주라고!!" },
+      { t: "n", text: "디아는 이창수의 빠른 걸음을 예상하지 못했는지, 빠르게 사라지는 이창수를 쫓아 뛰어갔다." },
+      { t: "d", who: "song_hamin", text: "고용주라기보단, 과하게 큰 칼을 쥔 어린아이같네요." },
+      { t: "d", who: "chu_minsu", text: "제2발톱은 감당하기에 과한 조직이지요. 예의를 지키지 않으면 신체일부나 목숨을 가져가기도 하니까요." },
+      { t: "d", who: "manager", text: "우리 방금 죽을 뻔 한 거란 말이야?" },
+      { t: "d", who: "kim_duhyeon", text: "…그정도겠…어요?" },
+      { t: "d", who: "lee_sojeong", text: "엮여서 좋은 것이 없는 놈들…이지…" },
+      { t: "n", text: "소정양이 웅얼거렸다." },
+      { t: "d", who: "lee_hanbeom", text: "우리도 어서 접수를 마치고, 자리를 피하죠." },
+      { t: "d", who: "kim_duhyeon", text: "그래, 또 무슨 싸움에 휘말리면 곤란하잖아." },
+      { t: "n", text: "그때 뒤에서 완전히 처음 보는 인물이 나타났다." },
+      { t: "d", who: "아멜리아", text: "아인." },
+      { t: "d", who: "yu_ain", text: "… 아멜리아." },
+      { t: "d", who: "아멜리아", text: "오랜만에 찾아왔네." },
+      { t: "d", who: "아멜리아", text: "그동안은 어디에 있었어?" },
+      { t: "n", text: "처음보는 여자의 등장과 그녀의 추궁에 다른 작성위원들은 당황했다." },
+      { t: "d", who: "park_suo", text: "누구시래요?" },
+      { t: "d", who: "kim_taeseong", text: "혹시…?" },
+      { t: "d", who: "아멜리아", text: "나는 아멜리아야." },
+      { t: "d", who: "아멜리아", text: "이곳 H사에서 아인군을 기다리고 있었어. 직업은 탐정이야." },
+      { t: "d", who: "yu_ain", text: "맞아." },
+      { t: "d", who: "아멜리아", text: "…매니저 선발전에 참가하려고 온거야?" },
+      { t: "d", who: "yu_ain", text: "맞아." },
+      { t: "d", who: "아멜리아", text: "매니저가 되려고?" },
+      { t: "d", who: "yu_ain", text: "그건... 아니야." },
+      { t: "d", who: "아멜리아", text: "…그럼 왜 참가하려고 하는 거야?" },
+      { t: "d", who: "yu_ain", text: "라거슈타트에서 그걸 원하니까..." },
+      { t: "d", who: "아멜리아", text: "…또 스스로 결정하기를 거부하는 거야?" },
+      { t: "d", who: "yu_ain", text: "...맞아." },
+      { t: "d", who: "아멜리아", text: "...그럼 나도 매니저 선발전에 참가할래." },
+      { t: "d", who: "lee_hanbeom", text: "매니저 선발전은 그렇게 참가할 수 있는 가벼운 행사가 아닙니다." },
+      { t: "d", who: "아멜리아", text: "아인군도 참가하는 거 아니야?" },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "아멜리아", text: "그럼 나도 할 수 있어." },
+      { t: "d", who: "kim_duhyeon", text: "아인군은…" },
+      { t: "n", text: "아인군이 두현군의 말을 끊었다." },
+      { t: "d", who: "yu_ain", text: "맞아, 네가 매니저 선발전에 참가하면 너도 나의 적이야." },
+      { t: "d", who: "아멜리아", text: "요, 바라던 대답이야." },
+      { t: "n", text: "아멜리아는 자신의 할말을 마치고는 자세를 휙 돌려서 참가 신청을 하러 갔다." },
+      { t: "d", who: "kim_duhyeon", text: "일단 확실한 건… 이곳에 우리에게 관심이 많은 사람들이 참 많다는 거야." },
+      { t: "n", text: "그리고 이번에는 낯익은 사람이 찾아왔다." },
+      { t: "d", who: "지와", text: "…" },
+      { t: "d", who: "kim_taeseong", text: "어…" },
+      { t: "d", who: "yu_ain", text: "안녕하세요." },
+      { t: "d", who: "지와", text: "지난 번에는 상황이 좋지 않았지만, 낮에 보니 좋구나." },
+      { t: "n", text: "지와의 뒤에는 지난 밤 보았던 짹G도 함께 서 있었다." },
+      { t: "d", who: "짹G", text: "무용한 자들입니다." },
+      { t: "d", who: "지와", text: "그럼에도, 아인군은 나의 후임들 중 하나인 걸." },
+      { t: "d", who: "지와", text: "하지만…" },
+      { t: "n", text: "지와는 노란테를 바라보았다." },
+      { t: "d", who: "지와", text: "라거슈타트는 엄연히… H사 외부의 집단이다." },
+      { t: "d", who: "manager", text: "그렇기는 하지만…" },
+      { t: "d", who: "lee_hanbeom", text: "필요에 의해 움직이는 것은 모두에게 당연한 일 아닌지요?" },
+      { t: "d", who: "지와", text: "당돌한 자가 있군." },
+      { t: "d", who: "지와", text: "나는 그저… B구역이 라거슈타트나 제2발톱이나 P사나. 다른 외부의 집단에 휘둘리지 않아야 한다고 생각할 뿐이다." },
+      { t: "d", who: "지와", text: "그러니…" },
+      { t: "d", who: "지와", text: "외부인들은 꺼져줬으면 좋겠을 뿐이야." },
+      { t: "cut", img: "assets/cut/지와의 영압.png" },   // 컷신 ② 덮음
+      { t: "n", text: "옥룡 지와의 압력이 라거슈타트 작성위원들을 덮쳤다." },   // 컷신 ② 「8장 지와의 압력」 — 이 줄 앞에서 덮고 «지와가 압력을 노란테에 집중했다» 뒤에 걷음
+      { t: "d", who: "yu_ain", text: "그럼 저는, 라거슈타트의 사람인가요, B구역의 사람인가요?" },
+      { t: "d", who: "지와", text: "그래, 너는 어떻게 생각하지?" },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "지와", text: "또 생각을 멈추었군." },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "manager", text: "적어도 지금 아인군의 담당은 나야." },
+      { t: "n", text: "지와가 압력을 노란테에 집중했다." },
+      { t: "cut" },   // 컷신 ② 걷음
+      { t: "d", who: "manager", text: "어… 일단 그렇다는 말이지…" },
+      { t: "d", who: "manager", text: "제가 무슨 말을 하겠습니ㄲ…" },
+      { t: "d", who: "lee_hanbeom", text: "그럼 매니저 선발전에 참가하실 계획인가요?" },
+      { t: "d", who: "지와", text: "그렇다." },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "yu_ain", text: "그럼… 전장에서 만나죠." },
+      { t: "d", who: "지와", text: "그렇게 나와야지." },
+      { t: "n", text: "지와는 만족스러운 웃음을 짓고는, 참가등록장을 나섰다." },
+      { t: "d", who: "kim_duhyeon", text: "어우 기빨려." },
+      { t: "d", who: "lee_hanbeom", text: "예상대로 길잡이의 개입은… 없군요." },
+      { t: "n", text: "한범군의 말대로 길잡이는 그저 단상 위에서 참가자들을 지켜보고 있을 뿐이었다." },
+      { t: "d", who: "park_suo", text: "이번에도 잘 모르겠는 일투성이네요." },
+      { t: "d", who: "lee_hanbeom", text: "차차, 알게되겠지요." },
+      { t: "n", text: "아인군은 참가등록을 마치고 참가등록장을 떠나는 아멜리아를 멀리서 지켜볼 뿐이었다." }
+    ]
+  },
+  {
+    id: "ch8_2", no: "8-2", title: "매니저 선발전", part: "ch8",
+    img: "assets/scene/한대기후 지역 폐쇄된 카페.jpg",          // 갈림길 화면 바탕
+    lead: "yu_ain", require: ["yu_ain"],
+    /* 카드 갈림길 — engine.js 의 routePick 머리말 */
+    route: {
+      per: 3,                      // 한 번에 보여 주는 카드 수
+      force: { id: 9, by: 3 },     // 9번(아멜리아 합류)은 세 번째 선택까지 반드시
+      refreshUntil: 6,             // 새로고침은 여섯 번째 선택까지 — 일곱 번째부터 치움
+      cards: [
+        { id: 1, name: "고드름이 자라있는 통로" },
+        { id: 2, name: "얼음 속에 갇혀있는 공룡" },
+        { id: 3, name: "망가진 전기울타리" },
+        { id: 4, name: "부서진 사원증" },
+        { id: 5, name: "폭발한 사무실" },
+        { id: 6, name: "낙서가 가득한 회의실" },
+        { id: 7, name: "폐쇄된 실험실" },
+        { id: 8, name: "틈이 보이는 공간" },
+        { id: 9, name: "놓쳐버린 돋보기" }
+      ]
+    },
+    scenes: [
+      { t: "n", text: "그리고 그 다음주가 되었다." },
+      { t: "n", text: "매니저 선발전은 H사 외곽의 버려진 한대기후 지역에서 진행되기로 하였고," },
+      { t: "n", text: "한대기후지역은 B구역의 다양한 공룡들 중에서도 한대기후에 적응한 다양한 공룡들이 사육되는 곳이었다." },
+      { t: "d", who: "kim_duhyeon", text: "매니저라면 그 모든 공룡과, 그 공룡을 사랑하는 회원들의 마음을 알아야 한다." },
+      { t: "d", who: "park_suo", text: "라는거지." },
+      { t: "d", who: "lee_hanbeom", text: "…이상한 부분이 있군요." },
+      { t: "d", who: "chu_minsu", text: "…그렇다." },
+      { t: "d", who: "manager", text: "뭔데?" },
+      { t: "d", who: "lee_hanbeom", text: "이거 어쩌면…" },
+      { t: "d", who: "lee_hanbeom", text: "아인군만의 차례는 아닌 것 같군요." },
+      { t: "n", text: "우리는 정해진 진입지점에서, 매니저 선발전이 진행되는 한대기후 지역으로 걸어들어갔다." },
+      { t: "place", name: "한대기후 지역 · 폐쇄된 카페", wx: "snow", img: "assets/scene/한대기후 지역 폐쇄된 카페.jpg" },
+      { t: "d", who: "kim_haju", text: "이곳은 폐쇄된 카페야. 폐허를 돌아다니면서 어디로 갈지 선택하면서 진행하면 돼." },
+      { t: "d", who: "kim_haju", text: "그리고 마지막에 남는 한 팀이. 매니저가 되는 거야." },
+      { t: "party", text: "매니저 선발전에 들어선다 — 편성을 손보십시오. 유아인은 반드시 서야 합니다." },   // 저장 지점 ① 진입 직전
+      { t: "routePick", until: 3 },
+
+      /* ── A 전투 — 북극티렉스 ── */
+      { t: "place", name: "설원", wx: "snow", img: "assets/scene/설원.jpg" },
+      { t: "d", who: "북극티렉스", text: "크오오오오!" },
+      { t: "n", text: "길을 빠져나오자, 하얀 눈 밭 위에 고고하게 서 있는 하얀 공룡의 모습이 눈에 들어온다." },
+      { t: "n", text: "주변에는 매니저 선발전에 참가했던 다양한 차림새의, 각 지역의 공룡세계에서 온 방문객들이 바닥에 누워있다." },
+      { t: "d", who: "lee_hanbeom", text: "이미 많은 수가 당했군요." },
+      { t: "d", who: "kim_duhyeon", text: "다 경쟁자인데." },
+      { t: "d", who: "kim_taeseong", text: "우리의 우승이 더 확실해진 것이죠." },
+      { t: "d", who: "kim_haju", text: "뭐 맞는 판단이긴 한데. 저걸 해결해야 되는 거 아니야?" },
+      { t: "d", who: "kim_haju", text: "저거 이쪽으로 오잖아." },
+      { t: "battle", foe: "arctic_trex" },
+      { t: "d", who: "park_suo", text: "해치웠나…" },
+      { t: "d", who: "cha_minjun", text: "그런 말을 하면 안돼." },
+      { t: "d", who: "아멜리아", text: "그러면... 컷!" },          // 북극티렉스 뒤 세 줄(사용자 지침 2026-11-20)
+      { t: "d", who: "manager", text: "...계속 나아가자." },
+      { t: "d", who: "manager", text: "갈길이 멀어." },
+      { t: "party", text: "숨을 고른다 — 편성을 손보십시오. 유아인은 반드시 서야 합니다." },                  // 저장 지점 ② A 뒤
+      { t: "routePick", until: 6 },
+
+      /* ── B 전투 — 뒤틀린 부매니저 쥬공티렉스 ── */
+      { t: "place", name: "설원 · 회색으로 물든 자리", wx: "snow", img: "assets/scene/설원 회색으로 물든 자리.jpg" },
+      { t: "d", who: "쥬공티렉스", text: "…크르륵." },
+      { t: "n", text: "길을 빠져나오자. 노란 몸체에 갈색 줄무늬를 가진, 티라노사우루스가 한번 더 나타났다." },
+      { t: "n", text: "검은 기운이 공룡을 둘러싸고 있었고, 그 위압에 주변까지 회색으로 물드는 지경이었다." },
+      { t: "d", who: "lee_hanbeom", text: "완전히 변해 버렸나." },
+      { t: "d", who: "chu_minsu", text: "징표의 주인이자… 이 설원을 지키던 부매니저야." },
+      { t: "d", who: "lee_hanbeom", text: "적어도 그때는 이러지 않았는데." },   // 쥬공티렉스 앞 다섯 줄(사용자 지침 2026-11-20)
+      { t: "d", who: "chu_minsu", text: "책임감을 느끼나?" },
+      { t: "d", who: "lee_hanbeom", text: "조금은..." },
+      { t: "d", who: "kim_taeseong", text: "저거... 이쪽으로 오는데요?" },
+      { t: "d", who: "manager", text: "준비해." },
+      { t: "battle", foe: "jugong_trex" },
+      { t: "d", who: "kim_taeseong", text: "해치웠네요. 악당." },   // 쥬공티렉스 뒤 세 줄(사용자 지침 2026-11-20)
+      { t: "d", who: "lee_hanbeom", text: "악당이라기보단..." },
+      { t: "d", who: "chu_minsu", text: "악당이 된 거지." },
+      { t: "d", who: "yu_ain", text: "쥬공티렉스, 이분이 나빴던 건가요?" },
+      { t: "d", who: "yu_ain", text: "아니면, 쥬공티렉스님을 둘러싼 그 외부의 모든 개입들이 쥬공티렉스님을 이렇게 만든 건가요?" },
+      { t: "d", who: "lee_hanbeom", text: "내 생각에는… 그냥 우리는 너무 어렸던 거야." },
+      { t: "d", who: "chu_minsu", text: "누구라도 그렇게 될 수 있었던 것이고. 또 그렇게 행동할 수 있었다." },
+      { t: "d", who: "lee_hanbeom", text: "이 질문은… 길잡이에게 다시 물어봐야겠지." },
+      { t: "d", who: "manager", text: "더, 나아가자." },
+      { t: "party", text: "숨을 고른다 — 편성을 손보십시오. 유아인은 반드시 서야 합니다." },                  // 저장 지점 ③ B 뒤
+      { t: "routePick", until: 9 },
+      /* 아멜리아는 8-3 머리에서 조력자로는 빠집니다(원작). 다음 부분을 열 때 조력자가 조용히 걷히므로 그대로 둡니다 —
+       * 작별 대사 · «물러난다» 줄은 내지 않습니다(사용자 지침 2026-11-19 — 8-2 가 끝나는 자리라 사라져도 어색하지 않음). */
+      { t: "routeDone" },
+
+      /* ── 카드 몸통 — routePick 이 고른 카드의 머리로 건너뛰고, 끝에서 돌아옵니다 ── */
+      { t: "routeCard", id: 1 },
+      { t: "place", name: "고드름이 자라있는 통로", img: "assets/scene/갈림길 고드름이 자라있는 통로.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "고드름이 자라있는 동굴로 들어왔다." },
+      { t: "d", who: "cha_minjun", text: "우와아…" },
+      { t: "d", who: "kim_taeseong", text: "고드름이 너무 예뻐요." },
+      { t: "d", who: "chu_minsu", text: "조심하는 게 좋아." },
+      { t: "d", who: "seong_siyun", text: "이 고드름은 굉장히 예쁘네요." },
+      { t: "d", who: "manager", text: "챙겨두자. 도움이 될 것 같아." },
+      { t: "perk", id: "ch8_ice" },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 2 },
+      { t: "place", name: "얼음 속에 갇혀있는 공룡", img: "assets/scene/갈림길 얼음 속에 갇혀있는 공룡.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "벽을 이루고 있는 빙하가 너무 투명한 나머지 그 안에 얼어있는 공룡이 보인다." },
+      { t: "d", who: "park_suo", text: "이 공룡은 얼마나 오래된 걸까요?" },
+      { t: "d", who: "lee_hanbeom", text: "…." },
+      { t: "d", who: "chu_minsu", text: "아마 5년 정도 되었을 거다." },
+      { t: "d", who: "lee_hanbeom", text: "그렇겠지." },
+      { t: "d", who: "chu_minsu", text: "수오군, 아주 먼 옛날 이 폐허에는 어린 공룡 사랑꾼들이 모여서 지내던 카페가 있었다." },
+      { t: "d", who: "chu_minsu", text: "지금은 이렇게 되었지만." },
+      { t: "d", who: "park_suo", text: "그럼 왜 이렇게 된 건가요?" },
+      { t: "d", who: "lee_hanbeom", text: "네가 진실을 알면 어떤 반응일지 궁금하네…" },
+      { t: "d", who: "chu_minsu", text: "그렇기에 더더욱 기억해야지. 아멸일. 그 참극을." },
+      { t: "d", who: "yu_ain", text: "그건 저도 처음 듣는 이야기네요." },
+      { t: "d", who: "kim_haju", text: "나도 처음 듣는데?" },
+      { t: "d", who: "cha_minjun", text: "나도!" },
+      { t: "d", who: "lee_hanbeom", text: "왜 여기에서 매니저 선발전을 하는 거지?" },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 3 },
+      { t: "place", name: "망가진 전기울타리", wx: "snow", img: "assets/scene/갈림길 망가진 전기울타리.jpg" },   // 실외 — 눈
+      { t: "n", text: "수십미터가 넘게 이어지는 킨 철제 울타리가 여기저기 부서지고 녹이 슨 채로 망가져있다." },
+      { t: "d", who: "cha_minjun", text: "지금은 전기가 안 들어오겠지?" },
+      { t: "d", who: "song_hamin", text: "그럼에도 조심하는 게 좋을걸…" },
+      { t: "d", who: "manager", text: "멀리 가지 마…" },
+      { t: "d", who: "kim_taeseong", text: "뭘 가두고 있었던 걸까요?" },
+      { t: "d", who: "lee_hanbeom", text: "이미 만났거나… 곧 만나게 되겠지." },
+      { t: "d", who: "manager", text: "일단 잠시 쉬고 이동할까?" },
+      { t: "rest", text: "관리력과 작성위원들의 체력이 모두 회복되었다." },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 4 },
+      { t: "place", name: "부서진 사원증", img: "assets/scene/갈림길 부서진 사원증.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "폐허 속에 어두운 방 안에서 작은 손전등이 어둠을 밝혔다." },
+      { t: "d", who: "kim_haju", text: "여기 뭐가 있겠어요?" },
+      { t: "d", who: "manager", text: "그래도 살펴보는 것이 좋지 않을까?" },
+      { t: "d", who: "seong_siyun", text: "여기 뭐가 있네요." },
+      { t: "n", text: "시윤군이 바닥에서 작은 카드키를 줍는다." },
+      { t: "d", who: "chu_minsu", text: "쥬공티렉스 녀석의 것이군." },
+      { t: "d", who: "lee_hanbeom", text: "과거 이 지역에 번성했던 카페의 부매니저… 역할을 했던 녀석이지." },
+      { t: "d", who: "kim_haju", text: "그런데 그런 게 왜 여기 떨어져 있지?" },
+      { t: "perk", id: "ch8_badge" },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 5 },
+      { t: "place", name: "폭발한 사무실", img: "assets/scene/갈림길 폭발한 사무실.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "벽면에 ICE AGE라고 큼지막하게 적혀있는 사무실." },
+      { t: "d", who: "kim_taeseong", text: "아이스에이지?" },
+      { t: "d", who: "chu_minsu", text: "여기에 있던 카페의 이름이다." },
+      { t: "d", who: "seong_siyun", text: "큰 폭발이 있었던 모양이네요." },
+      { t: "d", who: "chu_minsu", text: "주요한 공격은 잠입, 투표조작, 짤 테러 정도의 형태로 이루어졌다." },
+      { t: "d", who: "seong_siyun", text: "누가…요?" },
+      { t: "d", who: "lee_hanbeom", text: "카타프락토이." },
+      { t: "d", who: "kim_duhyeon", text: "카타프락토이…?" },
+      { t: "d", who: "lee_hanbeom", text: "…그 당시 베르렐리우스가 가지고 있던 수많은 이름들 중 하나야." },
+      { t: "d", who: "seong_siyun", text: "그럼… 길잡이 선생님이… 이 카페를 멸망시켰다는 거에요?" },
+      { t: "d", who: "cha_minjun", text: "에?" },
+      { t: "d", who: "chu_minsu", text: "그렇다." },
+      { t: "d", who: "seong_siyun", text: "여기는 종이더미가 있네요." },
+      { t: "n", text: "한범군은 종이더미를 뒤지기 시작했다." },
+      { t: "d", who: "chu_minsu", text: "이 종이더미는… 투표용지군." },
+      { t: "d", who: "lee_hanbeom", text: "이 안에…" },
+      { t: "d", who: "chu_minsu", text: "그렇겠지." },
+      { t: "n", text: "한범군은 ’카탁프락토이’라는 이름이 적힌 투표용지를 찾았다." },
+      { t: "perk", id: "ch8_ballot" },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 6 },
+      { t: "place", name: "낙서가 가득한 회의실", img: "assets/scene/갈림길 낙서가 가득한 회의실.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "불꺼진 회의실로 걸어들어왔다." },
+      { t: "d", who: "cha_minjun", text: "불은… 안 들어오는 건가?" },
+      { t: "d", who: "kim_duhyeon", text: "불이 없다고 무서워하는 건 아니지?" },
+      { t: "d", who: "cha_minjun", text: "무섭지 그럼!" },
+      { t: "d", who: "chu_minsu", text: "이정도는…" },
+      { t: "n", text: "벽면에 있는 낙서들은 기껏해야 중학교 1학년 정도 수준의 조잡한 낙서들이었다." },
+      { t: "n", text: "티라노사우루스 길이 15미터…" },
+      { t: "d", who: "kim_taeseong", text: "가장 큰 티라노사우루스 표본에 대한 사람들의 왜곡이 가득해요." },
+      { t: "d", who: "lee_hanbeom", text: "태성군, 모든 사람이 태성군같이 공룡 덕후로 사는 건 아니에요." },
+      { t: "d", who: "kim_taeseong", text: "저 공룡덕후 아닌뒈요." },
+      { t: "d", who: "chu_minsu", text: "그래라." },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 7 },
+      { t: "place", name: "폐쇄된 실험실", img: "assets/scene/갈림길 폐쇄된 실험실.jpg" },   // 실내 — 눈 걷힘
+      { t: "battle", foe: "pyroraptor" },
+      { t: "d", who: "kim_duhyeon", text: "이런 귀찮은 게 계속 튀어나오는 거야?" },
+      { t: "d", who: "kim_haju", text: "운이 없었다고 생각하자." },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 8 },
+      { t: "place", name: "틈이 보이는 공간", img: "assets/scene/갈림길 틈이 보이는 공간.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "얼음으로 뒤덮힌 공간 사이로 좁은 틈이 보인다." },
+      { t: "d", who: "kim_taeseong", text: "체구가 작은 사람은 이 안에 숨을 수도 있겠어요." },
+      { t: "d", who: "chu_minsu", text: "혹은 이미 숨어있거나." },
+      { t: "n", text: "민수군이 두 팔로 틈을 벌렸다." },
+      { t: "n", text: "그 안에는 어린 아이가 벌벌 추위와 공포에 벌벌 떨고 있었다." },
+      { t: "d", who: "chu_minsu", text: "너는 누구지?" },
+      { t: "d", who: "고대동물대탐험", text: "저는… 고대동물대탐험이에요." },
+      { t: "d", who: "lee_sojeong", text: "고.동.탐." },
+      { t: "n", text: "소정양이 웅얼거렸다." },
+      { t: "d", who: "고대동물대탐험", text: "이런 것인 줄 몰랐어요. 저는 그냥 대장 할 수 있다고 해서…" },
+      { t: "d", who: "고대동물대탐험", text: "그냥 추운 지역에서 대결을 한다는 이야기만 들었는데…" },
+      { t: "d", who: "kim_duhyeon", text: "이 녀석 P사에 매일 이상한 글을 쓰던 녀석이잖아." },
+      { t: "d", who: "kim_taeseong", text: "왜곡된 정보로 글을 쓰고, 이상한 그림을 넣었었어요." },
+      { t: "d", who: "kim_taeseong", text: "고생물학의 발전을…" },
+      { t: "d", who: "lee_hanbeom", text: "…." },
+      { t: "d", who: "kim_taeseong", text: "이런 녀석은 여기서 처리해야돼요." },
+      { t: "d", who: "lee_hanbeom", text: "…아뇨." },
+      { t: "d", who: "kim_duhyeon", text: "이렇게 어린 녀석인 줄 몰랐어." },
+      { t: "d", who: "lee_hanbeom", text: "태성군, 누구나 이런 어린시절이 있어요." },
+      { t: "d", who: "chu_minsu", text: "우리도 그랬고." },
+      { t: "d", who: "kim_taeseong", text: "그렇지만…" },
+      { t: "d", who: "manager", text: "일단 저기서 꺼내주고, 따뜻한 물을 줘." },
+      { t: "d", who: "manager", text: "같이 이동하자." },
+      { t: "d", who: "고대동물대탐험", text: "감사합니다." },
+      { t: "routeCardEnd" },
+
+      { t: "routeCard", id: 9 },
+      { t: "place", name: "놓쳐버린 돋보기", img: "assets/scene/갈림길 놓쳐버린 돋보기.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "아인군이 바닥에서 돋보기를 줍는다." },
+      { t: "d", who: "yu_ain", text: "이 돋보기는…" },
+      { t: "n", text: "어둠 속에서 붉은 눈동자가 빠르게 움직인다." },
+      { t: "battle", foe: "pyroraptor" },
+      { t: "d", who: "yu_ain", text: "여기 있었구나." },
+      { t: "d", who: "아멜리아", text: "그래." },
+      { t: "d", who: "lee_hanbeom", text: "무슨 일이 있었던 거죠?" },
+      { t: "d", who: "아멜리아", text: "습격을 당했어." },
+      { t: "d", who: "yu_ain", text: "…위험하다고 했잖아…" },
+      { t: "d", who: "아멜리아", text: "이정도는 혼자서도 할 수 있어." },
+      { t: "d", who: "lee_hanbeom", text: "혼자서 해결할 수 있는 영역이 아닙니다." },
+      { t: "d", who: "아멜리아", text: "아니야." },
+      { t: "d", who: "yu_ain", text: "그래, 차라리…" },
+      { t: "d", who: "아멜리아", text: "그래, 동행하자. 그렇게 말하려고 했지?" },
+      { t: "d", who: "manager", text: "그렇게 하자." },
+      { t: "d", who: "yu_ain", text: "그렇게 정해도 괜찮아요?" },
+      { t: "d", who: "lee_hanbeom", text: "큰 문제 없을 겁니다. 애초에 우리 목표는 1등도 아니었고…" },
+      { t: "d", who: "lee_hanbeom", text: "이쪽도 1등을 하려고 온 것 같진 않네요." },
+      { t: "ally", join: "아멜리아" },
+      { t: "n", text: "아멜리아가 조력자로 함께하기로 했다. 아멜리아가 쓰러지면 전투에서도 패배하게 된다." },
+      { t: "routeCardEnd" }
+    ]
+  },
+  {
+    id: "ch8_3", no: "8-3", title: "심판의 방", part: "ch8", skip: true,
+    img: "assets/scene/한대기후 지역 폐허의 외곽.jpg",          // 8-3 첫 장소
+    lead: "yu_ain", require: ["yu_ain"],
+    scenes: [
+      /* 8-2 에서 얻을 수 있는 특전은 전부 지닌 것으로 칩니다(원작) — 부분이 바뀌면 특전이 비므로 다시 줍니다.
+       * 아멜리아는 8-2 끝에서 조력자로는 물러났고, 여기서는 이야기에만 나옵니다. */
+      { t: "perk", ids: ["ch8_ice", "ch8_badge", "ch8_ballot"] },
+      { t: "place", name: "한대기후 지역 · 폐허의 외곽", wx: "snow", img: "assets/scene/한대기후 지역 폐허의 외곽.jpg" },
+      { t: "n", text: "폐허의 외곽을 전부 돌 때쯤, 안내방송이 나왔다." },
+      { t: "d", who: "안내방송", text: "남은 참가자의 수가 10명 이하입니다." },
+      { t: "d", who: "안내방송", text: "참가자 분들은 중앙, 심판의 방으로 모여주세요." },
+      { t: "d", who: "cha_minjun", text: "이제 10명도 안 남았다고?" },
+      { t: "d", who: "lee_hanbeom", text: "시간이 꽤 지났으니, 때가 되었죠." },
+      { t: "d", who: "아멜리아", text: "여기 두 명 있고, 그때 봤던 옥룡 지와라는 사람하고, 디아라는 사람은 다 살아남았을 것 같네." },
+      { t: "d", who: "yu_ain", text: "일단 남아있는 사람들은 전부 강할 거에요." },
+      { t: "d", who: "cha_minjun", text: "그 사람… 다시 봐야된다고?" },
+      { t: "d", who: "yu_ain", text: "그리고 아마도 싸워야겠지." },
+      { t: "d", who: "manager", text: "우리 목표는 2등이니까, 지와라는 분을 꼭 이겨야하지는 않을 거야…" },
+      { t: "place", name: "심판의 방", img: "assets/scene/심판의 방.jpg" },   // 실내 — 눈 걷힘
+      { t: "n", text: "중앙에 위치한 심판의 방에 도착해 문을 열었을 때는, 다른 모든 참가자들은 이미 탈락해 있었다." },
+      { t: "d", who: "디아", text: "솔다토들로는 안되는 건가…" },
+      { t: "d", who: "지와", text: "카포를 데려왔어도, 쉽지는 않았을 거다." },
+      { t: "d", who: "디아", text: "조력자의 수준은 카포 미만으로 제한해놓고, 참가자는 특색이어도 제한이 없다는 게 말이 돼?" },
+      { t: "d", who: "지와", text: "내가 특색이 아닌 건 그냥 둔다 치고… 그것은 당연한 처사다." },
+      { t: "d", who: "지와", text: "네게 B구역은 뭐지?" },
+      { t: "d", who: "지와", text: "네 E.G.O는 무엇이냐는 말이야. 네가 이 선발전에서 이긴다면, 너는 매니저가 되어야 해." },
+      { t: "d", who: "지와", text: "수많은 회원들이 너를 바라보고 너의 관리를 받는다." },
+      { t: "d", who: "지와", text: "그냥 너의 명예와 자아를 표출하기 위한 수단이라면, 이 선발전은 네게 마무런 가치가 없다." },
+      { t: "cut", img: "assets/cut/디아에게 겨누는 오망.png" },   // 컷신 ③ 덮음
+      { t: "n", text: "지와는 자신이 들고 있던 두꺼운 봉에 노란 망을 두르기 시작했다." },   // 컷신 ③ 「8장 디아를 겨눈 오망」 — 이 줄 앞에서 덮고 «쉬어라.» 뒤에 걷음
+      { t: "n", text: "망은 총 5개." },
+      { t: "d", who: "디아", text: "아니… 이건…" },
+      { t: "d", who: "지와", text: "어차피… 활동정지 기간이 지나면 살아나지 않나?" },
+      { t: "d", who: "디아", text: "잠깐만!!!!!!!!!!!", shake: true },
+      { t: "d", who: "디아", text: "이런걸 맞았다가는 5년은 있어야 다시 살아날 거라고!!!!!!" },
+      { t: "d", who: "지와", text: "쉬어라." },
+      { t: "cut" },   // 컷신 ③ 걷음 — 다음 줄의 흔들림은 무대에서
+      { t: "n", text: "디아가 있던 자리에는 아무것도 남지 않았다.", shake: "hard" },
+      { t: "n", text: "활동정지가 끝나면 다시 살아난다고는 하지만 5년은 걸릴 것이라는 말이 틀리지는 않았음을 바로 알 수 있었다." },
+      { t: "d", who: "지와", text: "그래… 답은 준비되었나?" },
+      { t: "d", who: "지와", text: "유아인…" },
+      { t: "n", text: "옥룡 지와는 자신이 들고 있던 봉을 아인군에게 겨누었다." },
+      { t: "d", who: "지와", text: "B구역에 필요한 것은… 무엇인가." },
+      { t: "n", text: "옥룡 지와의 물음에 답하라.", box: true },   // 상자(사용자 지침 2026-11-19). «30차례를 버텨내야 한다» 는 뺌(2026-11-20 — 30턴은 길지 않아 알릴 것 없음)
+      { t: "party", text: "편성을 손보십시오. 유아인은 반드시 서야 합니다." },   // 바로 위 상자와 겹치는 머리는 뺐습니다(사용자 지침 2026-11-19)
+
+      /* ── 지와 · 1단계 (1 ~ 10턴) — 3턴마다 강타 ──
+       *  세 단계 모두 «방어 부수기 광역»(버티기 깨기 + 여파)을 들쭉날쭉한 턴에 섞습니다 — 내내 방어만 해서는
+       *  못 버티게(사용자 지침 2026-10-30). 턴은 단계마다 다르게, 다른 기믹과 겹치지 않는 자리로:
+       *  1단계 4 · 9(9 는 강타 자리를 가져감) · 2단계 3 · 7(선공 강타 2 · 4 · 6 · 8 사이) · 3단계 1 · 7(광역 짝수 · 반격 5 사이).
+       *  웅크린 사람은 공격 ×1.5 를 경감 없이, 서 있던 사람도 그 60%(breakSplash 0.6)를 맞습니다.
+       *  ⚠ 아래 셈은 «공격 50 · 여파 0.3» 일 때의 것입니다 — 둘 다 올랐으니(공격 80 · 여파 0.6,
+       *  사용자 지침 2026-11-21) 그대로 믿지 마십시오. 실제 보관함으로 다시 재야 합니다.
+       *    옛 기록 — 봇(동기화 최대 · 회복 안 씀)이 내내 방어하면 22턴, 경고를 못 읽으면 12턴에 전멸.
+       *    경고 턴에만 방어를 풀면 17턴. 0.5 로 올려 보니 11 · 14 라 그때는 «경고를 읽은 값» 이 작다고 보아 0.3 으로 두었습니다. ── */
+      { t: "battle", foe: "jiwa", noWinHeal: true,
+        hint: "쓰러뜨릴 수 있는 상대가 아니다.",   // «30차례를 버텨라» 는 뺌 — 턴 수는 알리지 않습니다(사용자 지침 2026-11-20)
+        breakAt: [4, 9], breakSplash: 0.6,
+        breakLine: "등 뒤에 숨어서 내놓는 답은, 답이 아니다.",
+        breakWarn: "봉 끝을 바닥에 곧게 세운다. 웅크린 자리부터 내리칠 기세다.",
+        /* 10턴째 적 차례까지 마치고, 지와는 무대에 선 채로 대화로 넘어갑니다(사용자 지침 2026-11-19 — 끊겨 보이던 것) */
+        persuade: { turns: 10, foeLast: true, keepFoe: true, endText: "지와가 봉을 거두고, 아인군을 내려다보았다." } },
+      { t: "d", who: "지와", text: "B구역에 필요한 것은 무엇인가." },
+      { t: "d", who: "yu_ain", text: "…친밀함이에요." },
+      { t: "d", who: "yu_ain", text: "카페라는 곳은 사람들과 사람들이 만나는 곳." },
+      { t: "d", who: "yu_ain", text: "같이 있는 것만으로도 따뜻하고, 공룡을 좋아하던 사람들이 한데 뭉치는 곳어야 해요." },
+      { t: "d", who: "지와", text: "과거 길잡이도… 그렇게 이야기했었지." },
+      { t: "d", who: "지와", text: "하지만 그랬기에, 길잡이는 자신만의 집단을 만들어 카페를 망하게 할 뻔했다." },
+      { t: "d", who: "지와", text: "친목질…" },
+      { t: "d", who: "지와", text: "그것은 카페를 망하게 한다." },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "지와", text: "진실된 답을 들으려면, 더 몰아쳐야만 하겠구니." },
+      { t: "d", who: "지와", text: "짹G여, 오늘만큼은 너의 방법을 빌려야겠다." },
+      { t: "d", who: "짹G", text: "충." },
+
+      /* ── 지와 · 2단계 (11 ~ 20턴) — 짹G 의 원호. 강타 대신 2턴마다 선공 강타, 10턴째 선공 광역.
+       *     공격은 52 였습니다(흑수 구 47 보다 조금 높게, 원작). 1 · 3단계와 나란히 80 으로 올렸습니다
+       *     (사용자 지침 2026-11-21 — «세 페이즈 내내 80»). 바탕값과 같은 수지만, 이 전투만 못 박아 두려고
+       *     줄은 그대로 둡니다 — FOES.jiwa 를 나중에 또 고쳐도 2단계가 따라 흔들리지 않습니다. ── */
+      { t: "battle", foe: "jiwa", keepManage: true, noWinHeal: true, turnBase: 10,
+        resume: true, resumeLine: "▶ 지와가 다시 봉을 겨눈다. 짹G가 그 곁에 선다!",
+        sideImg: "assets/portrait/짹G.png", sideName: "짹G",
+        /* 2단계 — 평소에는 가운데 기본 초상 · 오른쪽 짹G 기본 초상. 특수 패턴(선공 강타 · 10턴 선공 광역 · 방어 부수기)
+         * 에서만 가운데가 «명령», 오른쪽 짹G 가 «속공» 으로 함께 바뀝니다(sideActImg — engine.js, 사용자 지침 2026-11-20). */
+        firstImg: "assets/enemy/옥룡 지와(명령).png",
+        aoeImg: "assets/enemy/옥룡 지와(명령).png",
+        breakImg: "assets/enemy/옥룡 지와(명령).png",
+        sideActImg: "assets/enemy/짹G(선공).png",
+        atk: 80, noHeavy: true,
+        firstEvery: 2, firstHeavy: true, firstLine: "베어라, 구.",
+        firstWarn: "짹G를 앞세워 몸을 낮춘다.  이쪽보다 먼저, 크게 그을 자세다.",
+        firstAoeEvery: 10,
+        firstAoeLine: "의미 없다 두려워하지 말아라. 그것은 네 생각을 말한 뒤에 해도 늦지 않으니.",
+        firstAoeWarn: "짹G와 함께 자세를 잡는다.  판 전체를 먼저 휩쓸 기세다.",
+        breakAt: [3, 7], breakSplash: 0.6,
+        breakLine: "불가위하. 막아내지는... 못하지.",   // 사용자 문구 그대로(2026-11-20)
+        breakWarn: "짹G가 칼끝을 웅크린 자리로 돌린다.  막아선 곳부터 쪼갤 기세다.",
+        persuade: { turns: 10, foeLast: true, keepFoe: true, endText: "짹G가 칼을 거두고 물러섰다. 지와는 봉을 짚은 채 다시 입을 열었다." } },
+      { t: "d", who: "지와", text: "다시 묻겠다. B구역에 필요한 것은 무엇인가?" },
+      { t: "d", who: "yu_ain", text: "…엄격함이에요." },
+      { t: "d", who: "yu_ain", text: "엄격하지 못한 조직은 스스로를 멸하고." },
+      { t: "d", who: "yu_ain", text: "예외를 두며 상벌을 달리하면 결국에는 근간이 무너지죠." },
+      { t: "d", who: "지와", text: "그 또한… 과거 길잡이의 대답과 같구나." },
+      { t: "d", who: "지와", text: "그 엄격함 때문에, 길잡이는 이 설원에 있던 카페 하나를 망가뜨렸지." },
+      { t: "d", who: "지와", text: "그것은 그저 어린 이들의 모임일 뿐이었는데." },
+      { t: "d", who: "지와", text: "어쩌면 중요한 이를 실족시켰을 수도 있겠지." },
+      { t: "d", who: "지와", text: "B구역을 지키고 이들을 이끄는 것은… 무엇을 위한 것인가?" },
+
+      /* ── 지와 · 3단계 (21 ~ 30턴) — 2턴마다 광역 · 5턴마다 반격(10턴째는 광역이 이김) ── */
+      { t: "battle", foe: "jiwa", keepManage: true, noWinHeal: true, turnBase: 20,
+        resume: true, resumeLine: "▶ 지와의 봉에 두른 노란 망이 일제히 울린다!",
+        noHeavy: true,
+        aoeEvery: 2,
+        aoeLine: "중한 싸움에 임한다면, 너희 또한 되돌려질 목숨이라 해도 그 생을 걸어보거라.",
+        aoeWarn: "봉에 두른 노란 망을 울린다.  광역 공격을 준비하는 듯하다.",
+        counterEvery: 5,
+        counterWarn: "봉을 거둔다. 섣불리 치면 그대로 되받아칠 것 같다.",
+        breakAt: [1, 7], breakSplash: 0.6,
+        breakLine: "물러서지 말거라. 그 생을 걸어보라 하지 않았느냐.",
+        breakWarn: "웅크린 자리를 향해 판 전체를 내리칠 것 같다.",
+        persuade: { turns: 10, foeLast: true } },   // 10턴째 광역까지 맞고 끝남(마지막 턴 적 차례까지)
+      { t: "n", text: "작성위원들은 모두 지쳐있고, 관리력은 거의 바닥났다." },
+      { t: "n", text: "그리고 지와가 다시 한번 물었다." },
+      { t: "d", who: "지와", text: "다시 묻겠다, B구역에 필요한 것은 무엇인가?" },
+      { t: "d", who: "yu_ain", text: "상냥함…이에요." },
+      { t: "d", who: "yu_ain", text: "…이 길, 매니저 선발전이 펼쳐진 아이스 에이지… 길잡이의 과오를 통해 과거를 돌아보게 하는 공간이에요." },
+      { t: "d", who: "yu_ain", text: "친밀함으로 사람을 가까이했던 길잡이는, 또 자신의 친밀함으로 카페의 위기를 보았고." },
+      { t: "d", who: "yu_ain", text: "엄격함으로 사람을 멀리했던 길잡이는, 또 자신의 엄격함으로 어린 아이들의 놀이터를 짓밟고, 그것을 옳은 것으로 믿었어요." },
+      { t: "d", who: "yu_ain", text: "하지만…" },
+      { t: "d", who: "지와", text: "그래." },
+      { t: "d", who: "yu_ain", text: "우리에게 필요한 건 친밀함도 엄격함도 아니에요." },
+      { t: "d", who: "yu_ain", text: "그냥… 공룡을 좋아하는 사람들에게 이야기할 자리를 주는… 상냥함이에요." },
+      { t: "d", who: "고대동물대탐험", text: "…!" },
+      { t: "d", who: "지와", text: "그래 그걸로 되었다." },
+      { t: "n", text: "옥룡 지와는 만족스러운듯 살며시 웃었다." },
+      { t: "d", who: "지와", text: "나는 기권하겠다." },
+      { t: "n", text: "눈치를 보던 사람도 한마디 거들었다." },
+      { t: "d", who: "고대동물대탐험", text: "…..저도요." },
+      { t: "d", who: "아멜리아", text: "…" },
+      { t: "n", text: "지와는 출구를 향해 자신의 충신과 함께 걸어나갔고." },
+      { t: "n", text: "고대동물대탐험도 눈치를 보며 우리에게 손을 흔들고는 그 뒤를 쫓았다." },
+      { t: "d", who: "yu_ain", text: "끝인가?" },
+      { t: "d", who: "kim_haju", text: "그럼 우리는… 아멜리아에게 1등을 양보하고 일을 마무리하자." },
+      { t: "d", who: "yu_ain", text: "하지만…" },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "kim_haju", text: "왜? 매니저를 하고 싶은 건… 아니잖아?" },
+      { t: "d", who: "아멜리아", text: "잠깐…" },
+      { t: "d", who: "yu_ain", text: "…기권하겠습니다." },
+      { t: "dark", text: "불이 꺼졌다." }
+    ]
+  },
+  {
+    id: "ch8_4", no: "8-4", title: "승계", part: "ch8", skip: true,
+    img: "assets/scene/H사 전경.jpg",          // 장 그림 — 첫 장소 전의 머리말 · 장 목록은 H사 전경으로
+    lead: "yu_ain", require: ["yu_ain"],
+    scenes: [
+      { t: "n", text: "매니저 선발전은 아멜리아의 우승으로 마무리되었고, 라거슈타트는 슬슬 떠날 채비를 하고 있었다." },
+      { t: "d", who: "lee_hanbeom", text: "H사의 흑수들이 오후중으로 황금교본을 인계해주기로 했습니다." },
+      { t: "d", who: "manager", text: "잘됐다. 앞으로도 이렇게만…" },
+      { t: "d", who: "yu_ain", text: "잘 된 것이겠죠?" },
+      { t: "d", who: "manager", text: "네 대답은 훌륭했어. 지와님도 네 생각을 인정해주었잖아." },
+      { t: "d", who: "yu_ain", text: "아마도…" },
+      { t: "d", who: "kim_haju", text: "아멜리아는 매니저 승계를 위해 매니저실로 갔어." },
+      { t: "d", who: "yu_ain", text: "인사를 하지 못하는 건 아쉽네요." },
+      { t: "d", who: "지와", text: "…일이 좀 틀어진 것 같군." },
+      { t: "d", who: "manager", text: "지와님??" },
+      { t: "d", who: "지와", text: "문제가 있다… 제2발톱이 움직이기 시작했어." },
+      { t: "d", who: "지와", text: "디아, 그 놈이 자신이 패배할 경우 제2발톱에게 매니저 승계가 진행되는 동안 B구역을 뒤집어 놓을 것을 명령한 모양이야." },
+      { t: "d", who: "yu_ain", text: "썩어나는 돈을… 썩어빠진 방법으로 쓰는군요." },
+      { t: "d", who: "지와", text: "B구역을 좀 도와줄 수 있나…" },
+      { t: "d", who: "manager", text: "…그래야지." },
+      { t: "d", who: "manager", text: "가자." },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "n", text: "지와는 입구로 들어올 제2발톱 카포 콰트로, 이창수를 막으러 갔고." },
+      { t: "n", text: "우리는…" },
+      { t: "place", name: "H사 · 매니저실 입구", img: "assets/scene/H사 매니저실 입구.jpg" },
+      /* 이창수의 곡은 «첫 대사» 부터 (사용자 지침 2026-11-26) — 전투가 시작될 때가 아니라.
+       * 장면의 bgm 은 그 줄부터 다음 bgm 까지 갑니다(data/bgm.js 머리말). 전투에 들어서면
+       * FOES.lee_changsu 의 bgm 이 같은 곡을 가리키므로 끊기지 않고, 전투가 끝난 뒤에도
+       * 이 줄의 곡이 그대로 이어져 이 부분 끝까지 흐릅니다. */
+      { t: "d", who: "이창수", text: "잘들 지냈을까잉?", bgm: "이창수" },
+      { t: "n", text: "매니저실 입구에서 아멜리아를 기다리는 이창수를 만났다." },
+      { t: "d", who: "이창수", text: "아야 으른이 말을 걸어쓰면 따박따박 대답을 혀야제잉..." },
+      { t: "n", text: "이창수의 표정이 어두워졌다." },
+      { t: "d", who: "lee_sojeong", text: "네 규칙에 어울려줄 생각은 없어." },
+      { t: "n", text: "이소정이 웅얼거렸다." },
+      { t: "d", who: "이창수", text: "뭐, 나는 여서 기나오는 아가씨를 죽이뿌면 그만이고," },
+      { t: "d", who: "이창수", text: "느그들은 고 아가씨를 딱 지켜야 쓰것으니께." },
+      { t: "d", who: "이창수", text: "긴말하게하지 말고 싸게싸게 들어와라잉." },
+      { t: "d", who: "이창수", text: "나! 이창수! 제2발톱의 카포이자, 남부십검중 하나! 전력으로 가르겠다." },
+      { t: "party", text: "제2발톱 카포 콰트로 이창수 — 편성을 손보십시오. 유아인은 반드시 서야 합니다." },
+      /* 각본 패배 — 체력을 10% 까지 몰아야만 이야기가 이어집니다(마무리 일격). 못 몰고 전멸하면 진짜 패배 → 위 저장 지점. */
+      { t: "battle", foe: "lee_changsu",
+        hint: "이길 수 있는 상대가 아니다. 그래도...",
+        finishAt: 0.1,
+        /* 흐트선 50% 하나 — 페이즈가 바뀌는 자리(사용자 지침 2026-11-19). 각본 전투라 기본으로는 흐트선이 없어 장면에 적습니다.
+         * 50% 에서 흐트러지면 바로 다음 턴 머리에서 2페이즈 대사와 함께 떨칩니다(engine.js checkPhase → staggerEnd "phase"). */
+        stagger: [0.5],
+        finishLine: "나를 여기까지 몬 것도 징한 일이다. 근디 소정이… 이길라믄 그 칼을 싸게싸게 뽑았어야제!",
+        finishFlat: 500,
+        endText: "▶ 판 전체가 한 번에 갈라졌다." },
+      { t: "n", text: "작성위원들은 정말로 최선을 다했지만, 이창수의 공격은 확실히 강했고," },
+      { t: "n", text: "이서진 때 그랬듯 승리하는 모습이 보이지는 않았다." },
+      { t: "n", text: "하지만 충분한 시간을 끌었는지, 이제는 익숙한 목소리가 들려왔다." },
+      { t: "d", who: "지와", text: "이 상황에 필요한 것은 무엇인가." },
+      { t: "d", who: "이창수", text: "에헤이, 이거 완전 조져부럿구마잉." },
+      { t: "d", who: "이창수", text: "12대 1 해주는것도 고맙게 알아야지." },
+      { t: "d", who: "이창수", text: "최종보스를 델꼬오는건 쪼까 치사하지않냐?" },
+      { t: "d", who: "이창수", text: "단도직입적으로 말하께. 우째야 내 목숨이라도 살려볼수있것냐?" },
+      { t: "d", who: "지와", text: "한 대만 맞아라." },
+      { t: "n", text: "옥룡 지와는 자신의 봉을 꺼내들고, 이창수의 머리를 겨누었다." },
+      { t: "d", who: "이창수", text: "이게 그… 천강성의 오망(五望)인가…" },
+      { t: "cut", img: "assets/cut/이창수에게 겨누는 오망.png" },   // 컷신 ④ 덮음 — ⑤ 까지 이어짐
+      { t: "n", text: "봉에는 노란 망이 다섯 개 걸렸고…" },   // 컷신 ④ 「8장 이창수를 겨눈 오망」 — 이 줄 앞에서 덮음, ⑤ 까지 이어짐
+      { t: "d", who: "이창수", text: "이왕 봐주는거... 쪼까 더 봐주면 안되겄냐..?" },
+      { t: "d", who: "지와", text: "흠." },
+      { t: "d", who: "지와", text: "그럼 망은 하나만 두르겠다." },
+      { t: "d", who: "이창수", text: "허벌라게 고맙다!" },
+      { t: "cut", img: "assets/cut/이창수에게 겨누는 일망.png" },   // 컷신 ⑤ — ④ 를 갈아 덮음
+      { t: "n", text: "봉에서 노란 망 네 개가 사라지고… 하나만이 남았다." },   // 컷신 ⑤ 「8장 망 하나」 — 이 줄 앞에서 ④ 를 갈아 덮고 «…버텨냈다» 뒤에 걷음
+      { t: "d", who: "지와", text: "버텨봐라." },
+      { t: "n", text: "봉이 이창수의 머리를 지났고, 놀랍게도 이창수는 피투성이가 되기는 했지만 그 공격을 버텨냈다." },
+      { t: "cut" },   // 컷신 ⑤ 걷음
+      { t: "d", who: "이창수", text: "하! 요로코롬 아픈거였구마잉..." },
+      { t: "d", who: "이창수", text: "저짝 야들한탠 쪼까 미안한거 같기도허고." },
+      { t: "d", who: "지와", text: "훌륭하군. 그래도 3년은 누워있을 줄 알았는데." },
+      { t: "d", who: "이창수", text: "이 은혜는 잊지... 않것어잉.. 하..하하..." },
+      { t: "n", text: "이창수는 그 자리에 쓰러졌고." },
+      { t: "d", who: "지와", text: "…구경하고 있을 때가 아닐텐데. 나는 다른 쪽 상황을 정리하고 있겠다." },
+      { t: "d", who: "yu_ain", text: "…어서 가죠." },
+      { t: "d", who: "yu_ain", text: "…기다리고 있어요." },
+    ]
+  },
+  {
+    id: "ch8_5", no: "8-5", title: "랑데부", part: "ch8", skip: true,
+    img: "assets/scene/H사 전경.jpg",          // 장 그림 — 첫 장소 전의 머리말 · 장 목록은 H사 전경으로
+    lead: "yu_ain",                            // 유아인 필수의 예외 — 전투 앞에서 편성 금지(ban)
+    scenes: [
+      { t: "place", name: "H사 · 매니저실", img: "assets/scene/H사 매니저실.jpg" },
+      { t: "n", text: "매니저실 문이 열렸다." },
+      { t: "n", text: "고급스러운 의자와 레드카펫이 아니라 푹신한 침대와 소파 대신," },
+      { t: "n", text: "수십 개의 모니터와 작은 키보드, 마우스. 그리고 작은 야전 침대가 있었다." },
+      { t: "d", who: "kim_taeseong", text: "생각했던 것보다는 조금…" },
+      { t: "d", who: "cha_minjun", text: "어려운 곳이네…" },
+      { t: "d", who: "chu_minsu", text: "비구역의 많은 회원들은… 무언가를 관리하는 사람들이 멋진 일을 한다고 생각하지만." },
+      { t: "d", who: "chu_minsu", text: "그것들은 생각보다 고된 일이다." },
+      { t: "d", who: "lee_hanbeom", text: "그것을 깨닫는 과정이 어쩌면 어른이 되는 과정일 수도 있는 것이죠." },
+      { t: "d", who: "manager", text: "그거를 늦게 안 것 같긴 해." },
+      { t: "d", who: "yu_ain", text: "…아멜리아는… 어디 있는 거지." },
+      { t: "n", text: "모니터 뒤에 앉아 있던 사람이 천천히 걸어나왔다." },
+      { t: "d", who: "사스", text: "오랜만이군." },
+      { t: "d", who: "yu_ain", text: "…아멜리아는…" },
+      { t: "d", who: "사스", text: "아인님이 짐작하신 그대로에요." },
+      { t: "d", who: "yu_ain", text: "…" },
+      { t: "d", who: "사스", text: "아멜리아가 매니저를 계승할 수 없다는 것. 아인님도 알고 있어서 여기에 왔잖아요." },
+      { t: "d", who: "사스", text: "그런 불안정한 상태로는…" },
+      { t: "d", who: "yu_ain", text: "그래서 지금 아멜리아는 어디에 있는 건가요." },
+      { t: "d", who: "사스", text: "아직은… 괜찮지만." },
+      { t: "d", who: "yu_ain", text: "저는 매니저를 계승할 생각도 그럴 능력도 안돼요." },
+      { t: "dark", sound: "assets/sound/거울굴절철도 2호선 종착역.mp3" },   // 원작: 초상화를 지우고 암전, 종소리
+      { t: "n", text: "둔탁한 종소리가 울린다." },
+      { t: "d", who: "yu_ain", text: "왜…" },
+      { t: "d", who: "yu_ain", text: "왜 내가 소중하게 생각하는 것들은 왜 다 나를…" },
+      { t: "d", who: "사스", text: "됐군." },
+      /* 그의 곡은 «첫 대사» 부터 (사용자 지침 2026-11-26 — 8-4 이창수와 같게).
+       * 전투에 들어서면 FOES.yu_ain_longing 의 bgm 이 같은 곡을 가리켜 끊기지 않고,
+       * 전투가 끝난 뒤 아멜리아의 자리까지 그대로 이어집니다. */
+      { t: "d", who: "모든 것을 그리워하는 유아인", text: "왜 다 나를 떠나는 거야…", bgm: "그리워하는 유아인" },
+      { t: "d", who: "manager", text: "뒤틀림을 유도한 건가요?" },
+      { t: "d", who: "사스", text: "…황금교본의 길이라는 게, 때로는 비정할 수도 있는 거야, 지성군." },
+      { t: "n", text: "사스는 모니터 앞에 놓인 키보드의 버튼을 몇 개 누르더니, 자리를 피했다." },
+      { t: "d", who: "manager", text: "…" },
+      { t: "d", who: "모든 것을 그리워하는 유아인", text: "돌아와…" },
+      { t: "d", who: "manager", text: "시작하자." },
+      /* 8장에서 유일하게 유아인을 편성할 수 없는 자리(사용자 지침 2026-10-25). 이 부분은 장 require 를 두지 않습니다. */
+      { t: "party", ban: ["yu_ain"], quiet: true,   // 안내는 짧게(사용자 지침 2026-11-19)
+        text: "편성을 손보십시오." },
+      { t: "battle", foe: "yu_ain_longing", spare: true, endAt: 0.1,
+        /* 흐트선 50% 하나 — 페이즈가 바뀌는 자리(사용자 지침 2026-11-19, 이창수와 같게). 각본 전투라 장면에 적습니다.
+         * 흐트러지면 다음 턴 머리의 2페이즈 대사(«다, 사라져…»)와 함께 조용히 풀립니다(engine.js checkPhase). */
+        stagger: [0.5],
+        /* hint 는 뺐습니다(사용자 지침 2026-11-20) */
+        endText: "▶ 그리움이, 조금씩 잦아든다." },
+      { t: "d", who: "아멜리아", text: "…아…" },
+      { t: "n", text: "옆 방 문이 열리고 아멜리아가 뛰어들어온다." },
+      { t: "n", text: "갇혀있었던건가?" },
+      { t: "d", who: "모든 것을 그리워하는 유아인", text: "아…" },
+      { t: "n", text: "하지만 유아인은 그녀를 알아보지 못한다." },
+      { t: "n", text: "그저 모든 방향으로 모든 형태로 자신의 것을 그리워하고 있을 뿐이었다." },
+      { t: "n", text: "노란테는 그 앞으로 다가서지도, 가까이 갈수도 없었다." },
+      { t: "n", text: "과거 아라온호에서 떨어지는 이형우를 두고 성시윤을 막아설 때처럼," },
+      { t: "n", text: "이경원의 이야기를 이경원이 끝내는 것을 지켜볼 때처럼…" },
+      { t: "n", text: "그저 바라보기만 하고 있었다." },
+      { t: "d", who: "manager", text: "지금 가까이 가면 안돼!" },
+      { t: "n", text: "그저 멀리서…" },
+      { t: "n", text: "하지만 아멜리아는 아인군을 향해 가까이가고 있었다, 아멜리아는." },
+      { t: "d", who: "아멜리아", text: "…돼." },
+      { t: "d", who: "아멜리아", text: "…다시 채워가면 돼." },
+      { t: "n", text: "아멜리아는 무엇을 원했던 걸까?" },
+      { t: "n", text: "그제야 노란테는 자신의 안에서 황금교본이 들려주는 소리가 아인군의 마음에 닿아있음을 느낄 수 있었다." },
+      { t: "n", text: "모든 것을 그리워하는 유아인은 아멜리아를 공격하지 않았다." },
+      { t: "cut", img: "assets/cut/유아인을 안아주는 아멜리아.png" },   // 컷신 ⑥ 덮음
+      { t: "n", text: "아멜리아는 천천히 아인군에게 닿았고." },   // 컷신 ⑥ 「8장 아멜리아의 포옹」 — 이 줄 앞에서 덮고 «아멜리아가 점점 옅어져간다» 뒤에 걷음
+      { t: "n", text: "아인군은 천천히… 그리움을 거두어가고 있었다." },
+      { t: "d", who: "manager", text: "아멜리아…" },
+      { t: "d", who: "아멜리아", text: "노란테… 다음에는" },
+      { t: "d", who: "아멜리아", text: "당신이, 아인군을 안아줘." },
+      { t: "n", text: "아멜리아가 점점 옅어져간다." },
+      { t: "cut" },   // 컷신 ⑥ 걷음
+      { t: "d", who: "manager", text: "나는 못해." },
+      { t: "d", who: "manager", text: "나는… 나는 무슨 말을 해야할지도 잘 모르겠어." },
+      { t: "d", who: "manager", text: "왜 다들 나에게 이런…" },
+      { t: "d", who: "아멜리아", text: "이건 누군가의 특별한 힘이 아닌걸." },
+      { t: "d", who: "아멜리아", text: "힘들 때 곁에 있어주고, 손을 잡아주고, 안아주는 것…" },
+      { t: "d", who: "아멜리아", text: "그거면 되는 거야." },
+      { t: "n", text: "아인군의 모습이 점점 원래대로 돌아오고 아멜리아가 완전히 옅어졌다." },
+      { t: "d", who: "yu_ain", text: "아… 아멜리아…" },
+      { t: "d", who: "manager", text: "…" },
+      { t: "n", text: "노란테는 이번에는 천천히 아인군에게 가까이 가서." },
+      { t: "n", text: "아인군을 천천히 안아주었다." },
+    ]
+  },
+  {
+    id: "ch8_6", no: "8-6", title: "후일담", part: "ch8",
+    img: "assets/scene/H사 전경.jpg",          // 장 그림 — 첫 장소 전의 머리말 · 장 목록은 H사 전경으로
+    lead: "yu_ain",                            // 전투가 없는 부분이라 장 require 를 두지 않습니다(사용자 지침 2026-11-20 — 8-5 전투를 마치면 바로 이어집니다)
+    scenes: [
+      /* 돋보기 컷 — 두 장을 번갈아 흔들림을 냅니다(사용자 지침 2026-11-20, 위 SCENE_EXT.cutShake).
+       * 처음엔 느리게 두어 번, «세차게» 에서 빠르게 여러 번. */
+      { t: "cut", img: "assets/cut/돋보기 흔들흔들1.png" },
+      { t: "n", text: "아인군은 아멜리아의 것이었던 돋보기를 손에 쥐었다." },
+      { t: "cutShake", imgs: ["assets/cut/돋보기 흔들흔들1.png", "assets/cut/돋보기 흔들흔들2.png"], times: 4, ms: 320,
+        text: "돋보기가 미세하게 떨리는 것이 느껴졌다." },
+      { t: "d", who: "yu_ain", text: "여기에 있구나…" },
+      { t: "cutShake", imgs: ["assets/cut/돋보기 흔들흔들1.png", "assets/cut/돋보기 흔들흔들2.png"], times: 8, ms: 140,
+        text: "돋보기가 세차게 흔들렸다." },
+      { t: "cut" },   // 돋보기 컷 걷음
+      { t: "d", who: "manager", text: "…미안해." },
+      { t: "d", who: "yu_ain", text: "…아니에요. 이건 그냥 함정이었을 뿐이잖아요." },
+      { t: "d", who: "manager", text: "그럼에도, 앞으로의 너의 시간을 조금은 더 새롭게 채워줄 수 있도록 노력할게." },
+      { t: "d", who: "yu_ain", text: "아니에요." },
+      { t: "n", text: "유아인은 노란테와, 작성위원들을 돌아봤다." },
+      { t: "d", who: "yu_ain", text: "제 생활은 이미 새로운 것들로 가득한 걸요." },
+      { t: "d", who: "lee_hanbeom", text: "…이제 길잡이를 만나야겠군요." },
+      { t: "place", name: "H사 · 부매니저의 방", img: "assets/scene/H사 부매니저의 방.jpg" },
+      { t: "n", text: "매니저실의 뒤쪽에 또다른 방이 있었다." },
+      { t: "n", text: "부매니저의 방. 비어있은지 오래되었던 그 방에 길잡이가 앉아있었다." },
+      { t: "d", who: "guide", text: "…왔구만." },
+      { t: "d", who: "lee_hanbeom", text: "무엇을… 보여주고 싶으셨던 거죠?" },
+      { t: "d", who: "lee_hanbeom", text: "그건 렐상의 흑역사라고 못 박아둔 것들이기도 했잖아요." },
+      { t: "d", who: "guide", text: "그래서 더… 보여줘야만 했지." },
+      { t: "d", who: "guide", text: "길잡이가 옳은 길을 보여주는 게 아니라…" },
+      { t: "d", who: "guide", text: "자신이 이미 가본 가시투성이의 길로 가지 않게 너희를 조금씩 틀고 있는 것뿐." },
+      { t: "d", who: "guide", text: "나도 너희도 계속 이런 막다른 길을 지나올 거란 말이지." },
+      { t: "d", who: "lee_hanbeom", text: "결국 또 고고한 척 이 상황을 넘기려고만 하는 거군요." },
+      { t: "d", who: "guide", text: "그럴지도 모르지." },
+      { t: "d", who: "guide", text: "그냥, 너희는 나보다 나아야만 하니까." },
+      { t: "n", text: "길잡이는 B구역의 상황을 조금씩 정리했다. 그리고 이미 대부분은 상의가 되어 있었다." },
+      { t: "n", text: "곧 투입된 흑수들이 제2발톱의 전력을 몰아내고 B구역의 상황을 정상화했다." },
+      { t: "n", text: "제2발톱 카포 이창수는 자리를 피했는지 끝까지 발견되지 않았다." },
+      { t: "n", text: "매니저는 예정대로 C사로 향했고, 매니저 선발전의 빈 자리는 옥룡 지와가 임시로 맡기로 했다." },
+      { t: "n", text: "라슈 컴퍼니에게는 다음 여정이 기다리고 있으니까." },
+      { t: "codex" }
     ]
   }
 ];

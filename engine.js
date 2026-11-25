@@ -11,12 +11,12 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "2.31.9";
-const VERSION_NAME = "공식 설정에 속하지 못하는";
+const VERSION = "3.0.0";
+const VERSION_NAME = "그리워할 수 밖에 없는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
 const RULE = {
-  manageStart: 3,      // 전투 시작 관리력
+  manageStart: 0,      // 전투 시작 관리력 (사용자 지침 2026-11-24 — 3 에서 0 으로)
   manageMax:   5,
   manageGain:  1,      // 턴마다 회복
   guardCut:    0.40,   // 방어 시 받는 피해 비율
@@ -104,7 +104,12 @@ const RULE = {
    *                  띄워 놓고 손잡이가 잠긴 채 15초를 서 있게 됩니다. */
   cineBlackoutMs: 1000,
   cineVoiceMaxMs: 15000,
-  cineNoVoiceMs:  2200
+  cineNoVoiceMs:  2200,
+  /* [스토리 넘기기] — 화면을 한 번 덮었다 걷는 시간(ms). 어두운 동안 기록칸을 비우고
+   * 넘길 줄을 치릅니다. holdMs 는 다 덮인 채 머무는 틈입니다. 0 으로 두면 암전 없이
+   * 그 자리에서 갈아 끼웁니다(사용자 지침 2026-11-21). */
+  skipFadeMs: 260,
+  skipHoldMs: 120
 };
 
 /* ── 엔케팔린 ──────────────────────────────────────────────────
@@ -152,9 +157,12 @@ const ENK_CAPSULE = {
  *
  *  compare 가 "major" 일 때는 인격 파편도 절반(버림)으로 줄어듭니다 — newState() 참고.
  *  다른 값으로 바꾸면 파편은 그대로 두고 원고료만 깎입니다.
+ *
+ *  2026-11-20 부터 꺼 둡니다(사용자 지침) — 판이 올라가도 원고료 · 인격 파편 · 파편 상자가
+ *  그대로 넘어옵니다. 다시 켜려면 on 을 true 로.
  */
 const VERSION_RULE = {
-  on:        true,
+  on:        false,
   compare:   "major",
   moneyKeep: 0.5      // 넘어오는 비율 (0.5 = 절반)
 };
@@ -213,7 +221,17 @@ let S = null;
 let SCENES = [];       // 평탄화된 현재 장의 장면들
 let MIRROR = null;      // 거울 던전을 돌 때만 채워지는 임시 장
 
-const STARTING_PARTY = ["kim_duhyeon", "lee_hanbeom", "kim_taeseong"];
+/* 처음 오신 분의 편성 — 예전에는 김두현 · 이한범 · 김태성으로 늘 같았습니다.
+ * 이제 작성위원 가운데 무작위로 셋을 세웁니다(사용자 지침 2026-11-20). 1성은 전원이 기본으로
+ * 지니므로 누구를 세워도 칸이 비지 않습니다. 저장된 편성이 있으면 그것이 이깁니다(newState). */
+function startingParty(equip) {
+  const pool = Object.keys(SINNERS).filter(w => equip[w]);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, 3);
+}
 
 /* ── 저장소 ────────────────────────────────────────────────────
  *  보통은 브라우저 localStorage 를 씁니다.
@@ -304,6 +322,10 @@ function vaultBody() {
     sync:     S.sync || {},
     /* 인격 파편 상자 — 보관함에서 바로 쓰는 소모품. { select: 개수, random: 개수 } */
     fragBox:  S.fragBox || { select: 0, random: 0 },
+    /* 특정 배정 선택 획득 횟수 — { 배정 name: 횟수 } (data/pickup.js PICKUP_SPARK).
+     * vaultSig() 에는 넣지 않습니다 — 옛 판 셈법(vaultSigOld…)을 또 하나 얼려야 하고,
+     * 배정 진행 기록이라 출석 · 탐사와 같은 결로 둡니다. 합칠 때는 vaultMergeOnce 가 큰 쪽을 남깁니다. */
+    pickupPts: S.pickupPts || {},
     /* 엔케팔린 캡슐 — 보관함에서 바로 쓰는 소모품. 개수 하나만 남깁니다. */
     enkCap:   enkCapCount(),
     /* 동기화 모듈 — 캡슐과 같은 결의 소모품. 개수 하나만 남깁니다. SYNC_MODULE 참고. */
@@ -392,6 +414,7 @@ function loadVault() {
     frags:    v.frags || {},
     sync:     v.sync || {},
     fragBox:  v.fragBox || { select: 0, random: 0 },
+    pickupPts: v.pickupPts || {},     // 특정 배정 선택 획득 횟수 — newState 가 내려간 배정 몫을 상자로 돌려줍니다
     enkCap:   (+v.enkCap) || 0,
     syncModule: (+v.syncModule) || 0,
     pickTicket: {
@@ -804,6 +827,10 @@ function vaultMergeOnce(seed) {
   const fa = foeLogClean(seed.foeLog), fb = foeLogClean(now.foeLog);
   for (const k in fb) fa[k] = Math.max(fa[k] || 0, fb[k]);
   seed.foeLog = fa;
+  /* 특정 배정 선택 획득 횟수 — 배정마다 큰 쪽(더하면 파일을 되들여와 불릴 수 있습니다) */
+  const pa = Object.assign({}, seed.pickupPts || {}), pb = now.pickupPts || {};
+  for (const k in pb) pa[k] = Math.max(+pa[k] || 0, +pb[k] || 0);
+  seed.pickupPts = pa;
   return seed;
 }
 
@@ -1285,14 +1312,22 @@ function newState() {
   let event    = (v && +v.event) || 0;
   let eventBuy = (v && v.eventBuy) || {};
   let eventNote = null;
+  /* 지난 이벤트에 refund: { money: n } 이 적혀 있으면, 지우기 전에 남은 개수 × n 만큼 원고료로 돌려줍니다
+   * (사용자 지침 2026-11-20 — 1장 복각 「유전자」 를 교환소 값 그대로 원고료로). 판 갈림의 원고료 절반
+   * 깎기보다 «뒤에» 얹습니다(아래 money) — 돌려받은 몫까지 깎이면 안 되니까요. */
+  let eventRefund = 0;
   if (evId && (!v || v.eventId !== evId)) {
+    const 옛이벤트 = (v && v.eventId) ? eventList().find(e => e && e.id === v.eventId) : null;
+    const 값 = 옛이벤트 && 옛이벤트.refund ? +옛이벤트.refund.money || 0 : 0;
+    if (값 > 0 && event > 0) eventRefund = event * 값;
     /* 보관함이 아예 없는 분(처음 오신 분)께는 알리지 않습니다 — 지울 것이 없습니다 */
-    if (v) eventNote = { cur: eventCurName(), before: event };
+    if (v) eventNote = { cur: eventCurName(), before: event,
+                         refund: eventRefund ? { cur: 옛이벤트.cur, n: event, money: eventRefund } : null };
     event = 0;
     eventBuy = {};
   }
 
-  let party = STARTING_PARTY.slice();
+  let party = startingParty(equip);
   const okMember = (w, i) =>
     isSupport(w) ? (supportBy(w) && supportsOwned[w] && slotTakesSupport(i))
                  : (SINNERS[w] && equip[w]);
@@ -1383,6 +1418,27 @@ function newState() {
       if (bxBefore > 0) verNote.fragBox = { before: bxBefore, after: bxAfter };
     }
   }
+  money += eventRefund;   /* 지난 이벤트 재화를 돌려준 몫 — 판 갈림 깎기 뒤에(위 eventRefund) */
+
+  /* 특정 배정 선택 획득 횟수 — 배정 name 마다 쌓입니다(data/pickup.js PICKUP_SPARK).
+   * 지금 서 있지 않은 배정의 몫은 지우고, 그 수만큼 인격 파편 상자(무작위)로 돌려줍니다 —
+   * 판 갈림의 상자 절반 깎기보다 «뒤에» 얹습니다(돌려받은 몫까지 깎이면 안 되니까요).
+   * 돌려준 사실은 pickupNote 에 담아 상점 알림 다음 창에서 한 번 알립니다(openVaultChange). */
+  const pickupPts = {};
+  let pickupNote = null;
+  {
+    const live = pickupList().map(p => p.name);
+    const src = (v && v.pickupPts) || {};
+    for (const k in src) {
+      const n = Math.floor(+src[k]) || 0;
+      if (n <= 0) continue;
+      if (live.indexOf(k) >= 0) pickupPts[k] = n;
+      else {
+        fragBox.random += n;
+        (pickupNote = pickupNote || []).push({ name: k, n });
+      }
+    }
+  }
 
   return {
     ch: 0, sc: 0,
@@ -1396,8 +1452,18 @@ function newState() {
     frags,
     sync,
     fragBox,
+    pickupPts,              // 특정 배정 선택 획득 횟수 { 배정 name: 횟수 }
+    pickupNote,             // 내려간 배정의 횟수를 상자로 돌려줬을 때 한 번 알릴 내용
     enkCap: (v && +v.enkCap) || 0,   // 엔케팔린 캡슐 — 보관함에 남는 소모품
     syncModule: (v && +v.syncModule) || 0,   // 동기화 모듈 — 보관함에 남는 소모품
+    /* 선택권 셋 — 보관함에 남는 소모품입니다. 여기서 되돌려 받지 않으면 saveVault 가 제대로
+     * 적어 두어도 새 기록을 세울 때마다 통째로 사라집니다(사용자 지침 2026-11-21 — 인격
+     * 선택권이 보관함에 안 들어오던 탈이 이것이었습니다). loadVault 는 이미 셋을 다 읽습니다. */
+    pickTicket: {
+      advisor: (v && v.pickTicket && +v.pickTicket.advisor) || 0,
+      gift:    (v && v.pickTicket && +v.pickTicket.gift)    || 0,
+      id:      (v && v.pickTicket && +v.pickTicket.id)      || 0
+    },
     /* 이벤트 재화 — 이름은 기간마다 갈리고(eventCurName), 개수는 이 한 칸입니다 */
     event,
     eventId: evId,
@@ -1516,6 +1582,10 @@ function openPatch(back) {
                 : '　지난번 <b>v' + LAST_VER + '</b> 뒤로 새로 나온 것은 없습니다.')
             : '　머리를 누르면 접었다 펼 수 있습니다.') +
           '</div>';
+  /* 줄 오른쪽에 상점 알림을 다시 여는 손잡이(사용자 지침 2026-11-20) — 알림(data/notice.js)이 있을 때만 */
+  if (noticeData())
+    h = h.replace('<div class="hint">지금 판은', '<div class="pthead"><div class="hint">지금 판은')
+         .replace(/<\/div>$/, '</div><button id="ptnotice" class="ghost">알림 보기</button></div>');
 
   if (!list.length) h += '<div class="hint">아직 적어 둔 것이 없습니다.</div>';
   recent.forEach((p, i) => { h += patchEntryHtml(p, i, patchIsNew(p, i)); });
@@ -1533,6 +1603,11 @@ function openPatch(back) {
          '<button id="ptall" class="ghost">모두 펼치기</button>' +
        '</div>';
   $sheet.innerHTML = h;
+  const 알림 = document.getElementById("ptnotice");
+  /* 알림을 닫으면 패치 노트로 돌아옵니다. [상점으로] 는 상점을 열고, 상점을 닫으면 다시 패치 노트로 —
+   * 처음 온 판(FIRST_LOCK)에는 상점 길이 막혀 있으므로 그때도 패치 노트로 */
+  if (알림) 알림.onclick = () => openNotice(k =>
+    (k === "shop" && !FIRST_LOCK) ? openShop(() => openPatch(back)) : openPatch(back));
 
   /* 머리를 누르면 그 덩이만 접었다 펼칩니다 */
   $sheet.querySelectorAll(".patch .pv").forEach(el => {
@@ -1558,38 +1633,81 @@ function openPatch(back) {
   document.getElementById("ptclose").onclick = doClose;
 }
 
-/* 판이 올라간 것을 한 번 알리고, 보관함에 새 판 도장을 찍는다.
- * 도장을 찍어 두어야 다음 번에 또 깎이지 않습니다. */
-function versionNotice() {
-  if (!S || !S.verNote) return;
+/* ── 보관함이 갈린 것을 알리는 창 (사용자 지침 2026-11-25) ──────────────────
+ *  판이 올라가 깎인 것(verNote) · 새 이벤트로 재화가 갈리고 돌려받은 것(eventNote) ·
+ *  특정 배정이 내려가 횟수를 상자로 돌려받은 것(pickupNote) — 셋 다 newState 가 보관함을 읽으며 정합니다.
+ *  예전에는 유리창 기록칸에 글줄로만 찍혀 지나가 버렸습니다. 이제 상점 알림(openNotice) 다음에
+ *  창 하나로 띄웁니다(glass). 띄울 때 지우고 곧바로 보관함에 적습니다 — 도장을 찍어 두어야
+ *  다음 번에 또 깎이거나 또 돌려받지 않습니다. */
+function vaultChangeDue() { return !!(S && (S.verNote || S.eventNote || S.pickupNote)); }
+function vaultChangeGroups() {
+  const out = [];
   const n = S.verNote;
-  S.verNote = null;
+  if (n) out.push({
+    head: "판이 올라갔습니다　" + (n.from ? "v" + n.from : "옛 판") + " → v" + n.to,
+    lines: [
+      "모아 둔 인격 · 교육위원 · 기프트 · 황금교본 · 클리어 기록은 그대로입니다.",
+      CURRENCY + "는 " + Math.round(VERSION_RULE.moneyKeep * 100) + "%만 넘어옵니다:　" +
+        iconMini("원고료") + n.before + " → " + n.after,   /* payHTML 은 글머리 들여쓰기 안에서 숫자 첫 자리를 덮어 iconMini 로 */
+      n.frags ? "인격 파편이 절반으로 줄었습니다:　" + n.frags.before + " → " + n.frags.after : "",
+      n.fragBox ? "인격 파편 상자가 절반으로 줄었습니다:　" + n.fragBox.before + " → " + n.fragBox.after : ""
+    ]
+  });
+  const e = S.eventNote;
+  if (e) out.push({
+    head: "새 이벤트 재화 「" + e.cur + "」",
+    lines: [
+      "지난 이벤트 재화는 0으로 초기화되었습니다.",
+      e.refund ? "남은 " + e.refund.cur + " " + e.refund.n + "개를 " + iconMini("원고료") + CURRENCY + " " +
+                 e.refund.money + josa(String(e.refund.money), "로") + " 바꿔 드렸습니다." : ""
+    ]
+  });
+  const pk = S.pickupNote;
+  if (pk) out.push({
+    head: "특정 배정 종료",
+    lines: pk.map(x => "「" + x.name + "」에 쌓인 배정 횟수 " + x.n + "회를 " +
+                       iconMini("인격 파편 상자 (무작위)") + "인격 파편 상자(무작위) " + x.n + "개로 돌려드렸습니다.")
+  });
+  return out;
+}
+function openVaultChange(then) {
+  const groups = vaultChangeGroups();
+  S.verNote = null; S.eventNote = null; S.pickupNote = null;
   saveVault();
-  divider();
-  say("판이 올라갔습니다.  " + (n.from ? "v" + n.from : "옛 판") + " → v" + n.to, "place");
-  say("모아 둔 인격·교육위원·기프트·황금교본·클리어 기록은 그대로입니다.", "sys");
-  say("다만 " + CURRENCY + "는 " +
-      Math.round(VERSION_RULE.moneyKeep * 100) + "% 만 넘어옵니다 — " +
-      n.before + " → " + n.after, "bad");
-  if (n.frags)
-    say("인격 파편도 절반으로 줄었습니다 — " + n.frags.before + " → " + n.frags.after, "bad");
-  if (n.fragBox)
-    say("인격 파편 상자도 절반으로 줄었습니다 — " + n.fragBox.before + " → " + n.fragBox.after, "bad");
-  divider();
+  $modal.classList.add("on");
+  $sheet.innerHTML = '<h2>보 관 함 정 리</h2>' +
+    '<div class="noticebody">' +   /* 무리 제목(.nthead)은 상점 알림과 같은 모양 */
+      groups.map(g => '<div class="nthead">' + g.head + '</div>' + bulletBox(g.lines)).join("") +
+    '</div>' +
+    '<div class="modalfoot"><button id="vcok" class="primary">확인</button></div>';
+  document.getElementById("vcok").onclick = () => then();
 }
 
-/* 새 이야기가 나와 이벤트 재화가 갈렸을 때 — 유리창에서 한 번만 알립니다.
- * versionNotice() 와 같은 방식으로, 알리고 나면 지우고 곧바로 보관함에 적습니다. */
-function eventNotice() {
-  if (!S || !S.eventNote) return;
-  const n = S.eventNote;
-  S.eventNote = null;
-  saveVault();
-  divider();
-  say('새로운 이벤트 재화가 출시되었습니다 "' + n.cur + '"! 기존 재화는 0으로 초기화됩니다.', "gain");
-  divider();
+/* ── 특정 배정 선택 획득 (data/pickup.js PICKUP_SPARK) ─────────────── */
+function sparkNeed() { return (typeof PICKUP_SPARK !== "undefined" && PICKUP_SPARK && +PICKUP_SPARK.need) || 200; }
+function sparkPts(p) { return (p && S.pickupPts && +S.pickupPts[p.name]) || 0; }
+function sparkAdd(p, n) {
+  if (!p || !n) return;
+  if (!S.pickupPts) S.pickupPts = {};
+  S.pickupPts[p.name] = sparkPts(p) + n;
 }
-
+/* 그 배정에 걸린 것 — 인격(배정 풀과 같은 기준: todo · hidden 빼고)과 교육위원 */
+function sparkTargets(p) {
+  const out = [];
+  for (const who in SINNERS)
+    SINNERS[who].ids.forEach(id => {
+      if (id.todo || id.hidden || !pickupHit(p, id.title, null)) return;
+      const key = idKey(who, id);
+      out.push({ kind: "id", who, id, key, star: id.star, owned: !!S.owned[key] });
+    });
+  advisorOpenList().forEach(a => {
+    if (!pickupHit(p, a.title, a.name)) return;
+    const key = advisorId(a);
+    out.push({ kind: "adv", adv: a, key, star: a.star, owned: !!(S.advisorsOwned && S.advisorsOwned[key]) });
+  });
+  /* 못 가진 것 먼저, 그 안에서 높은 성급 먼저 */
+  return out.sort((x, y) => (x.owned - y.owned) || (y.star - x.star));
+}
 
 /* ── 저장이 미덥잖은 환경 알림 ─────────────────────────────────
  *  유리창에서 알립니다. 두 가지를 갈라서 봅니다.
@@ -1744,16 +1862,23 @@ const SLOT_RULE = {
   gift:    [{ n: 1 }, { n: 2, needCleared: "ch6" }, { n: 3, needCleared: "ch8" }],
   advisor: [{ n: 1 }, { n: 2, needCleared: "ch7" }, { n: 3, needCleared: "ch9" }]
 };
-function slotCount(kind) {
+/* 장을 마쳐 «열린» 칸 수 — 제약은 세지 않습니다.
+ * 다음 칸이 어느 장에서 열리는가(nextSlotChapter)는 반드시 이쪽을 봐야 합니다. 제약으로
+ * 한 칸 잠긴 판에서 slotCount 를 보면, 이미 마친 장을 가리키며 「7장을 마치면 한 명 더」
+ * 하고 거짓말을 했습니다(사용자 지침 2026-11-21). */
+function slotOpened(kind) {
   let n = 1;
   (SLOT_RULE[kind] || []).forEach(r => {
     if (!r.needCleared || (S && S.cleared && S.cleared[r.needCleared])) n = Math.max(n, r.n);
   });
+  return n;
+}
+function slotCount(kind) {
+  const n = slotOpened(kind);
   /* 어비스 거울 던전의 제약 — 열린 칸 가운데 «마지막 칸» 을 잠급니다(MIRROR_BINDS).
    * 칸 수를 여기서 줄이므로 편성 창 · 고르는 창 · 효과 셈이 모두 함께 따라옵니다.
    * S.giftOn · S.advisorOn 은 건드리지 않습니다 — 판이 끝나면 그 칸이 그대로 돌아옵니다. */
-  if (bindOn(kind)) n = Math.max(0, n - 1);
-  return n;
+  return bindOn(kind) ? Math.max(0, n - 1) : n;
 }
 /* 제약으로 잠긴 칸이 있는가 — 편성 창이 잠긴 칸을 한 장 더 세울 때 봅니다 */
 function slotBound(kind) { return bindOn(kind); }
@@ -1762,7 +1887,7 @@ function advisorSlots() { return slotCount("advisor"); }
 
 /* 다음 칸이 어느 장에서 열리는가 — 화면에 일러 주려고 씁니다. 다 열렸으면 null. */
 function nextSlotChapter(kind) {
-  const now = slotCount(kind);
+  const now = slotOpened(kind);      // 제약으로 잠긴 칸은 «아직 안 열린 칸» 이 아닙니다
   const r = (SLOT_RULE[kind] || []).filter(x => x.n > now)
               .sort((a, b) => a.n - b.n)[0];
   if (!r || !r.needCleared) return null;
@@ -2199,7 +2324,7 @@ function critMultFor(who) {
  *    fallAtk: 0.15              전투 중 편성에서 쓰러져 있는 사람 하나마다 남은 전원 공격
  *    ── 8장 ──
  *    critMult · bossAtk · bossAtkSupport · bossDefCut · arrestZero   (이야기 특전 — storyPerks 머리말)
- *    stackMult: { heat: 2 }     인격 스택(히트 · 염화)이 한 번에 쌓이는 몫 × 배수 (stackRulesFor)
+ *    stackMult: { heat: 2 }     인격 스택(히트 · 염화 — 고유 효과)이 한 번에 쌓이는 몫 × 배수 (stackRulesFor)
  *    linkBoost: 1               연계 효과의 몫(배율 − 1) · 연계 추가타 피해를 1 + 그만큼 (1 = 2배, 「만화경」)
  *    egoSynergy: 1              이름에 «E.G.O» 가 든 인격은 시너지 몫을 1 + 그만큼 (1 = 2배, 「정신조작체」) */
 function packPerks() {
@@ -2207,10 +2332,77 @@ function packPerks() {
   const rule = mirrorRuleNow();
   if (!rule || !rule.packRounds || S.railSave.key !== rule.key) return [];
   const ids = (S.railSave.clearedPacks || []).concat(S.railSave.current ? [S.railSave.current] : []);
-  return ids.map(id => {
+  return fusePackPerks(ids, rule)
+    .concat(emberReady() ? [MIRROR_EMBER_PERK] : []);   // 「불씨」 가호 — 쓰기 전까지만
+}
+
+/* ── 특전 합성 (사용자 지침 2026-11-23 — data/mirrorpacks.js 의 PERK_FUSES 머리말) ──
+ *  들고 있는 팩 id 들을 특전으로 바꾸되, 재료 둘이 다 있는 조합은 합쳐진 특전 하나로 섭니다.
+ *  자리는 «나중 재료» 가 있던 곳입니다. 저장하지 않고 늘 새로 맞추므로, 재료가 빠지면 저절로 풀립니다. */
+function fuseOpen(f, rule) {
+  if (!f) return false;
+  rule = rule || mirrorRuleNow();
+  if (f.deep && !(rule && rule.deep)) return false;   // 철도 팩 조합 — 어비스에서만
+  return true;
+}
+/* 이 조합이 어비스에서만 맞춰지는가 — 손수 적었거나(deep), 재료가 어비스 전용 팩이면 */
+function fuseDeepOnly(f) {
+  return !!f.deep || f.parts.some(id => { const p = MIRROR_PACKS.find(x => x.id === id); return p && p.deepOnly; });
+}
+function fusePackPerks(ids, rule) {
+  const fuses = (typeof PERK_FUSES !== "undefined") ? PERK_FUSES : [];
+  const enh = id => !!(rule && rule.deep) && deepPackEnh(id);
+  const used = {}, at = {};
+  fuses.forEach(f => {
+    if (!fuseOpen(f, rule)) return;
+    if (!f.parts.every(id => ids.indexOf(id) >= 0 && !used[id])) return;
+    f.parts.forEach(id => { used[id] = f; });
+    at[f.parts.reduce((a, id) => ids.indexOf(id) > ids.indexOf(a) ? id : a)] = f;
+  });
+  const out = [];
+  ids.forEach(id => {
+    if (at[id]) {
+      const f = at[id];
+      const k = f.parts.some(enh) ? deepEnhancePerk(f.perk) : f.perk;
+      out.push(Object.assign({}, k, { fuse: f.id, from: f.parts.slice() }));
+      return;
+    }
+    if (used[id]) return;
     const p = MIRROR_PACKS.find(x => x.id === id);
-    return deepPerkOf(p, !!rule.deep && deepPackEnh(id));   // 어비스 — 강화로 고른 팩은 강화된 특전
-  }).filter(Boolean).concat(emberReady() ? [MIRROR_EMBER_PERK] : []);   // 「불씨」 가호 — 쓰기 전까지만
+    const k = deepPerkOf(p, enh(id));   // 어비스 — 강화로 고른 팩은 강화된 특전
+    if (k) out.push(k);
+  });
+  return out;
+}
+/* 이번 판에 들고 있는 팩 id — 갈림길 카드의 «합쳐짐» 귀띔이 봅니다 */
+function heldPackIds() {
+  if (!S || !S.railSave) return [];
+  return (S.railSave.clearedPacks || []).concat(S.railSave.current ? [S.railSave.current] : []);
+}
+/* 이 팩을 고르면 지닌 특전과 맞물리는 조합 — 없으면 null */
+function fuseWith(packId) {
+  if (typeof PERK_FUSES === "undefined") return null;
+  const held = heldPackIds();
+  return PERK_FUSES.find(f => fuseOpen(f) && f.parts.indexOf(packId) >= 0 &&
+                              f.parts.every(id => id === packId || held.indexOf(id) >= 0)) || null;
+}
+/* 판마다 쓴 횟수 — 「먼저 뛰어드는 쪽」 의 선공 무효(firstNullify). 지고 다시 해도 돌아오지 않습니다(「불씨」 와 같은 결) */
+function fuseUseOf(key) { return (S.railSave && S.railSave.fuseUse && S.railSave.fuseUse[key]) || 0; }
+function fuseUseAdd(key) {
+  if (!S.railSave) return;
+  if (!S.railSave.fuseUse) S.railSave.fuseUse = {};
+  S.railSave.fuseUse[key] = fuseUseOf(key) + 1;
+}
+/* 적의 선공을 받아넘길 수 있으면 하나 쓰고 true — 못박은 광역(aoeFlat · 각본 전멸)에는 듣지 않습니다 */
+function fuseNullifyFirst(b) {
+  if (!b || !b.foeFirst || !S.mirror) return false;
+  const n = perkSum().firstNullify;
+  if (!n || fuseUseOf("firstNullify") >= n) return false;
+  fuseUseAdd("firstNullify");
+  const k = activePerks().find(p => p.effect && p.effect.firstNullify);
+  const left = n - fuseUseOf("firstNullify");
+  say("▶ 특전 「" + (k ? k.name : "선공 무효") + "」 — " + b.name + "의 선공을 받아넘겼다!　(이번 판 남은 " + left + "번)", "good");
+  return true;
 }
 
 /* ── 이야기 특전 (8장~, 사용자 지침 2026-10-25) ───────────────────
@@ -2255,7 +2447,7 @@ function perkSum() {
   const o = { crit: 0, critMult: 0, bossCritDmg: 0, push: 0, correct: 0, manage: 0, manageMax: 0, manageFull: false,
               skillUses: 0, winHeal: 0, healEvery: 0, healRatio: 0, hitHeal: 0, uniqueHeal: 0,
               aoeCut: 0, aoeGuardCut: 0, firstCut: 0, retribFloor: 0, bossDefCut: 0, arrestZero: false,
-              linkBoost: 0, egoSynergy: 0 };
+              linkBoost: 0, egoSynergy: 0, firstNullify: 0, aoeFirstCut: 0 };
   activePerks().forEach(p => {
     const e = p.effect || {};
     ["crit", "critMult", "bossCritDmg", "push", "correct", "manage", "manageMax", "skillUses", "hitHeal",
@@ -2265,10 +2457,12 @@ function perkSum() {
     if (e.arrestZero) o.arrestZero = true;
     o.winHeal = Math.max(o.winHeal, e.winHeal || 0);
     o.retribFloor = Math.max(o.retribFloor, e.retribFloor || 0);
+    o.firstNullify = Math.max(o.firstNullify, e.firstNullify || 0);   // 합성 특전 — 판당 횟수(fuseNullifyFirst)
+    o.aoeFirstCut  = Math.max(o.aoeFirstCut, e.aoeFirstCut || 0);     // 합성 특전 — 매 전투 첫 광역 한 번
     if (e.healEvery && (!o.healEvery || e.healEvery < o.healEvery)) { o.healEvery = e.healEvery; }
     if (e.healEvery) o.healRatio += e.healRatio || 0;
   });
-  ["aoeCut", "aoeGuardCut", "firstCut"].forEach(k => { o[k] = Math.min(0.9, o[k]); });
+  ["aoeCut", "aoeGuardCut", "firstCut", "aoeFirstCut"].forEach(k => { o[k] = Math.min(0.9, o[k]); });
   o.bossDefCut = Math.min(1, o.bossDefCut);
   return o;
 }
@@ -2535,6 +2729,8 @@ function staggerSync() {
  *    작성위원 · 인격은 2개까지(tools/check.js 가 짚습니다). 조력자는 예외(아멜리아 셋).
  *  ■ 흐트러뜨리는 것 — «적의 공격» 뿐입니다. 판정은 적의 피해 줄(resolveTurn 의 foeTurn)에서만 부릅니다.
  *    스스로 깎는 것(시너지 스택 selfDmg · 연계 효과의 체력 대가)은 setHp 를 거쳐도 판정을 타지 않습니다.
+ *    그렇게 지나친 선은 쓰지 않고 남습니다 — 그 순간에는 흐트러지지 않고, 다음에 적에게 맞는 한 대에
+ *    흐트러집니다(투계 「염화」, 사용자 지침 2026-11-21).
  *    방어 · 교정을 했어도 선을 넘으면 흐트러집니다(사용자 지침 — 체력 관리가 무거워지도록).
  *  ■ 흐트러지지 않는 한 대 — 반격(김하주) · 책임(추민수) · 도발(송하민)이 걸린 한 대, 8장 흑수 갑의 대신 받기.
  *    그 한 대로 선 아래로 떨어져도 **선은 쓰지 않고 남깁니다** — 다음에 맞는 한 대에 흐트러집니다.
@@ -2584,8 +2780,10 @@ function allyStaggerLines(who) {
   }
   return (raw || []).filter(r => r > 0 && r < 1).slice().sort((x, y) => y - x);
 }
-/* 지금 낀 인격의 흐트러짐 능력 — { recoverEnd: n } */
+/* 지금 낀 인격(또는 지원 작성위원)의 흐트러짐 능력 — { recoverEnd: n, line?: 글 또는 글의 배열 }.
+ * 지원 작성위원은 data/characters.js SUPPORTS 의 staggerSkill 을 봅니다(사용자 지침 2026-11-20 — 짹G). */
 function allyStaggerSkill(who) {
+  if (isSupport(who)) { const sp = supportBy(who); return (sp && sp.staggerSkill) || null; }
   const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
   return (id && id.staggerSkill) || null;
 }
@@ -2637,6 +2835,7 @@ function allyStaggerCheck(who, noStg) {
   const line = allyStaggerLine(who);
   if (line) { battleSay(who, line); battleHold(b); }
   allyStaggerRetrib(who);
+  avengeStrike(who);          // 되갚음 — 동료가 흐트러진 바로 그 자리에서 한 대
   return true;
 }
 /* 유아인 「보복」 동기화 12단계 — 아군이 흐트러질 때도 반 스택(쓰러질 때와 같은 배수를 반으로) */
@@ -2648,11 +2847,16 @@ function allyStaggerRetrib(who) {
   S.arc.retribution.yu_ain = (S.arc.retribution.yu_ain || 0) + retribGain(who) * ALLY_STAGGER_RULE.retribHalf;
 }
 /* why: "time"(다음 차례가 지났다) | "skill"(인격 능력 recoverEnd) | "down"(쓰러졌다 — 말 없이) */
-function allyStaggerEnd(who, why, label) {
+function allyStaggerEnd(who, why, label, line) {
   const g = S.battle && S.battle.allyStg && S.battle.allyStg[who];
   if (!g || !g.on) return;
   g.on = false;
-  if (why === "skill") say("▷ " + withJosa(memberName(who), "이") + " 곧바로 자세를 바로잡았다." + (label ? " (" + label + ")" : ""), "good");
+  if (why === "skill") {
+    say("▷ " + withJosa(memberName(who), "이") + " 곧바로 자세를 바로잡았다." + (label ? " (" + label + ")" : ""), "good");
+    /* 풀며 한마디(staggerSkill.line) — 턴 머리가 holdLeft 만큼 기다렸다 예고를 잇습니다 */
+    const list = [].concat(line || []).filter(Boolean);
+    if (list.length) { battleSay(who, list[rnd(list.length)]); battleHold(S.battle); }
+  }
   else if (why === "time") say("▷ " + withJosa(memberName(who), "이") + " 자세를 바로잡았다.", "good");
 }
 /* 쓰러졌다 일어설 때 — 일어선 체력보다 아래의 선이 살아납니다 */
@@ -2684,8 +2888,8 @@ function allyStaggerTurn(b) {
     const usedKey = own ? w + "_recoverEnd" : "_giftRecover";
     if (n && (b.persist[usedKey] || 0) < n) {
       b.persist[usedKey] = (b.persist[usedKey] || 0) + 1;
-      const id = idByKey(S.equip[w]);
-      return allyStaggerEnd(w, "skill", own ? (id ? id.title : "") : fx.recoverBy);
+      const id = isSupport(w) ? supportBy(w) : idByKey(S.equip[w]);
+      return allyStaggerEnd(w, "skill", own ? (id ? id.title : "") : fx.recoverBy, own ? sk.line : null);
     }
   });
   S.party.forEach(w => {
@@ -2723,6 +2927,19 @@ function grantPackPerk(packId) {
   say("▶ 특전 「" + p.name + "」을 얻었다.", "gain");
   say("　" + p.desc, "sys");
   say("　이 팩부터 거울을 나설 때까지 이어진다. 이 팩을 넘지 못하면 잃는다.", "sys");
+  /* 특전 합성 — 이 팩으로 재료가 다 모였으면 합쳐졌음을 알리고, «얻는 순간» 듣는 몫의 차이를 더 얹습니다 */
+  const fused = packPerks().find(k => k.fuse && k.from.indexOf(packId) >= 0);
+  if (!fused) return;
+  const fe = fused.effect || {};
+  const parts = fused.from.map(id => deepPerkOf(MIRROR_PACKS.find(x => x.id === id), deepRule() && deepPackEnh(id))).filter(Boolean);
+  const partKills = parts.reduce((t, k) => t + ((k.effect && k.effect.kills) || 0), 0);
+  if (fe.kills && fe.kills > partKills) S.arc.kills = (S.arc.kills || 0) + fe.kills - partKills;
+  if (fe.retribFloor) S.arc.retribution.yu_ain = Math.max(S.arc.retribution.yu_ain || 0, fe.retribFloor);
+  if (!S.mirrorDone) S.mirrorDone = {};
+  S.mirrorDone["fuse:" + fused.fuse] = true;   // 테마팩 도감 「특전 합성」 — 합쳐 본 조합
+  say("▶ 특전 합성 — " + parts.map(k => "「" + k.name + "」").join(" + ") + " → 「" + fused.name + "」", "gain");
+  say("　" + fused.desc, "sys");
+  say("　재료 팩 가운데 하나라도 넘지 못하면 다시 풀린다.", "sys");
 }
 /* 「이번 갈래」 스택(광신·보복)을 떠 둡니다 — 같은 객체를 물려 두면 전투에서 쌓인 것이
  * 저장해 둔 자리에도 그대로 묻어, 지고 돌아와도 되돌아가지 않습니다. */
@@ -2752,6 +2969,15 @@ function drawPackGate(shown, heardId, picking, onPick) {
     h += '<div class="pgheld"><span class="pglabel">지닌 특전</span>' +
          held.map(p => '<span class="perk" title="' + p.desc + '">' + iconMini(p.name) + p.name + '</span>').join("") +
          '</div>';
+  /* 건 제약 — 들어설 때 기록칸에 한 줄 말하고 끝이라, 층을 넘길 때마다 밀려 올라가
+   * 무엇을 걸었는지 잊혔습니다(사용자 지침 2026-11-21). 「지닌 특전」 줄과 같은 꼴로
+   * 갈림길마다 다시 세웁니다 — 붉은 딱지입니다. */
+  const bound = MIRROR_BINDS.filter(b => bindOn(b.id));
+  if (bound.length)
+    h += '<div class="pgheld pgbind"><span class="pglabel">건 제약</span>' +
+         bound.map(b => '<span class="perk" title="' + b.desc.replace(/"/g, "&quot;") + '">' +
+                          iconMini(b.icon) + b.name + '</span>').join("") +
+         '<span class="pgbmult">완주 보상 ×' + bindRewardMult(bound.map(b => b.id)) + '</span></div>';
   if (picking) h += '<div class="pghint">소리를 들을 길을 고르십시오.</div>';
   h += '<div class="grid three">';
   shown.forEach((p, i) => {
@@ -2767,6 +2993,7 @@ function drawPackGate(shown, heardId, picking, onPick) {
                   '<div><div class="pgname">' + k.name + '</div><div class="sub">' + k.desc + '</div></div>' +
                 '</div>'
               : '<div class="sub">특전 없음</div>') +
+           fuseHintHTML(p.id, enhAt[i]) +
          '</div>';
   });
   h += '</div>';
@@ -2774,6 +3001,23 @@ function drawPackGate(shown, heardId, picking, onPick) {
   $log.appendChild(box);
   box.querySelectorAll("[data-pg]").forEach(el => { el.onclick = () => onPick(shown[+el.dataset.pg]); });
   $log.scrollTop = $log.scrollHeight;
+}
+
+/* 갈림길 카드 아래 — 이 팩을 고르면 지닌 특전과 합쳐지는가(특전 합성, PERK_FUSES).
+ * 무엇이 되는지까지 보여 줍니다 — 고를지 말지를 가르는 귀띔이라서입니다. */
+function fuseHintHTML(packId, enh) {
+  const f = fuseWith(packId);
+  if (!f) return '';
+  const held = heldPackIds();
+  const names = f.parts.filter(id => id !== packId).map(id => {
+    const p = MIRROR_PACKS.find(x => x.id === id);
+    return p && p.perk ? p.perk.name : "";
+  }).filter(Boolean);
+  const mine = names.map(n => "「" + n + "」").join(" · ") + josa(names[names.length - 1] || "", "와");
+  const k = (enh || f.parts.some(id => held.indexOf(id) >= 0 && deepRule() && deepPackEnh(id))) ? deepEnhancePerk(f.perk) : f.perk;
+  return '<div class="pgfuse" title="' + (k.name + " — " + k.desc).replace(/"/g, "&quot;") + '">' +
+           iconMini(k.name) + '<span class="fzlong">지닌 ' + mine + ' 합쳐져 <b>「' + k.name + '」</b></span>' +
+           '<span class="fzshort">합성</span></div>';
 }
 
 /* ── 보조 교육위원 효과 ────────────────────────────────────── */
@@ -2875,6 +3119,11 @@ function skillOpen(s) {
 function managerSkills() { return (CREW.manager.skills || []).filter(skillOpen); }
 function skillBy(id) { return (CREW.manager.skills || []).find(s => s.id === id); }
 function skillCost(base) { return Math.max(1, base - advisorEffect().cheap); }
+/* 관리자 능력의 본디 값 — data/characters.js CREW.manager.skills 에서. 못 찾으면 fb */
+function managerSkillCost(id, fb) {
+  const sk = (CREW.manager && CREW.manager.skills || []).find(x => x.id === id);
+  return sk && sk.cost != null ? sk.cost : fb;
+}
 
 /* 중복으로 나왔을 때 돌려줄 원고료 — 성급을 넣으면 됩니다 */
 function dupRefund(star) {
@@ -2916,12 +3165,22 @@ function addFrag(who, n) {
  *  합은 언제나 (쓴 개수 × 2) 와 정확히 같다. */
 const FRAGBOX_RULE = {
   mult: 2,
-  desc: "상자 1개당 1~3개의 파편이 들어있습니다.",
-  /* 보관함에서 desc 바로 아랫줄에 붙습니다 — 파편을 어디에 쓰는지 일러 두는 자리.
-   * 숫자 둘은 SYNC_UNLOCK_CH(동기화가 열리는 장)와 PRICES.fragExchange 를 따라갑니다. */
-  desc2: "3장 이후부터 동기화에 사용할 수 있습니다. " +
-         "400개의 파편을 모으면 원하는 인격과 교환할 수 있습니다."
+  desc: "상자 1개당 1~3개의 파편이 들어있습니다."
 };
+/* 파편 상자 안내 — 불릿 상자에 한 줄씩(보관함 · 동기화 창 · 이벤트 교환소, 사용자 지침 2026-11-25).
+ * 동기화가 열린 뒤(syncUnlocked)에는 «3장 이후부터» 가 쓸데없는 말이라 뺍니다.
+ * 400 은 RULE.fragExchange 를 따라갑니다. */
+function fragBoxLines() {
+  return [
+    "인격 파편 " + FRAGBOX_RULE.desc,
+    "파편은 " + (syncUnlocked() ? "" : "3장 이후부터 ") + "동기화에 사용할 수 있습니다.",
+    "파편 " + RULE.fragExchange + "개를 모으면 원하는 인격과 교환할 수 있습니다."
+  ];
+}
+/* 불릿 상자 — 줄마다 금빛 «·» 글머리 (상점 알림 .ntbox 와 같은 결, index.html .bulletbox) */
+function bulletBox(lines) {
+  return '<div class="bulletbox">' + lines.filter(Boolean).map(x => '<p>' + x + '</p>').join("") + '</div>';
+}
 const FRAGBOX_KINDS = [
   { key: "select", name: "인격 파편 상자 (선택)" },
   { key: "random", name: "인격 파편 상자 (무작위)" }
@@ -2940,10 +3199,12 @@ function addFragBox(kind, n) {
  *
  *  ■ 고를 수 없는 것
  *    · 이미 가진 것은 목록에 아예 안 나옵니다.
- *    · 교육위원 · 인격 선택권 — «지금 특정 배정에 걸려 있는» 것은 못 고릅니다
- *      (인격 교환의 pickupOnTitle 규칙을 그대로 가져왔습니다 — 돈을 주고 뽑으라고
- *      세워 둔 것을 정가로 가로채지 않게). 기프트는 특정 배정이 없어 이 규칙이
- *      없습니다.
+ *    · 특정 배정은 **가리지 않습니다**(사용자 지침 2026-11-21). 전에는 교육위원 ·
+ *      인격 선택권이 «지금 특정 배정에 걸려 있는» 것을 못 고르게 막았습니다
+ *      (인격 교환의 pickupOnTitle 을 그대로 가져온 것). 그런데 선택권은 업적 ·
+ *      우편으로 어렵게 오는 몫이라, 하필 그 사람이 배정에 걸린 기간이면 쓸 데가
+ *      없어지고 «고를 것이 없습니다» 로 잠기기까지 했습니다. 이제 셋 다 같은 규칙 —
+ *      아직 안 가진 것이면 무엇이든 고릅니다.
  *    · 인격 선택권 — 배정소 뽑기 통에 드는 인격만 나옵니다(아직 안 쓴 todo · 업적으로만
  *      오는 hidden 은 빠집니다). 성급은 가리지 않습니다 — 교육위원 · 기프트 선택권과 같습니다.
  *      (2026-11-15 — 자리만 만들었습니다. 아직 얻는 경로는 없습니다.)
@@ -2953,9 +3214,9 @@ function addFragBox(kind, n) {
 /* 보관함에 이 차례로 섭니다 — 인격 선택권이 두 선택권 줄 위(사용자 지침 2026-11-15) */
 const PICK_TICKETS = [
   { key: "id",      name: "인격 선택권",
-    desc: "아직 지니지 않은 인격 하나를 골라 받습니다. 지금 특정 배정에 걸려 있는 인격은 고를 수 없습니다." },
+    desc: "아직 지니지 않은 인격 하나를 골라 받습니다." },
   { key: "advisor", name: "보조 교육위원 선택권",
-    desc: "아직 함께하지 않은 보조 교육위원 하나를 골라 받습니다. 지금 특정 배정에 걸려 있는 사람은 고를 수 없습니다." },
+    desc: "아직 함께하지 않은 보조 교육위원 하나를 골라 받습니다." },
   { key: "gift",    name: "E.G.O 기프트 선택권",
     desc: "아직 지니지 않은 E.G.O 기프트 하나를 골라 받습니다." }
 ];
@@ -2975,13 +3236,12 @@ function pickTicketOut() {
 /* 지금 고를 수 있는 것들 — 비어 있으면 쓸 수 없습니다 */
 function pickTicketCands(kind) {
   if (kind === "advisor")
-    return advisorOpenList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]) &&
-                                     !pickupOnTitle(a.title));
+    return advisorOpenList().filter(a => !(S.advisorsOwned && S.advisorsOwned[advisorId(a)]));
   /* 인격 — { who, id } 묶음으로 돌려줍니다. 배정소 뽑기 통(pullOnce)과 같은 거름입니다 */
   if (kind === "id") {
     const out = [];
     Object.keys(SINNERS).forEach(who => SINNERS[who].ids.forEach(id => {
-      if (id.todo || id.hidden || S.owned[idKey(who, id)] || pickupOnTitle(id.title)) return;
+      if (id.todo || id.hidden || S.owned[idKey(who, id)]) return;
       out.push({ who, id });
     }));
     return out;
@@ -3228,6 +3488,19 @@ function eventLeft(g) {
   if (!g || !g.limit) return Infinity;
   return Math.max(0, g.limit - eventBought(g.id));
 }
+/* 한꺼번에 여러 개 살 수 있는 물건인가 — 인격이 아니고, 한도가 없거나 10 이상 */
+function eventMulti(g) { return !!g && !eventGiveId(g.give) && (!g.limit || g.limit >= 10); }
+/* 지금 한꺼번에 살 수 있는 최대 수 — 남은 한도와 가진 재화 가운데 작은 쪽 */
+function eventMax(g) {
+  if (!g || !g.cost) return 0;
+  return Math.max(0, Math.min(eventLeft(g), Math.floor(eventCount() / g.cost)));
+}
+/* 주는 것의 수를 n 배로 — 수로 적힌 칸만 곱합니다(인격 칸 id 는 그대로) */
+function giveTimes(give, n) {
+  const o = {};
+  Object.keys(give || {}).forEach(k => { o[k] = typeof give[k] === "number" ? give[k] * n : give[k]; });
+  return o;
+}
 /* 교환 물건이 무엇을 주는지 한 줄로 — 우편(mailGiveText)과 «같은 말» 을 씁니다 */
 /* 물건이 인격을 준다면 그 인격 줄을 찾아 돌려줍니다. 못 찾으면 null —
  * 제목을 고쳤을 때 조용히 사라지지 않게, 화면에서 그대로 일러 줍니다. */
@@ -3264,8 +3537,9 @@ function eventGiveText(g) {
  * 보관함과 교환소가 늘 같은 말을 하게 되는 몫입니다. */
 function eventGoodsNote(g) {
   g = g || {};
-  if (g.fragBoxSelect || g.fragBoxRandom)
-    return FRAGBOX_RULE.desc + " " + FRAGBOX_RULE.desc2;
+  /* 파편 상자 설명은 줄마다 붙이지 않고 교환소 머리 상자에 한 번만 적습니다 —
+   * 줄에 붙이면 칸이 세로로 늘어납니다(사용자 지침 2026-11-25) */
+  if (g.fragBoxSelect || g.fragBoxRandom) return "";
   /* 인격을 이미 지녔으면 «무엇을 대신 받는지» 를 사기 전에 알려 둡니다 */
   const p = eventGiveId(g);
   if (p && S.owned[p.key])
@@ -3539,7 +3813,8 @@ function activeSynergies(party) {
     const tags = Array.isArray(sy.tag) ? sy.tag : [sy.tag];
     const n = titles.filter(t => tags.some(tg => t.indexOf(tg) >= 0)).length;
     if (n < sy.need) return;
-    let scale = n >= 4 ? 2 : n >= 3 ? 1.75 : 1;
+    const base = n >= 4 ? 2 : n >= 3 ? 1.75 : 1;
+    let scale = base;
     /* 기프트가 이 시너지를 북돋우는 경우 — 여럿을 지녔으면 곱해집니다 */
     equippedGifts().forEach(g => {
       if (g.effect && g.effect.synergy &&
@@ -3568,7 +3843,10 @@ function activeSynergies(party) {
        * 얹힙니다. useUniqueSkill 이 b.mods 에 적고 effStats 가 읽습니다. 머릿수 배수
        * (3명 1.75 · 4명 2)는 atk/def/hp 와 똑같이 탑니다. */
       uniqueAtkFromDef: (sy.uniqueAtkFromDef || 0) * scale,
-      stack: sy.stack || null, scale: scale
+      /* 인격 스택(고유 효과)에 주는 배율 — 2명 ×1.5 · 3명 ×1.75 · 4명 ×2, 기프트 · 교육위원 mult 도 곱함(stackRulesFor 머리말) */
+      stackBoost: sy.stackBoost || null,
+      stackScale: sy.stackBoost ? (n >= 3 ? base : 1.5) * (scale / base) : 1,
+      scale: scale
     });
   });
   return out;
@@ -3922,6 +4200,7 @@ function onAllyDown(who) {
   if (who === "yu_ain") S.arc.retribution.yu_ain = perkSum().retribFloor;   // 평소 0 — 테마팩 특전 retribFloor 가 있으면 그 수
   else if (S.party.indexOf("yu_ain") >= 0)
     S.arc.retribution.yu_ain = (S.arc.retribution.yu_ain || 0) + retribGain(who);
+  avengeStrike(who);          // 되갚음 — 동료가 쓰러진 바로 그 자리에서 한 대
 }
 /* 쓰러진 한 사람이 「보복」을 몇 올리는가 — 평소 1.
  * E.G.O 기프트 effect.retribTag · retribMult (사용자 지침 2026-10-14):
@@ -3939,10 +4218,12 @@ function retribGain(who) {
   return mult;
 }
 
-/* ── 인격 스택 — 히트 · 염화 (8장, 사용자 지침 2026-10-25) ──────────────────
- *  SYNERGIES 에 stack: { key, name, atk, selfDmg } 를 단 시너지(오버히트 · 투계)가 켜져 있으면,
- *  그 tag 를 이름에 단 사람이 «공격을 마칠 때마다»(연계 추가타 포함) 공격력을 얻습니다.
- *    한 번에 얻는 몫 = atk × 시너지 배율(셋 1.75 · 넷 2) × stackMult(기프트 · 특전), 소수점 버림.
+/* ── 인격 스택 — 히트 · 염화 (8장, 사용자 지침 2026-10-25 · 2026-11-21) ─────────
+ *  인격 줄(지원 작성위원이면 그 줄)에 stack: { key, name, atk, selfDmg } 를 단 사람은 «고유 효과» 로,
+ *  «공격을 마칠 때마다»(연계 추가타 포함) 공격력을 얻습니다. 혼자 서도 쌓입니다.
+ *  그 key 에 stackBoost 를 단 시너지(오버히트 · 투계)가 켜지면 배율이 붙습니다 — 2명 ×1.5 · 3명 ×1.75 · 4명 ×2.
+ *  (2026-11-21 까지는 시너지가 켜져야만 쌓였고, 2명일 때 ×1 이었습니다.)
+ *    한 번에 얻는 몫 = atk × 시너지 배율(없으면 1) × stackMult(기프트 · 특전), 소수점 버림.
  *    selfDmg — 얻을 때 체력을 그만큼 깎습니다(투계). 이것으로는 쓰러지지 않습니다 — 1 을 남깁니다.
  *  쌓인 수가 곧 «얻은 공격력» 이고, 카드에 「히트 n」 으로 섭니다(effStats 가 공격에 그대로 더함 —
  *  그 시너지가 켜져 있는 동안만). S.arc.stacks[key][who] 라 갈래(본편 장 · 거울 한 판) 동안 이어집니다.
@@ -3957,12 +4238,21 @@ function arcStacks(key) {
   if (!S.arc.stacks) S.arc.stacks = {};
   return S.arc.stacks[key] || (S.arc.stacks[key] = {});
 }
-/* 이 사람에게 지금 걸리는 스택 시너지들 — [{ stack, scale, name }] */
+/* 그 사람의 고유 효과 스택 — 지금 낀 인격 줄(지원 작성위원이면 그 줄)의 stack. 없으면 null */
+function stackOf(who) {
+  if (!who) return null;
+  if (isSupport(who)) { const sp = supportBy(who); return (sp && sp.stack) || null; }
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  return (id && id.stack) || null;
+}
+/* 이 사람에게 지금 걸리는 스택 — [{ stack, scale }] (고유 효과 하나, scale 은 stackBoost 시너지의 배율 곱) */
 function stackRulesFor(who) {
   if (!who || !S.party || S.party.indexOf(who) < 0) return [];
-  const title = memberTitle(who) || "";
-  if (!title) return [];
-  return activeSynergies().filter(sy => sy.stack && sy.tags.some(tg => title.indexOf(tg) >= 0));
+  const st = stackOf(who);
+  if (!st) return [];
+  let scale = 1;
+  activeSynergies().forEach(sy => { if (sy.stackBoost === st.key) scale *= sy.stackScale; });
+  return [{ stack: st, scale: scale }];
 }
 function stackEffects() {
   return equippedGifts().map(g => g.effect || {}).concat(activePerks().map(p => p.effect || {}));
@@ -4063,6 +4353,172 @@ function stackLineFor(who) {
   if (!sl) return null;
   const st = S.arc && S.arc.stacks && S.arc.stacks[sl.key];
   return st && (st[who] || 0) >= (sl.min || 0) && stackRulesFor(who).length ? sl.text : null;
+}
+/* 「되갚음」 — 추민수 「흑수 추 필두」 (사용자 지침 2026-11-21).
+ *  적어 둔 시너지가 켜져 있을 때, 동료가 «흐트러지거나 쓰러지는 그 순간» 곧바로
+ *  한 대를 되갚습니다 — 제 차례를 기다리지 않습니다(처음에는 제 차례의 공격에
+ *  배율을 얹었는데, 동료가 흐트러지는 것은 대개 적의 차례라 한 박자 늦게 터졌습니다).
+ *
+ *  ■ 한 차례에 한 번만 — 광역 한 방에 둘이 함께 흐트러져도 되갚는 것은 처음 한 번뿐입니다
+ *    (b._avengeTurn 에 그 차례를 적어 둡니다. 사용자 지침 2026-11-21).
+ *  ■ 자기 일로는 안 됩니다 — 자기가 흐트러졌거나 쓰러졌으면 칠 수 없습니다.
+ *  인격 줄의 avenge: { synergy, mult, label, line } 를 읽습니다(data/characters.js 머리말). */
+function avengeOf(who) {
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  const av = id && id.avenge;
+  if (!av) return null;
+  if (av.synergy && !activeSynergies(S.party).some(x => x.name === av.synergy)) return null;
+  return { mult: av.mult || 2, label: av.label || "되갚음", line: av.line || null };
+}
+/* 동료가 흐트러지거나 쓰러진 바로 그 자리에서 부릅니다(allyStaggerCheck · onAllyDown). */
+function avengeStrike(victim) {
+  const b = S && S.battle;
+  if (!b || b.hp <= 0) return;
+  if (b._avengeTurn === b.turn) return;                 // 이 차례에는 이미 되갚았습니다
+  const who = (S.party || []).find(w =>
+    w && w !== victim && alive(w) && !allyStaggerOn(w) && avengeOf(w));
+  if (!who) return;
+  const av = avengeOf(who);
+  b._avengeTurn = b.turn;
+  const al = avengeLine(av);
+  if (al) battleSay(who, al);
+  const st = effStats(who);
+  let dmg = st.atk * (av.mult || 2) + rnd(4) - foeDefFor(b, who);
+  const crit = Math.random() < critRate();
+  if (crit) dmg *= critMultFor(who) * critDmgMult();
+  const ty = atkTypeHit(b, who);
+  dmg = Math.max(1, Math.floor(dmg * ty.mult));
+  b.hp = Math.max(0, b.hp - dmg);
+  say("▶ " + memberName(who) + "의 " + av.label + "! — " + dmg + " 피해" + ty.tag,
+      crit ? "crit" : "hit", { tags: true, who: who });
+  foeSfx("hit");
+  foeHit(0, dmg, crit, ty.type);
+  staggerCheck(b);          // 되갚음 한 대로 적의 흐트선을 넘을 수도 있습니다
+  render();
+  /* 여기서 이기고 지는 것을 가리지는 않습니다 — 부른 쪽(적의 한 대)이 곧바로
+   * b.hp <= 0 을 보고 승리로 넘어갑니다. 가로채면 그 흐름이 꼬입니다. */
+}
+/* 배열 대사를 차례대로 — 적의 lineCycle 과 같은 셈을 전투 하나 안에서 따로 셉니다 */
+function avengeLine(av) {
+  const b = S && S.battle;
+  let line = av && av.line;
+  if (!line) return null;
+  if (!Array.isArray(line)) return line;
+  b._lineI = b._lineI || new Map();
+  const i = b._lineI.get(line) || 0;
+  b._lineI.set(line, i + 1);
+  return line[i % line.length];
+}
+/* ── 고유 능력 쪽지 ────────────────────────────────────────────
+ *  인격 줄(또는 지원 작성위원 줄)에 붙은 «늘 듣는 능력» 을 사람 말로 적어 돌려줍니다.
+ *  여태 이것들은 화면 어디에도 안 적혀 있어, 패치 노트를 읽어야만 알 수 있었습니다
+ *  (사용자 지침 2026-11-21). 편성 화면의 카드 오른쪽 아래 연두색 네모를 누르면 뜹니다.
+ *
+ *  새 능력을 더하면 여기 한 줄만 보태면 됩니다 — 카드 세 곳이 함께 따라옵니다. */
+function abilityLinesOf(src) {
+  const out = [];
+  if (!src) return out;
+  if (src.staggerSkill)
+    out.push("<b>흐트러짐 해제</b> " + (src.staggerSkill.recoverEnd || 1) + "회" +
+             " — 차례가 끝날 때 흐트러져 있으면 그 자리에서 풀립니다(전투당).");
+  if (src.cover)
+    out.push("기믹 <b>「대신 맞기」</b> — 「" + src.cover.synergy + "」이 켜진 동안, 이름에 「" +
+             src.cover.titleHas + "」가 든 사람을 노린 한 사람 공격을 대신 맞습니다.");
+  if (src.avenge)
+    out.push("기믹 <b>「" + (src.avenge.label || "되갚음") + "」</b> — 「" + src.avenge.synergy +
+             "」이 켜진 동안, 다른 아군이 흐트러지거나 쓰러지면 그 자리에서 곧바로 " +
+             (src.avenge.mult || 2) + "배로 되갚습니다(한 차례에 한 번).");
+  if (src.stack) {
+    const st = src.stack;
+    const boost = (typeof SYNERGIES !== "undefined" ? SYNERGIES : []).find(x => x.stackBoost === st.key);
+    out.push("고유 효과 <b>「" + st.name + "」</b> — 공격을 마칠 때마다(연계 추가타 포함) " +
+             (st.selfDmg ? "체력 " + st.selfDmg + "을 태워 " : "") + "공격력이 " + st.atk + "씩 쌓입니다." +
+             (boost ? "\n시너지 「" + boost.name + "」" + josa(boost.name, "이") + " 켜지면 ×1.5(셋 ×1.75 · 넷 ×2)." : "") +
+             (st.selfDmg ? "\n태운 체력으로는 쓰러지지도, 흐트러지지도 않습니다." : "") +
+             "\n쓰러지면 잃습니다.");
+  }
+  /* stackLine 은 «한마디 하는 자리» 일 뿐 능력이 아니라 적지 않습니다 */
+  return out;
+}
+/* ── 연계 기믹 줄 (사용자 지침 2026-11-24) ──────────────────────
+ *  연계 셋은 인격 줄에 밭으로 적혀 있지 않고, data/skills.js 의 따로 선 표에
+ *  who + needTitle 로 적혀 있습니다 — 그래서 위 abilityLinesOf 가 볼 길이 없어
+ *  화면 어디에도 안 적혀 있었습니다(패치 노트를 읽어야만 알 수 있었습니다).
+ *
+ *    LINK_SKILLS        연계 효과   — 차민준 「신해수랜드 실장」
+ *    LINK_BONUS_ATTACKS 연계 추가타 — 유아인 「B구역 군주」
+ *    LINK_ORDERS        연계 호령   — 성시윤 「아라온호 선장」
+ *
+ *  기믹 쪽 코드(checkLinkSkills · checkLinkBonus · checkLinkOrders)는 건드리지
+ *  않습니다 — 여기서 같은 표를 읽어 사람 말로 옮겨 적기만 합니다. 턴 가락과
+ *  배율은 표에서 읽으니 수치를 고치면 글도 따라옵니다.
+ *
+ *  ■ 주기를 줄여 주는 기프트(giftName)와 배율을 올리는 교육위원(advisorName)은
+ *    적지 않습니다 (사용자 지침 2026-11-24) — 아직 못 얻은 물건·사람의 이름을
+ *    미리 흘리지 않으려는 것으로, notice.js · patch.js 가 지키는 결과 같습니다.
+ *  ■ 묶이지 않은 연계 둘(LINK_GUARDS 「장부」 · LINK_VOLLEYS 「일제사격」)은 여기
+ *    없습니다 — 제목의 말로만 걸려 한 인격의 능력이라 하기 어렵습니다(같은 지침).
+ */
+function linkCycleText(ls) {
+  const start = ls.startTurn != null ? ls.startTurn : ls.every;
+  return start + "턴부터 " + ls.every + "턴마다";
+}
+function linkLinesOf(who, title) {
+  const out = [];
+  if (!who || !title) return out;
+  const tbl = (x) => (x && x.length) ? x : [];
+  const hit = (x) => tbl(x).find(r => r.who === who && title.indexOf(r.needTitle) >= 0);
+  const tagText = (t) => { const a = [].concat(t);
+    return a.map(x => "「" + x + "」").join(" · ") + josa(a[a.length - 1], "이"); };
+
+  const a = hit(typeof LINK_SKILLS !== "undefined" ? LINK_SKILLS : null);
+  if (a)
+    out.push("기믹 <b>「" + (a.label || "연계") + "」</b> — 「" + a.synergyName + "」" + josa(a.synergyName, "이") + " 켜진 동안, " +
+             linkCycleText(a) + " 제목에 " + tagText(a.pickTag) + " 든 편성원 하나를 불러, " +
+             "그 사람의 다음 차례 공격력을 " + (a.atkMult || 2) + "배로 올립니다." +
+             "\n부를 사람이 없으면 자신이 받습니다.");
+
+  const b = hit(typeof LINK_BONUS_ATTACKS !== "undefined" ? LINK_BONUS_ATTACKS : null);
+  if (b)
+    out.push("기믹 <b>「" + (b.label || "연계") + "」</b> — 「" + b.synergyName + "」" + josa(b.synergyName, "이") + " 켜진 동안, " +
+             linkCycleText(b) + " 자기 공격을 마친 자리에서 제목에 " + tagText(b.pickTag) +
+             " 든 편성원 하나를 불러 덤으로 한 대 더 꽂습니다.\n흐트러진 사람은 빠집니다." +
+             /* 보복 전이 — checkLinkBonus 가 「흑수들의 왕」과 유아인 「보복」을 그대로 보고 셉니다 */
+             (b.synergyName === "흑수들의 왕"
+               ? "\n그 시너지가 셋 이상으로 걸려 있으면, 그 한 대에 「보복」으로 올라 있는 공격력 상승률이 그대로 얹힙니다."
+               : ""));
+
+  const c = hit(typeof LINK_ORDERS !== "undefined" ? LINK_ORDERS : null);
+  if (c)
+    out.push("기믹 <b>「" + (c.label || "연계") + "」</b> — 「" + c.synergyName + "」" + josa(c.synergyName, "이") + " 켜진 동안, " +
+             linkCycleText(c) + " 제목에 " + tagText(c.tag) + " 든 편성원 전원(자신도 포함)의 " +
+             (c.effect && c.effect.crit ? "이번 차례 공격이 확정 치명타가 됩니다." : "이번 차례 공격이 강화됩니다."));
+
+  return out;
+}
+/* 편성 칸의 그 사람 — 작성위원이면 지금 낀 인격, 지원 작성위원이면 그 줄 자체.
+ * 연계 셋은 표가 who 로 가리므로 작성위원 쪽에만 붙습니다(지원은 걸릴 일이 없습니다). */
+function abilityLines(who) {
+  if (isSupport(who)) return abilityLinesOf(supportBy(who));
+  const id = SINNERS[who] ? idByKey(S.equip[who]) : null;
+  return abilityLinesOf(id).concat(id ? linkLinesOf(who, id.title) : []);
+}
+/* 쪽지에 한 줄을 세우는 모양 (사용자 지침 2026-11-25 — «눈에 너무 안 보인다»).
+ *  · 능력 이름은 윗줄에 흰 글씨로, 설명은 그 아랫줄에. 위 두 짜는 자리가 늘
+ *    «이름 — 설명» 꼴로 적으므로 첫 « — » 에서 가릅니다.
+ *  · 설명 안의 \n 은 «여기서 줄을 가르면 읽기 좋다» 는 표시입니다 — <br> 로 섭니다.
+ *    (쪽지 말고는 abilityLines 를 글로 쓰는 자리가 없습니다 — 네모는 길이만 셉니다.) */
+function abilityLineHTML(line) {
+  const i = line.indexOf(" — ");
+  const head = i < 0 ? line : line.slice(0, i);
+  const body = i < 0 ? ""   : line.slice(i + 3);
+  return '<div class="abl"><span class="abk">' + head + '</span>' +
+         body.split("\n").join("<br>") + '</div>';
+}
+/* 카드 오른쪽 아래에 서는 연두색 네모. 능력이 하나도 없으면 아예 안 섭니다. */
+function abilityDotHTML(who) {
+  return abilityLines(who).length
+    ? '<button class="abildot" data-abil="' + who + '" title="고유 능력"></button>' : '';
 }
 function stars(n) { return "★".repeat(n); }
 
@@ -4492,7 +4948,17 @@ function speak(who, text, portraitSrc) {
   if (text === "TODO" || text == null) say("(대사 미작성)", "todo");
   else say(text, "d");
   const pt = portraitSrc || portraitOf(who);
-  if (pt) showSpeaker(pt, nameOf(who));
+  if (pt && !speakerOnStage(who, pt)) showSpeaker(pt, nameOf(who));
+}
+/* 말하는 사람이 지금 무대 가운데 적으로 서 있는가 — 그러면 왼쪽 초상을 또 세우지 않습니다
+ * (사용자 지침 2026-11-20 — 8-3 지와 단계 사이 대화에 새 적 그림과 옛 초상이 함께 섰음).
+ * 이름이 겹치는 일(«유아인» ⊂ «모든 것을 그리워하는 유아인»)이 있어 글자 포함으로는 가리지 않고,
+ * 적 쪽에 speakerAs(대사의 who 이름 — 글 또는 배열)를 적은 경우와 같은 그림인 경우만 봅니다. */
+function speakerOnStage(who, pt) {
+  if (!CUR_FOE) return false;
+  if (pt && pt === CUR_FOE.src) return true;
+  const f = Object.keys(FOES).map(k => FOES[k]).find(x => x.name === CUR_FOE.tag);
+  return !!(f && f.speakerAs && [].concat(f.speakerAs).indexOf(who) >= 0);
 }
 /* 전투 턴 머리 — 가운데 굵은 흰 «n턴» 양옆에 구분선, 그 아래 적 이름 · 체력을 크게(사용자 지침 2026-11-13, v2.28.11).
  * 예전 «── n턴 ──  적  hp/max» 한 줄과 그 위 붉은 구분선(divider)을 대신합니다 — 지난 턴 결과와 한눈에 갈리게. */
@@ -4592,6 +5058,22 @@ function supportCard(sp, sub) {
 /* 유리창에 서 있는가 — 머리줄의 [우편함] · [보상] 아이콘은 유리창에서만 섭니다(renderHeader).
  * glass() 가 켜고, 다른 화면으로 넘어갈 때 부르는 clearLog() 가 끕니다. */
 let AT_GLASS = false;
+/* ── 진행 중에 건 시간 대기 (사용자 지침 2026-11-20 — 전투 · 이야기 중 [설정] 에서 «저장하지 않고 유리창으로») ──
+ *  전투와 이야기는 대사 사이 · 적 차례 사이를 setTimeout 으로 잇습니다. 그 한가운데서 유리창으로 나가면
+ *  걸려 있던 대기가 나중에 깨어나 유리창 기록칸에 전투 줄을 찍거나 비어 버린 S.battle 을 건드립니다.
+ *  그래서 유리창 밖에서 건 대기만 따로 적어 두었다가, 나갈 때(leavePlayToGlass) 한꺼번에 걷습니다.
+ *  유리창에서 건 대기(알림 · 손잡이 글씨 되돌리기 등)는 적지 않습니다. */
+const PLAY_TIMERS = new Set();
+const _rawSetTimeout = window.setTimeout.bind(window);
+const _rawClearTimeout = window.clearTimeout.bind(window);
+window.setTimeout = function (fn, ms, ...args) {
+  if (AT_GLASS || typeof fn !== "function") return _rawSetTimeout(fn, ms, ...args);
+  const id = _rawSetTimeout(() => { PLAY_TIMERS.delete(id); fn(...args); }, ms);
+  PLAY_TIMERS.add(id);
+  return id;
+};
+window.clearTimeout = function (id) { PLAY_TIMERS.delete(id); _rawClearTimeout(id); };
+function clearPlayTimers() { PLAY_TIMERS.forEach(id => _rawClearTimeout(id)); PLAY_TIMERS.clear(); }
 function clearLog() { $log.innerHTML = ""; AT_GLASS = false; }
 
 /* ── 무대 ─────────────────────────────────────────────────── */
@@ -4675,8 +5157,13 @@ function renderStage() {
     /* --imgscale 로 넘깁니다(직접 transform 을 박지 않습니다) — 맞을 때·쓰러질 때
      * 애니메이션도 이 값을 keyframes 안에서 함께 곱하게 index.html 쪽에 맞춰 뒀습니다.
      * 그래야 맞는 순간 확대가 풀렸다 돌아오는 깜빡임이 없습니다. */
-    const big = !!(CUR_FOE.scale && CUR_FOE.scale !== 1);
-    const st = big ? ' style="--imgscale:' + CUR_FOE.scale + '"' : '';
+    /* scale 이 {s, at} 이면 평소 그림만 키우는 몫(baseScale) — 칸 가운데로 옮기지 않고
+     * 바닥에 선 채 at 을 축으로 키웁니다. 숫자면 예전대로 가운데에 답니다. */
+    const sc0 = CUR_FOE.scale, keep = !!(sc0 && typeof sc0 === "object");
+    const sv = keep ? sc0.s : sc0;
+    const big = !!(sv && sv !== 1) && !keep;
+    const st = (sv && sv !== 1)
+      ? ' style="--imgscale:' + sv + (keep ? ';transform-origin:' + sc0.at : '') + '"' : '';
     /* 키워 세우는 그림은 바닥이 아니라 «칸 한가운데» 에 답니다 — 바닥을 축으로
      * 키우면 위로만 자라 머리가 화면 밖으로 넘칩니다. scaled 가 그 몫입니다.
      * id="figure" 는 foeHit()·foeFalls() 가 찾는 자리라 적 그림에만 답니다. */
@@ -4839,7 +5326,15 @@ function clearCut() {
 /* 대사하는 사람을 왼쪽에 세운다 — 적(CUR_FOE)은 그대로 둔다 */
 function showSpeaker(src, tag) { drawStage(src, "left", tag); }
 /* 적을 가운데에 세운다 — 말하는 사람의 초상(CUR_SPEAKER)은 그대로 둔다 */
-function showFoe(src, tag, scale) { drawStage(src, "mid", tag, scale); }
+function showFoe(src, tag, scale) {
+  /* 평소 그림만 키우는 적(FOES 의 baseScale) — 그림 경로로 찾으니 전투 · 이야기 · 거울 어디서 세워도
+   * 같은 크기입니다. 따로 키우라는 scale 이 오면 그쪽이 이깁니다. */
+  if (!scale && src) {
+    const k = Object.keys(FOES).find(k => FOES[k].img === src && FOES[k].baseScale);
+    if (k) scale = { s: FOES[k].baseScale, at: FOES[k].baseAt || "50% 100%" };
+  }
+  drawStage(src, "mid", tag, scale);
+}
 
 /* 다음 차례가 열리면 말하던 사람의 초상은 스스로 사라집니다(사용자 지침
  * 2026-09-02) — 적(CUR_FOE)은 그대로 두고 이 자리만 비웁니다. */
@@ -5581,13 +6076,21 @@ function renderHeader() {
   /* 유리창에서만 — [우편함] · [보상] · [설정] 을 아이콘 손잡이로 (사용자 지침 2026-10-16 · 17).
    * 예전에는 아래 손잡이 줄에 글자로 섰습니다. 받을 것이 있으면 금빛 테두리와 개수 딱지 */
   if (AT_GLASS && !S.battle) {
-    const hb = (key, name, n) =>
-      '<button class="hdrbtn' + (n ? ' on' : '') + '" data-hdr="' + key + '" title="' + name + (n ? ' (' + n + ')' : '') + '">' +
-        iconMini(name) + (n ? '<i>' + n + '</i>' : '') + '</button>';
+    /* 처음 온 판에는 [우편함] · [보상] 을 잠그고 [설정] 만 켭니다(FIRST_LOCK, 사용자 지침 2026-11-20) */
+    const hb = (key, name, n) => {
+      const off = FIRST_LOCK && key !== "settings";
+      if (off) n = 0;
+      return '<button class="hdrbtn' + (n ? ' on' : '') + '" data-hdr="' + key + '" title="' + name + (n ? ' (' + n + ')' : '') + '"' +
+        (off ? ' disabled' : '') + '>' + iconMini(name) + (n ? '<i>' + n + '</i>' : '') + '</button>';
+    };
     /* [설정] 도 톱니바퀴 아이콘으로 맨 끝에 (사용자 지침 2026-10-17) */
     right += '<span class="hdrbtns">' + hb("mail", MAIL_RULE.name, mailWaiting()) +
              (rewardOn() ? hb("reward", REWARD_RULE.name, rewardWaiting()) : "") +
              hb("settings", "설정", 0) + '</span>';
+  } else {
+    /* 전투 · 이야기 · 거울 갈래 — [설정] 하나만. 소리 조절과 «저장하지 않고 유리창으로» 만 하는 작은 창(openPlaySettings,
+     * 사용자 지침 2026-11-20). 유리창의 설정 화면과는 다른 창입니다. */
+    right += '<span class="hdrbtns"><button class="hdrbtn" data-hdr="playset" title="설정">' + iconMini("설정") + '</button></span>';
   }
   /* 이벤트 재화는 여기 적지 않습니다 — 상점과 이벤트 교환소 안에서만 보입니다 */
   /* 관리력은 머리에 숫자로 적지 않고, 아래쪽 눈금으로 보여 줍니다 (renderManage) */
@@ -5596,6 +6099,7 @@ function renderHeader() {
     const k = el.dataset.hdr;
     el.onclick = () => k === "mail" ? openMail(() => glass())
                      : k === "reward" ? openReward(() => glass())
+                     : k === "playset" ? openPlaySettings()
                      : openSettings(() => glass());
   });
 }
@@ -5736,7 +6240,7 @@ function renderParty() {
       ? '<span class="skfull">' + o.name + '</span><span class="skshort">' + o.short + '</span>'
       : o.name;
     if (stack !== null) mark += ' <span class="stacktag">' + stackLabel(UNIQUE_SKILLS[who]) + ' ' + stack + '</span>';
-    /* 히트 · 염화 — 그 시너지가 켜져 있는 동안 (stackRulesFor) */
+    /* 히트 · 염화 — 인격 고유 효과, 시너지가 켜지면 배율 (stackRulesFor) */
     stackRulesFor(who).forEach(r => {
       const n = (S.arc && S.arc.stacks && S.arc.stacks[r.stack.key] && S.arc.stacks[r.stack.key][who]) || 0;
       mark += ' <span class="stacktag">' + stackLabel(r.stack) + ' ' + n + '</span>';
@@ -6089,16 +6593,49 @@ document.addEventListener("click", e => {
   const info = chip.dataset.cur ? (WALLET_INFO[chip.dataset.cur] && WALLET_INFO[chip.dataset.cur]())
                                 : GIFT_ROW_INFO[+chip.dataset.ginfo];
   if (!info) return;
+  showChipInfo(chip, key, info);
+});
+/* 쪽지 한 장을 그 자리 아래에 띄웁니다 */
+function showChipInfo(chip, key, info) {
   const el = document.createElement("div");
   el.id = "chipinfo";
+  if (info.cls) el.className = info.cls;   // 쪽지마다 다른 꾸밈 — 고유 능력 쪽지는 "abil"
   el.dataset.for = key;
   el.innerHTML = '<div class="nm">' + info.name + '</div>' + (info.desc ? '<div class="sub">' + info.desc + '</div>' : '');
   document.body.appendChild(el);
   const b = chip.getBoundingClientRect(), w = Math.min(280, window.innerWidth - 16);
   el.style.width = w + "px";
   el.style.left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8)) + "px";
-  el.style.top = (b.bottom + 6) + "px";
-});
+  /* 딱지 «아래» 가 본자리지만, 아래로 넘쳐 잘릴 것 같으면 «위» 에 세웁니다
+   * (사용자 지침 2026-11-25) — 고유 능력 쪽지가 길어 화면 밖으로 나가면 아예 안 보였습니다.
+   * 위아래 어디에도 다 안 들어가면 아래에 세우되 화면 안으로 끌어당깁니다. */
+  const h = el.getBoundingClientRect().height;
+  const under = b.bottom + 6, over = b.top - 6 - h;
+  el.style.top = (under + h <= window.innerHeight - 8 || over < 8)
+    ? Math.max(8, Math.min(under, window.innerHeight - h - 8)) + "px"
+    : over + "px";
+}
+
+/* 고유 능력 네모 — «잡는 단계»(capture)에서 가로챕니다 (사용자 지침 2026-11-21).
+ * 칸(.slot)의 onclick 은 거품 단계에서 이 자리보다 «먼저» 돌기 때문에, 아래 거품 쪽
+ * 손잡이에서 막아서는 늦습니다 — 네모만 누르려다 그 사람이 편성에서 빠졌습니다. */
+document.addEventListener("click", e => {
+  const dot = e.target.closest && e.target.closest("[data-abil]");
+  if (!dot) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const key = "abil:" + dot.dataset.abil;
+  const tip = document.getElementById("chipinfo");
+  const same = tip && tip.dataset.for === key;
+  if (tip) tip.remove();
+  if (same) return;
+  const lines = abilityLines(dot.dataset.abil);
+  if (!lines.length) return;
+  /* 줄마다 «고유 능력: » 을 되풀이하지 않고, 머리에 작은 딱지 하나만 (사용자 지침 2026-11-25) */
+  showChipInfo(dot, key, { name: memberName(dot.dataset.abil), cls: "abil",
+                           desc: '<div class="ablab">고유 능력</div>' +
+                                 lines.map(abilityLineHTML).join("") });
+}, true);
 
 /* 발동 중인 편성 시너지 — 「활성화된 시너지 |」 로 시작하는 줄 (사용자 지침 2026-10-16). 전투 중에도 항상 보인다.
  * 보조 교육위원은 renderAdvisors, 기프트 · 테마팩 특전은 renderGifts 가 따로 줄을 그립니다. */
@@ -6119,6 +6656,7 @@ function renderSynergy() {
     if (s.atk) eff.push("공 +" + Math.round(s.atk * 100) + "%");
     if (s.def) eff.push("방 +" + Math.round(s.def * 100) + "%");
     if (s.hp)  eff.push("체 +" + Math.round(s.hp  * 100) + "%");
+    if (s.stackBoost) eff.push(deepStackName(s.stackBoost) + " ×" + (Math.round(s.stackScale * 100) / 100));
     return '<span class="syn' + (s.count >= 3 ? ' full' : '') + '" title="' + (s.desc || "") + '">' +
              '<b>' + s.name + '</b>' +
              '<span class="cnt">' + s.count + '명' + (s.count >= 3 ? ' 완전' : '') + '</span>' +
@@ -6216,6 +6754,142 @@ function buildScenes(chapter) {
   return out;
 }
 
+/* ── 그림 미리 받기 (사용자 지침 2026-11-23) ─────────────────────
+ *  장(과 거울 갈래)에 들어설 때 그 장면 목록에 나오는 그림을 모아, 뒤에서 한 장씩 받아 둡니다 —
+ *  처음 나오는 순간 받느라 무대가 비거나 늦게 뜨는 일이 없게.
+ *    · 장면의 어느 칸이든 ‹assets/…png·jpg·webp·gif› 인 글은 다 모읍니다(배경 · 컷 · 전투 장면의 그림 칸)
+ *      (‹ › 는 따옴표 자리 — 주석 속 따옴표 경로는 배포 검사가 «있어야 할 그림» 으로 셉니다. data/bgm.js 머리말과 같은 까닭)
+ *    · FOES 의 키인 글(battle.foe 등)은 그 적의 그림 칸 전부(강타 · 광역 · 반격 …)로 넓힙니다
+ *    · who 칸은 portraitOf 로 초상을 찾습니다
+ *    · bgm 칸(장면 · 적)은 곡 열쇠라 따로 모읍니다 — 돌려주는 { img, bgm } 의 bgm 쪽입니다
+ *  지금 자리(from)부터 차례로 받고, 받는 쪽 우선순위는 낮춰(fetchPriority low) 지금 화면을 막지 않습니다.
+ *  다른 장으로 넘어가면 남은 줄은 버립니다(PRELOAD_TOKEN). 배포판처럼 그림이 파일 안에 든
+ *  것(ASSET_DATA)은 받을 것이 없어 건너뜁니다. */
+let PRELOAD_TOKEN = 0;
+const PRELOADED = new Set();
+function sceneAssets(list) {
+  const out = [], bgms = [], seen = new Set(), foeSeen = new Set();
+  const add = p => {
+    if (typeof p === "string" && !seen.has(p) && /^assets\/.+\.(png|jpe?g|webp|gif)$/i.test(p)) { seen.add(p); out.push(p); }
+  };
+  const walk = (v, depth) => {
+    if (v == null || depth > 8) return;
+    if (typeof v === "string") {
+      add(v);
+      if (Object.prototype.hasOwnProperty.call(FOES, v) && !foeSeen.has(v)) { foeSeen.add(v); walk(FOES[v], depth + 1); }
+      return;
+    }
+    if (Array.isArray(v)) { v.forEach(x => walk(x, depth + 1)); return; }
+    if (typeof v !== "object") return;
+    for (const k in v) {
+      if (k === "who") { try { add(portraitOf(v[k])); } catch (e) {} }
+      /* 곡(장면의 bgm · 적의 bgm)은 열쇠라 BGM 표를 거쳐야 파일이 됩니다 — bgmSrcs */
+      if (k === "bgm" && typeof v[k] === "string" && bgms.indexOf(v[k]) < 0) bgms.push(v[k]);
+      walk(v[k], depth + 1);
+    }
+  };
+  (list || []).forEach(s => walk(s, 0));
+  return { img: out, bgm: bgms };
+}
+function preloadAssets(paths) {
+  const tok = ++PRELOAD_TOKEN;
+  const todo = paths.filter(p => p && !PRELOADED.has(p) &&
+    !(typeof ASSET_DATA !== "undefined" && ASSET_DATA[p]));
+  let i = 0;
+  const one = () => {
+    if (tok !== PRELOAD_TOKEN || i >= todo.length) return;
+    const p = todo[i++];
+    const im = new Image();
+    im.decoding = "async";
+    try { im.fetchPriority = "low"; } catch (e) {}
+    im.onload = () => { PRELOADED.add(p); setTimeout(one, 20); };
+    im.onerror = () => { PRELOADED.add(p); setTimeout(one, 20); };   // 없는 그림은 다시 찾지 않습니다
+    im.src = assetURL(p);
+  };
+  one(); one();   // 두 줄로 나눠 받습니다
+}
+function preloadScenes(list, from, extra) {
+  const a = sceneAssets((list || []).slice(from || 0));
+  preloadAssets((extra || []).concat(a.img));
+  preloadAudio(bgmSrcs(a.bgm));      // 이 자리부터 나올 곡도 함께 (소리 미리 받기)
+}
+
+/* ── 소리 미리 받기 (사용자 지침 2026-11-26) ─────────────────────
+ *  소리는 그림보다 늦게 들통납니다 — 보스가 서는 그 순간에 몇 MB 짜리 곡을 받기
+ *  시작하면, 연출은 다 지나가고 음악만 뒤늦게 들어옵니다.
+ *
+ *    ■ 켤 때(preloadSounds)   효과음 전부 · 보스 등장 음성 · 늘 쓰는 곡(BGM_PICK).
+ *                             첫 화면을 막지 않게 조금 미뤄 두고 받습니다.
+ *    ■ 장에 들어설 때          그 장의 곡(preloadChapterBgm) — 묶음이면 부분 전부.
+ *    ■ 그 밖의 자리            preloadScenes 가 남은 장면 · 적의 bgm 을 함께 받습니다.
+ *
+ *  «받기» 만 하고 틀지 않으므로 «사용자가 누른 때» 를 안 탑니다(unlockSounds 머리말과 다릅니다)
+ *  — 허락이 필요한 것은 play() 뿐입니다. 받아 둔 것은 브라우저 칸에 남아, 나중에 Audio 가
+ *  같은 주소를 부르면 그대로 꺼내 씁니다.
+ *
+ *  아직 없는 파일(지금 assets/bgm/ 의 곡 넷)은 404 를 한 번 받고 다시 찾지 않습니다.
+ *  배포판처럼 파일이 코드 안에 든 것(ASSET_DATA)은 받을 것이 없어 건너뜁니다. */
+const AUDIO_PRELOADED = new Set();
+const AUDIO_QUEUE = [];
+let   AUDIO_BUSY = false;
+function preloadAudio(paths) {
+  (paths || []).forEach(p => {
+    if (p && !AUDIO_PRELOADED.has(p) && AUDIO_QUEUE.indexOf(p) < 0 &&
+        !(typeof ASSET_DATA !== "undefined" && ASSET_DATA[p])) AUDIO_QUEUE.push(p);
+  });
+  if (AUDIO_BUSY) return;
+  AUDIO_BUSY = true;
+  /* 한 줄로 차례차례 — 그림 받기(두 줄)와 지금 화면을 밀어내지 않게 */
+  const one = () => {
+    const p = AUDIO_QUEUE.shift();
+    if (!p) { AUDIO_BUSY = false; return; }
+    AUDIO_PRELOADED.add(p);                 // 없는 파일도 한 번만 찾습니다
+    const next = () => setTimeout(one, 60);
+    try {
+      const f = fetch(assetURL(p));
+      if (f && f.then) f.then(r => (r && r.ok) ? r.arrayBuffer() : null).then(next, next);
+      else next();
+    } catch (e) { next(); }
+  };
+  one();
+}
+/* 곡 열쇠 목록 → 파일 경로 (BGM 표에 없는 열쇠는 빠집니다) */
+function bgmSrcs(keys) {
+  const out = [];
+  (keys || []).forEach(k => {
+    const t = (typeof BGM !== "undefined" && k) ? BGM[k] : null;
+    if (t && t.src && out.indexOf(t.src) < 0) out.push(t.src);
+  });
+  return out;
+}
+/* 장에 들어설 때 — 그 장의 곡. 묶음(8장처럼 부분으로 나뉜 장)이면 부분 전부를 봅니다
+ * (사용자 지침 2026-11-26 — «8장 입장할 때 8장 보스전 음악을 받도록»). 8-1 로 들어가도
+ * 8-4 · 8-5 의 보스 곡을 미리 쥐어 둡니다 — 장면 목록을 펴 보는 값싼 일입니다. */
+function preloadChapterBgm(c) {
+  if (!c) return;
+  const gid = partOf(c);
+  const list = gid ? groupParts(gid).map(i => CHAPTERS[i]) : [c];
+  const keys = c.bgm ? [c.bgm] : [];
+  list.forEach(x => { if (x && x.scenes) sceneAssets(buildScenes(x)).bgm.forEach(k => keys.push(k)); });
+  preloadAudio(bgmSrcs(keys));
+}
+/* 켤 때 한 번 — 효과음 · 보스 등장 음성 · 늘 쓰는 곡. 작은 것부터 차례로 담습니다 */
+function preloadSounds() {
+  const out = [];
+  for (const k in ATK_TYPES) if (ATK_TYPES[k].sfx) out.push(ATK_TYPES[k].sfx);   // 공격 유형(관통 · 참격 · 타격)
+  foeSfxList().forEach(x => out.push(x));                                        // 적의 공격 · 흐트러짐
+  bgmSrcs(bgmCommonKeys()).forEach(x => out.push(x));                            // 유리창 · 이야기 · 전투 곡
+  soundsToUnlock().forEach(x => out.push(x));                                    // 보스 등장 음성 — 덩치가 커 맨 뒤
+  preloadAudio(out);
+}
+/* BGM_PICK 에 적힌 곡 — 어느 장을 가든 울리는 것들 */
+function bgmCommonKeys() {
+  const out = [];
+  if (typeof BGM_PICK !== "undefined")
+    for (const k in BGM_PICK) if (BGM_PICK[k] && out.indexOf(BGM_PICK[k]) < 0) out.push(BGM_PICK[k]);
+  return out;
+}
+
 /* ── 장마다 꼭 있어야 하는 사람 ────────────────────────────────
  *  data/story.js 의 장에 이렇게 적으면, 그 사람이 편성되어 있어야 들어갈 수 있습니다.
  *
@@ -6231,6 +6905,17 @@ function chapterMissing(c) {
   return chapterNeeds(c).filter(w => S.party.indexOf(w) < 0);
 }
 function nameList(keys) { return keys.map(w => memberName(w)).join(", "); }
+
+/* 장 묶음의 안내 상자 — 부분 고르기 창 맨 위에서 줄 하나를 다 쓰고 섭니다
+ * (사용자 지침 2026-11-20). 「누가 반드시 편성되어야 하는가」 처럼 장 전체에 걸리는 말을
+ * 여기 한 번만 적습니다. 부분마다 되풀이하지 않는 까닭은 보기 사납기 때문만이 아닙니다 —
+ * 되풀이하면 어느 한 부분에만 그 줄이 빠지는 일이 생기고, 그 빠짐 자체가 스포일러가 됩니다
+ * (8-5 는 유아인을 편성할 수 없는 자리입니다). 묶음 머리칸의 partNote 에 적습니다. */
+function partNoteHTML(m) {
+  const lines = m && m.partNote ? (Array.isArray(m.partNote) ? m.partNote : [m.partNote]) : [];
+  if (!lines.length) return "";
+  return '<div class="partnote">' + lines.map(x => '<p>' + x + '</p>').join("") + '</div>';
+}
 
 /* 꼭 있어야 할 사람이 빠졌을 때 — 들어가지 않고 편성으로 돌려보냅니다 */
 function chapterGate(i, miss) {
@@ -6279,7 +6964,9 @@ function startChapter(i) {
   S.ch = i; S.sc = 0; S.ended = false;
   S.mirror = false; MIRROR = null;
   SCENES = buildScenes(c);
-  allyClear();                                            // 앞 장의 조력자는 데려가지 않습니다
+  preloadScenes(SCENES, 0, [c.img]);                      // 이 장에 나오는 그림을 뒤에서 미리 받아 둡니다
+  preloadChapterBgm(c);                                   // 이 장(묶음이면 부분 전부)의 곡 — 보스 곡을 전투 머리에 받지 않도록
+  allyClear();                                           // 앞 장의 조력자는 데려가지 않습니다
 
   const enter = () => {
     S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });   // 장 시작 시 회복
@@ -6808,24 +7495,59 @@ function skipStage(list) {
   return where;
 }
 
+/* 화면을 한 번 어둡게 덮었다 걷습니다 — 다 덮인 사이에 work() 로 판을 갈아 끼웁니다
+ * (사용자 지침 2026-11-21 — 「끊김이 자연스럽도록」). 덮개가 누름도 함께 막습니다.
+ * RULE.skipFadeMs 를 0 으로 두면 덮지 않고 그 자리에서 치릅니다. */
+function fadeThrough(work) {
+  if (!RULE.skipFadeMs) { work(); return; }
+  const ms = RULE.skipFadeMs;
+  const el = document.createElement("div");
+  el.className = "fadeveil";
+  el.style.transitionDuration = ms + "ms";
+  document.body.appendChild(el);
+  /* 한 번 재게 해서 «투명했던 것» 을 굳힙니다 — 이래야 브라우저가 사이를 그려 줍니다.
+   * requestAnimationFrame 은 쓰지 않습니다(2026-11-21): 창이 그리기를 쉬면 그 부름이
+   * 영영 안 와서, 덮개가 화면에 남아 누름을 통째로 막아 버립니다. setTimeout 은 옵니다. */
+  void el.offsetWidth;
+  el.classList.add("on");
+  setTimeout(() => {
+    /* work() 가 어디서 넘어져도 덮개는 반드시 걷습니다 — 남으면 아무것도 못 누릅니다 */
+    try { work(); }
+    finally {
+      el.classList.remove("on");
+      setTimeout(() => el.remove(), ms + 60);
+    }
+  }, ms + (RULE.skipHoldMs || 0));
+}
+
 function storySkip() {
   const t = storySkipTo();
   if (!t) return cont();                                      // 그새 넘길 것이 없어졌으면 그대로
-  /* 넘긴다는 말을 «먼저» 적습니다 — 지나는 길에 받은 것(인격 · 황금교본 …)이
-   * 그 아래에 찍혀야 무엇 때문에 받았는지가 읽힙니다. */
-  divider();
-  say("이미 지나온 이야기를 넘겼다 — " + withJosa(storySkipWhere(t), "으로") + ".", "sys");
-  const 무대 = [];
-  while (S.sc < t.to) {
-    const s = SCENES[S.sc++];
-    if (SKIP_RUN[s.t]) { play(s); continue; }                 // 받을 것은 받고 지나갑니다
-    무대.push(s);                                             // 나머지는 무대만 챙깁니다
-  }
-  const where = skipStage(무대);
-  if (where) say("▶ " + where, "place");
-  render();
-  save(true);
-  next();                                                     // 멈추는 자리를 그대로 엽니다
+  /* 덮이는 동안 손잡이를 걷고 길을 잠가 둡니다 — [계속] 이 한 번 더 눌리면 장면이 어긋납니다 */
+  S.waiting = true;
+  buttons([]);
+  fadeThrough(() => {
+    S.waiting = false;
+    /* 어두운 사이에 기록칸을 비웁니다 — 읽은 줄 밑에 새 자리가 그냥 이어 붙으면
+     * «넘어왔다» 는 것이 안 보였습니다(사용자 지침 2026-11-21). */
+    clearLog();
+    $log.classList.remove("recalling");
+    /* 넘긴다는 말을 «먼저» 적습니다 — 지나는 길에 받은 것(인격 · 황금교본 …)이
+     * 그 아래에 찍혀야 무엇 때문에 받았는지가 읽힙니다. */
+    divider();
+    say("이미 지나온 이야기를 넘겼다 — " + withJosa(storySkipWhere(t), "으로") + ".", "sys");
+    const 무대 = [];
+    while (S.sc < t.to) {
+      const s = SCENES[S.sc++];
+      if (SKIP_RUN[s.t]) { play(s); continue; }               // 받을 것은 받고 지나갑니다
+      무대.push(s);                                           // 나머지는 무대만 챙깁니다
+    }
+    const where = skipStage(무대);
+    if (where) say("▶ " + where, "place");
+    render();
+    save(true);
+    next();                                                   // 멈추는 자리를 그대로 엽니다
+  });
 }
 
 /* 계속 버튼 — 손으로 누르는 「기록」 손잡이는 없앴습니다(사용자 지침
@@ -7331,7 +8053,9 @@ function startBattleFight(scene, f) {
    "rageAt", "rageHeavyEvery", "rageAoeEvery", "rageAtkPct", "rageLine", "rageWarn", "rageImg",
    "firstEvery", "firstFrom", "firstLine", "firstWarn", "firstHeavy",
    "firstAoeEvery", "firstAoeFrom", "firstAoeFlat", "firstAoeLine", "firstAoeWarn",
-   "staggerLine", "staggerEndLine"].forEach(k => {
+   "staggerLine", "staggerEndLine",
+   /* 그림도 이 전투에서만 갈아 끼울 수 있습니다 — 8-3 지와 2단계처럼 같은 적이 단계마다 다른 모습일 때(2026-11-20) */
+   "img", "heavyImg", "aoeImg", "firstImg", "counterImg", "evadeImg", "breakImg"].forEach(k => {
     if (scene[k] != null) S.battle[k] = scene[k];
   });
   if (scene.hp != null) S.battle.maxhp = scene.hp;
@@ -7381,8 +8105,9 @@ function startBattleFight(scene, f) {
     else if (f.intro === "TODO") say("(등장 대사 미작성)", "todo");
     playSound(f.sound);                    // 등장할 때 한 번 — FOES 에 sound 를 적어 둔 적만
   }
-  showFoe(f.img || null, f.name, f.imgScale || null);   // 적은 배경 가운데에 선다
-  S.battle.shown = f.img || null;          // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
+  const img0 = S.battle.img || f.img || null;   // 전투 장면에 img 를 적었으면 그것(위 목록)
+  showFoe(img0, f.name, f.imgScale || null);   // 적은 배경 가운데에 선다
+  S.battle.shown = img0;                   // 지금 걸려 있는 그림 (강타 때 갈아 끼웁니다)
   say(resume ? (scene.resumeLine || ("▶ " + withJosa(f.name, "이") + " 다시 자세를 잡는다!")) : ("▶ " + withJosa(f.name, "이") + " 나타났다!"), "bad");
   /* FOES 원본이 아니라 «이 전투의» 값을 적습니다 — 장면에서 hp·atk·def 를
    * 덮어쓴 전투(위 «이 전투 하나만 다르게» 자리)는 둘이 다릅니다.
@@ -7487,6 +8212,13 @@ function lockKillCheck(b, t) {
   if (!gain) return;
   addFoeAtk(b, gain);
   say("▶ " + b.name + " — 노리던 표적을 쓰러뜨렸다.  공격 +" + gain + "　(지금 " + b.atk + ")", "heavy");
+  /* 그때 한마디 — 적에 lockKillLine(글 또는 배열). 읽을 틈 1.5초(battleHold, 사용자 지침 2026-11-20 — 8-4 이창수) */
+  const kl = b.lockKillLine || foeDef(b).lockKillLine;
+  if (kl) {
+    const one = Array.isArray(kl) ? kl[rnd(kl.length)] : kl;
+    foeSayLine(b, one);
+    battleHold(b, 1500);
+  }
 }
 function aoeMultNow(b) {
   const f = foeDef(b);
@@ -7681,13 +8413,14 @@ function beginTurn() {
 
   b.aoe      = !!(b.boss && (주기(aoeEvery, aoeFrom) || (rageAoe && 주기(rageAoe, null))));
   /* aoeFastAtk · aoeFastEvery — 공격력이 aoeFastAtk 이상이 되면 광역 주기를 aoeFastEvery 로 당깁니다(사용자 지침 2026-11-19 — 8-4 이창수 200 · 2).
-   * 페이즈 주기 대신 «지난 광역에서 몇 차례 지났나»(b.lastAoeTurn — afterAoe)로 셉니다. 넘어선 첫 턴에 한 번 알립니다(aoeFastWarn). */
+   * 페이즈 주기 대신 «지난 광역에서 몇 차례 지났나»(b.lastAoeTurn — afterAoe)로 셉니다.
+   * 넘어선 첫 턴의 알림은 aoeFastWarn 을 적었을 때만 — 이창수는 예고 없이 빠르게 몰아치도록 비웁니다(사용자 지침 2026-11-20). */
   const fastAtk = b.aoeFastAtk || fnow.aoeFastAtk;
   if (b.boss && fastAtk && b.atk >= fastAtk) {
     if (!b.aoeFastOn) {
       b.aoeFastOn = true;
-      say("▷ " + withJosa(b.name, "이") + " " + (b.aoeFastWarn || fnow.aoeFastWarn || "더는 숨을 고르지 않는다.  광역 공격이 잦아질 것 같다.") +
-          "　(공격 " + b.atk + ")", "bad");
+      const fw = b.aoeFastWarn || fnow.aoeFastWarn;
+      if (fw) say("▷ " + withJosa(b.name, "이") + " " + fw + "　(공격 " + b.atk + ")", "bad");
     }
     const fe = b.aoeFastEvery || fnow.aoeFastEvery || 2;
     b.aoe = b.lastAoeTurn == null ? b.aoe : (b.turn - b.lastAoeTurn >= fe);
@@ -7823,6 +8556,16 @@ function beginTurn() {
                : (b.foeFirst && nowFirst) ? nowFirst
                : ((b.heavy || b.firstHeavyNow) && nowHeavy) ? nowHeavy
                : nowImg;
+    /* 오른쪽 초상(sideImg)도 차례에 따라 갈아 끼울 수 있습니다 — 전투 장면의 sideActImg 를
+     * 선공 · 광역 · 버티기 깨기 차례에만 세웁니다(8-3 지와 2단계의 짹G 속공, 사용자 지침 2026-11-20).
+     * 가운데 적 그림이 그대로여도 무대를 다시 그려 오른쪽만 바꿉니다. */
+    const sc = b.scene || {};
+    if (sc.sideImg && sc.sideActImg) {
+      const act = !!(b.foeFirst || b.aoe || b.foeBreak);
+      const sideWant = act ? sc.sideActImg : sc.sideImg;
+      const shownBefore = want !== b.shown;
+      if (CUR_SIDE && CUR_SIDE.src !== sideWant) { CUR_SIDE = { src: sideWant, tag: sc.sideName || "" }; if (!shownBefore) renderStage(); }
+    }
     if (want !== b.shown) { b.shown = want; showFoe(want, b.name, nowScale); }
   }
   if (staggerOn(b)) {
@@ -7861,7 +8604,7 @@ function beginTurn() {
     say("▷ " + withJosa(b.name, "이") + " " + (b.counterWarn || f.counterWarn ||
         "몸을 웅크린 채 이쪽을 본다.  되받아칠 준비를 하고 있다."), "bad");
     say("　지금 공격하는 것은 위험할 것 같다." +
-        ((b.counterIdleAoe || f.counterIdleAoe) ? "  가만히 있어도 " + withJosa(b.counterIdleName || f.counterIdleName || "여파", "은") + " 닿는다." : ""), "bad");
+        ((b.counterIdleAoe || f.counterIdleAoe) ? "  치든 참든 " + withJosa(b.counterIdleName || f.counterIdleName || "여파", "은") + " 판 전체에 닿는다." : ""), "bad");
   } else if (b.take) {
     /* 데려가기 — 막을 길이 있는 짓이라 반드시 미리, 누구인지까지 알립니다.
      * 교정으로 지켜 두거나 그 사람이 회피를 고르면 놓칩니다 (foeTurn 참고). */
@@ -7907,7 +8650,16 @@ function beginTurn() {
              : b.foeBreak ? (b.breakLine || f.breakLine)
              : b.foeEvade ? (b.evadeLine || f.evadeLine)
              :              (b.heavyLine || f.heavyLine);
-    if (Array.isArray(line)) line = line[rnd(line.length)];
+    /* 배열이면 무작위 하나 — 적에 lineCycle 을 적으면 «차례대로 돌려» 같은 대사가 연달아 나오지 않습니다
+     * (사용자 지침 2026-11-20, 8-4 이창수 강타 대사 셋). 대사 배열마다 따로 셉니다(b._lineI). */
+    if (Array.isArray(line)) {
+      if (b.lineCycle || f.lineCycle) {
+        b._lineI = b._lineI || new Map();
+        const i = b._lineI.get(line) || 0;
+        b._lineI.set(line, i + 1);
+        line = line[i % line.length];
+      } else line = line[rnd(line.length)];
+    }
     if (line) {
       const w = document.createElement("p");
       w.className = "who";
@@ -8472,7 +9224,8 @@ function askNext() {
 
   /* 관리자 능력 — 비용과 성능은 세워둔 보조 교육위원에 따라 달라진다 */
   const ae = advisorEffect();
-  const cRevive  = skillCost(2);
+  /* 첨삭 3(사용자 지침 2026-11-20 — 2 → 3, 큰 균형 조정). 값은 data/characters.js CREW.manager.skills 의 cost 를 읽습니다 */
+  const cRevive  = skillCost(managerSkillCost("revive", 3));
   const cCorrect = skillCost(1);
   const cPush    = skillCost(1);
   const downed = S.party.filter(w => w && !alive(w) && !allyLoseOnDown(w));   // 작성위원이 아닌 조력자는 첨삭으로 못 일으킵니다
@@ -8685,9 +9438,15 @@ function checkAchievements(foeName, cleared) {
       const sp = supportBy(SUP_PREFIX + g.support);
       if (sp) {
         if (!S.supportsOwned) S.supportsOwned = {};
-        S.supportsOwned[SUP_PREFIX + g.support] = true;
-        cards.push(supportCard(sp));
-        if (sp.note) notes.push("(" + sp.note + ")");
+        /* 이미 함께하는 지원 작성위원이면 인격 선택권 1개(SUPPORT_DUP — 사용자 지침 2026-11-20) */
+        if (S.supportsOwned[SUP_PREFIX + g.support]) {
+          giveApply(SUPPORT_DUP).cards.forEach(c => cards.push(c));
+          notes.push("(" + titleName(sp) + "은 이미 함께하고 있어 인격 선택권으로 드립니다.)");
+        } else {
+          S.supportsOwned[SUP_PREFIX + g.support] = true;
+          cards.push(supportCard(sp));
+          if (sp.note) notes.push("(" + sp.note + ")");
+        }
       } else say("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")", "todo");
     }
     /* E.G.O 기프트 — 이름으로. 우편과 같은 자리(giveApply)를 씁니다 — 이미 지녔으면 원고료로 (8장 업적 기프트) */
@@ -9125,12 +9884,21 @@ function resolveTurn() {
       const flatAoe = (b.foeFirst ? (b.firstAoeFlat || fdef.firstAoeFlat) : 0) ||
                       b.aoeFlat || fdef.aoeFlat || 0;
       if (flatAoe) b.mods._scriptedHit = true;   // «반드시 전멸» — 되살리는 기프트가 듣지 않습니다 (reviveFirstDown)
+      /* 합성 특전 「먼저 뛰어드는 쪽」 — 광역 선공도 판당 횟수 안에서 받아넘깁니다. 못박은 광역에는 듣지 않습니다 */
+      if (!flatAoe && fuseNullifyFirst(b)) {
+        render();
+        afterAoe(b);
+        return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
+      }
+      /* 합성 특전 「눈을 감고 나는 법」 — 매 전투 첫 광역 한 번은 적어도 그만큼 줄입니다(방어를 안 골라도) */
+      const aoeFirstK = (!flatAoe && !b._aoeFirstUsed) ? perkSum().aoeFirstCut : 0;
       const aoeK = aoeMultNow(b);
       /* noStg — 책임으로 추민수에게 모을 몫. 흐트러짐 배수는 «맞는 사람»(추민수) 쪽에서 한 번 곱합니다 */
       const hitOne = (t, noStg) => {
         if (flatAoe) return flatAoe;
         const st = effStats(t);
         let dmg = b.atk * aoeK + rnd(4) - st.def;
+        const preCut = dmg;                                      // 경감 전 — 첫 광역 한 번(aoeFirstK)의 바닥
         {
           const ps = perkSum();                                  // 테마팩 특전 — 광역·선공 경감
           if (ps.aoeCut) dmg *= (1 - ps.aoeCut);
@@ -9142,10 +9910,16 @@ function resolveTurn() {
         if (b.mods[t + "_immune"]) dmg *= (1 - b.mods[t + "_immune"]);
         if (b.mods[t + "_fragile"]) dmg *= b.mods[t + "_fragile"];
         { const lc = lowHpCut(t); if (lc) dmg *= (1 - lc); }       // 화석 기프트 「키티파티」
+        if (aoeFirstK) dmg = Math.min(dmg, preCut * (1 - aoeFirstK));
         if (!noStg) dmg *= allyStaggerMult(t);                    // 흐트러진 사람 — 약점처럼 (ALLY_STAGGER_RULE)
         return Math.max(1, Math.floor(dmg));
       };
 
+      if (aoeFirstK) {
+        b._aoeFirstUsed = true;
+        const k = activePerks().find(p => p.effect && p.effect.aoeFirstCut);
+        say("　특전 「" + (k ? k.name : "첫 광역") + "」 — 이번 전투 첫 광역이라 적어도 " + Math.round(aoeFirstK * 100) + "%를 덜었다.", "good");
+      }
       /* 맞는 연출은 카드를 다 다시 그린 뒤(render) 한꺼번에 띄웁니다 — allyHitFx 참고 */
       const hits = [];
       if (hero) {
@@ -9265,8 +10039,10 @@ function resolveTurn() {
       const 피한줄 = () => 피함.forEach(t => {                          // 적의 외침 «뒤» 에 섭니다
         const dl = (allyBy(t) || {}).dodgeLine;                         // 피할 때 한마디(아멜리아 «그거 재밌네»)
         if (dl) battleSay(t, dl);
-        say("　" + withJosa(memberName(t), "이") + " 몸을 틀어 피했다.", "sys");
+        /* 박수오 회피와 같은 꼴 — 초록 줄 · 헛친 소리 · 카드 위 «회피»(피함연출, 사용자 지침 2026-11-20) */
+        say(memberName(t) + " — 몸을 틀어 피했다! (회피)", "good");
       });
+      const 피함연출 = () => { if (!피함.length) return; foeSfx("miss"); 피함.forEach(t => allyHitFx(t, 0, { miss: true })); };
       const 맞을 = targets.filter(t => 피함.indexOf(t) < 0);
       const 웅크린 = 맞을.filter(t => b.cmds[t] === "guard" || b.mods[t + "_guard"]);
       const splash = b.breakSplash || foeDef(b).breakSplash || 0;
@@ -9275,6 +10051,7 @@ function resolveTurn() {
         if (!피함.length) say("▶ " + withJosa(b.name, "이") + " 내리칠 곳을 찾지 못했다. 아무도 웅크리지 않았다.", "sys");
         else { say("▶ " + withJosa(b.name, "이") + " 내리친다!", "heavy"); 피한줄(); }
         render();
+        피함연출();
         return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
       }
       const mult = b.breakMult || foeDef(b).breakMult || RULE.breakMult;
@@ -9304,6 +10081,7 @@ function resolveTurn() {
       render();
       foeSfx("breaks");
       hits.forEach(h => allyHitFx(h.who, h.dmg, { heavy: !h.splash, tag: h.splash ? "여파" : "버티기 깨기" }));
+      피함연출();
       if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
       return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
@@ -9323,13 +10101,16 @@ function resolveTurn() {
     /* counterIdleAoe — 아무도 치지 않아 되받아칠 것이 없어도, 그 배수만큼 판 전체가 맞습니다(사용자 지침 2026-11-19 — 8장 북극티렉스
      * «얼음 폭풍» 0.2). 방어 · 교정 · 적의 방어 계산 없이 그대로 들어가는 잔 피해입니다 — 웅크려도 닿는다는 것이 이 기믹입니다.
      * 이름은 counterIdleName(안 적으면 «여파»). 갑주 · 강공 · 흐트러짐은 그대로 먹습니다. */
-    const ciK = b.counter && !되받음 ? (b.counterIdleAoe || foeDef(b).counterIdleAoe || 0) : 0;
-    if (ciK) {
-      const nm = b.counterIdleName || foeDef(b).counterIdleName || "여파";
+    /* 2026-11-20 사용자 지침 — 되받아치기가 나가든 안 나가든 반격 차례마다 늘 몰아칩니다(아래 counterGust).
+     * 아무도 안 쳤으면 이것 하나로 차례가 끝나고, 누가 쳤으면 되받아치기 한 대 뒤에 이어 몰아칩니다. */
+    const ciK = b.counter ? (b.counterIdleAoe || foeDef(b).counterIdleAoe || 0) : 0;
+    const ciNm = b.counterIdleName || foeDef(b).counterIdleName || "여파";
+    const counterGust = (lead) => {
+      const nm = ciNm;
       shakeScreen(true);
-      say("▶ " + withJosa(b.name, "이") + " 웅크린 채 그대로 있다. 대신 " + withJosa(nm, "이") + " 판 전체에 몰아친다!", "heavy");
+      say(lead, "heavy");
       const hits = [];
-      targets.forEach(t => {
+      targets.filter(alive).forEach(t => {
         const stgNow = allyStaggerOn(t);
         let dmg = b.atk * ciK + rnd(4);
         if (b.mods[t + "_immune"])  dmg *= (1 - b.mods[t + "_immune"]);
@@ -9347,6 +10128,9 @@ function resolveTurn() {
       render();
       foeSfx("aoe");
       hits.forEach(h => allyHitFx(h.who, h.dmg, { tag: nm }));
+    };
+    if (ciK && !되받음) {
+      counterGust("▶ " + withJosa(b.name, "이") + " 웅크린 채 그대로 있다. 대신 " + withJosa(ciNm, "이") + " 판 전체에 몰아친다!");
       if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
       return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
@@ -9375,6 +10159,13 @@ function resolveTurn() {
     /* 남의 몫을 대신 맞았는가 — E.G.O 기프트 coverCut(울퉁불퉁의 가호)이 이때 피해를 덜어 줍니다 */
     const tookFor = (covered || (hero && aimed !== hero)) ? giftCoverCut() : 0;
 
+    /* 합성 특전 「먼저 뛰어드는 쪽」 — 한 사람을 치는 선공도 판당 횟수 안에서 받아넘깁니다 */
+    if (!되받음 && fuseNullifyFirst(b)) {
+      render();
+      allyHitFx(t, 0, { miss: true });
+      return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
+    }
+
     /* 회피 — 노려진 사람이 회피를 골랐으면 이번 공격은 완전히 피한다.
      * 다음 공격에 걸릴 확정 치명타는 b.persist 에 넣어 턴이 넘어가도 남긴다. */
     if (b.mods[t + "_evadeActive"]) {
@@ -9383,6 +10174,7 @@ function resolveTurn() {
       render();
       foeSfx("miss");
       allyHitFx(t, 0, { miss: true });
+      if (ciK && 되받음) counterGust("▶ 이어서 " + withJosa(ciNm, "이") + " 판 전체에 몰아친다!");   // 피했어도 몰아칩니다
       if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
       return setTimeout(afterFoe, holdMs(RULE.turnGapMs));
     }
@@ -9460,6 +10252,10 @@ function resolveTurn() {
       if (finishReached(b)) return setTimeout(finishBlow, holdMs(RULE.turnGapMs));   // 반격으로 턱을 넘어도 마무리 일격
       if (b.hp <= 0) return setTimeout(victory, holdMs(RULE.turnGapMs));
     }
+
+    /* 되받아치기 한 대 뒤에도 몰아칩니다(counterGust — 반격 차례마다 늘, 사용자 지침 2026-11-20) */
+    if (ciK && 되받음 && !partyLost())
+      counterGust("▶ 이어서 " + withJosa(ciNm, "이") + " 판 전체에 몰아친다!");
 
     if (partyLost()) return setTimeout(defeat, holdMs(RULE.turnGapMs));
     setTimeout(afterFoe, holdMs(RULE.turnGapMs));
@@ -9713,6 +10509,11 @@ function persuadeEnd() {
   const ps = b.scene.persuade || {};
   if (ps.endText) { divider(); say(ps.endText, "n"); }
   if (!ps.keepFoe) showFoe(null, null, null);
+  /* 남겨 두는 적은 그 단계의 마지막 차례 그림(광역 · 명령 …)이 아니라 바탕 그림으로 되돌려 세웁니다
+   * — 사이 대화 동안 기술을 쓰는 자세로 서 있지 않게(사용자 지침 2026-11-20, 8-3 지와 기본 초상).
+   * 바탕은 FOES 의 img(전투 장면이 img 를 덮었으면 그것). */
+  else { const f0 = foeDef(b), base = b.scene.img || f0.img || null;
+         if (base && base !== b.shown) showFoe(base, b.name, f0.imgScale || null); }
   healParty(winHealRatio(b, RULE.winHeal), null);
   if (b.scene.party) { forcePartyPop(); S.battleForced = false; }
   S.battle = null;
@@ -10029,6 +10830,9 @@ function chapterEnd() {
     }
   }
 
+  /* 색 테마 — 이 장(또는 묶음)으로 열리는 테마가 있으면 한 줄 겁니다 (sayPaletteUnlock) */
+  sayPaletteUnlock(newly);
+
   const firstEver = first && CHAPTERS[0] && c.id === CHAPTERS[0].id;
   /* 0장을 처음 마치면 손잡이는 [유리창으로] 하나 — 유리창에서 화면 안내(tutorOnce "glass")가 이어집니다
    * (사용자 지침 2026-11-06 — 상점 · 다음 장 · 편성 · 보관함 · 노트 · 운전석 · 유리창이 한꺼번에 서서 헷갈렸습니다). */
@@ -10133,9 +10937,11 @@ function loadoutSlotsHTML() {
   const advNext = nextSlotChapter("advisor");
   const advCount = Object.keys(S.advisorsOwned || {}).length;
   h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">보조 교육위원</div>' +
-       '<div class="hint">전투를 도와줄 보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다. ' +
-       '직접 싸우지는 않고, 작성위원 전원에게 상시 효과를 겁니다.' +
-       (advNext ? '　' + advNext + '을 마치면 한 명 더.' : '') + '</div>' +
+       '<div class="hintbox"><ul class="hintlist">' +
+         '<li>보조 교육위원을 <b>' + advCap + '명</b>까지 세울 수 있습니다.</li>' +
+         '<li>싸우지 않고 <b>작성위원 전원</b>에게 늘 효과를 겁니다.</li>' +
+         (advNext ? '<li>' + advNext + '을 마치면 한 명 더.</li>' : '') +
+       '</ul></div>' +
        '<div class="grid" data-tut="party-advisor">';
   /* 칸 수만큼 나란히 세웁니다 — 한 칸에 쌓지 않습니다 */
   for (let i = 0; i < advCap; i++) {
@@ -10156,7 +10962,10 @@ function loadoutSlotsHTML() {
   const gfCount = Object.keys(S.giftsOwned || {}).length;
   h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">E.G.O 기프트</div>' +
        /* 「n장을 마치면 하나 더.」 는 걷었습니다 — 그 장을 마칠 때 알게 됩니다 (사용자 지침 2026-11-06) */
-       '<div class="hint"><b>' + gfCap + '개</b>까지 지닐 수 있습니다. 상점에서 원고료로 뽑습니다.</div>' +
+       '<div class="hintbox"><ul class="hintlist">' +
+         '<li><b>' + gfCap + '개</b>까지 지닐 수 있습니다.</li>' +
+         '<li>상점에서 원고료로 뽑습니다.</li>' +
+       '</ul></div>' +
        '<div class="grid">';
   for (let i = 0; i < gfCap; i++) {
     const gf = gfs[i];
@@ -10226,7 +11035,7 @@ function openParty(done) {
              iconHTML(sp ? supportIconName(sp) : memberIconName(w)) + '<div>' +
                '<div class="nm"><span class="teamno">' + (i + 1) + '</span> ' + memberName(w) + '</div>' +
                '<div class="sub"><span class="star">' + stars(sp ? sp.star : id ? id.star : 1) + '</span> ' +
-                 (sp ? sp.title + ' · 지원' : id ? id.title : '') + '</div>' +
+                 (sp ? sp.title + ' · 지원' : id ? id.title : '') + abilityDotHTML(w) + '</div>' +
              '</div>' + atkTypeIconHTML(atkTypeOf(w)) +
            '</div>';
     }
@@ -10239,8 +11048,11 @@ function openParty(done) {
     }
 
     h += '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">작성위원</div>' +
-         '<div class="hint">3명을 고르고, 각자 장착할 인격을 정합니다. 고른 순서대로 배치됩니다. ' +
-         '칸을 꾹 누르면 그 사람의 인격 장착으로 갑니다.</div>' +
+         '<div class="hintbox"><ul class="hintlist">' +
+           '<li><b>3명</b>을 고르고, 각자 장착할 인격을 정합니다.</li>' +
+           '<li><b>고른 순서대로</b> 배치됩니다.</li>' +
+           '<li>칸을 <b>꾹 누르면</b> 그 사람의 인격 장착으로 갑니다.</li>' +
+         '</ul></div>' +
          '<div class="grid" data-tut="party-sinners">';
     Object.keys(SINNERS).forEach(who => {
       const s = SINNERS[who];
@@ -10261,7 +11073,7 @@ function openParty(done) {
                ' <span class="sub">No.' + s.no + '</span></div>' +
              '<div class="sub">' + s.ego + '</div>' +
              '<div class="sub"><span class="star">' + (id ? stars(id.star) : '') + '</span> ' +
-               (id ? id.title : '인격 없음') + '</div>' +
+               (id ? id.title : '인격 없음') + abilityDotHTML(who) + '</div>' +
              '<div class="sub">보유 인격 ' + ownedIds(who).length + '종</div>' +
            '</div></div>';
     });
@@ -10280,9 +11092,11 @@ function openParty(done) {
              '<span class="cnt">' + mine.length + ' / ' + sups.length + '</span>' +
            '</div>';
       if (on) {
-        h += '<div class="eqbody"><div class="hint">' +
-             '12명 밖에서 손을 빌려주는 사람들입니다. 인격을 갈아 끼우지 않고, ' +
-             '편성 시너지는 똑같이 받습니다. <b>업적으로 얻습니다.</b></div>' +
+        h += '<div class="eqbody"><div class="hintbox"><ul class="hintlist">' +
+               '<li>12명 밖에서 손을 빌려주는 사람들입니다.</li>' +
+               '<li>인격은 못 갈아 끼우고, 시너지는 똑같이 받습니다.</li>' +
+               '<li><b>업적으로 얻습니다.</b></li>' +
+             '</ul></div>' +
              '<div class="grid">';
         sups.forEach(sp => {
           const id = supportId(sp);
@@ -10318,7 +11132,7 @@ function openParty(done) {
                    ' <span class="sub">지원</span></div>' +
                  (sp.note ? '<div class="sub">' + sp.note + '</div>' : '') +
                  '<div class="sub"><span class="star">' + stars(sp.star) + '</span> ' +
-                   sp.title + '</div>' +
+                   sp.title + abilityDotHTML(id) + '</div>' +
                  '<div class="sub">공 ' + sp.atk + '　방 ' + sp.def + '　체 ' + sp.hp + '</div>' +
                '</div></div>';
         });
@@ -10425,6 +11239,36 @@ function openParty(done) {
  *  펴 둔 사람과 이 설정은 창을 닫아도 그대로 남습니다. */
 let EQUIP_OPEN = {};        // who -> 펴 두었나
 let EQUIP_OWNED_ONLY = true;
+let EQUIP_SYN = "";         // 시너지 거르개 — 빈 글이면 거르지 않습니다
+
+/* 「인격 장착」의 시너지 거르개 (사용자 지침 2026-11-21).
+ * 손잡이로 내놓는 것은 «지금 가진 인격만으로 켤 수 있는» 시너지뿐입니다 —
+ * 한 사람에게 인격을 둘 끼울 수는 없으니 «가진 사람 수» 로 세고, need 를 채운 것만 섭니다.
+ * 한 사람뿐인 시너지를 내놓아 봐야 걸면 한 칸만 남습니다.
+ * 맞추는 자리는 activeSynergies 와 똑같습니다 — tagTitle 한 줄에 tag 가 들었나. */
+function synTagsOf(sy) {
+  return (Array.isArray(sy.tag) ? sy.tag : String(sy.tag).split(","))
+         .map(x => String(x).trim()).filter(Boolean);
+}
+function idInSyn(who, id, sy) {
+  if (!id || id.todo || !SINNERS[who]) return false;
+  const t = tagTitle(id.title, SINNERS[who].name);
+  return synTagsOf(sy).some(tg => t.indexOf(tg) >= 0);
+}
+function equipSynBy(name) {
+  if (!name || typeof SYNERGIES === "undefined") return null;
+  return SYNERGIES.find(x => x.name === name) || null;
+}
+/* 그 사람이 «가진» 인격 가운데 이 시너지에 드는 것이 있나 */
+function equipSynHas(who, sy) {
+  return SINNERS[who].ids.some(id =>
+    !idHidden(who, id) && S.owned[idKey(who, id)] && idInSyn(who, id, sy));
+}
+function equipSynList() {
+  if (typeof SYNERGIES === "undefined") return [];
+  return SYNERGIES.filter(sy =>
+    Object.keys(SINNERS).filter(who => equipSynHas(who, sy)).length >= sy.need);
+}
 
 /* 꾹 누르기 — 손가락(또는 마우스)을 ms 동안 떼지 않고 있으면 fn 을 부릅니다.
  * 부른 뒤에 따라오는 click 은 el._longPressed 로 알려 주므로, 그 칸의 onclick 이 걸러야 합니다.
@@ -10483,9 +11327,16 @@ function openEquip(back, focus) {
     SINNERS[w]   ? SINNERS[w].name : w
   ).join('・') : '';
 
+  /* 거르개 손잡이는 가진 인격으로만 셉니다 — 보유중/전부를 뒤집어도 목록이 흔들리지 않게 */
+  const synChips = equipSynList();
+  if (EQUIP_SYN && !synChips.some(x => x.name === EQUIP_SYN)) EQUIP_SYN = "";
+  const synF = equipSynBy(EQUIP_SYN);
+
   let h = '<h2>인 격 장 착</h2>' +
-          '<div class="hint">사람 이름을 누르면 그 사람의 인격이 펴집니다. ' +
-          '장착 중인 인격은 이름줄에 함께 적힙니다.</div>' +
+          '<div class="hintbox"><ul class="hintlist">' +
+            '<li><b>사람 이름</b>을 누르면 그 사람의 인격이 펴집니다.</li>' +
+            '<li>장착 중인 인격은 이름줄에 함께 적힙니다.</li>' +
+          '</ul></div>' +
           (forced ? '<div class="hint" style="color:var(--gold)">' +
             '지금은 <b>' + forcedNames + '</b> 으로만 전투에 나갑니다. ' +
             '편성 자체는 이미 짜여 있습니다 — 인격과 교육위원 · E.G.O 기프트를 골라 두십시오.</div>' +
@@ -10493,12 +11344,26 @@ function openEquip(back, focus) {
              * 2026-10-14) — 혼자 서는 전투일수록 이 둘이 판을 가릅니다. 편성 창과 같은 칸입니다. */
             loadoutSlotsHTML() +
             '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">인격</div>' : '') +
-          '<div class="eqbar">' +
-            '<label class="eqchk"><input type="checkbox" id="eqowned"' +
-              (EQUIP_OWNED_ONLY ? ' checked' : '') + '> 보유한 것만 보기</label>' +
+          /* 세 손잡이를 줄 오른쪽에 모읍니다. 「보유중 / 전부」 는 지금 어느 쪽인지를
+           * 글로 이고 있는 토글입니다(사용자 지침 2026-11-21 — 네모 칸에서 손잡이로). */
+          '<div class="eqbar eqend">' +
+            '<button id="eqowned" class="ghost' + (EQUIP_OWNED_ONLY ? ' on' : '') + '" title="' +
+              (EQUIP_OWNED_ONLY ? '지금은 가진 인격만 보입니다 — 누르면 아직 없는 인격까지 함께'
+                                : '지금은 아직 없는 인격까지 보입니다 — 누르면 가진 것만') + '">' +
+              (EQUIP_OWNED_ONLY ? '보유중' : '전부') + '</button>' +
             '<button id="eqall" class="ghost">모두 펴기</button>' +
             '<button id="eqnone" class="ghost">모두 접기</button>' +
-          '</div>';
+          '</div>' +
+          /* 시너지 거르개 — 줄 하나로만 섭니다. 넘치면 옆으로 밀어 봅니다(index.html .eqsyn) */
+          (synChips.length
+            ? '<div class="eqsyn">' +
+                '<button class="ghost' + (EQUIP_SYN ? '' : ' on') + '" data-syn="">전체</button>' +
+                synChips.map(sy =>
+                  '<button class="ghost' + (EQUIP_SYN === sy.name ? ' on' : '') +
+                    '" data-syn="' + sy.name + '" title="' + synTagsOf(sy).join(' · ') + '">' +
+                    sy.name + '</button>').join('') +
+              '</div>'
+            : '');
 
   Object.keys(SINNERS).forEach(who => {
     const s = SINNERS[who];
@@ -10507,6 +11372,10 @@ function openEquip(back, focus) {
     const mine = ownedIds(who).length;
     const tot  = s.ids.filter(i => idCounted(who, i)).length;
     const inParty = forced && S.party.indexOf(who) >= 0;
+
+    /* 거르개 — 그 시너지에 드는 인격이 한 장도 없으면 이 사람은 아예 안 보입니다 */
+    if (synF && !s.ids.some(id => !idHidden(who, id) && idInSyn(who, id, synF) &&
+          (!EQUIP_OWNED_ONLY || S.owned[idKey(who, id)]))) return;
 
     h += '<div class="eqhead' + (open ? ' open' : '') + (inParty ? ' inparty' : '') +
          '" data-open="' + who + '">' +
@@ -10529,6 +11398,7 @@ function openEquip(back, focus) {
       const key = idKey(who, id);
       /* 숨은 인격은 얻기 전까지 자리 자체가 없습니다 (idHidden 참고) */
       if (idHidden(who, id)) return;
+      if (synF && !idInSyn(who, id, synF)) return;   // 거르개 — 미작성 칸도 함께 빠집니다
       if (id.todo) {
         if (!EQUIP_OWNED_ONLY) {
           body += '<div class="slot"><div class="lock">' + stars(id.star) + ' (미작성)</div></div>';
@@ -10570,10 +11440,20 @@ function openEquip(back, focus) {
       openEquip(back);
     };
   });
-  document.getElementById("eqowned").onchange = (e) => {
-    EQUIP_OWNED_ONLY = e.target.checked;
+  document.getElementById("eqowned").onclick = () => {
+    EQUIP_OWNED_ONLY = !EQUIP_OWNED_ONLY;
     openEquip(back);
   };
+  $sheet.querySelectorAll("[data-syn]").forEach(el => {
+    el.onclick = () => {
+      const v = el.dataset.syn;
+      EQUIP_SYN = (EQUIP_SYN === v) ? "" : v;
+      /* 거른 사람은 펴 둡니다 — 머리줄만 남으면 거르는 뜻이 없습니다 */
+      const sy = equipSynBy(EQUIP_SYN);
+      if (sy) Object.keys(SINNERS).forEach(w => { if (equipSynHas(w, sy)) EQUIP_OPEN[w] = true; });
+      openEquip(back);
+    };
+  });
   document.getElementById("eqall").onclick = () => {
     Object.keys(SINNERS).forEach(w => EQUIP_OPEN[w] = true);
     openEquip(back);
@@ -11414,6 +12294,7 @@ function openNote(back, focus) {
           if (sy.atk) eff.push("공 +" + Math.round(sy.atk * 100) + "%");
           if (sy.def) eff.push("방 +" + Math.round(sy.def * 100) + "%");
           if (sy.hp)  eff.push("체 +" + Math.round(sy.hp  * 100) + "%");
+          if (sy.stackBoost) eff.push(deepStackName(sy.stackBoost) + " ×1.5 (셋 ×1.75 · 넷 ×2)");
           const on = now >= sy.need;
           const detailOpen = NOTE_SYN_DETAIL === sy.name;
           h += '<div class="slot' + (on ? ' sel' : '') + '" data-syn="' + sy.name + '">' +
@@ -11531,8 +12412,14 @@ const SHOP_TRADES = [
     desc: payHTML("황금교본", 1) + " → " + payHTML("원고료", CODEX_PRICE),
     can:  () => S.codex >= 1,
     need: () => payHTML("황금교본", 1),
-    give: () => { S.codex -= 1; S.money += CODEX_PRICE;
-                  return "황금교본 1권을 넘기고 원고료 " + CODEX_PRICE + "을 받았다."; }
+    /* max 를 적은 줄은 누르면 수량 고르기 창이 뜹니다 — give(n) 으로 n 번 (사용자 지침 2026-11-25).
+     * payN · have 는 그 창에 «n 번이면 얼마 · 지금 가진 것» 을 적습니다 */
+    max:  () => S.codex,
+    payN: n => payHTML("황금교본", n) + " → " + payHTML("원고료", CODEX_PRICE * n),
+    have: () => payHTML("황금교본", S.codex),
+    give: (n) => { n = Math.max(1, Math.min(n || 1, S.codex));
+                  S.codex -= n; S.money += CODEX_PRICE * n;
+                  return "황금교본 " + n + "권을 넘기고 원고료 " + CODEX_PRICE * n + "을 받았다."; }
   }
 ];
 
@@ -11556,6 +12443,12 @@ function noticeDue() {
   return Object.keys(S.cleared || {}).length > 0;
 }
 
+/* 알림 글 안의 {ic:이름} — 구워 둔 아이콘(assets/icon/<이름>.png)을 글줄 아이콘으로 바꿉니다
+ * (사용자 지침 2026-11-20 — 알림에도 아이콘을 적극적으로). 데이터는 engine.js 보다 먼저 읽히므로
+ * iconMini 를 직접 부를 수 없어 이 표시를 씁니다. */
+function noticeIcons(x) {
+  return String(x).replace(/\{ic:([^}]+)\}/g, (m, name) => iconMini(name.trim()));
+}
 function openNotice(then) {
   const n = noticeData();
   $modal.classList.add("on");
@@ -11586,17 +12479,31 @@ function openNotice(then) {
             /* eventUntil 은 «닫히는 때»(다음 날 0시)라, 그대로 적으면 하루 늦게 읽힙니다 —
              * 11-04 0시에 닫히는 것을 「11월 4일까지」 라 적고 있었습니다. 마지막으로 열린 날로 적습니다. */
             const until = new Date(eventUntil(ev) - 1);
-            const untilText = until.getMonth() + 1 + "월 " + until.getDate() + "일";
-            return '<div class="slot"><div class="sub">' +
-              '<b style="color:var(--gold);font-size:14px">' + ev.cur + ' — ' + eventLeftText(ev) + '</b>　' +
-              '(' + untilText + '까지)' +
-            '</div></div>';
+            /* from 을 안 적은 이벤트는 기한이 없습니다(Infinity) — 날짜 괄호를 뺍니다(«NaN월 NaN일» 이 떴습니다) */
+            const untilText = isFinite(eventUntil(ev)) ? until.getMonth() + 1 + "월 " + until.getDate() + "일" : "";
+            return '<b style="color:var(--gold);font-size:14px">' + ev.cur + ': ' + eventLeftText(ev) + '</b>　' +   /* 줄표 대신 쌍점(사용자 지침 2026-11-20) */
+              (untilText ? '(' + untilText + '까지)' : '');
           })()
         : "";
+      /* box: true — 그 무리의 줄을 상자 «하나» 에 담고 줄마다 금빛 «·» 글머리(편성 안내 상자와 같음 —
+       * 사용자 지침 2026-11-20). 남은 날 줄도 같은 상자의 마지막 줄로 들어갑니다. */
+      if (g.box) {
+        const rows = (g.lines || []).concat(countdownLine ? [countdownLine] : []);
+        return (g.head ? '<div class="nthead">' + g.head + '</div>' : "") +
+          '<div class="grid one"><div class="slot ntbox">' +
+            /* 칸 줄(배열)은 글머리 없이 상자 안에 칸을 나란히 */
+            rows.map(x => Array.isArray(x)
+              ? '<div class="ntcells">' + x.map(c => '<div class="ntcell">' + noticeIcons(c) + '</div>').join("") + '</div>'
+              : '<p>' + noticeIcons(x) + '</p>').join("") +
+          '</div></div>';
+      }
       return (g.head ? '<div class="nthead">' + g.head + '</div>' : "") +
       '<div class="grid one">' +
-        (g.lines || []).map(x => '<div class="slot"><div class="sub">' + x + '</div></div>').join("") +
-        countdownLine +
+        /* 줄 하나를 배열로 적으면 그 줄 상자 안에 칸을 나란히 세웁니다(사용자 지침 2026-11-20 — 기믹 셋을 따로따로) */
+        (g.lines || []).map(x => '<div class="slot"><div class="sub">' +
+          (Array.isArray(x) ? '<div class="ntcells">' + x.map(c => '<div class="ntcell">' + noticeIcons(c) + '</div>').join("") + '</div>' : noticeIcons(x)) +
+        '</div></div>').join("") +
+        (countdownLine ? '<div class="slot"><div class="sub">' + countdownLine + '</div></div>' : "") +
       '</div>';
     }).join("") +
     '</div>' +
@@ -11692,12 +12599,6 @@ function openShop(back) {
 
     const gTotal = giftGachaList().length;
     const gMine  = giftGachaList().filter(g => S.giftsOwned && S.giftsOwned[giftId(g)]).length;
-    /* 파편이 그 사람 몫으로 RULE.fragExchange 개를 넘고, 아직 못 가진(그리고 지금
-     * 특정 배정 중이 아닌) 인격이 있는 사람이 하나라도 있으면 눌러 볼 수 있습니다 —
-     * 구체적인 대상 고르기는 openExchange() 안에서. */
-    const exCan = Object.keys(SINNERS).some(w =>
-      fragCount(w) >= RULE.fragExchange &&
-      SINNERS[w].ids.some(id => !S.owned[idKey(w, id)] && !id.hidden && !pickupOnTitle(id.title)));
     const aTotal = advisorOpenList().length;
     const aMine  = Object.keys(S.advisorsOwned || {}).length;
 
@@ -11718,12 +12619,12 @@ function openShop(back) {
                ? RULE.guaranteePulls + '회에 ★★ 이상 하나 확정'
                : CURRENCY + '가 모자랍니다') + '</div>' +
            '</div>' +
-           '<div class="slot"' + (exCan ? ' data-exchange="1"' : '') + '>' +
-             '<div class="' + (exCan ? 'nm' : 'nm off') + '">인격 교환</div>' +
+           /* 늘 들어갈 수 있습니다 — 파편이 모자라도 누가 얼마나 모였는지 · 무엇이 남았는지 안에서 봅니다
+            * (사용자 지침 2026-11-25 — 「파편이 모자라거나, 이미 전부 지녔습니다」 로 잠그던 것을 걷음) */
+           '<div class="slot" data-exchange="1">' +
+             '<div class="nm">인격 교환</div>' +
              '<div class="sub">' + iconMini("인격 파편") + '파편 ' + RULE.fragExchange + '개로 미보유 인격 하나를 획득합니다</div>' +
-             '<div class="sub">' + (exCan
-               ? '뽑기와 달리 무엇을 얻을지 직접 고릅니다'
-               : '파편이 모자라거나, 이미 전부 지녔습니다') + '</div>' +
+             '<div class="sub">뽑기와 달리 무엇을 얻을지 직접 고릅니다</div>' +
            '</div>' +
            '<div class="slot"' + (S.codex >= ADVISOR_RULE.cost ? ' data-adv="1"' : '') + '>' +
              '<div class="' + (S.codex >= ADVISOR_RULE.cost ? 'nm' : 'nm off') + '">교육위원 파견 요청</div>' +
@@ -11743,14 +12644,15 @@ function openShop(back) {
       if (t.show && !t.show()) return;
       const ok = t.can();
       /* 아이콘은 «받는 것» — SHOP_TRADES 의 icon. 안 적은 줄은 아이콘 없이 섭니다 */
-      h += '<div class="slot' + (t.icon ? ' hasic' : '') + '"' + (ok ? ' data-trade="' + t.id + '"' : '') + '>' +
+      h += '<div class="slot' + (t.icon ? ' hasic' : '') + '" data-tid="' + t.id + '"' + (ok ? ' data-trade="' + t.id + '"' : '') + '>' +
              (t.icon ? iconHTML(t.icon, { dim: !ok }) : '') +
              '<div><div class="' + (ok ? 'nm' : 'lock') + '">' + t.name + '</div>' +
              '<div class="sub">' + t.desc + '</div>' +
              /* 못 누르는 까닭은 need() 가 스스로 말합니다 —
               * 「가진 것이 모자랍니다」로 뭉뚱그리면 이미 가득 찬 경우에 거짓말이 됩니다. */
              '<div class="sub"' + (ok ? '' : ' style="color:var(--red)"') + '>' +
-               '필요: ' + t.need() + '</div></div>' +
+               '필요: ' + t.need() + '</div>' +
+             '</div>' +
            '</div>';
     });
     h += '</div>';
@@ -11781,13 +12683,31 @@ function openShop(back) {
     const ap = $sheet.querySelector(".slot[data-adv]");
     if (ap) ap.onclick = () => openStockGacha("adv", () => draw(null));
 
+    /* 교환도 글줄 알림 없이 — 맨 위에 끼어들면 칸이 통째로 밀립니다. 산 칸 테두리만 한 번 번쩍입니다
+     * (이벤트 교환소와 같은 결, 사용자 지침 2026-11-25). 받은 양은 맨 위 보유 수가 말합니다. */
+    const trade = (id, n) => {
+      const t = SHOP_TRADES.find(x => x.id === id);
+      if (!t || !t.can()) return;
+      t.give(n);
+      saveVault(); render();
+      draw(null);
+      const r = $sheet.querySelector('[data-tid="' + id + '"]');
+      if (r) r.classList.add("gotnow");
+    };
+    /* max 를 적은 교환은 누르면 수량 고르기 창 (이벤트 교환소와 같은 창) */
     $sheet.querySelectorAll(".slot[data-trade]").forEach(el => {
       el.onclick = () => {
         const t = SHOP_TRADES.find(x => x.id === el.dataset.trade);
-        if (!t || !t.can()) return;
-        const said = t.give();
-        saveVault(); render();
-        draw(said);
+        if (!t) return;
+        if (!t.max || t.max() < 2) return trade(t.id, 1);
+        openQtyPick({
+          icon: t.icon, name: t.name, left: t.desc,
+          pay:  n => t.payN(n),
+          have: () => t.have(),
+          max:  () => t.max(),
+          ok:   n => trade(t.id, n),
+          back: () => draw(null)
+        });
       };
     });
     document.getElementById("shclose").onclick = () => { closeModal(); render(); if (back) back(); };
@@ -11812,15 +12732,15 @@ function openEventShop(back) {
   const draw = (msg) => {
     const cur = eventCurName();
     let h = '<h2>' + eventRule().shop + '</h2>' +
-      /* 맨 위 알림 — 어떻게 하면 재화가 더 들어오는지 일러 두는 자리입니다.
-       * 비율은 EVENT_RULE.bonusPct 한 곳에서 고칩니다. */
-      '<div class="mailnote ok"><b>특정 배정 인격을 가지고 클리어하면 ' +
-        eventRule().bonusPct + '%의 추가 재화를 획득합니다!</b></div>' +
-      '<div class="hint">이곳에서는 오직 <b>' + cur + '</b>' +
-      josa(cur, "로") + '만 바꿉니다. ' +
-      CURRENCY + '도 황금교본도 쓰이지 않습니다.<br>' +
-      '보유 ' + payHTML(cur, '<b>' + eventCount() + '</b>') + '　·　' + eventLeftText(ev) + '</div>';
+      '<div class="hint">보유 ' + payHTML(cur, '<b>' + eventCount() + '</b>') + '　·　' + eventLeftText(ev) + '</div>';
     if (ev.desc) h += '<div class="hint" style="color:var(--gold)">' + ev.desc + '</div>';
+    /* 안내는 머리 상자 하나에 줄마다 불릿으로 (사용자 지침 2026-11-25) — 추가 재화 · 쓰는 재화 · 파편 상자.
+     * 비율은 EVENT_RULE.bonusPct 한 곳에서 고칩니다. 파편 상자 줄은 그 물건이 서 있을 때만. */
+    const hasBox = eventGoods().some(g => g.give && (g.give.fragBoxSelect || g.give.fragBoxRandom));
+    h += bulletBox([
+      '<b style="color:var(--gold)">특정 배정 인격을 가지고 클리어하면 ' + eventRule().bonusPct + '%의 추가 재화를 획득합니다.</b>',
+      '이곳에서는 오직 <b>' + cur + '</b>' + josa(cur, "로") + '만 바꿉니다. ' + CURRENCY + '도 황금교본도 쓰이지 않습니다.'
+    ].concat(hasBox ? fragBoxLines() : []));
     if (msg)     h += '<div class="mailnote ok">' + msg + '</div>';
 
     const goods = eventGoods();
@@ -11841,7 +12761,7 @@ function openEventShop(back) {
         const gi  = giveIcon(g.give);
         const gid = eventGiveId(g.give);
         const note = eventGoodsNote(g.give);
-        h += '<div class="achrow evrow' + (ok ? ' can' : '') + '"' + (ok ? ' data-goods="' + g.id + '"' : '') + '>' +
+        h += '<div class="achrow evrow' + (ok ? ' can' : '') + '" data-gid="' + g.id + '"' + (ok ? ' data-goods="' + g.id + '"' : '') + '>' +
                (gi ? iconHTML(gi, { dim: out })
                    : '<span class="ic txt' + (out ? ' dim' : '') + '">' + (gid ? stars(gid.id.star) : '') + '</span>') +
                '<div class="body">' +
@@ -11867,19 +12787,52 @@ function openEventShop(back) {
     h += '<div class="modalfoot"><button id="evclose">닫기</button></div>';
     $sheet.innerHTML = h;
 
-    $sheet.querySelectorAll("[data-goods]").forEach(el => {
-      el.onclick = () => {
+    const buy = (el, want) => {
         const g = eventGoods().find(x => x.id === el.dataset.goods);
         if (!g) return;
         /* 그리고 난 뒤에 사정이 바뀌었을 수 있으니 치르기 직전에 한 번 더 봅니다 */
         if (eventCount() < g.cost || eventLeft(g) <= 0) return;
-        S.event = eventCount() - g.cost;
+        const n = want > 1 && eventMulti(g) ? Math.min(want, eventMax(g)) : 1;
+        S.event = eventCount() - g.cost * n;
         if (!S.eventBuy) S.eventBuy = {};
-        S.eventBuy[g.id] = eventBought(g.id) + 1;
-        const got = eventGiveApply(g.give);
+        S.eventBuy[g.id] = eventBought(g.id) + n;
+        /* 인격을 바꾸는 물건인가 — 넣어 주기 «전에» 봅니다. 이미 지녔으면 파편으로
+         * 돌아오므로(eventGiveApply) 그때는 새로 얻은 것이 아닙니다. */
+        const p = eventGiveId(g.give);
+        const 새로 = !!(p && !S.owned[p.key]);
+        eventGiveApply(n > 1 ? giveTimes(g.give, n) : g.give);
         saveVault(); render();
-        draw(cur + " " + g.cost + " → " + (got || g.name) +
-             josa(got || g.name, "을") + " 받았습니다.");
+        /* 「사원증 10 → … 받았습니다」 글줄은 걷었습니다 — 위에 끼어들어 줄이 통째로 밀려 내려가고,
+         * 받은 수는 줄의 남은 횟수 · 보유 수가 이미 말합니다(사용자 지침 2026-11-25).
+         * 대신 산 줄의 테두리를 한 번 금빛으로 번쩍입니다 — 자리는 움직이지 않습니다. */
+        const flash = () => {
+          draw(null);
+          const r = $sheet.querySelector('[data-gid="' + g.id + '"]');
+          if (r) { r.classList.remove("gotnow"); void r.offsetWidth; r.classList.add("gotnow"); }
+        };
+        /* 교환소에서 인격을 손에 넣는 것도 «배정에서 먹은» 것과 같은 자리입니다 —
+         * 특정 배정과 같은 초록빛으로 한 번 터뜨립니다. 배정은 ★★★ 에만 빛이
+         * 붙지만 여기는 성급을 가리지 않습니다(사용자 지침 2026-11-21).
+         * 겹쳐서 파편으로 돌아온 자리에는 붙이지 않습니다 — bigWin 과 같은 결입니다. */
+        if (새로) starFlash(p.id.star, p.id.note || null, flash, true);
+        else flash();
+    };
+    /* 여러 개 살 수 있는 물건(eventMulti)은 누르면 수량 고르기 창이 뜹니다 — 줄에 단추를 세우면
+     * 칸이 세로로 늘어납니다(사용자 지침 2026-11-25). 나머지는 예전처럼 눌러서 하나. */
+    $sheet.querySelectorAll("[data-goods]").forEach(el => {
+      el.onclick = () => {
+        const g = eventGoods().find(x => x.id === el.dataset.goods);
+        if (!g) return;
+        if (!eventMulti(g) || eventMax(g) < 2) return buy(el, 1);
+        openQtyPick({
+          icon: giveIcon(g.give), name: g.name,
+          left: g.limit ? '남은 횟수 ' + eventLeft(g) + ' / ' + g.limit : '횟수 제한 없음',
+          pay:  n => payHTML(cur, g.cost * n) + " → " + g.name + " × " + n,
+          have: () => payHTML(cur, eventCount()),
+          max:  () => eventMax(g),
+          ok:   n => buy(el, n),
+          back: () => draw(null)
+        });
       };
     });
     /* 닫으면 «상점으로» 돌아옵니다 — 창을 닫지 않고 그 자리에 상점을 다시 그립니다.
@@ -11890,6 +12843,48 @@ function openEventShop(back) {
     };
   };
   draw(null);
+}
+
+/* ── 수량 고르기 창 (사용자 지침 2026-11-25) ─────────────────────────
+ *  이벤트 교환소 · 상점 교환에서 «여러 개 살 수 있는» 줄을 누르면 뜹니다.
+ *  줄마다 [×10] [최대] 단추를 세웠더니 칸이 세로로 늘어나, 고르는 일을 이 창으로 옮겼습니다.
+ *    o.icon  받는 것 아이콘 이름 · o.name 이름 · o.left 한 줄 덧말(남은 횟수 등)
+ *    o.pay(n)  n 개면 무엇을 얼마 내고 무엇을 받는지 · o.have() 지금 가진 것
+ *    o.max()   지금 살 수 있는 최대 수 · o.ok(n) 사기 · o.back() 돌아가기
+ *    o.title · o.okLabel · o.noLabel — 안 주면 「수량 선택」 · 「교환」 · 「취소」
+ *  인격 파편 상자 쓰기(openFragBoxUse — 보관함 · 동기화 창)도 이 창을 씁니다.
+ *  단추 줄과 값 줄은 늘 같은 자리 — 수만 바뀝니다(누를 칸이 움직이지 않게). */
+function openQtyPick(o) {
+  $modal.classList.add("on");
+  const max = Math.max(1, o.max());
+  let n = 1;
+  $sheet.innerHTML =
+    '<h2>' + (o.title || '수량 선택') + '</h2>' +
+    '<div class="qtyhead">' + (o.icon ? iconHTML(o.icon) : '') +
+      '<div><div class="nm">' + o.name + '</div><div class="sub">' + (o.left || '') + '</div></div></div>' +
+    '<div class="qtyrow">' +
+      '<button data-d="-10">−10</button><button data-d="-1">−1</button>' +
+      '<input id="qtyn" type="number" min="1" max="' + max + '" value="1" inputmode="numeric">' +
+      '<button data-d="1">+1</button><button data-d="10">+10</button>' +
+    '</div>' +
+    '<div class="qtyrow qtyends"><button data-set="1">최소</button><button data-set="' + max + '">최대 (' + max + ')</button></div>' +
+    '<div class="qtypay"></div>' +
+    '<div class="hint qtyhave">보유 ' + o.have() + '</div>' +
+    '<div class="modalfoot"><button id="qtyno" class="ghost">' + (o.noLabel || '취소') + '</button>' +
+      '<button id="qtyok" class="primary">' + (o.okLabel || '교환') + '</button></div>';
+  const inp = document.getElementById("qtyn"), pay = $sheet.querySelector(".qtypay");
+  const set = v => {
+    n = Math.max(1, Math.min(max, Math.floor(+v) || 1));
+    inp.value = n;
+    pay.innerHTML = o.pay(n);
+  };
+  $sheet.querySelectorAll(".qtyrow [data-d]").forEach(b => b.onclick = () => set(n + +b.dataset.d));
+  $sheet.querySelectorAll(".qtyrow [data-set]").forEach(b => b.onclick = () => set(+b.dataset.set));
+  inp.oninput = () => { if (inp.value !== "") set(inp.value); };
+  inp.onblur  = () => set(inp.value);
+  document.getElementById("qtyok").onclick = () => o.ok(n);
+  document.getElementById("qtyno").onclick = () => o.back();
+  set(1);
 }
 
 /* 무엇이 나올지 정한다 — 1 / 2 / 3 (성) 또는 "adv" (보조 교육위원) */
@@ -12042,6 +13037,17 @@ function openGacha(done, pk, deal) {
               '<span class="more">인격 — ' + iconMini("인격 파편") + '그 인격 파편 ' + dupStarList([1, 2, 3], '개') + '</span>' +
               '<span class="more">교육위원 — ' + iconMini("원고료") + CURRENCY + ' ' + dupStarList([2, 3]) + '</span></li>' +
             '</ul></div>';
+    /* 선택 획득 — 특정 배정에서만. 횟수 줄과 단추는 늘 같은 자리(수만 바뀝니다 — 누를 칸이 움직이지 않게) */
+    if (pickup) {
+      const pts = sparkPts(pickup), need = sparkNeed();
+      h += '<div class="sparkrow">' +
+             '<div class="body"><div class="nm">선택 획득　<b>' + pts + '</b> / ' + need + '</div>' +
+               '<div class="sub">' + need + '회마다 이 배정의 인격 · 교육위원 하나를 골라 받습니다. ' +
+                 '배정이 끝나면 남은 횟수만큼 인격 파편 상자(무작위)로 돌려받습니다.</div></div>' +
+             /* 횟수가 모자라도 눌러서 대상 목록은 봅니다 — [받기] 만 잠깁니다(사용자 지침 2026-11-25) */
+             '<button id="gspark"' + (pts >= need ? ' class="primary"' : '') + '>' + (pts >= need ? '선택' : '목록') + '</button>' +
+           '</div>';
+    }
     h += '<!--PULLBAR-->';   // 배정 단추 줄은 결과 «위» — 아래 pb 참고
     if (result) {
       h += '<div class="grid">';
@@ -12146,6 +13152,7 @@ function openGacha(done, pk, deal) {
         out.push(tier === "adv" ? pullAdvisor() : pullIdentity(tier));
       }
       rewardCount("pull", out.length);   // 주간 과제 「상점 배정」
+      if (pickup) sparkAdd(pickup, out.length);   // 선택 획득 횟수 (PICKUP_SPARK)
       saveVault();
       render();
       /* 처음 얻은 ★★★ 이 섞여 있으면 한 번 빛낸 뒤에 펼친다.
@@ -12163,11 +13170,86 @@ function openGacha(done, pk, deal) {
     const g5 = document.getElementById("g10");
     if (g1 && !g1.disabled) g1.onclick = () => pull(1);
     if (g5 && !g5.disabled) g5.onclick = () => pull(RULE.guaranteePulls);
+    const gs = document.getElementById("gspark");
+    if (gs && !gs.disabled) gs.onclick = () => openPickupSpark(pickup, () => draw(null));
     /* 상점에서 열었으면 상점으로 한 칸만 돌아갑니다 — 창을 닫고 나서 done() 을 부르면
      * 상점은 닫힌 창 안에 그려져 유리창이 드러납니다 */
     document.getElementById("gclose").onclick = () => { if (done) done(); else closeModal(); };
   };
   draw(null);
+}
+
+/* ── 선택 획득 창 ─────────────────────────────────────────────
+ *  특정 배정 PICKUP_SPARK.need 회마다 그 배정에 걸린 인격 · 교육위원 하나를 직접 골라 받습니다.
+ *  칸을 눌러 고르고 [받기] 로 확정합니다 — 횟수를 쓰는 일이라 한 번 더 누르게 했습니다.
+ *  이미 지닌 것을 고르면 배정에서 겹쳤을 때와 똑같이 돌려받습니다(인격 → 파편, 교육위원 → 원고료). */
+function openPickupSpark(p, back) {
+  $modal.classList.add("on");
+  let pick = null;
+  const draw = () => {
+    const need = sparkNeed(), pts = sparkPts(p);
+    const list = sparkTargets(p);
+    let h = '<h2>선 택 획 득</h2>' +
+      bulletBox([
+        '<b>' + p.name + '</b>에 걸린 인격 · 교육위원 중 하나를 골라 받습니다.',
+        '한 번에 배정 횟수 <b>' + need + '</b>회를 씁니다.　지금 <b>' + pts + '</b>회',
+        '이미 지닌 것을 고르면 배정에서 겹쳤을 때처럼 돌려받습니다.',
+        pts < need ? '<b style="color:var(--red)">아직 ' + (need - pts) + '회가 모자라 목록만 볼 수 있습니다.</b>' : ''
+      ]) +
+      '<div class="grid">';
+    list.forEach(t => {
+      const ic = t.kind === "id" ? memberIconName(t.who) : advisorIconName(t.adv);
+      const title = t.kind === "id" ? t.id.title : titleName(t.adv);
+      const sub = t.kind === "id" ? SINNERS[t.who].name : "보조 교육위원";
+      h += '<div class="slot hasic' + (pick === t.key ? ' sel' : '') + '" data-spk="' + t.key + '">' + iconHTML(ic) +
+             '<div><div class="nm"><span class="star">' + stars(t.star) + '</span> ' + title + '</div>' +
+             '<div class="sub">' + sub + '　·　' +
+               (t.owned ? '<span style="color:var(--dim)">보유 중</span>' : '<span style="color:var(--gold)">미보유</span>') +
+             '</div></div></div>';
+    });
+    h += '</div>' +
+      '<div class="modalfoot"><button id="spkno" class="ghost">뒤로</button>' +
+        '<button id="spkok" class="primary"' + (pick && pts >= need ? '' : ' disabled') + '>받기</button></div>';
+    $sheet.innerHTML = h;
+    /* 횟수가 모자라면 보기만 — 칸을 고를 수 없게(.ro 는 누르는 칸 모양을 끕니다) */
+    if (pts >= need)
+      $sheet.querySelectorAll("[data-spk]").forEach(el => el.onclick = () => { pick = el.dataset.spk; draw(); });
+    else $sheet.querySelectorAll("[data-spk]").forEach(el => el.classList.add("ro"));
+    document.getElementById("spkno").onclick = () => back();
+    document.getElementById("spkok").onclick = () => {
+      const t = sparkTargets(p).find(x => x.key === pick);
+      if (!t || sparkPts(p) < sparkNeed()) return;
+      S.pickupPts[p.name] = sparkPts(p) - sparkNeed();
+      let line, isNew = !t.owned;
+      if (t.kind === "id") {
+        if (isNew) {
+          S.owned[t.key] = true;
+          const cur = idByKey(S.equip[t.who]);
+          if (!cur || cur.star < t.star) { S.equip[t.who] = t.key; equipHp(t.who); }
+          line = stars(t.star) + " " + titleName({ title: t.id.title, name: SINNERS[t.who].name }) + " 획득";
+        } else {
+          const n = dupRefund(t.star); addFrag(t.who, n);
+          line = "이미 지닌 인격이라 " + SINNERS[t.who].name + " 인격 파편 " + n + "개를 받았습니다.";
+        }
+      } else {
+        if (isNew) {
+          if (!S.advisorsOwned) S.advisorsOwned = {};
+          S.advisorsOwned[t.key] = true;
+          if (!advisorOnList().length) { S.advisorOn = [t.key]; S.advisor = t.key; }
+          line = stars(t.star) + " " + titleName(t.adv) + " 획득";
+        } else {
+          const n = dupRefund(t.star); S.money += n;
+          line = "이미 지닌 교육위원이라 " + CURRENCY + " " + n + "을 받았습니다.";
+        }
+      }
+      saveVault(); render();
+      say("선택 획득 — " + line, "gain");
+      /* 새로 얻었으면 특정 배정과 같은 초록빛 (교환소와 같은 결 — 성급을 가리지 않습니다) */
+      if (isNew) starFlash(t.star, (t.kind === "id" ? t.id.note : t.adv.note) || null, back, true);
+      else back();
+    };
+  };
+  draw();
 }
 
 /* ── 기프트 · 교육위원 배정 ────────────────────────────────────
@@ -12325,8 +13407,13 @@ function openStockGacha(kind, done) {
 function openExchange(back) {
   $modal.classList.add("on");
   let h = '<h2>인 격 교 환</h2>' +
-          '<div class="hint">그 사람 몫 인격 파편 <b>' + RULE.fragExchange + '개</b>로, ' +
-          '아직 못 가진 그 사람의 인격 하나를 정가로 바꿉니다. 무엇을 받을지는 다음 화면에서 직접 고릅니다.</div>' +
+          /* 안내는 머리 상자 하나에 줄마다 불릿으로 (사용자 지침 2026-11-25).
+           * 특정 배정을 막는 규칙(pickupOnTitle)은 예전부터 있었지만 사람을 눌러 들어가야 보였습니다 */
+          bulletBox([
+            '그 사람 몫 인격 파편 <b>' + RULE.fragExchange + '개</b>로 아직 못 가진 그 사람의 인격 하나를 정가로 바꿉니다.',
+            '무엇을 받을지는 다음 화면에서 직접 고릅니다.',
+            '<b style="color:var(--gold)">지금 특정 배정 중인 인격은 교환할 수 없습니다.</b>'
+          ]) +
           '<div class="grid">';
 
   Object.keys(SINNERS).forEach(who => {
@@ -12335,7 +13422,9 @@ function openExchange(back) {
     const missing = s.ids.filter(id => !S.owned[idKey(who, id)] && !id.hidden);
     const exchangeable = missing.filter(id => !pickupOnTitle(id.title));
     const can = have >= RULE.fragExchange && exchangeable.length > 0;
-    h += '<div class="slot hasic"' + (can ? ' data-who="' + who + '"' : '') + '>' +
+    /* 바꿀 수 없어도 누를 수 있습니다 — 들어가서 무엇이 남았는지 봅니다(사용자 지침 2026-11-25).
+     * 이름 글빛(nm · lock)만 바꿀 수 있는지를 말합니다 */
+    h += '<div class="slot hasic" data-who="' + who + '">' +
            iconHTML("인격 파편 - " + s.name, { dim: !have }) +
            '<div><div class="' + (can ? 'nm' : 'lock') + '">' + s.name + '</div>' +
            '<div class="sub">보유 파편 <b>' + have + '</b> / ' + RULE.fragExchange + '</div>' +
@@ -12377,7 +13466,7 @@ function openExchangePick(who, back) {
                '<div class="' + (can ? 'nm' : 'lock') + '">' +
                  '<span class="star">' + stars(id.star) + '</span> ' + id.title + '</div>' +
                (id.note ? '<div class="sub">' + id.note + '</div>' : '') +
-               (pickedUp ? '<div class="sub" style="color:var(--gold)">지금 특정 배정 중인 인격입니다 — 정가로는 못 바꿉니다</div>'
+               (pickedUp ? '<div class="sub" style="color:var(--gold)">특정 배정 중이라 교환할 수 없습니다</div>'
                 : can ? '' : '<div class="sub" style="color:var(--red)">파편이 모자랍니다</div>') +
              '</div>';
       });
@@ -12433,6 +13522,15 @@ function saveSpotText() {
     return c.no + (c.title ? "  " + c.title : "") +
            (total ? "　·　" + Math.min((spot.sc || 0) + 1, total) + "/" + total + "번째 장면" : "");
   } catch (e) { return null; }
+}
+/* 기록이 «장의 첫 장면» 에 서 있는가 — 이어 읽어도 처음부터 읽는 것과 같은 자리입니다.
+ * 처음 온 판(FIRST_LOCK)에서 이것이면 운전석의 「이어하기」 를 잠급니다(사용자 지침 2026-11-20 —
+ * 아무것도 안 읽었는데 «0장 · 1/13번째 장면» 이 떠 있었음). 0장을 몇 장면이라도 읽었으면 그대로 엽니다. */
+function saveSpotAtStart() {
+  const raw = readSave();
+  if (!raw) return false;
+  try { const spot = JSON.parse(raw); return !spot.mirror && !(spot.sc > 0); }
+  catch (e) { return false; }
 }
 /* 기록이 «마친 자리» 인가 — 장을 마쳤거나(chapterEnd) 거울 던전 · 거울굴절철도를 완주했으면(mirrorClear)
  * S.ended 가 선 채로 기록됩니다. 그 기록을 이어 읽으면 이어 갈 장면이 없어 0장 처음으로 떨어졌습니다
@@ -12536,6 +13634,7 @@ function load() {
       if (S.equip[w] && !S.owned[S.equip[w]]) S.equip[w] = firstOwned(w, S.owned);
     S.battle = null; S.waiting = false;
     SCENES = buildScenes(CHAPTERS[S.ch]);   // 기록은 본편만 남는다
+    preloadScenes(SCENES, S.sc);            // 읽던 자리부터 남은 그림을 미리 받아 둡니다
     clearLog();
     restoreStage();                        // 읽던 자리의 배경을 되살립니다
     say("기록을 불러왔다.", "sys");
@@ -12603,7 +13702,7 @@ function groupMeta(gid) {
   return { id: gid, no: g.no || first.no || gid, title: g.title || "",
            img: g.img || first.img || null, banner: g.banner || chapterBanner(first),
            summary: g.summary || null, pitch: g.pitch || null, glassNote: g.glassNote || null,
-           parts: idx };
+           partNote: g.partNote || null, parts: idx };
 }
 function isLastPart(c) {
   const idx = c && c.part ? groupParts(c.part) : [];
@@ -12735,12 +13834,19 @@ function openChapterSelect(back) {
                 : hardCall ? hr.name + '에 할 장이 남았습니다.'
                            : '눌러서 ' + (hNow ? hr.easy : hr.name) + '으로 바꿉니다.') +
       '</div></div>';
-  /* spotText 가 "" 면 마친 자리 — 카드는 세우되 잠급니다(saveSpotDone) */
-  if (spotText != null || hardSlot)
+  /* spotText 가 "" 면 마친 자리 — 카드는 세우되 잠급니다(saveSpotDone).
+   * 처음 온 판(FIRST_LOCK)인데 읽던 자리가 없거나 장의 첫 장면뿐이면(saveSpotAtStart) 그때도 잠근 카드로
+   * 세웁니다(사용자 지침 2026-11-20). 0장을 몇 장면이라도 읽었으면 평소처럼 열립니다. */
+  const 첫판빈 = FIRST_LOCK && (spotText == null || saveSpotAtStart());
+  if (spotText != null || hardSlot || 첫판빈)
     h += '<div class="grid">' +
-           (spotText ? '<div class="slot" data-resume="1">' +
+           (spotText && !첫판빈 ? '<div class="slot" data-resume="1">' +
                          '<div class="nm">이어하기</div>' +
                          '<div class="sub">' + spotText + '</div>' +
+                       '</div>'
+            : 첫판빈 ? '<div class="slot resumelock">' +
+                         '<div class="lock">이어하기</div>' +
+                         '<div class="sub">아직 이어 갈 자리가 없습니다.</div>' +
                        '</div>'
             : spotText === "" ? '<div class="slot resumelock">' +
                          '<div class="lock">이어하기</div>' +
@@ -12802,15 +13908,19 @@ function openChapterSelect(back) {
   };
 
   /* 장 묶음 한 칸 — 부분 여럿을 한 칸으로 세웁니다(partOf 머리말). 누르면 openPartSelect.
-   * 열림은 첫 부분, 「편성 필요」 는 아직 안 마친 첫 부분의 것을 보입니다. */
+   * 열림은 첫 부분, 「편성 필요」 는 부분 전체를 모아 보입니다. */
   const groupSlot = (gid, rich) => {
     const m = groupMeta(gid);
     const parts = m.parts.map(i => CHAPTERS[i]);
     const done  = S.cleared && S.cleared[gid];
     let   open  = chapterUnlocked(m.parts[0]);
     const n     = parts.filter(c => S.cleared && S.cleared[c.id]).length;
-    const nextP = parts.find(c => !(S.cleared && S.cleared[c.id])) || parts[0];
-    const needs = chapterNeeds(nextP), miss = chapterMissing(nextP);
+    /* 「편성 필요」 는 부분 «전체» 를 모읍니다 — 아직 안 마친 첫 부분의 것만 보이면,
+     * 그 부분에 require 가 없는 때(전투가 없는 8-1 · 8-6, 유아인을 편성할 수 없는 8-5)에
+     * 줄이 사라져 어느 부분이 그런 자리인지가 드러납니다(사용자 지침 2026-11-20). */
+    const needs = [];
+    parts.forEach(c => chapterNeeds(c).forEach(w => { if (needs.indexOf(w) < 0) needs.push(w); }));
+    const miss = needs.filter(w => S.party.indexOf(w) < 0);
     const hs = hardSkin({ id: gid, part: gid }, gid, open);
     if (hs) open = hs.open;
     return '<div class="slot' + (done ? ' sel' : '') + (hs ? hs.cls : '') + '"' +
@@ -12987,23 +14097,18 @@ function openPartSelect(gid, back) {
   const m = groupMeta(gid);
   $modal.classList.add("on");
   let h = '<h2>' + m.no + (m.title ? '　' + m.title : '') + '</h2>' +
-          '<div class="hint">앞 부분을 마쳐야 다음 부분이 열립니다.</div><div class="grid">';
+          '<div class="hint">앞 부분을 마쳐야 다음 부분이 열립니다.</div>' +
+          partNoteHTML(m) + '<div class="grid">';
   m.parts.forEach(i => {
     const c = CHAPTERS[i];
     const done = S.cleared && S.cleared[c.id];
     const open = chapterUnlocked(i);
-    const needs = chapterNeeds(c), miss = chapterMissing(c);
     h += '<div class="slot' + (done ? ' sel' : '') + '"' + (open ? ' data-i="' + i + '"' : '') + '>' +
            slotStrip(open ? chapterBanner(c) : null) +
            '<div class="' + (open ? 'nm' : 'lock') + '">' + c.no + (c.title ? '　' + c.title : '') + '</div>' +
            '<div class="sub">' + (open ? (done ? '클리어' : '진행 가능') : '잠김') + '</div>' +
            (open && c.subtitle ? '<div class="sub">' + c.subtitle + '</div>' : '') +
-           (open && needs.length
-             ? '<div class="sub"' + (miss.length ? ' style="color:var(--red)"' : '') + '>' +
-                 nameList(needs) + ' 편성 필요' +
-                 (miss.length ? '　— 지금은 빠져 있습니다' : '　— 확인됨') + '</div>'
-             : '') +
-         '</div>';
+         '</div>';   /* 「편성 필요」 는 칸마다 적지 않습니다 — 맨 위 안내 상자 한 자리에(partNoteHTML) */
   });
   h += '</div><div class="modalfoot"><button id="psback" class="ghost">운전석으로</button></div>';
   $sheet.innerHTML = h;
@@ -14246,6 +15351,8 @@ function mirrorFoeCopy(id, src, r, k, dk, base) {
      * 본편 값 그대로 옮깁니다(거울 수치가 커도 «쌓이는 맛» 은 같은 결로) */
     lockTurns: f.lockTurns || 0,
     lockKillAtk: f.lockKillAtk || 0,
+    lockKillLine: f.lockKillLine || null,   // 표적을 쓰러뜨렸을 때 한마디(2026-11-20)
+    lineCycle: !!f.lineCycle,               // 배열 대사를 차례대로(2026-11-20)
     aoeMult: f.aoeMult != null ? f.aoeMult : null,
     aoeMultStep: f.aoeMultStep || 0,
     aoeAtkGain: f.aoeAtkGain || 0,
@@ -14488,7 +15595,8 @@ const PACK_CODEX_TABS = [
   { key: "all",    name: "전체" },
   { key: "normal", name: "일반" },
   { key: "upper",  name: "상층부 전용" },
-  { key: "deep",   name: "어비스 전용" }
+  { key: "deep",   name: "어비스 전용" },
+  { key: "fuse",   name: "특전 합성" }   // 사용자 지침 2026-11-23 — PERK_FUSES
 ];
 let PACK_CODEX_TAB = "all";
 function packCodexKind(p) { return p.deepOnly ? "deep" : p.railOnly ? "upper" : "normal"; }
@@ -14522,8 +15630,13 @@ function openPackCodex(back) {
                      deep:   "어비스 거울 던전 4·5층" };
   const draw = () => {
     const inTab = p => PACK_CODEX_TAB === "all" || packCodexKind(p) === PACK_CODEX_TAB;
-    const cnt = k => { const l = packs.filter(p => k === "all" || packCodexKind(p) === k);
-                       return l.filter(packSeen).length + " / " + l.length; };
+    const fuses = (typeof PERK_FUSES !== "undefined") ? PERK_FUSES : [];
+    const fuseSeen = f => !!(S.mirrorDone && S.mirrorDone["fuse:" + f.id]);
+    const cnt = k => {
+      if (k === "fuse") return fuses.filter(fuseSeen).length + " / " + fuses.length;
+      const l = packs.filter(p => k === "all" || packCodexKind(p) === k);
+      return l.filter(packSeen).length + " / " + l.length;
+    };
     let h = '<h2>테 마 팩   도 감</h2>' +
             '<div class="hint">거울 던전의 갈림길에 서는 테마팩과, 그 팩을 고르면 얻는 특전입니다. ' +
             '팩 안의 상대는 «잡졸 → 보스 → 큰보스» 차례로 섭니다. <b>들어가 본 팩</b>만 보이고, 아직 들어가 본 적 없는 팩은 가려져 있습니다.</div>' +
@@ -14532,7 +15645,8 @@ function openPackCodex(back) {
               t.name + '<span class="n">' + cnt(t.key) + '</span></button>').join('') +
             '</div>';
     const deepSeen = mirrorUnlocked(MIRROR_DEEP);   // 어비스가 열린 사람에게만 강화된 특전 글을 함께
-    ["normal", "upper", "deep"].forEach(kind => {
+    if (PACK_CODEX_TAB === "fuse") h += packCodexFuseHTML(fuses, fuseSeen, deepSeen);
+    else ["normal", "upper", "deep"].forEach(kind => {
       const list = packs.filter(p => packCodexKind(p) === kind && inTab(p));
       if (!list.length) return;
       h += '<div class="pchead"><b>' + kindName[kind] + '</b><span>' + kindSub[kind] + '</span></div>' +
@@ -14573,6 +15687,43 @@ function openPackCodex(back) {
     document.getElementById("pcback").onclick = () => { if (back) back(); else { closeModal(); render(); } };
   };
   draw();
+}
+
+/* 테마팩 도감 「특전 합성」 갈래 — 조합 하나가 카드 하나입니다: 재료 둘 → 합쳐진 특전.
+ *  재료는 그 팩에 들어가 본 적이 있어야 보이고, 합쳐진 특전은 재료 팩 둘 다 들어가 봤어야 보입니다(팩 가림과 같은 결).
+ *  실제로 합쳐 본 조합은 금빛 테두리와 「합쳐 봄」 딱지(S.mirrorDone 의 「fuse:<id>」 — grantPackPerk). */
+function packCodexFuseHTML(fuses, fuseSeen, deepSeen) {
+  const packOf = id => MIRROR_PACKS.find(x => x.id === id);
+  let h = '<div class="pchead"><b>특전 합성</b><span>한 판에 재료 특전 둘을 함께 들면, 둘이 사라지고 합쳐진 특전 하나가 섭니다. ' +
+          '재료 팩을 하나라도 넘지 못하면 다시 풀립니다.</span></div>' +
+          '<div class="grid pcgrid fzgrid">';
+  fuses.forEach((f, i) => {
+    const ps = f.parts.map(packOf);
+    const seenAll = ps.every(p => p && packSeen(p));
+    const done = fuseSeen(f);
+    const part = p => (p && packSeen(p) && p.perk)
+      ? '<span class="fzpart" title="' + (p.perk.name + " — " + p.name).replace(/"/g, "&quot;") + '">' +
+          iconMini(p.perk.name) + '<span>' + p.perk.name + '<i>' + p.name + '</i></span></span>'
+      : '<span class="fzpart shut"><span>？？？<i>들어가 본 적 없는 팩</i></span></span>';
+    const k = f.perk;
+    const enh = (seenAll && deepSeen) ? deepEnhancePerk(k) : null;
+    h += '<div class="slot ro pccard fzcard' + (done ? ' done' : '') + (seenAll ? '' : ' shut') + '">' +
+           '<div class="pcno">' + (i + 1) + '</div>' +
+           '<div class="fzparts">' + part(ps[0]) + '<b class="fzplus">+</b>' + part(ps[1]) + '</div>' +
+           '<div class="fztags">' +
+             (fuseDeepOnly(f) ? '<span class="fztag deep">어비스에서만</span>' : '<span class="fztag">모든 갈래</span>') +
+             (done ? '<span class="fztag done">합쳐 봄</span>' : '') +
+           '</div>' +
+           (seenAll
+             ? '<div class="pgperk">' + iconHTML(k.name) +
+                 '<div><div class="pgname">' + k.name + '</div><div class="sub">' + k.desc + '</div>' +
+                 (enh && enh.desc !== k.desc ? '<div class="sub pcenh">' + enh.desc + '</div>' : '') +
+               '</div></div>'
+             : '<div class="pgperk"><div><div class="pgname">？？？</div>' +
+                 '<div class="sub">재료 팩에 모두 들어가 보면 무엇이 되는지 보입니다.</div></div></div>') +
+         '</div>';
+  });
+  return h + '</div>';
 }
 
 function openMirrorGate(tier, back) {
@@ -15025,6 +16176,7 @@ function enterPack(rule, pack, round) {
   S.sc = 0;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
+  preloadScenes(SCENES, S.sc);   // 거울 갈래도 남은 그림을 미리
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
   /* 팩에 들어가 있는 동안(테마팩 선택 화면으로 돌아올 때까지)은 그 팩의
    * 배경(사용자 지침 2026-09-02) — 안 적힌 팩은 그냥 거울 던전 기본 배경. */
@@ -15217,6 +16369,7 @@ function startMirror(tier, preIds, boons, binds) {
   S.sc = 0;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
+  preloadScenes(SCENES, S.sc);   // 거울 갈래도 남은 그림을 미리
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
   setBackdrop(mirrorBG(rule), null);
   clearLog();
@@ -15311,6 +16464,7 @@ function resumeMirror() {
   S.sc = S.railSave.checkpoint;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
+  preloadScenes(SCENES, S.sc);   // 거울 갈래도 남은 그림을 미리
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
   setBackdrop(mirrorBG(rule), null);
   clearLog();
@@ -15357,6 +16511,7 @@ function startRailLoop(rule) {
   S.sc = 0;
   S.ended = false;
   SCENES = buildScenes(MIRROR);
+  preloadScenes(SCENES, S.sc);   // 거울 갈래도 남은 그림을 미리
   S.party.forEach(w => { if (w) S.hp[w] = maxHp(w); });
   setBackdrop(mirrorBG(rule), null);
   clearLog();
@@ -15408,6 +16563,7 @@ function railAppend(scenes) {
   if (S.mirrorCheckpoint != null) MIRROR.scenes.length = S.mirrorCheckpoint + 1;
   scenes.forEach(x => MIRROR.scenes.push(x));
   SCENES = buildScenes(MIRROR);
+  preloadScenes(SCENES, S.sc);   // 거울 갈래도 남은 그림을 미리
   S.waiting = false;
   next();
 }
@@ -15761,6 +16917,19 @@ function openMirrorResult(rec) {
   /* 팩 하나가 카드 한 장 — 몇 번째로 골랐는지 · 팩 이름 · 거기서 얻은 특전(아이콘 · 이름 · 효과).
    * 갈림길의 카드(drawPackGate)와 같은 꼴입니다. 특전이 생기기 전의 옛 기록(packCards 없음)은
    * 팩 이름만 든 카드로 섭니다. */
+  /* 건 제약 — 큰 턴수 옆에 이름 셋이 붙어 머리를 옆으로 밀어냈습니다(사용자 지침 2026-11-21).
+   * 아이콘 칸을 든 제 줄로 내려, 편성 바로 위에서 «이 판의 조건» 으로 먼저 읽히게 둡니다.
+   * 옛 기록에는 이름만 얼려 두었으므로 이름으로 뜻을 되찾습니다 — 못 찾으면 이름만 섭니다. */
+  const bindHTML = (rec.binds && rec.binds.length)
+    ? '<div class="mrlabel">건 제약　<b class="mrbmult">완주 보상 ×' + bindRewardMult(rec.binds) + '</b></div>' +
+      '<div class="grid three mrbinds">' + rec.binds.map(nm => {
+        const d = MIRROR_BINDS.find(x => x.name === nm);
+        return '<div class="slot ro bindlock' + (d ? ' hasic' : '') + '">' +
+                 (d ? iconHTML(d.icon) : '') +
+                 '<div><div class="nm">' + nm + '</div>' +
+                 (d ? '<div class="sub">' + d.desc + '</div>' : '') + '</div></div>';
+      }).join('') + '</div>'
+    : '';
   const cards = rec.packCards || (rec.packs || []).map(n => ({ name: n, perk: null }));
   const packHTML = cards.length
     ? '<div class="mrlabel">고른 테마팩 · 얻은 특전</div>' +
@@ -15780,8 +16949,8 @@ function openMirrorResult(rec) {
       '<div class="mrclear">' + rec.name + ' 클리어</div>' +
       '<div class="mrstats"><b class="mrturn">' + rec.turns + '턴</b>' +
         (rec.cycles ? '<span class="mrcyc">' + rec.cycles + '순환</span>' : '') +
-        (rec.binds && rec.binds.length ? '<span class="mrcyc mrbind">제약 ' + rec.binds.join(" · ") + '</span>' : '') +
       '</div>' +
+      bindHTML +
       '<div class="mrlabel">편성</div>' +
       '<div class="grid three mrparty">' + partyHTML + '</div>' +
       '<div class="mrlabel">사용한 E.G.O 기프트</div>' +
@@ -15826,17 +16995,22 @@ function sayMirrorCard(rec) {
     chip(c.perk ? c.perk.name : null, (i + 1) + ". " + c.name, c.perk ? "특전 「" + c.perk.name + "」" : "")).join('');
   const syn = (rec.synergies || []).length ? esc(rec.synergies.join(" · ")) : "";
   const pick = mirrorPickText(rec);
+  /* 제약은 머리의 점줄에서 빼 제 줄로 내렸습니다 — 이름 셋이 턴수 줄을 길게 끌었습니다
+   * (사용자 지침 2026-11-21. 큰 결과 카드 openMirrorResult 와 같은 결) */
+  const binds = (rec.binds || []).map(nm => {
+    const d = MIRROR_BINDS.find(x => x.name === nm);
+    return chip(d ? d.icon : null, nm, d ? d.desc : "");
+  }).join('');
   const stats = [rec.turns + "턴"]
     .concat(rec.cycles ? [rec.cycles + "순환"] : [])
     .concat(rec.fallen != null ? ["내린 사람 " + rec.fallen + "명"] : [])
-    .concat(rec.binds && rec.binds.length ? ["제약 " + rec.binds.join(" · ")] : [])
     .concat(rec.railK != null ? ["운행 " + railScaleText(rec.railK) + " · 지나친 역 " + (rec.skips || 0)] : []);
   const box = document.createElement("div");
   box.className = "mirlog";
   box.innerHTML =
     '<div class="mlhead"><span class="mlname">' + esc(rec.name) + ' 클리어</span>' +
       '<span class="mlstat">' + stats.map(esc).join('<span class="mldot">·</span>') + '</span></div>' +
-    row("편성", party) + row("기프트", gifts) + row("교육위원", advs) + row("테마팩", packs) +
+    row("제약", binds) + row("편성", party) + row("기프트", gifts) + row("교육위원", advs) + row("테마팩", packs) +
     (syn ? '<div class="mlrow"><div class="mllabel">시너지</div><div class="mlline">' + syn + '</div></div>' : '') +
     (pick && !(rec.packCards || []).length ? '<div class="mlrow"><div class="mllabel">특전</div><div class="mlline">' + esc(pick) + '</div></div>' : '') +
     '<div class="mlfoot">v' + esc(rec.ver) + '　' + esc(mirrorRecordDateText(rec.at)) + '</div>';
@@ -15960,6 +17134,8 @@ function mirrorClear() {
   }
   sayGainCards(clearCards, rule.name + " 완주 보상");
   if (clearNote) say(clearNote, "sys");
+  /* 색 테마 — 이 갈래를 처음 완주해 열리는 테마가 있으면 한 줄 (needMirror) */
+  if (firstRun) sayPaletteUnlock([rule.key]);
   /* 완주 업적은 여기서 봅니다. S.mirror 를 내리기 전에 불러야
    * 편성·시너지 조건이 아직 거울 안의 것으로 읽힙니다. */
   checkAchievements(null, rule.key);
@@ -16155,28 +17331,26 @@ function openRecord(back) {
       : '<div class="hint">콘첸트라트 계정에 보관함을 맡겨 두면 다른 기기에서도 이어서 할 수 있습니다. ' +
           '<span class="dim">라거슈타트 위원만 — 접속 코드와 PIN 이 필요합니다.</span></div>' +
         '<div style="margin-bottom:14px"><button id="kzon" class="ghost">콘첸트라트 연결</button></div>') +
-    '<div class="hint" style="margin-top:16px">' +
-      '<b>내보내기</b> 를 누르면 <code>vault.js</code> 파일이 ' +
-      '브라우저가 쓰는 <b>내려받기 폴더</b>에 떨어집니다 (보통 «다운로드»).' +
-    '</div>' +
-    '<div class="hint">' +
-      '<b>다시 읽히려면</b> 그 파일을 게임 폴더의 <code>data/vault.js</code> 에 덮어쓰고 ' +
-      '새로고침하십시오. <code>index.html</code> 이 있는 곳 아래의 <code>data</code> 폴더입니다.<br>' +
-      '<span class="dim">브라우저에 저장된 것이 먼저 읽힙니다. 파일 쪽으로 되돌리려면 ' +
-      '[설정] → [보관함 비우기] 를 한 번 하고 새로고침하세요.</span>' +
-    '</div>' +
-    '<div class="hint">' +
-      '<span class="dim">판이 바뀌기 <b>전</b>의 보관함도 이 파일에 함께 담깁니다. ' +
-      '무언가 없어진 것 같으면 고칠 것 없이 그대로 보내 주시면 됩니다.' +
-      (vaultBackups().length
-        ? '　(떠 둔 것 ' + vaultBackups().length + '벌)'
-        : '　(아직 떠 둔 것은 없습니다 — 이 기기에서는 판이 안 바뀌었습니다)') + '</span>' +
-    '</div>' +
-    '<div class="hint">' +
-      '<b>가져오기</b> 는 다른 곳(오프라인 완전판 등)에서 내보낸 <code>vault.js</code> 를 ' +
-      '파일 그대로 골라 <b>이 브라우저</b>에 바로 옮겨 담습니다 — data 폴더를 만질 필요가 없습니다. ' +
-      '지금 이 브라우저에 있던 보관함은 그 자리에서 덮어써집니다.' +
-      (Cloud.on() ? ' 콘첸트라트에도 그 파일이 올라갑니다.' : '') +
+    /* 내보내기 · 가져오기 안내 — 한 상자에 항목마다 «이름 | 짧은 줄들»(사용자 지침 2026-11-20, index.html .infobox) */
+    '<div class="infobox">' +
+      '<div class="ib"><b>내보내기</b><div>' +
+        '<code>vault.js</code> 파일이 내려받기 폴더(보통 «다운로드»)에 떨어집니다.' +
+      '</div></div>' +
+      '<div class="ib"><b>가져오기</b><div>' +
+        '다른 곳(오프라인 완전판 등)에서 내보낸 <code>vault.js</code> 를 골라 이 브라우저에 바로 담습니다.<br>' +
+        '<span class="warn">지금 이 브라우저의 보관함은 덮어써집니다.</span>' +
+        (Cloud.on() ? '<br>콘첸트라트에도 그 파일이 올라갑니다.' : '') +
+      '</div></div>' +
+      '<div class="ib"><b>파일로 읽히기</b><div>' +
+        '게임 폴더의 <code>data/vault.js</code>(<code>index.html</code> 옆 <code>data</code>)에 덮어쓰고 새로고침합니다.<br>' +
+        '<span class="dim">브라우저에 저장된 것이 먼저 읽힙니다. 파일로 되돌리려면 [설정] → [보관함 비우기] 뒤 새로고침.</span>' +
+      '</div></div>' +
+      '<div class="ib"><b>지난 판 보관함</b><div>' +
+        '판이 바뀌기 <b>전</b>의 보관함도 파일에 함께 담깁니다. 무언가 없어졌다면 그대로 보내 주십시오.<br>' +
+        '<span class="dim">' + (vaultBackups().length
+          ? '떠 둔 것 ' + vaultBackups().length + '벌'
+          : '아직 떠 둔 것은 없습니다 — 이 기기에서는 판이 안 바뀌었습니다') + '</span>' +
+      '</div></div>' +
     '</div>' +
     '<div class="modalfoot">' +
       '<a id="vdl" class="dl" download="vault.js">내보내기</a>' +
@@ -16301,6 +17475,8 @@ function mailWasted(m) {
 
 /* give 덩이를 실제로 보관함에 넣습니다. 돌려주는 것은 「무엇을 받았나」 줄들입니다.
  * 우편(mailTake)과 출석·주간 보상(rewardTake)이 함께 씁니다. 저장은 부르는 쪽이 합니다. */
+/* 지원 작성위원을 이미 지녔는데 또 받게 되면(업적 · 우편) 대신 주는 것 — 사용자 지침 2026-11-20 */
+const SUPPORT_DUP = { idTicket: 1 };
 function giveApply(g) {
   g = g || {};
   const got = [];
@@ -16365,9 +17541,16 @@ function giveApply(g) {
     const sp = supportBy(SUP_PREFIX + g.support);
     if (sp) {
       if (!S.supportsOwned) S.supportsOwned = {};
-      S.supportsOwned[SUP_PREFIX + g.support] = true;
-      got.push("지원 작성위원 " + stars(sp.star) + " " + titleName(sp));
-      cards.push(supportCard(sp));
+      if (S.supportsOwned[SUP_PREFIX + g.support]) {
+        /* 이미 함께하면 인격 선택권(SUPPORT_DUP) — 업적과 같은 규칙 */
+        const d = giveApply(SUPPORT_DUP);
+        got.push("이미 함께하는 " + titleName(sp) + " 대신 " + d.join(" · "));
+        d.cards.forEach(c => cards.push(c));
+      } else {
+        S.supportsOwned[SUP_PREFIX + g.support] = true;
+        got.push("지원 작성위원 " + stars(sp.star) + " " + titleName(sp));
+        cards.push(supportCard(sp));
+      }
     } else got.push("(보상 지원 작성위원을 찾지 못했습니다: " + g.support + ")");
   }
   return got;
@@ -16413,8 +17596,9 @@ function openMail(back, note) {
   let h = '<h2>우 편 함</h2>' +
     (note && !note.ok ? '<div class="mailnote no">' + note.msg + '</div>' : '') +
           /* 안내는 상자에, 한 줄에 하나씩 (사용자 지침 2026-11-06) */
-          '<div class="rwnote">불편을 끼쳤을 때 얹어 드리는 자리입니다.<br>' +
-          '하나에 한 번씩만 받습니다.</div>' +
+          /* 줄마다 금빛 «·»(.dots — 상점 배정 상자와 같음, 사용자 지침 2026-11-20) */
+          '<div class="rwnote"><ul class="dots"><li>불편을 끼쳤을 때 얹어 드리는 자리입니다.</li>' +
+          '<li>하나에 한 번씩만 받습니다.</li></ul></div>' +
           /* 「받지 않은 우편 n통」 은 상자 밖, 상자 아래 한 줄로 (사용자 지침 2026-11-06) */
           (기다림 ? '<div class="hint" style="margin:-4px 0 10px"><b style="color:var(--gold)">받지 않은 우편 ' + 기다림 + '통</b></div>' : '');
 
@@ -16442,9 +17626,9 @@ function openMail(back, note) {
   });
   h += '</div>';
 
-  h += '<div class="rwnote" style="margin-top:14px">' +
-       '받을 수 있는 기간은 보낸 날부터 ' + mailRule().days + '일입니다.<br>' +
-       '기간이 지난 우편은 받을 수 없습니다.</div>' +
+  h += '<div class="rwnote" style="margin-top:14px"><ul class="dots">' +
+       '<li>받을 수 있는 기간은 보낸 날부터 ' + mailRule().days + '일입니다.</li>' +
+       '<li>기간이 지난 우편은 받을 수 없습니다.</li></ul></div>' +
        '<div class="modalfoot"><button id="mlclose">닫기</button></div>';
   $sheet.innerHTML = h;
 
@@ -16643,9 +17827,10 @@ function openReward(back, note) {
    * note 는 부르는 쪽이 아직 넘겨 주므로 받기만 하고 쓰지 않습니다. */
   let h = '<h2>' + REWARD_RULE.title + '</h2>' +
     /* 문장마다 한 줄, 줄표(—) 없이, 상자로 묶어서 (사용자 지침 2026-11-06 — 표본실 머리 상자와 같은 꼴, .rwnote) */
-    '<div class="rwnote">매일 출석은 원고료, 주간 보상은 키우는 재료입니다.<br>' +
-    '하루는 0시에, 주는 <b>월요일 0시</b>에 갈립니다.<br>' +
-    '받지 않은 주간 보상은 그때 사라집니다.</div>';
+    /* 줄 앞 금빛 «·» 는 글머리라 줄표 규칙과 별개(사용자 지침 2026-11-20 — 상점 배정 상자와 통일) */
+    '<div class="rwnote"><ul class="dots"><li>매일 출석은 원고료, 주간 보상은 키우는 재료입니다.</li>' +
+    '<li>하루는 0시에, 주는 <b>월요일 0시</b>에 갈립니다.</li>' +
+    '<li>받지 않은 주간 보상은 그때 사라집니다.</li></ul></div>';
   /* 받을 것이 둘 이상이면 한 번에 — 둘 중 하나를 골라야 하는 「모두 달성」 보상만 빼고(v2.28.14, 사용자 지침).
    * 손잡이는 여기서 글만 지어 두고, 자리는 아래 «매일 출석» 칸 밑의 지질망치 줄 오른쪽 끝입니다
    * (사용자 지침 2026-11-17 — 예전에는 맨 위 안내 상자 바로 아래에 혼자 섰습니다). */
@@ -16992,8 +18177,10 @@ function presetBarHTML() {
   if (!ps.some(Boolean)) return "";
   const 담긴 = ps.filter(Boolean).length;
   let h = '<div style="margin:18px 0 6px;color:var(--text);font-weight:700">저장해 둔 편성</div>' +
-          '<div class="hint">눌러서 그대로 갈아 끼웁니다. 맨 위 [편성 저장] 으로 담아 둡니다.' +
-            '　담긴 ' + 담긴 + ' / ' + PRESET_MAX + '</div>' +
+          '<div class="hintbox"><ul class="hintlist">' +
+            '<li>눌러서 <b>그대로 갈아 끼웁니다.</b></li>' +
+            '<li>맨 위 <b>[편성 저장]</b> 으로 담아 둡니다.　담긴 ' + 담긴 + ' / ' + PRESET_MAX + '</li>' +
+          '</ul></div>' +
           '<div class="grid">';
   ps.forEach((p, i) => {
     if (!p) return;
@@ -17288,13 +18475,18 @@ function openSync(back) {
     const next = nextSyncChapter();
     const whos = Object.keys(SINNERS);
     if (!SYNC_PICK || !SINNERS[SYNC_PICK]) SYNC_PICK = whos[0];
+    /* 머리말 — 상자 안에 한 줄씩(사용자 지침 2026-11-21, index.html .hintbox · .hintlist).
+     * data-tut 두 자리는 길잡이가 짚는 곳이라 그대로 둡니다(data/tutorial.js 「동기화」). */
     let h = '<h2>동 기 화</h2>' +
-      '<div class="hint" data-tut="sync-what">인격 파편으로 작성위원의 동기화 단계를 올립니다. ' +
-      '단계 1당 그 작성위원의 공격·방어·체력이 모두 ' + Math.round(SYNC_RULE.statPct * 100) +
-      '%씩 강해집니다. 지원 작성위원은 자기 단계가 없어, 함께 편성된 두 작성위원 중 ' +
-      '낮은 쪽의 단계를 빌려 씁니다. 칸을 누르면 아래에 그 사람의 설명과 손잡이가 뜹니다.<br>' +
-      '<span data-tut="sync-cap">지금은 <b>' + cap + '단계</b>까지 올릴 수 있습니다.' +
-      (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</span></div>';
+      '<div class="hintbox" data-tut="sync-what"><ul class="hintlist">' +
+        '<li>인격 파편으로 작성위원의 <b>동기화</b>를 올립니다.</li>' +
+        '<li>단계 1당 <b>공격·방어·체력이 모두 ' +
+          Math.round(SYNC_RULE.statPct * 100) + '%씩</b> 오릅니다.</li>' +
+        '<li><b>지원 작성위원</b>은 둘 중 <b>낮은 단계</b>를 빌려 씁니다.</li>' +
+        '<li>칸을 누르면 아래에 설명과 손잡이가 뜹니다.</li>' +
+        '<li data-tut="sync-cap">지금은 <b>' + cap + '단계</b>까지.' +
+          (next ? ' ' + next + '을 마치면 더 오릅니다.' : '') + '</li>' +
+      '</ul></div>';
 
     if (msg) h += '<div class="hint" style="color:var(--gold)">' + msg + '</div>';
 
@@ -17328,7 +18520,7 @@ function openSync(back) {
              '<div class="sub">파편 <b>' + fragCount(who) + '</b>개' +
                (maxed ? '' : '　·　다음 단계에 <b>' + cost + '</b>개') + '</div>' +
              (skill
-               ? '<div class="sub"><span class="uskill"><b>' + skill.name + '</b> ' +
+               ? '<div class="sub skill"><span class="uskill"><b>' + skill.name + '</b> ' +
                    (lv >= 1 ? skill.desc(skillTierValue(skill, lv), lv)
                             : '<span style="color:var(--dim)">동기화 1단계에서 열립니다.</span>') +
                  '</span></div>'
@@ -17343,7 +18535,7 @@ function openSync(back) {
     /* 아래에 인격 파편 상자 줄 — 파편이 모자랄 때 여기서 바로 열어 채웁니다 (사용자 지침 2026-10-16).
      * 보관함의 그 줄과 같은 꼴이고, 다 쓰면 이 동기화 창으로 돌아옵니다 */
     h += '<div style="margin:16px 0 6px;color:var(--text);font-weight:700" data-tut="sync-box">인격 파편 상자</div>' +
-         '<div class="hint">' + FRAGBOX_RULE.desc + '</div>';
+         bulletBox(fragBoxLines());   /* 보관함 · 교환소와 같은 불릿 상자 (사용자 지침 2026-11-25) */
     FRAGBOX_KINDS.forEach(k => {
       const cnt = fragBoxCount(k.key);
       h += '<div class="syncrow">' + iconHTML(k.name, { dim: !cnt }) +
@@ -17540,7 +18732,9 @@ function openGiftFuse(back) {
         return '<span style="color:' + (ok ? 'var(--text)' : 'var(--muted)') + '">' +
                  (g ? stars(g.star) + ' ' : '') + pn + (lv ? ' ' + "+".repeat(lv) : '') +
                  (ok ? '' : ' <span style="color:var(--muted)">(없음)</span>') + '</span>';
-      }).join('　+　');
+      /* 전각 공백(　)은 줄 끝에 걸려도 폭을 그대로 먹어 칸 밖으로 넘칩니다 —
+       * 여느 공백으로 두고 「+」 만 흐리게(사용자 지침 2026-11-21) */
+      }).join(' <span style="color:var(--muted)">+</span> ');
       const costHTML = '황금교본 ' + (f.codex || 0) + '권' +
                        (f.syncModule ? ' · ' + SYNC_MODULE.name + ' ' + f.syncModule + '개' : '');
       h += '<div class="syncrow"' + (first ? ' data-tut="fuse-row"' : '') + '>' + giftIconHTML(r) +
@@ -17740,7 +18934,10 @@ const PALETTES = [
   { key: "sewer",   name: "하수구를 바라보는 검은 눈", sub: "알록달록하고 혼란스러운 테마", need: "ch6_5",
     sw: ["#1e1234", "#3a3016", "#b6f23a", "#f0e8fb"] },
   { key: "boom",    name: "붐은 온다",       sub: "터져서 없어짐 수고하세요.", needMirror: "railLine2",
-    sw: ["#4a0e0b", "#170f0e", "#ffd83d", "#ffeae5"] }
+    sw: ["#4a0e0b", "#170f0e", "#ffd83d", "#ffeae5"] },
+  /* 설원 — 8장을 마치면 열립니다(사용자 지침 2026-11-20). 밝은 바탕 · 얼음 청색 강조, 「북극해」(어두운 남색)와 겹치지 않게 */
+  { key: "snow",    name: "설원",           sub: "싸늘한 공기가 그리움을 불러오는 듯하다.", light: true, need: "ch8",
+    sw: ["#eaf0f5", "#fafcfe", "#1f6f9f", "#17222d"] }
 ];
 function paletteBy(key) { return PALETTES.find(p => p.key === key) || null; }
 function paletteOpen(p) {
@@ -17755,7 +18952,9 @@ function paletteLockText(p) {
     return (m ? m.name : p.needMirror) + "을 마치면 열립니다";
   }
   const c = p.need ? CHAPTERS.find(x => x.id === p.need) : null;
-  return (c ? c.no : p.need) + "을 마치면 열립니다";
+  /* 장 묶음(8장처럼 부분으로 나뉜 장)은 id 가 없고 부분들의 part 로만 있습니다 — 첫 부분의 group.no(«8장») */
+  const g = !c && p.need ? CHAPTERS.find(x => x.part === p.need && x.group) : null;
+  return (c ? c.no : g ? g.group.no : p.need) + "을 마치면 열립니다";
 }
 function paletteNow() {
   const p = paletteBy(Store.get(PALETTE_KEY));
@@ -17773,6 +18972,28 @@ function paletteCheck() {
   const p = paletteBy(paletteNow());
   if (p && !paletteOpen(p)) { Store.del(PALETTE_KEY); applyPalette("ink"); }
   else applyPalette(paletteNow());
+}
+/* ── 색 테마가 새로 열렸다 ──────────────────────────────────────
+ *  장을 마치거나 거울 갈래를 완주한 자리에서 한 줄 겁니다(사용자 지침 2026-11-26).
+ *  여태 조용히 열리기만 해서, [설정] 의 색 테마 칸을 다시 열어 보지 않으면 무엇이
+ *  열렸는지 알 길이 없었습니다 — 동기화 · 장착 칸 해금과 같은 모양으로 섭니다.
+ *
+ *  무엇이 어디서 열리는가는 PALETTES 의 need · needMirror 를 그대로 읽습니다 —
+ *  테마를 더 얹어도 이 함수는 다시 손댈 일이 없습니다. 한 줄은 그 테마의 sub
+ *  (고르는 칸에 뜨는 그 한 줄)을 그대로 씁니다.
+ *
+ *  keys — 이번에 «처음» 마친 열쇠들(장 id · 묶음 id · 거울 갈래 key). 처음이 아닌
+ *  자리에서는 부르지 않으므로, 다회차로 같은 장을 다시 밟아도 두 번 뜨지 않습니다.
+ *  5장처럼 한 번에 둘이 열리는 자리도 있어, 가름줄은 한 번만 긋습니다. */
+function sayPaletteUnlock(keys) {
+  if (!keys || !keys.length) return;
+  const got = PALETTES.filter(p => keys.indexOf(p.need) >= 0 || keys.indexOf(p.needMirror) >= 0);
+  if (!got.length) return;
+  divider();
+  got.forEach(p => {
+    sayBold("색 테마 「" + p.name + "」" + josa(p.name, "이") + " 열렸습니다!", "good");
+    say(p.sub + "　—　[설정] 의 «색 테마» 칸에서 고를 수 있습니다.", "sys");
+  });
 }
 /* 색 테마 칸 — [설정] 화면에 바로 펼쳐 둡니다(사용자 지침 2026-10-16). openPalettePick 도 같은 것을 씁니다.
  * 누르면 곧바로 입히고 저장한 뒤 redraw() 로 그 화면을 다시 그립니다. */
@@ -17989,17 +19210,19 @@ function glassBgPick() {
  *  지금 걸린 배경 «묶음» 에 붙은 한 줄입니다 — 낱장마다가 아닙니다
  *  (사용자 지침 2026-09-12). 장 쪽은 data/story.js 의 glassNote,
  *  거울 갈래는 위 MIRROR_RULE·MIRROR_HARD·… 의 같은 이름 칸에 적혀 있습니다.
- *  안 적혔으면 null 을 돌려주고, 유리창은 그 줄만 비웁니다. */
+ *  안 적혔으면 null 을 돌려주고, 유리창은 그 줄만 비웁니다.
+ *  배열로 적으면 유리창에 들어설 때마다 그중 하나를 고릅니다(사용자 지침 2026-11-20 — 8장 둘). */
 function glassNote() {
+  const pick = v => Array.isArray(v) ? (v.length ? v[rnd(v.length)] : null) : (v || null);
   const k = glassBgKey();
   if (!k) return null;
   if (k.indexOf("mirror:") === 0) {
     const r = MIRROR_TIERS.find(x => x.key === k.slice(7));
-    return (r && r.glassNote) || null;
+    return pick(r && r.glassNote);
   }
-  if (groupParts(k).length) return groupMeta(k).glassNote;   // 장 묶음
+  if (groupParts(k).length) return pick(groupMeta(k).glassNote);   // 장 묶음
   const c = CHAPTERS.find(x => x.id === k);
-  return (c && c.glassNote) || null;
+  return pick(c && c.glassNote);
 }
 
 /* ── 유리창 한마디 — 누가 읊는가 ────────────────────────────────
@@ -18061,6 +19284,44 @@ let SET_SEC_OPEN = {};
  *  맨 위에 색 테마를 바로 펼쳐 두고, 그 아래 «다른 설정» 칸들 — 유리창 배경 · 화면 글꼴 ·
  *  기록 · 내보내기 · 앱으로 설치 · 보관함 비우기. 칸마다 제 화면을 열고, 닫으면 여기로 돌아옵니다. */
 let SET_PAL_OPEN = false;   // 설정의 색 테마 칸을 펼쳐 두었는가
+/* ── 진행 중 설정 (사용자 지침 2026-11-20) ─────────────────────────
+ *  전투 · 이야기 · 거울 갈래에서 머리줄 [설정] 으로 엽니다. 할 수 있는 것은 둘뿐입니다 —
+ *    · 효과음 · 배경음 크기 (유리창 설정과 같은 막대)
+ *    · 저장하지 않고 유리창으로 — 두 번 눌러야 나갑니다. 지금 자리를 따로 기록하지 않고 나가므로,
+ *      다시 들어오면 마지막으로 기록한 자리(이야기의 저장 지점 · 거울의 갈림길)부터입니다.
+ *  창이 떠 있는 동안에도 전투는 멈추지 않습니다(대기가 이미 걸려 있는 줄은 마저 흐릅니다). */
+function openPlaySettings() {
+  $modal.classList.add("on");
+  let armed = false;
+  const draw = () => {
+    $sheet.innerHTML =
+      '<h2>설 정</h2>' +
+      '<div class="setsfx">' + sfxSettingHTML() + bgmSettingHTML() + '</div>' +
+      '<div class="hint" style="margin-top:14px">' +
+        (armed ? '<b style="color:var(--red)">한 번 더 누르면 나갑니다.</b> 마지막으로 기록한 자리 뒤로 진행한 것은 남지 않습니다.'
+               : '유리창으로 나가면 마지막으로 기록한 자리부터 다시 이어갑니다.') +
+      '</div>' +
+      '<div class="grid one" style="margin-top:8px">' +
+        '<button id="psout" class="' + (armed ? 'primary' : 'ghost') + '">저장하지 않고 유리창으로</button>' +
+      '</div>' +
+      '<div class="modalfoot"><button id="psclose">닫기</button></div>';
+    sfxSettingBind();
+    bgmSettingBind();
+    document.getElementById("psout").onclick = () => {
+      if (!armed) { armed = true; return draw(); }
+      closeModal();
+      leavePlayToGlass();
+    };
+    document.getElementById("psclose").onclick = () => closeModal();
+  };
+  draw();
+  liftSheetFoot();
+}
+/* 걸려 있던 대기를 걷고 유리창으로 — glass() 가 보관함에서 S 를 다시 읽으므로 진행 중이던 것은 버려집니다 */
+function leavePlayToGlass() {
+  clearPlayTimers();
+  glass();
+}
 function openSettings(back) {
   $modal.classList.add("on");
   const draw = () => {
@@ -18076,20 +19337,21 @@ function openSettings(back) {
               '<summary><b>색 테마</b>　지금 「' + cur.name + '」</summary>' +
               '<div class="hint">' + PALETTE_NOTE + '</div>' + paletteGridHTML() +
             '</details>' +
-            sfxSettingHTML() + bgmSettingHTML() +
+            '<div class="setsfx">' + sfxSettingHTML() + bgmSettingHTML() + '</div>' +   // 소리 두 줄을 한 상자에(사용자 지침 2026-11-20)
             '<div style="margin:16px 0 6px;color:var(--text);font-weight:700">다른 설정</div>' +
             '<div class="grid">' +
-              slot("bg", "유리창 배경", "마친 장의 배경으로 갈아 끼웁니다 — 지금 「" +
-                   (bgIt ? bgIt.name : "작성위원 단체 그림") + "」.") +
-              slot("font", "화면 글꼴", "기본 글꼴 · 대사 글꼴 · 대사 크기를 고릅니다. 누르는 대로 곧바로 저장됩니다.") +
+              /* 칸마다 설명은 짧은 두 줄로(<br>) — 칸 너비에서 줄이 제멋대로 꺾이지 않게(사용자 지침 2026-11-20) */
+              slot("bg", "유리창 배경", "마친 장의 배경으로 바꿉니다.<br>지금 「" +
+                   (bgIt ? bgIt.name : "작성위원 단체 그림") + "」") +
+              slot("font", "화면 글꼴", "글꼴과 대사 크기를 고릅니다.<br>누르는 대로 바로 저장됩니다.") +
               slot("patch", "패치 노트" + (patchHidden() ? "" : ' <span class="pnew">새 판</span>'),
-                   "v" + VERSION + (VERSION_NAME ? " «" + VERSION_NAME + "»" : "") + " — 판마다 무엇이 바뀌었는지 봅니다.") +
-              slot("rec", "기록 · 내보내기", "보관함을 파일로 받아 두거나, 받아 둔 파일을 다시 읽습니다. 콘첸트라트 연결도 여기서 합니다.") +
+                   "판마다 바뀐 것을 봅니다.<br>지금 v" + VERSION) +
+              slot("rec", "기록 · 내보내기", "보관함을 파일로 받거나 읽습니다.<br>콘첸트라트 연결도 여기서 합니다.") +
               slot("app", appEnv().standalone ? "보관함 옮기기" : "앱으로 설치 · 보관함 옮기기",
-                   appEnv().standalone ? "다른 브라우저·기기에서 복사해 온 보관함을 이 앱에 옮겨 담습니다."
-                                       : "홈 화면에 앱으로 깔아 바로 엽니다. 아이폰은 설치하기 전에 보관함을 복사해 두어야 이어집니다.") +
+                   appEnv().standalone ? "다른 곳에서 복사해 온 보관함을<br>이 앱에 옮겨 담습니다."
+                                       : "홈 화면에 앱으로 깔아 엽니다.<br>아이폰은 보관함부터 복사하십시오.") +
               /* 되돌릴 수 없는 자리라 맨 끝에, 붉은 글씨로 — 누르면 무엇이 사라지는지 세어 보여 주고 두 번 묻습니다(openReset) */
-              slot("reset", "보관함 비우기", "모은 것을 모두 지우고 맨 처음으로 돌아갑니다. 되돌릴 수 없으니 먼저 내보내 두십시오.", true) +
+              slot("reset", "보관함 비우기", "모은 것을 다 지우고 처음으로.<br>되돌릴 수 없으니 먼저 내보내십시오.", true) +
             '</div>' +
             '<div class="modalfoot"><button id="setclose">닫기</button></div>';
     $sheet.innerHTML = h;
@@ -18118,6 +19380,7 @@ function openSettings(back) {
 const CREDITS = [
   { role: "라거슈타트 행정고문", names: ["이승찬"] },
   { role: "라거슈타트 디자인부", names: ["이창수", "최찬경"] },
+  { role: "라거슈타트 교육위원", names: ["이형우(작곡)"] },
   { role: "도움", names: ["라거슈타트"] }
 ];
 function aboutHTML() {
@@ -18146,13 +19409,12 @@ function sfxTryList() {
 }
 function sfxSettingHTML() {
   const v = sfxVol();
-  return '<div class="setsfx">' +
-           '<div class="setsfxrow">' +
-             '<b>효과음 크기</b>' +
-             '<input type="range" id="sfxrange" min="0" max="100" step="' + SFX_RULE.step + '" value="' + Math.round(v * 100) + '">' +
-             '<span id="sfxval">' + sfxVolText(v) + '</span>' +
-             '<button class="ghost" id="sfxtry">들어 보기</button>' +
-           '</div>' +
+  /* 줄 하나만 돌려줍니다 — 배경음 줄과 한 상자(.setsfx)에 담는 것은 openSettings(사용자 지침 2026-11-20) */
+  return '<div class="setsfxrow">' +
+           '<b>효과음 크기</b>' +
+           '<input type="range" id="sfxrange" min="0" max="100" step="' + SFX_RULE.step + '" value="' + Math.round(v * 100) + '">' +
+           '<span id="sfxval" class="vval">' + sfxVolText(v) + '</span>' +
+           '<button class="ghost vtry" id="sfxtry">들어 보기</button>' +
          '</div>';   /* 설명 줄은 걷었습니다(사용자 지침 2026-11-15) */
 }
 function sfxSettingBind() {
@@ -18183,17 +19445,15 @@ function sfxSettingBind() {
 function bgmSettingHTML() {
   if (!bgmHas() && !cueHas()) return "";
   const v = bgmVol();
-  return '<div class="setsfx">' +
-           '<div class="setsfxrow">' +
-             '<b>배경음 크기</b>' +
-             '<input type="range" id="bgmrange" min="0" max="100" step="' + BGM_RULE.step + '" value="' + Math.round(v * 100) + '">' +
-             '<span id="bgmval">' + sfxVolText(v) + '</span>' +
-             /* 자리를 비워 두던 칸에 [들어 보기] 를 넣었습니다 (사용자 지침 2026-11-17) —
-              * 보스 등장 음성을 한 번 틀어 지금 크기를 귀로 견줍니다. 길게 흐르는 소리라
-              * 다시 누르면 멈춥니다. 들려줄 것이 없으면 예전처럼 빈 자리로 둡니다. */
-             (cueHas() ? '<button class="ghost" id="bgmtry">들어 보기</button>'
-                       : '<button class="ghost" tabindex="-1" aria-hidden="true" style="visibility:hidden">들어 보기</button>') +
-           '</div>' +
+  return '<div class="setsfxrow">' +
+           '<b>배경음 크기</b>' +
+           '<input type="range" id="bgmrange" min="0" max="100" step="' + BGM_RULE.step + '" value="' + Math.round(v * 100) + '">' +
+           '<span id="bgmval" class="vval">' + sfxVolText(v) + '</span>' +
+           /* 자리를 비워 두던 칸에 [들어 보기] 를 넣었습니다 (사용자 지침 2026-11-17) —
+            * 보스 등장 음성을 한 번 틀어 지금 크기를 귀로 견줍니다. 길게 흐르는 소리라
+            * 다시 누르면 멈춥니다. 들려줄 것이 없으면 예전처럼 빈 자리로 둡니다. */
+           (cueHas() ? '<button class="ghost vtry" id="bgmtry">들어 보기</button>'
+                     : '<button class="ghost vtry" tabindex="-1" aria-hidden="true" style="visibility:hidden">들어 보기</button>') +
          '</div>';
 }
 function bgmSettingBind() {
@@ -18240,8 +19500,12 @@ function openGlassBgPick(back, draft0) {
     }
 
     let h = '<h2>유 리 창 배 경</h2>' +
-            '<div class="hint">[확정] 을 눌러야 보관함에 남습니다. 마친 장의 배경만 나옵니다. 묶음을 고르면 그 장의 배경이 ' +
-            '유리창에 들어올 때마다 한 장씩 돌아갑니다.</div>' +
+            /* 안내 셋을 한 줄씩(사용자 지침 2026-11-20) — index.html .hintlist */
+            '<ul class="hintlist">' +
+              '<li>마친 장의 배경만 나옵니다.</li>' +
+              '<li>묶음을 고르면, 유리창에 들어올 때마다 그 장의 배경이 한 장씩 돌아갑니다.</li>' +
+              '<li><b>[확정]</b> 을 눌러야 보관함에 남습니다.</li>' +
+            '</ul>' +
             '<div class="hint" style="color:var(--gold)">' + (바뀜 ? '고르는 중 — ' : '지금 걸린 것 — ') +
               '<b>' + (nowIt ? nowIt.name : "작성위원 단체 그림") + '</b>' +
               (nowIt ? '　·　배경 ' + nowIt.imgs.length + '장' : '') +
@@ -18252,9 +19516,12 @@ function openGlassBgPick(back, draft0) {
               (고름 ? '' : ' disabled') + '>배경을 기본값으로</button></div>';
 
     if (!items.length)
-      h += '<div class="grid"><div class="slot"><div class="sub">아직 마친 장이 없습니다 — ' +
-           '한 장을 마치면 그 장의 배경을 고를 수 있습니다. 그때까지는 작성위원 ' +
-           '단체 그림이 걸립니다.</div></div></div>';
+      /* 아무것도 없을 때만 서는 칸이라 줄 전체를 씁니다(격자 밖, 사용자 지침 2026-11-20) — index.html .bgempty */
+      h += '<div class="slot bgempty">' +
+             '<div class="nm">아직 마친 장이 없습니다.</div>' +
+             '<div class="sub">한 장을 마치면 그 장의 배경을 고를 수 있습니다.<br>' +
+             '그때까지는 작성위원 단체 그림이 걸립니다.</div>' +
+           '</div>';
 
     groups.forEach(g => {
       let body = '<div class="grid">';
@@ -18389,9 +19656,9 @@ function openVault(back) {
   /* 인격 파편 상자 — 보관함에서 바로 «사용» 하는 자리라 syncrow 로,
    * 오른쪽 끝에 사용 손잡이를 둔다. 이런 손잡이가 필요 없는 항목은
    * vaultItemCategories() 에 얹으면 되고, 여기는 손댈 것 없다. */
+  /* 안내는 불릿 상자로 한 줄씩 — 이벤트 교환소 머리와 같은 줄(사용자 지침 2026-11-25) */
   h += '<div style="margin:14px 0 6px;color:var(--text);font-weight:700">인격 파편 상자</div>' +
-       '<div class="hint">' + FRAGBOX_RULE.desc + '</div>' +
-       '<div class="hint">' + FRAGBOX_RULE.desc2 + '</div>';
+       bulletBox(fragBoxLines());
   FRAGBOX_KINDS.forEach((k, i) => {
     const cnt = fragBoxCount(k.key);
     h += '<div class="syncrow"' + (i === 0 ? ' data-tut="vault-use"' : '') + '>' + iconHTML(k.name, { dim: !cnt }) +
@@ -18422,9 +19689,9 @@ function openVault(back) {
              (cnt > 0 && left === 0
                ? '<div class="sub" style="color:var(--gold)">' +
                  (t.key === "advisor"
-                   ? '더 고를 사람이 없습니다 — 이미 다 함께하고 있거나, 남은 사람이 전부 특정 배정 중입니다.'
+                   ? '더 고를 사람이 없습니다 — 이미 다 함께하고 있습니다.'
                    : t.key === "id"
-                   ? '더 고를 인격이 없습니다 — 이미 다 지녔거나, 남은 인격이 전부 특정 배정 중입니다.'
+                   ? '더 고를 인격이 없습니다 — 이미 다 지니고 있습니다.'
                    : '더 고를 기프트가 없습니다 — 이미 전부 지니고 있습니다.') + '</div>'
                : '') +
            '</div>' +
@@ -18720,27 +19987,19 @@ function openFragBoxUse(kind, back, ret) {
   const owned = fragBoxCount(kind);
   if (!meta || owned <= 0) { ret(); return; }
 
-  let h = '<h2>' + meta.name + '</h2>' +
-    '<div class="hint">' + FRAGBOX_RULE.desc + ' 사용할 개수를 고르십시오.  (보유 ' + owned + '개)</div>' +
-    '<div class="hint" id="bxamt" style="color:var(--text);font-weight:700;font-size:15px">1개 사용</div>' +
-    '<input type="range" id="bxrange" min="1" max="' + owned + '" value="1" ' +
-      'style="width:100%;accent-color:var(--red)">' +
-    '<div class="modalfoot">' +
-      '<button id="bxcancel" class="ghost">그만두기</button>' +
-      '<button id="bxnext" class="primary">다음</button>' +
-    '</div>';
-  $sheet.innerHTML = h;
-
-  const range = document.getElementById("bxrange");
-  const amt = document.getElementById("bxamt");
-  range.oninput = () => { amt.textContent = range.value + "개 사용"; };
-
-  document.getElementById("bxcancel").onclick = () => ret();
-  document.getElementById("bxnext").onclick = () => {
-    const n = +range.value;
-    if (kind === "random") openFragBoxRandom(n, back, ret);
-    else openFragBoxPickWho(n, back, ret);
-  };
+  /* 개수 고르기는 교환소 · 상점과 같은 수량 선택 창으로(사용자 지침 2026-11-25 — 예전엔 바(슬라이더)).
+   * 받는 파편 수는 적지 않습니다 — 정확한 배율(FRAGBOX_RULE.mult)은 감춥니다(위 머리말) */
+  openQtyPick({
+    title: meta.name, icon: meta.name, name: meta.name,
+    left: FRAGBOX_RULE.desc,
+    pay:  n => '상자 <b>' + n + '</b>개 사용',
+    have: () => fragBoxCount(kind) + '개',
+    max:  () => fragBoxCount(kind),
+    okLabel: kind === "random" ? "열기" : "다음",
+    noLabel: "그만두기",
+    ok:   n => kind === "random" ? openFragBoxRandom(n, back, ret) : openFragBoxPickWho(n, back, ret),
+    back: ret
+  });
 }
 
 /* 무작위 — 개수(n)만큼 상자를 태워 n×mult 개를 낱개로 12명에게 임의로 흩는다.
@@ -18939,6 +20198,9 @@ function vaultLockScreen() {
   ]);
 }
 
+/* 처음 온 판(본편 · 곁가지 어느 장도 안 마침)의 유리창인가 — glass() 가 세우고,
+ * 아래 손잡이(운전석만 깜빡 · 나머지 잠금)와 머리줄(설정만 켬)이 읽습니다(사용자 지침 2026-11-20). */
+let FIRST_LOCK = false;
 function glass() {
   if (!S || !S.mirror) rail4Release();   // 유리창으로 나오면 편도(4호선) 도전은 멈춘 것 — 막아 둔 것을 풉니다
   VAULT_LOCK = null;       // 다시 읽으므로 판단도 다시 합니다
@@ -18957,6 +20219,7 @@ function glass() {
   const mains = mainChapters();
   const done  = mains.filter(c => S.cleared && S.cleared[c.id]).length;
   const sides = CHAPTERS.filter(c => isSide(c) && S.cleared && S.cleared[c.id]).length;
+  FIRST_LOCK = !done && !sides;   // 처음 온 판 — 아래 손잡이와 머리줄을 잠급니다(사용자 지침 2026-11-20)
 
   /* ── 머리글 두 갈래 (사용자 지침 2026-09-12) ─────────────────
    *  보관함이 비었거나 아직 한 장도 안 마친 판에서는, «여기가 무엇을 하는 곳인지»
@@ -18978,8 +20241,8 @@ function glass() {
   }
   divider();
 
-  versionNotice();          // 옛 판 보관함을 열었으면 여기서 한 번 알린다
-  eventNotice();            // 새 이야기가 나와 이벤트 재화가 갈렸으면 한 번 알린다
+  /* 판 갈림 · 이벤트 재화 갈림 · 특정 배정 종료로 보관함이 바뀐 것은 기록칸이 아니라
+   * 상점 알림 «다음» 의 창으로 띄웁니다(아래 openVaultChange — 사용자 지침 2026-11-25) */
   storageNotice();          // 저장이 막혔거나(사파리 file://) 지워질 수 있는(사파리 7일) 환경이면 일러 준다
 
   /* 처음 오신 분께 — 어디를 눌러야 하는지 일러 둡니다.
@@ -18988,8 +20251,8 @@ function glass() {
     divider();
     say("처음이시라면 —", "place");
     say("아래 [운전석] 을 누르고 «0장 돌아갈 수 없는» 을 고르면 이야기가 시작됩니다.", "good");
-    say("[편성] 에서 누구를 데려갈지, [상점] 에서 새 인격을 뽑을 수 있습니다. " +
-        "무엇을 눌러야 할지 모르겠으면 [운전석] 부터 누르십시오.", "sys");
+    /* 다른 손잡이는 잠가 두므로 [편성] · [상점] 안내는 걷고, 이어 하던 분께 길을 일러 둡니다(사용자 지침 2026-11-20) */
+    say("기존 데이터와 연동하시려면 [설정] 에서 «기록 · 내보내기» 를 찾아 주세요.", "sys");
   }
   /* 이번 판에 새로 들어온 것들을 한 번 알려 줍니다.
    * 유리창을 다 그린 뒤에 덮어씌우므로, 닫으면 바로 유리창이 보입니다. */
@@ -19004,9 +20267,15 @@ function glass() {
      * 여기서 열리는 것은 이제 유리창뿐이므로, 어느 손잡이로 닫든 한 번 본 것으로 봅니다. */
     return openNotice(go => {
       noticeHide();
-      if (go === "shop") return openShop(() => glass());
+      if (go === "shop" && !FIRST_LOCK) return openShop(() => glass());   // 처음 온 판에는 상점이 잠겨 있습니다
       closeModal(); glass();
     });
+  }
+  /* 보관함이 갈린 것 — 상점 알림을 닫은 «다음» 에 창으로 (사용자 지침 2026-11-25) */
+  if (!INSTALL_ASKING && vaultChangeDue()) {
+    render();
+    buttons([{ label: "…", cls: "primary", disabled: true }]);
+    return openVaultChange(() => { closeModal(); glass(); });
   }
   /* 오늘 출석을 아직 안 받았으면 출석 창을 띄웁니다 — 알림이 있으면 알림을 닫은 뒤에 */
   if (!INSTALL_ASKING && rewardAutoDue()) {
@@ -19020,17 +20289,20 @@ function glass() {
    * 통수가 적히고 테두리가 금빛으로 바뀝니다 (사용자 지침 2026-09-12). */
 
   render();
+  /* 처음 온 판(마친 장이 하나도 없음) — [운전석] 만 붉게 깜빡이고 나머지는 잠급니다.
+   * 머리줄의 [우편함] · [보상] 도 잠그고 [설정] 만 켭니다(renderHeader, 사용자 지침 2026-11-20). */
+  const 첫 = FIRST_LOCK;
   buttons([
-    { label: "운전석", cls: "primary", fn: () => openChapterSelect(() => glass()) },
-    { label: "편성",   fn: () => openParty(() => glass()) },
-    { label: "상점",   fn: () => openShop(() => glass()) },
-    { label: "노트",   fn: () => openNote(() => glass()) },
-    { label: "업적",   fn: () => openAchieve(() => glass()) },
+    { label: "운전석", cls: "primary" + (첫 ? " firstgo" : ""), fn: () => openChapterSelect(() => glass()) },
+    { label: "편성",   disabled: 첫, fn: () => openParty(() => glass()) },
+    { label: "상점",   disabled: 첫, fn: () => openShop(() => glass()) },
+    { label: "노트",   disabled: 첫, fn: () => openNote(() => glass()) },
+    { label: "업적",   disabled: 첫, fn: () => openAchieve(() => glass()) },
     /* [탐사] — 4장을 마치면 섭니다(화석 탐사 · DIG_RULE.unlock) */
     digOpen() ? { label: DIG_DOOR, fn: () => openDig(() => glass()) } : null,
     /* [우편함] · [보상] 은 머리줄 오른쪽의 아이콘 손잡이로 옮겼습니다 (renderHeader · AT_GLASS) */
     /* [강화] 는 쪼개 옮겼습니다 — 동기화는 [편성] 맨 위, 기프트 강화 · 합성은 [보관함] 의 기프트 칸 아래 (사용자 지침 2026-10-16) */
-    { label: "보관함", fn: () => openVault(() => glass()) },
+    { label: "보관함", disabled: 첫, fn: () => openVault(() => glass()) },
     /* [설정] 은 머리줄 오른쪽 끝의 톱니바퀴로 옮겼습니다 (renderHeader, 사용자 지침 2026-10-17) */
     /* [패치 노트] 는 [설정] 안으로 옮겼습니다 (사용자 지침 2026-10-16) */
   ]);
@@ -19347,6 +20619,8 @@ function boot() {
   const ask = installAskWanted();
   INSTALL_ASKING = ask;
   if (gateOpen()) glass(); else gate();
+  /* 소리는 뒤에서 미리 받아 둡니다 — 첫 화면을 다 그린 뒤에 (preloadSounds 머리말) */
+  setTimeout(preloadSounds, 1500);
   if (ask) openInstall(() => { INSTALL_ASKING = false; if (gateOpen()) glass(); }, true);
   /* 콘첸트라트에 연결돼 있으면 뒤에서 구름을 봅니다 — 더 새로우면 합치고 새로고침합니다.
    * 기다리게 하지 않습니다: 오프라인이면 그냥 지금 것으로 갑니다. */
@@ -19410,7 +20684,7 @@ const DIG_RULE = {
   brushDaily: 1,     // 매일 출석 (3 → 1)
 };
 
-/* 현장 일곱 — 열리는 차례대로(사용자 지침 2026-11-08). 같은 장에 열리는 셋(4장)은 얕은 곳(젊은 지층)부터.
+/* 현장 여덟 — 열리는 차례대로(사용자 지침 2026-11-08 · 에뮤 베이 셰일 2026-11-25). 같은 장에 열리는 셋(4장)은 얕은 곳(젊은 지층)부터.
  * 지도 옆 목록 · 표본실이 이 차례를 그대로 씁니다. 표본마다 그 이름의 아이콘(assets/icon/<이름>.png).
  * open — 이 장을 마치면 열립니다(4장에 셋, 5 · 6 · 7장에 하나씩 — 사용자 지침 2026-10-23, 8장에 우하 톨고드 — 2026-11-08).
  * star — 표본 희귀도 ★1~★3. 현장마다 ★3 하나 · ★2 둘 · ★1 둘.
@@ -19516,6 +20790,24 @@ const DIG_SITES = [
       { name: "벨로키랍토르", star: 2, note: "프로토케라톱스와 맞붙은 채 묻힌 «싸우는 공룡»." },
       { name: "프로토케라톱스", star: 1, note: "고비에서 가장 흔한 작은 각룡." },
       { name: "슈부이아", star: 1, note: "손가락이 하나뿐인 작은 사냥꾼." }
+    ] },
+  /* 8장을 마치면 — 우하 톨고드와 함께(사용자 지침 2026-11-25). 슬랩 한 장에 지질망치 둘도 같습니다.
+   * 호주에서 하나뿐인 버제스 셰일형 라거슈타트, 지도에 처음 서는 남반구 점입니다.
+   * 표본 출처(2026-11-25 조사): Wikipedia 「Emu Bay Shale」 · 「Balcoracania」 · 「Nesonektris」,
+   * Paterson 외 2010(Oestokerkus, Acta Palaeontologica Polonica). 「아노말로카리스」 는 버제스 ★2 로 이미 있어 뺐습니다. */
+  { key: "emubay", gift: "레들리키아", open: "ch8", cost: 2, en: "Emu Bay Shale", at: [-35.59, 137.48], name: "에뮤 베이 셰일", where: "호주 캥거루섬 · 캄브리아기 전기 약 5억 1,400만 년 전",
+    soil: { mode: "multiply", tint: "rgba(92,112,124,.42)" },   /* 청회색 — 짙은 이암 */
+    /* 인산염 보존 — 연조직까지 광물로 굳었습니다. 화석 칸이 한 겹 더 단단하고(hardFossil),
+     * 망치 «가운데» 로 친 화석 칸은 금이 가지 않습니다(hammerSafe — 둘레는 평소대로). 메셀(무르고 잘 깨짐)의 반대 결 */
+    trait: { name: "인산염 보존", note: "장과 근육까지 광물로 굳어 단단하다. 화석이 한 겹 더 깊지만, 망치 가운데로 친 화석은 금이 가지 않는다.",
+             hardFossil: true, hammerSafe: true },
+    note: "남쪽 끝 섬의 바다. 눈의 렌즈와 장의 결까지 돌이 되어 남았다.",
+    specs: [
+      { name: "레들리키아", star: 3, note: "이곳에서 가장 큰 삼엽충. 더듬이와 다리까지 남았다." },
+      { name: "이속시스", star: 2, note: "두 장 껍데기 속, 눈의 렌즈와 소화샘이 입체로 남았다." },
+      { name: "네소넥트리스", star: 2, note: "«섬의 헤엄꾼». 꼬리 속 막대가 척삭을 닮았다." },
+      { name: "발코라카니아", star: 1, note: "손톱만 한 삼엽충. 몸마디가 아흔일곱까지 늘어난다." },
+      { name: "외스토케르쿠스", star: 1, note: "호주에서 처음 나온 «큰 앞다리» 절지동물." }
     ] }
 ];
 const DIG_SHARD = "화석 조각";
@@ -19717,6 +21009,8 @@ function digNewBoard(site) {
   }
   /* 무너진 사구(deep) — 화석이 아닌 흙만 한 겹 더 깊게(4겹까지). 화석 칸은 그대로입니다 */
   if (t.deep) cells.forEach(c => { if (c.f < 0) c.d = Math.min(4, c.d + 1); });
+  /* 인산염 보존(hardFossil) — 화석 칸만 한 겹 더 단단하게(4겹까지). 흙은 그대로입니다 */
+  if (t.hardFossil) cells.forEach(c => { if (c.f >= 0) c.d = Math.min(4, c.d + 1); });
   let sh = 0;
   for (let tries = 0; sh < DIG_RULE.shardCells && tries < 200; tries++) {
     const i = Math.floor(Math.random() * cells.length);
@@ -19779,9 +21073,11 @@ function digFossilClear(b, f) { return b.fossils[f].cells.every(i => b.cells[i].
 function digFossilBroken(b, f) { return b.fossils[f].cells.some(i => b.cells[i].c); }
 
 /* 한 칸을 n 겹 팝니다. 화석 칸을 0 아래로 치면 깨집니다(망치만 그럴 수 있습니다). */
-function digHit(b, i, n, 스쳐도금) {
+function digHit(b, i, n, 스쳐도금, 안깨짐) {
   const c = b.cells[i];
   if (!c) return;
+  /* 안깨짐 — 인산염 보존(hammerSafe)의 망치 가운데. 겹은 그대로 파이고 금만 안 갑니다 */
+  if (안깨짐) { c.d = Math.max(0, c.d - n); return; }
   /* 평소에는 «0 아래로» 내리쳐야 금이 갑니다. 스쳐도금 이 서면 꼭 0 으로 내려도 금입니다
    * — 무른 오일셰일의 망치 가운데(hammerCrackOn0), 눌린 화석의 망치 둘레(edgeCrack). */
   if (c.f >= 0 && c.d > 0 && (스쳐도금 ? c.d - n <= 0 : c.d - n < 0)) c.c = true;
@@ -19864,7 +21160,7 @@ function digAct(i) {
   } else {
     if (b.sta < DIG_RULE.hammer) return false;
     b.sta -= DIG_RULE.hammer;
-    digHit(b, i, 2, !!t.hammerCrackOn0);
+    digHit(b, i, 2, !!t.hammerCrackOn0, !!t.hammerSafe);
     /* 석판은 십자 대신 가로 한 줄(좌우 두 칸씩), 그 밖에는 사방 한 칸 */
     const 둘레 = t.hammerRow ? [[1, 0], [2, 0], [-1, 0], [-2, 0]]
                              : [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -20477,7 +21773,8 @@ function digSiteHTML() {
          digToolHTML("brush",  b.mode, "발굴 - 붓",   "붓",   DIG_RULE.brush,
            ['한 칸 ' + ((digTrait(b).brushDepth || 1) > 1 ? '두 겹' : '한 겹'), '안 깨짐']) +
          digToolHTML("hammer", b.mode, "발굴 - 망치", "망치", DIG_RULE.hammer,
-           ['두 겹 + ' + (digTrait(b).hammerRow ? '가로' : '둘레') + ' 한 겹', '깨질 수 있음']) +
+           ['두 겹 + ' + (digTrait(b).hammerRow ? '가로' : '둘레') + ' 한 겹',
+            digTrait(b).hammerSafe ? '둘레만 깨질 수 있음' : '깨질 수 있음']) +
          digToolHTML("probe",  b.mode, "발굴 - 탐침", "탐침", DIG_RULE.probe,
            ['파지 않고', '둘레 3×3 셈']) +
        '</span></div>';
@@ -20612,23 +21909,44 @@ function digLegendHTML(site) {
       '흩어진 조각 / 탐침 주변 화석 수</span>' +
   '</div></div></details>';
 }
+/* 현장 두 번 누르기 · 꾹 누르기로 바로 파기 (digSiteBind) */
+let DIG_TAP = null;            // 마지막으로 누른 현장과 그때 — { key, t }
+const DIG_DOUBLE_MS = 400;     // 이 안에 같은 현장을 또 누르면 «두 번 누르기»
+const DIG_HOLD_MS   = 500;     // 이만큼 누르고 있으면 «꾹 누르기»
 function digSiteBind(again) {
   const d = digState();
-  /* 지도의 점과 오른쪽 줄은 «고르기» 만 합니다 — 잠긴 현장도 눌러 볼 수 있습니다 */
-  $sheet.querySelectorAll("[data-site]").forEach(el => el.onclick = () => {
-    if (d.board) return;
-    DIG_SITE_PICK = el.dataset.site;
-    again();
-  });
-  /* 파기 시작 — 여기서만 지질망치가 나갑니다 */
-  $sheet.querySelectorAll("[data-dig-go]").forEach(el => el.onclick = () => {
-    const s = digSiteBy(el.dataset.digGo);
-    if (!s || d.brush < digCost(s) || d.board) return;
+  /* 파기 시작 — 지질망치가 나가는 곳은 이 하나입니다([여기를 팝니다] · 두 번 누르기 · 꾹 누르기) */
+  const digGo = key => {
+    const s = digSiteBy(key);
+    if (!s || d.brush < digCost(s) || d.board || !digSiteOpen(DIG_SITES.indexOf(s))) return;
     d.brush -= digCost(s);
     d.board = digNewBoard(s);
     saveVault();
     again();
+  };
+  /* 지도의 점과 오른쪽 줄은 한 번 누르면 «고르기» 만 합니다 — 잠긴 현장도 눌러 볼 수 있습니다.
+   * 같은 현장을 곧바로 한 번 더 누르거나(두 번 누르기) 꾹 누르면 바로 팝니다(사용자 지침 2026-11-25).
+   * 한 번 누르면 창을 다시 그려 칸이 갈리므로 브라우저 dblclick 은 못 씁니다 — 눌린 때를 DIG_TAP 에 적어 둡니다. */
+  $sheet.querySelectorAll("[data-site]").forEach(el => {
+    let 꾹 = null, 꾹됨 = false;
+    const 놓음 = () => { if (꾹) { clearTimeout(꾹); 꾹 = null; } };
+    el.onpointerdown = () => {
+      꾹됨 = false; 놓음();
+      꾹 = setTimeout(() => { 꾹 = null; 꾹됨 = true; DIG_TAP = null; DIG_SITE_PICK = el.dataset.site; digGo(el.dataset.site); }, DIG_HOLD_MS);
+    };
+    el.onpointerup = el.onpointerleave = el.onpointercancel = 놓음;
+    el.oncontextmenu = e => e.preventDefault();   /* 휴대전화에서 꾹 누르면 뜨는 메뉴를 막습니다 */
+    el.onclick = () => {
+      if (꾹됨) { 꾹됨 = false; return; }          /* 꾹 눌러 이미 팠으면 뒤따르는 click 은 버립니다 */
+      if (d.board) return;
+      const now = Date.now(), k = el.dataset.site;
+      const 두번 = DIG_TAP && DIG_TAP.key === k && now - DIG_TAP.t < DIG_DOUBLE_MS;
+      DIG_TAP = 두번 ? null : { key: k, t: now };
+      DIG_SITE_PICK = k;
+      if (두번) digGo(k); else again();
+    };
   });
+  $sheet.querySelectorAll("[data-dig-go]").forEach(el => el.onclick = () => digGo(el.dataset.digGo));
   $sheet.querySelectorAll("[data-dm]").forEach(el => el.onclick = () => { d.board.mode = el.dataset.dm; saveVault(); again(); });
   if (d.board && !d.board.done)
     $sheet.querySelectorAll("[data-dc]").forEach(el => el.onclick = () => {
@@ -20772,7 +22090,7 @@ TUTORIALS.push(
       { text: "여기가 «화석 탐사» 입니다. " + DIG_BRUSH + " 하나로 " + DIG_SLAB +
               " 한 장을 떼어 와, 흙을 걷어내며 그 안에 묻힌 화석을 찾습니다." },
       { at: { sel: "[data-tut='dig-map']" },
-        text: "현장 일곱은 세계에 흩어진 «라거슈타트» — 화석이 유난히 잘 남은 지층들입니다. " +
+        text: "현장 여덟은 세계에 흩어진 «라거슈타트» — 화석이 유난히 잘 남은 지층들입니다. " +
               "점이 실제로 그 지층이 있는 자리입니다." },
       { at: { sel: "[data-tut='dig-list']" },
         text: "줄을 누르면 그 현장을 고릅니다. 오른쪽 수는 그 현장에서 이미 걸어 둔 표본 수입니다. " +
@@ -20838,12 +22156,17 @@ SHOP_TRADES.push({
   can:  () => digState().shards >= DIG_RULE.shardCodex.shards,
   need: () => payHTML(DIG_SHARD, DIG_RULE.shardCodex.shards) +
               "　(지닌 것 " + digState().shards + ")",
-  give: () => {
+  /* 수량 고르기 창 — 바꿀 수 있는 횟수(사용자 지침 2026-11-25, 되팔기와 같은 틀) */
+  max:  () => Math.floor(digState().shards / DIG_RULE.shardCodex.shards),
+  payN: n => payHTML(DIG_SHARD, DIG_RULE.shardCodex.shards * n) + " → " + payHTML("황금교본", DIG_RULE.shardCodex.codex * n),
+  have: () => payHTML(DIG_SHARD, digState().shards),
+  give: (n) => {
     const d = digSync();
-    d.shards -= DIG_RULE.shardCodex.shards;
-    S.codex += DIG_RULE.shardCodex.codex;
-    return DIG_SHARD + " " + DIG_RULE.shardCodex.shards + "개를 넘기고 황금교본 " +
-           DIG_RULE.shardCodex.codex + "권을 받았다.";
+    n = Math.max(1, Math.min(n || 1, Math.floor(d.shards / DIG_RULE.shardCodex.shards)));
+    d.shards -= DIG_RULE.shardCodex.shards * n;
+    S.codex += DIG_RULE.shardCodex.codex * n;
+    return DIG_SHARD + " " + DIG_RULE.shardCodex.shards * n + "개를 넘기고 황금교본 " +
+           DIG_RULE.shardCodex.codex * n + "권을 받았다.";
   }
 });
 
@@ -20936,7 +22259,9 @@ function deepEnhancePerk(k) {
       e.tagged = { tag: v.tag };
       ["atk", "def", "hp"].forEach(y => { if (v[y]) e.tagged[y] = v[y] > 0 ? r(v[y] * m) : v[y]; });
     }
-    else if (["manage", "manageMax", "skillUses", "kills", "retribFloor"].indexOf(x) >= 0) e[x] = v + plus;
+    else if (["manage", "manageMax", "skillUses", "kills", "retribFloor", "firstNullify"].indexOf(x) >= 0) e[x] = v + plus;
+    /* 첫 광역 한 번의 감소(합성 특전)는 강화해도 키우지 않습니다 — 피해 감소는 횟수로만(사용자 지침 2026-11-23) */
+    else if (x === "aoeFirstCut") e[x] = v;
     else if (x === "healEvery") e[x] = Math.max(3, v - 2);
     /* 스택 배수(8장 「가속탄」 — { heat: 2 })는 «2배 넘는 몫» 을 키워 정수로 — 2 → 3 */
     else if (x === "stackMult") {
@@ -21002,14 +22327,17 @@ function deepPerkText(e) {
   if (e.aoeCut)       L.push("광역 공격으로 받는 피해 -" + pc(e.aoeCut));
   if (e.aoeGuardCut)  L.push("광역 공격에 방어를 고르면 그 피해를 " + pc(e.aoeGuardCut) + " 더 줄임");
   if (e.firstCut)     L.push("적의 선공으로 받는 피해 -" + pc(e.firstCut));
+  if (e.firstNullify) L.push("이번 판에 " + e.firstNullify + "번까지 적의 선공을 받아넘김");
+  if (e.aoeFirstCut)  L.push("매 전투 첫 광역 공격은 최소 " + pc(e.aoeFirstCut) + " 줄임");
   if (e.kills)        L.push("김태성의 광신 +" + e.kills);
   if (e.retribFloor)  L.push("유아인의 보복이 " + e.retribFloor + "에서 시작하고, 쓰러져도 그 아래로 안 내려감");
   return "【강화】 " + L.join(", ") + ".";
 }
-/* 스택 열쇠(heat) → 화면 이름(히트) — 시너지 표의 stack 칸에서 찾습니다 */
+/* 스택 열쇠(heat) → 화면 이름(히트) — 인격 줄 · 지원 작성위원 줄의 stack 칸에서 찾습니다 */
 function deepStackName(key) {
-  const sy = (typeof SYNERGIES !== "undefined" ? SYNERGIES : []).find(x => x.stack && x.stack.key === key);
-  return sy ? sy.stack.name : key;
+  for (const w in SINNERS) { const id = SINNERS[w].ids.find(i => i.stack && i.stack.key === key); if (id) return id.stack.name; }
+  const sp = (typeof SUPPORTS !== "undefined" ? SUPPORTS : []).find(x => x.stack && x.stack.key === key);
+  return sp ? sp.stack.name : key;
 }
 /* 그 팩이 지금 이 판에서 주는 특전 — 강화로 골랐으면 강화된 것 */
 function deepPerkOf(p, enh) {
@@ -21930,5 +23258,189 @@ function rail4Restart() {
  *    것이 그래서입니다. 엔진에 무엇을 더 붙이더라도 이 표시는 맨 끝에 둡니다.
  */
 /* @wip anchor: EXT */
+/* ── 카드 갈림길 (8장 8-2, 사용자 지침 2026-10-25) ───────────────────
+ *  장에 route 를 적고, 장면에 아래 넷을 둡니다.
+ *
+ *    route: { cards: [{ id, name, icon }], per: 3, force: { id, by }, refreshUntil: 6 }
+ *
+ *    { t:"routePick", until: 3 }  카드 셋을 보여 주고 고르게 합니다. 고른 카드의 몸통으로 건너뛰었다가
+ *                                 돌아오고, 지금까지 고른 수가 until 에 닿으면 다음 장면으로 갑니다
+ *    { t:"routeCard", id }        카드 몸통의 머리 — 여기부터 그 카드의 장면입니다
+ *    { t:"routeCardEnd" }         카드 몸통의 끝 — 고른 자리(routePick)로 돌아갑니다
+ *    { t:"routeDone" }            카드 몸통들 «앞» 에 둡니다 — 이 장을 마칩니다
+ *
+ *  ■ 정한 것 — 카드는 이름 · 아이콘만 보입니다(효과 · 보상은 숨김). 고른 카드는 다시 안 나옵니다.
+ *    남은 카드가 per 보다 적으면 빈 칸. 새로고침은 고를 때마다 1번, refreshUntil 번째 선택까지.
+ *    force — 그 카드를 고를 때까지 선택지에 늘 한 칸 서고, by 번째 선택까지 안 골랐으면 그 카드 하나만 남습니다.
+ *  ■ 상태는 S.flags.route 에 — 이어하기 기록과 편성 자리 중간 저장(S.storySave)에 저절로 실립니다.
+ *    중간 저장이 S.flags 를 얕게 베끼므로, 상태는 고치지 않고 늘 새 객체로 갈아 끼웁니다(routeSet).
+ *  ■ 카드 몸통은 장면 목록 안의 «자리» 로 건너뛰므로 SCENES 를 고치지 않습니다 — 창을 닫았다
+ *    이어해도 같은 자리가 그대로 섭니다. 고르는 화면에서는 S.sc 를 routePick 자리에 두고 기록합니다. */
+function routeRule() { const c = curChapter(); return (c && c.route) || null; }
+function routeState() {
+  const st = (S.flags && S.flags.route) || {};
+  return { done: st.done || [], shown: st.shown || null, refreshed: !!st.refreshed, back: st.back };
+}
+function routeSet(o) {
+  if (!S.flags) S.flags = {};
+  S.flags.route = Object.assign({}, routeState(), o);
+}
+function routeCardOf(r, id) { return r.cards.find(c => c.id === id) || null; }
+/* 고를 카드 per 장을 뽑습니다. 새로고침도 같은 뽑기 — 방금 보인 카드가 또 나와도 됩니다(사용자 지침 2026-11-20). */
+function routeDraw(r, st) {
+  const per = r.per || 3;
+  const left = r.cards.map(c => c.id).filter(id => st.done.indexOf(id) < 0);
+  const f = r.force && left.indexOf(r.force.id) >= 0 ? r.force : null;
+  if (f && st.done.length + 1 >= f.by) return [f.id];          // by 번째 선택 — 그 카드 하나만
+  const out = f ? [f.id] : [];
+  const pool = left.filter(id => out.indexOf(id) < 0);
+  while (out.length < per && pool.length) out.push(pool.splice(rnd(pool.length), 1)[0]);
+  for (let i = out.length - 1; i > 0; i--) { const j = rnd(i + 1); const t = out[i]; out[i] = out[j]; out[j] = t; }
+  return out;
+}
+function routeCanRefresh(r, st) {
+  if (st.refreshed || !st.shown) return false;
+  if (st.done.length + 1 > (r.refreshUntil || 99)) return false;              // 이번이 몇 번째 선택인가
+  const f = r.force;
+  if (f && st.done.indexOf(f.id) < 0 && st.done.length + 1 >= f.by) return false;   // 반드시 그 카드 하나만 남는 자리
+  const left = r.cards.filter(c => st.done.indexOf(c.id) < 0).length;
+  return left > st.shown.length;                                              // 다시 뽑아도 같을 뿐이면 막음
+}
+function routeDrawCards(r, st, onPick) {
+  $log.querySelectorAll(".packgate").forEach(el => el.parentNode.removeChild(el));
+  const per = r.per || 3;
+  const box = document.createElement("div");
+  box.className = "packgate routegate";
+  let h = '<div class="grid three">';
+  for (let i = 0; i < per; i++) {
+    const c = st.shown[i] != null ? routeCardOf(r, st.shown[i]) : null;
+    if (!c) { h += '<div class="slot pgcard blank"><div class="nm">빈 길</div></div>'; continue; }   // 눌리지 않는 빈 카드(index.html .pgcard.blank)
+    /* 반드시 갈 카드 하나만 남은 자리 — 붉게(index.html .pgcard.must, 사용자 지침 2026-11-20) */
+    const must = r.force && c.id === r.force.id && st.shown.filter(x => x != null).length === 1;
+    h += '<div class="slot pgcard' + (must ? ' must' : '') + '" data-rc="' + c.id + '">' +
+           '<div class="rcic">' + iconHTML(c.icon || c.name) + '</div>' +
+           '<div class="nm">' + c.name + '</div>' +
+         '</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+  $log.appendChild(box);
+  box.querySelectorAll("[data-rc]").forEach(el => { el.onclick = () => onPick(+el.dataset.rc); });
+  $log.scrollTop = $log.scrollHeight;
+}
+SCENE_EXT.routePick = function (s) {
+  const r = routeRule();
+  if (!r) return next();
+  let st = routeState();
+  if (st.done.length >= (s.until || r.cards.length)) return next();         // 이 묶음은 다 골랐다
+  S.sc = SCENES.indexOf(s);                                                   // 이어하기가 이 자리부터 다시 서게
+  if (!st.shown) { routeSet({ shown: routeDraw(r, st), refreshed: false }); st = routeState(); }
+  S.waiting = true;
+  divider();
+  say("길이 갈려 있다. 어디로 갈까?", "n");   // 나레이션 크기로(사용자 지침 2026-11-19)
+  say("(" + (st.done.length + 1) + " / " + r.cards.length + "번째 길)", "sys");
+  render();
+  save(true);
+  const draw = () => {
+    st = routeState();
+    const pickRoute = id => {
+      const c = routeCardOf(r, id);
+      $log.querySelectorAll(".packgate").forEach(el => el.parentNode.removeChild(el));
+      say("→ " + c.name, "sys");
+      routeSet({ done: st.done.concat(id), shown: null, refreshed: false, back: SCENES.indexOf(s) });
+      const at = SCENES.findIndex(x => x.t === "routeCard" && x.id === id);
+      S.waiting = false;
+      S.sc = at >= 0 ? at : SCENES.indexOf(s);
+      next();
+    };
+    routeDrawCards(r, st, pickRoute);
+    /* 아래 손잡이에도 칸마다 하나씩 — 1 · 2 · 3 글쇠로 고릅니다(사용자 지침 2026-11-19).
+     * 반드시 고를 카드 하나만 남은 자리 · 남은 카드가 셋보다 적은 여덟째부터는 빈 칸이 «빈 길» 로 서되 눌리지 않습니다. */
+    const per = r.per || 3;
+    const slots = [];
+    for (let i = 0; i < per; i++) {
+      const c = st.shown[i] != null ? routeCardOf(r, st.shown[i]) : null;
+      slots.push(c ? { label: c.name, key: String(i + 1), fn: () => pickRoute(c.id) }
+                   : { label: "—", key: String(i + 1), cls: "ghost", disabled: true });
+    }
+    const can = routeCanRefresh(r, st);
+    const late = st.done.length + 1 > (r.refreshUntil || 99);
+    buttons(slots.concat([
+      late ? null : { label: "다른 길로 (" + (st.refreshed ? 0 : 1) + "/1)", cls: "ghost", disabled: !can, fn: () => {
+          routeSet({ shown: routeDraw(r, st), refreshed: true });
+          say("→ 다른 길을 찾는다.", "sys");
+          save(true);
+          draw();
+        } }
+      /* 「유리창」(로비로 나가기) 단추는 뺐습니다 — 이야기 중간 갈림길에서 나갈 길이 아닙니다(사용자 지침 2026-11-19) */
+    ]).filter(Boolean));
+  };
+  draw();
+  tutorOnce("route");                                                         // 처음 선 갈림길에서 한 번
+};
+SCENE_EXT.routeCard = function (s) {
+  const r = routeRule();
+  const c = r && routeCardOf(r, s.id);
+  divider();
+  /* 카드 머리 바로 뒤에 장소(place)가 서면 그 장소가 «▶ 이름» 과 배경 · 날씨를 맡습니다 — 두 번 찍지 않게 */
+  const nx = SCENES[SCENES.indexOf(s) + 1];
+  if (!(nx && nx.t === "place")) say("▶ " + (c ? c.name : "길"), "place");
+  return cont();
+};
+/* 카드를 마치고 갈림길로 돌아올 때, 카드 안의 장소(실내 · 눈 걷힘)가 남지 않게
+ * 고르는 자리 앞의 가장 가까운 장소로 배경 · 날씨를 되돌립니다(이어하기의 restoreStage 와 같은 답). */
+function routeHubStage(back) {
+  for (let k = Math.min(back, SCENES.length) - 1; k >= 0; k--) {
+    const sc = SCENES[k];
+    if (sc && sc.t === "place") {
+      CUR_WX = sc.wx || null;
+      showCard(sc.img || (curChapter() || {}).img, sc.name, sc.name);
+      stageWeather();
+      return;
+    }
+  }
+}
+SCENE_EXT.routeCardEnd = function () {
+  const st = routeState();
+  S.sc = st.back != null ? st.back : S.sc;
+  if (st.back != null) routeHubStage(st.back);
+  return next();
+};
+SCENE_EXT.routeDone = function () { return chapterEnd(); };
+
+/* ── 흔들리는 컷신 (8-6 돋보기, 사용자 지침 2026-11-20) ─────────────────
+ *    { t:"cutShake", imgs:[그림1, 그림2], times: 4, ms: 220, text: "…" }
+ *  두 장을 번갈아 times 번 갈아 끼워 흔들리는 것처럼 보이고, 첫 장으로 멈춘 채 「계속」 을 세웁니다.
+ *  도는 동안은 「…」 로 잠가 둡니다. 이어하기로 이 자리에 서면 흔들림 없이 넘어가므로,
+ *  바로 앞에 같은 그림의 { t:"cut", img } 를 두어 무대가 비지 않게 합니다. */
+/*  번갈아 끼울 때 showCut 을 부르지 않습니다 — 그림이 갈릴 때마다 컷 겹을 새로 지어 흰 바탕에서
+ *  밝아지는 연출(cutIn)이 매번 돌아, 흔들림이 아니라 «점멸» 로 보였습니다(사용자 지침 2026-11-22).
+ *  두 장을 다 받아 풀어 둔(decode) 뒤, 이미 서 있는 컷 겹 안의 <img> 의 그림만 바꿔 끼웁니다. */
+SCENE_EXT.cutShake = function (s) {
+  const imgs = (s.imgs || []).filter(Boolean);
+  if (!imgs.length) return cont();
+  if (s.text) say(s.text, s.cls || "n");
+  render();
+  buttons([{ label: "…", cls: "primary", disabled: true }]);
+  const times = s.times || 4, ms = s.ms || 220;
+  const pre = imgs.map(src => { const im = new Image(); im.src = assetURL(src); return im; });
+  const ready = pre.map(im => (im.decode ? im.decode() : Promise.resolve()).catch(() => {}));
+  Promise.all(ready).then(() => {
+    showCut(imgs[0]);                         // 컷 겹은 여기서 한 번만 섭니다(앞의 { t:"cut" } 와 같은 그림이면 연출도 없음)
+    const swap = k => {
+      const el = CUT_EL && CUT_EL.firstChild;
+      if (!el || !CUR_CUT) return;
+      el.src = pre[k].src;
+      CUR_CUT.src = imgs[k]; CUT_KEY = imgs[k];   // 사이에 무대를 다시 그려도 겹을 새로 짓지 않게
+    };
+    let i = 1;
+    const step = () => {
+      if (i >= times) { swap(0); return cont(); }
+      swap(i++ % imgs.length);
+      setTimeout(step, ms);
+    };
+    setTimeout(step, ms);
+  });
+};
 
 boot();   // 코드를 통과하면 유리창부터

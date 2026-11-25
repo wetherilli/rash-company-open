@@ -37,15 +37,27 @@
 
 const BGM = {
   /* 열쇠: { src: ‹assets/bgm/파일.mp3›, name: "보이는 이름", vol: 1 } */
+  /* 곡 — 라거슈타트 교육위원 이형우. 2026-11-26 에 1차 완성본이 들어왔습니다(사용자 지침).
+   *   비전투 · 전투 · 보스   어디서나 쓰는 세 곡 (BGM_PICK)
+   *   사람 곡               그 사람이 서는 자리에서만 — 장면의 bgm 과 적(FOES)의 bgm 이 함께 가리킵니다 */
+  비전투: { src: "assets/bgm/비전투.mp3", name: "비전투", vol: 1 },
+  전투:   { src: "assets/bgm/전투.mp3",   name: "전투",   vol: 1 },
+  보스:   { src: "assets/bgm/전투(보스).mp3", name: "전투(보스)", vol: 1 },
+  이서진:             { src: "assets/bgm/이서진.mp3",                     name: "이서진",                     vol: 1 },
+  이창수:             { src: "assets/bgm/제2발톱 이창수.mp3",             name: "제2발톱 이창수",             vol: 1 },
+  "그리워하는 유아인": { src: "assets/bgm/모든 것을 그리워하는 유아인.mp3", name: "모든 것을 그리워하는 유아인", vol: 1 }
 };
 
+/* 비전투는 네 자리에 같은 곡 — 유리창에서 이야기 · 거울로 들어가도 끊기지 않고 이어집니다.
+ * 보스전은 «보스»(2026-11-26 — 전에는 보스 곡이 없어 «전투» 를 함께 썼습니다).
+ * 적(FOES)에 bgm 을 단 보스와, 장면에 bgm 을 단 자리는 제 곡이 이깁니다. */
 const BGM_PICK = {
-  glass:        null,   // 유리창 · 운전석
-  story:        null,   // 본편 이야기 — 장에 bgm 이 없을 때
-  battle:       null,   // 본편 · 거울 공통 전투
-  boss:         null,   // 보스 전투
-  mirror:       null,   // 거울 던전 이야기 칸(갈림길 · 휴식 등)
-  rail:         null,   // 거울굴절철도 이야기 칸
+  glass:        "비전투",   // 유리창 · 운전석
+  story:        "비전투",   // 본편 이야기 — 장에 bgm 이 없을 때
+  battle:       "전투",     // 본편 · 거울 공통 전투
+  boss:         "보스",     // 보스 전투 — 본편 · 거울 공통(mirrorBoss 를 비워 두면 여기로)
+  mirror:       "비전투",   // 거울 던전 이야기 칸(갈림길 · 휴식 등)
+  rail:         "비전투",   // 거울굴절철도 이야기 칸
   mirrorBattle: null,   // 거울 · 철도 전투 — 비우면 battle
   mirrorBoss:   null    // 거울 · 철도 보스 — 비우면 boss
 };

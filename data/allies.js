@@ -70,5 +70,27 @@ const ALLIES = [
     note: "몸으로 막아서는 쪽을 택한 사람.",
     line: "여기는 제가 막습니다. 먼저 가세요.",
     bye:  "이 정도면 됐습니다 — 조심히 다녀오세요."
+  },
+  {
+    name: "아멜리아", title: "탐정",
+    idText: "탐정",
+    cardTitle: "Hololive -Myth-",   // 조력자 카드에는 «Hololive -Myth- 「탐정」»(사용자 지침 2026-11-19) — engine.js 의 idHTML
+    color: "#8a5ad0",
+    atk: 20, def: 20, hp: 160,
+    atkType: "blunt",             // 타격(사용자 지침 2026-11-19 — 참격에서 바꿈)
+    /* 강타 — 4차례부터 3차례마다(4 · 7 · 10 …) 한마디 하고 1.5배로 칩니다(사용자 지침 2026-11-19).
+     * 3턴은 보스 패턴이 많이 드는 차례라 피했습니다. engine.js allyHeavyFor */
+    heavy: { from: 4, every: 3, mult: 1.5, label: "강타", lines: ["초보적인 것이지요?", "더러워 보인다고?"] },
+    selfCmd: true,                // 공격 · 방어를 스스로 고름 — 강타 차례는 공격, 그 밖에는 무작위(engine.js allySelfCmd)
+    dodgeLine: "그거 재밌네",      // 피할 때 한마디(사용자 지침 2026-11-19)
+    dodgeBreak: true,             // 버티기 깨기 차례에는 피함 — 교정으로도 못 지켜 주는 한 대라서(engine.js allyDodgesBreak)
+    stagger: [0.8, 0.5, 0.2],     // 흐트선 셋 — 조력자라 2개 제한 밖(사용자 지침 2026-11-15)
+    staggerLine: ["…이건 예상하지 못한 것이지요.", "윽… 탐정이 넘어지면 안 되는 것이지요."],
+    portrait: "assets/portrait/아멜리아.png",
+    note: "H사에서 아인군을 기다리던 탐정. 쓰러지면 그 전투를 진다.",
+    showStats: true,
+    loseOnDown: true,
+    line: "초보적인 것이지요?"
+    // bye(작별 대사)는 뺐습니다 — 8-2 끝에서 조용히 걷힙니다(사용자 지침 2026-11-19)
   }
 ];

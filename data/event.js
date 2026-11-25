@@ -275,8 +275,10 @@ const EVENTS = [
     line:    "순수하지 않은 것일수록, 많이 남는다.",
     banner:  "assets/scene/구C사 지하실.jpg",
     /* 1장은 «맨 마지막 장» 이 아닙니다 — 복각이라 장을 맨 뒤에 붙이지 않았으니까요.
-     * now 가 없으면 curEvent() 가 영영 이것을 못 잡습니다(2026-11-14 에 그랬습니다). */
-    now:     true,
+     * now 가 없으면 curEvent() 가 영영 이것을 못 잡습니다(2026-11-14 에 그랬습니다).
+     * 8장(v3.0.0)과 함께 내려갑니다 — now 를 걷어 「사원증」 이 서고, 남은 유전자는 1개에 원고료 5로
+     * 돌려줍니다(교환소 값 그대로, engine.js eventRefund — 사용자 지침 2026-11-20). */
+    refund:  { money: 5 },
     from:    "2026-11-14",                 /* 복각이 나간 날 */
     days:    14,
     /* 원고 «울티마/안킬로라노돈/타나콘다/구C사를 편성하면 추가 획득».
@@ -304,6 +306,38 @@ const EVENTS = [
       { id: "gene_id_duhyeon", name: "김두현 — 개화 E.G.O :: 울티마",
         cost: 300, limit: 1,
         give: { id: { who: "kim_duhyeon", star: 3, title: "개화 E.G.O :: 울티마" } } }
+    ]
+  },
+  {
+    id:      "idcard",             /* 보관함에 남는 열쇠 — 바꾸지 마십시오 */
+    chapter: "후일담",             /* 8장 마지막 부분 8-6 의 title — 위 ⚠ */
+    cur:     "사원증",
+    desc:    "H사 직원의 사원증. 선발전이 끝나면 주인이 바뀐다.",
+    line:    "이름표는 남는다. 주인이 바뀌어도.",
+    banner:  "assets/scene/H사 전경.jpg",
+    bonusTag: ["B구역", "흑수"],   /* 특정 배정 「B구역의 흑수」 와 같은 대상 */
+    /* 12월 11일까지(사용자 지침 2026-11-20) — 공개판에 나가는 11-21 부터 21일, 12-12 0시에 닫힙니다.
+     * from 은 끝나는 날을 셈하는 데만 씁니다(여는 것은 8장이 맨 마지막 장이 되는 순간). */
+    from:    "2026-11-21",
+    days:    21,
+    goods: [
+      { id: "idcard_box_select", name: "인격 파편 상자 (선택) 10개",
+        cost: 30, limit: 30, give: { fragBoxSelect: 10 } },
+      { id: "idcard_box_random", name: "인격 파편 상자 (무작위) 5개",
+        cost: 10, limit: 30, give: { fragBoxRandom: 5 } },
+      { id: "idcard_cap",        name: "엔케팔린 캡슐 1개",
+        cost: 10, limit: 6,  give: { enkCap: 1 } },
+      { id: "idcard_codex",      name: "황금교본 5권",
+        cost: 10, limit: 5,  give: { codex: 5 } },
+      { id: "idcard_money",      name: "원고료 5",
+        cost: 1,  limit: 0,  give: { money: 5 } },
+      /* 인격 둘 — 사용자 지침(2026-11-20): 이경원 「흑수 구」 200 · 김태성 「흑수 유」 300 */
+      { id: "idcard_id_gyeongwon", name: "이경원 — 흑수 구",
+        cost: 200, limit: 1,
+        give: { id: { who: "lee_gyeongwon", star: 3, title: "흑수 구" } } },
+      { id: "idcard_id_taeseong", name: "김태성 — 흑수 유",
+        cost: 300, limit: 1,
+        give: { id: { who: "kim_taeseong", star: 3, title: "흑수 유" } } }
     ]
   }
 ];

@@ -248,7 +248,9 @@ const DEEP_MIX_VOICE = {
          "rodan_toy", "giganotosaurus", "mutadon", "rail4_quetzal", "rail4_dirrex",
          /* 흐트러짐 대사가 모든 적에게 서면서 더한 몫(2026-11-15) — 우는 것 · 실기 시험의 같은 것 */
          "monarch_c", "tanaconda_shadow",
-         "ju3pino_test", "rail3_locust_test", "rail3_therizino_test"]
+         "ju3pino_test", "rail3_locust_test", "rail3_therizino_test",
+         /* 8장 공룡 셋(사용자 지침 2026-11-20 — «윽… 다리가…» 로 말하던 것). 8장이 병합되기 전에는 FOES 에 없어도 해가 없습니다 */
+         "pyroraptor", "arctic_trex", "jugong_trex"]
 };
 /* 강화 선택지의 특전 — 비율은 이만큼 곱하고, 횟수·칸은 1 더합니다(deepEnhancePerk) */
 const DEEP_ENH_PERK = { mult: 1.5, plus: 1 };
@@ -374,5 +376,94 @@ const MIRROR_PACKS = [
     foes: ["csa_grunt", "piercing_tongue", "won_daehan"],
     /* 절반 · 강화면 가득(사용자 지침 2026-11-14). 강화는 ×1.5 셈을 안 타고 enhEffect 가 덮습니다 */
     perk: { name: "덜 뜯은 포장지", desc: "고유 능력을 쓸 때마다 전원이 최대 체력의 50%를 회복한다.",
-            effect: { uniqueHeal: 0.5 }, enhEffect: { uniqueHeal: 1 } } }
+            effect: { uniqueHeal: 0.5 }, enhEffect: { uniqueHeal: 1 } } },
+  { id: "pack16", name: "설원의 왕", bg: "assets/scene/설원.jpg",
+    foes: ["mutadon", "pyroraptor", "arctic_trex"],
+    perk: { name: "만년한철", desc: "전원의 공격력 +20%, 치명타 배율 +100%.",
+            effect: { all: { atk: 0.20 }, critMult: 1.0 } } },
+  { id: "pack17", name: "잃어버린 세계", bg: "assets/scene/한대기후 지역 폐쇄된 카페.jpg",
+    foes: ["mutadon", "pyroraptor", "jugong_trex"],
+    perk: { name: "들리지 않는 무전기", desc: "B구역 · 흑수 인격의 방어력 +50%.",
+            effect: { tagged: { tag: ["B구역", "흑수"], def: 0.50 } } } },
+  { id: "pack18", name: "호랑이를 잡는 법", bg: "assets/scene/H사 매니저실 입구.jpg",
+    foes: ["pyroraptor", "claw2_soldato", "lee_changsu"],
+    perk: { name: "가속탄", desc: "제2발톱 인격이 얻는 공격력 증가분(히트)이 2배.",
+            effect: { stackMult: { heat: 2 } } } },
+
+  /* ── 어비스 거울 던전 전용 — 심층 4·5층 갈림길에만(deepOnly — v2.25.0 에 본편으로) ── */
+  { id: "deep04", name: "죽음의 문답", bg: "assets/scene/심판의 방.jpg", deepOnly: true,
+    foes: ["heuksu_gu", "jjaekg", "jiwa_mirror"],
+    perk: { name: "만화경", desc: "연계로 생기는 효과가 2배 — 연계 효과의 공격 몫 · 연계 추가타 피해.",
+            effect: { linkBoost: 1 } } },
+  { id: "deep05", name: "모든 것으로부터 거부", bg: "assets/scene/H사 매니저실.jpg", deepOnly: true,
+    foes: ["pyroraptor", "rail4_quetzal", "yu_ain_longing"],
+    perk: { name: "정신조작체", desc: "모든 E.G.O 인격이 시너지 효과를 2배로 받는다.",
+            effect: { egoSynergy: 1 } } }
+];
+
+/* ── 특전 합성 (사용자 지침 2026-11-23) ─────────────────────────
+ *  한 판에 재료 특전 둘을 함께 들면, 그 둘이 사라지고 합쳐진 특전 하나가 섭니다.
+ *  따로 저장하지 않습니다 — 들고 있는 팩 특전을 읽을 때마다(engine.js packPerks) 짝을 맞춰 바꿉니다.
+ *  그래서 재료 팩을 다 깨기 전에 지거나 나가 그 특전이 빠지면, 합쳐진 특전도 저절로 풀립니다.
+ *
+ *  ■ 칸
+ *    id      열쇠 — 도감의 「합쳐 본 조합」 기록(S.mirrorDone 의 「fuse:<id>」)에도 씁니다
+ *    parts   재료 팩 id 둘 (MIRROR_PACKS 의 id)
+ *    deep    true 면 어비스 거울 던전에서만 합쳐집니다 — 거울굴절철도 팩 특전이 든 조합
+ *            (사용자 지침 — 철도 팩은 익스트림에서 한 판에 하나뿐이라, 둘째 철도 팩을 만나는 어비스의 몫).
+ *            어비스 전용 팩(deepOnly)이 재료면 적지 않아도 어비스에서만 맞춰집니다.
+ *    perk    합쳐진 특전 { name, desc, effect } — effect 칸은 테마팩 특전과 같습니다.
+ *            아이콘은 assets/icon/<이름>.png (tools/아이콘-도안.js).
+ *            enhEffect 를 적으면 어비스 강화 셈 대신 그 값이 덮습니다(deepEnhancePerk).
+ *  ■ 재료 중 하나라도 어비스 «뒤섞인» 강화 선택지였으면 합쳐진 특전도 강화된 것으로 섭니다.
+ *
+ *  ■ 피해를 줄이거나 무효로 하는 몫은 키우지 않습니다 (사용자 지침 2026-11-23 — 긴장감).
+ *    합쳐도 감소율은 재료의 값 그대로이고, 더 주고 싶으면 «횟수» 로만 줍니다 —
+ *    firstNullify(판당 n번 선공 무효) · aoeFirstCut(매 전투 첫 광역 한 번만). 더해지는 힘은 공격 · 회복 · 관리력 쪽. */
+const PERK_FUSES = [
+  { id: "transfusion", parts: ["pack11", "deep03"],
+    perk: { name: "수혈 동의서", desc: "공격할 때마다 자기 최대 체력의 8%를 회복하고, 전투에 이기면 80%를 회복한다.",
+            effect: { hitHeal: 0.08, winHeal: 0.80 } } },
+  { id: "nightsnack", parts: ["pack02", "pack12"],
+    perk: { name: "야식 실험", desc: "3턴마다 전원이 체력 15%를 회복하고, 전투에 이기면 60%를 회복한다.",
+            effect: { healEvery: 3, healRatio: 0.15, winHeal: 0.60 } } },
+  { id: "unwrap", parts: ["pack10", "deep_csa"],
+    perk: { name: "뜯고 또 뜯고", desc: "고유 능력(액티브) 사용 횟수 +2, 고유 능력을 쓸 때마다 전원이 최대 체력의 50%를 회복한다.",
+            effect: { skillUses: 2, uniqueHeal: 0.5 }, enhEffect: { uniqueHeal: 1 } } },
+  { id: "finale", parts: ["pack03", "deep02"],
+    perk: { name: "축제의 피날레", desc: "전원의 치명타 확률 +50%p, 치명타 배율 +0.5, 보스에게 주는 치명타 피해 +50%.",
+            effect: { crit: 0.50, critMult: 0.5, bossCritDmg: 0.50 } } },
+  { id: "arrowhead", parts: ["pack16", "pack08"],
+    perk: { name: "한철 화살촉", desc: "전원의 공격력 +20%, 보스와 싸울 때 공격력 +30%, 치명타 배율 +100%, 보스에게 주는 치명타 피해 +50%.",
+            effect: { all: { atk: 0.20 }, bossAtk: 0.30, critMult: 1.0, bossCritDmg: 0.50 } } },
+  { id: "fullboard", parts: ["pack07", "rail1pack"], deep: true,
+    perk: { name: "만석 출항", desc: "매 전투를 관리력이 가득 찬 채로 시작하고, 최대 관리력 +2.",
+            effect: { manageFull: true, manageMax: 2 } } },
+  { id: "divein", parts: ["rail3pack1", "pack06"], deep: true,
+    perk: { name: "먼저 뛰어드는 쪽", desc: "적의 선공 피해 -50%, 이번 판 3번까지는 선공 무효. 매 전투 1턴 전원 공격력 +150%, 시작 관리력 +1.",
+            effect: { firstCut: 0.5, firstNullify: 3, firstTurnAtk: 1.5, manage: 1 } } },
+  { id: "whiptea", parts: ["pack09", "pack04"],
+    perk: { name: "채찍과 찻잔", desc: "교정으로 줄이는 피해 +15%p, 독촉의 배수가 1.5에서 2.5로 오르고, 전투 시작 관리력 +1.",
+            effect: { correct: 0.15, push: 1.0, manage: 1 } } },
+  { id: "blindflight", parts: ["pack15", "rail3pack2"], deep: true,
+    perk: { name: "눈을 감고 나는 법", desc: "광역 피해 -30%, 방어를 고르면 절반 더. 매 전투 첫 광역은 방어 없이도 최소 -60%.",
+            effect: { aoeCut: 0.3, aoeGuardCut: 0.5, aoeFirstCut: 0.6 } } },
+  { id: "rightbone", parts: ["pack05", "rail2pack"], deep: true,
+    perk: { name: "바로 맞춘 뼈", desc: "전원의 공격력 +25%, 방어력 +30%, 최대 체력 +15%.",
+            effect: { all: { atk: 0.25, def: 0.30, hp: 0.15 } } } },
+  { id: "monarch", parts: ["pack13", "pack14"],
+    perk: { name: "H사의 군주", desc: "유아인이 서 있는 동안 전원 공격력 +35%, 방어력 +20%. 보복이 3에서 시작하고 3 아래로 안 내려간다.",
+            effect: { whileWho: "yu_ain", all: { atk: 0.35, def: 0.20 }, retribFloor: 3 } } },
+  { id: "zealname", parts: ["pack01", "deep01"],
+    perk: { name: "이름을 부르는 광신", desc: "김태성의 광신 8 (재료 몫과 합쳐), 전원의 공격력 +40%.",
+            effect: { kills: 8, all: { atk: 0.40 } } } },
+  { id: "rescue", parts: ["rail4pack1", "rail4pack2"], deep: true,
+    perk: { name: "끝까지 남는 구조대", desc: "N사 인격의 공격력 +130%. 쓰러진 아군 하나마다 남은 전원의 공격력 +25%.",
+            effect: { tagged: { tag: "N사", atk: 1.30 }, fallAtk: 0.25 } } },
+  { id: "hotline", parts: ["pack18", "pack17"],
+    perk: { name: "제2발톱 직통 무전", desc: "제2발톱 인격이 얻는 공격력 증가분(히트)이 3배. B구역 · 흑수 인격의 방어력 +50%.",
+            effect: { stackMult: { heat: 3 }, tagged: { tag: ["B구역", "흑수"], def: 0.50 } } } },
+  { id: "kaleido", parts: ["deep04", "deep05"],
+    perk: { name: "깨진 만화경", desc: "연계로 생기는 효과가 2.5배. 모든 E.G.O 인격이 시너지 효과를 2.5배로 받는다.",
+            effect: { linkBoost: 1.5, egoSynergy: 1.5 } } }
 ];

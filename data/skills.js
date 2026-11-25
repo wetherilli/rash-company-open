@@ -218,7 +218,13 @@ const LINK_BONUS_ATTACKS = [
     startTurn: 2, every: 3,
     label: "흑수",
     callLines: ["흑수여.", "물어뜯어라."],
-    replyLines: {},
+    /* 불려 나온 사람의 대답 — 사람 열쇠마다. 그 사람이 흑수 인격을 낀 때만 불리므로 인격별 대사(8장).
+     * 여럿이면 하나를 고릅니다. 김태성의 둘째 대사는 원작에 여는 따옴표만 있어 하나만 넣었습니다. */
+    replyLines: {
+      lee_hanbeom: ["혈천하, 계무난도!", "혈전, 염화!"],
+      kim_taeseong: "이번에도!",
+      seong_siyun: "이번에도, 튕겼네요."
+    },
     defaultReply: "수행합니다."
   }
 ];

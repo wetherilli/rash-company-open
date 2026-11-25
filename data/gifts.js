@@ -48,7 +48,7 @@
  *    skillStackMult: 0.5          그 작성위원 고유 능력(패시브)의 스택 하나당
  *                                 몫 +비율 (tag/who 로 대상 제한. 아직 이 키를
  *                                 쓰는 기프트는 없습니다)
- *    ── 인격 스택(히트 · 염화 — 시너지의 stack, engine.js stackRulesFor) 8장 ──
+ *    ── 인격 스택(히트 · 염화 — 인격 줄의 stack, engine.js stackRulesFor) 8장 ──
  *    stackMult: { heat: 2 }       그 스택이 한 번에 쌓이는 몫 × 배수 (테마팩 · 이야기 특전에도 씀)
  *    keepStack: "yeom"            그 스택을 쓰러져도 잃지 않는다
  *    stackGuard: { key: "heat", need: 40 }   쓰러질 피해를 받으면 그 스택 need 를 태워
@@ -850,6 +850,20 @@ const GIFTS = [
     ],
     effect: { all: { hp: 0.10 }, lowHpCut: { below: 0.5, cut: 0.20 } }
   },
+  /* 에뮤 베이 셰일(8장 — 2026-11-25). 껍데기를 벗고 다시 서는 삼엽충 — 방어 · 체력에 흐트러짐 회복.
+   * staggerRecover 는 기프트끼리 더하지 않고 큰 쪽(engine.js typeFx) — 「페이스메이커」 와 함께면 마지막 강화의 2 가 이깁니다. */
+  {
+    star: 3, noGacha: true, fossil: true, name: "레들리키아",
+    flavor: "벗어 둔 껍데기가 쌓여도, 몸은 다시 단단해졌다.",
+    desc: "모든 인격의 방어력 15%, 체력 10% 강화 · 흐트러진 작성위원이 차례가 끝날 때 곧바로 자세를 바로잡음(편성 전체에 전투당 1회, 같은 능력을 지닌 인격에게는 적용되지 않음)",
+    up: [
+      { desc: "모든 인격의 방어력 18%, 체력 12% 강화 · 흐트러진 작성위원이 차례가 끝날 때 곧바로 자세를 바로잡음(편성 전체에 전투당 1회, 같은 능력을 지닌 인격에게는 적용되지 않음)",
+        effect: { all: { def: 0.18, hp: 0.12 }, staggerRecover: 1 } },
+      { desc: "모든 인격의 방어력 20%, 체력 15% 강화 · 흐트러진 작성위원이 차례가 끝날 때 곧바로 자세를 바로잡음(편성 전체에 전투당 2회, 같은 능력을 지닌 인격에게는 적용되지 않음)",
+        effect: { all: { def: 0.20, hp: 0.15 }, staggerRecover: 2 } }
+    ],
+    effect: { all: { def: 0.15, hp: 0.10 }, staggerRecover: 1 }
+  },
   /* 원고 «울티마/안킬로라노돈/타나콘다/구C사가 이름에 든 인격의 방어력이 편성된 수 1명당 10%씩».
    * 「섞인 것」 시너지와 같은 이름 넷을 봅니다 — 그쪽은 공격, 이쪽은 방어입니다. */
   {
@@ -863,6 +877,186 @@ const GIFTS = [
       { desc: "울티마 · 안킬로라노돈 · 타나콘다 · 구C사 인격의 방어 +20% × 편성된 수",
         effect: { tag: ["울티마", "안킬로라노돈", "타나콘다", "구C사"], defPerMember: 0.20 } }
     ]
+  },
+  {
+    star: 3, name: "혈염도",
+    flavor: "피로 물든 칼날은, 주인이 쓰러져도 식지 않는다.",
+    desc: "흑수 유 인격이 쓰러져도 염화로 얻은 공격력을 잃지 않음",
+    up: [
+      { desc: "흑수 유 인격이 쓰러져도 염화를 잃지 않음 · 흑수 유 인격 공격 +5%",
+        effect: { keepStack: "yeom", tag: "흑수 유", atk: 0.05 } },
+      { desc: "흑수 유 인격이 쓰러져도 염화를 잃지 않음 · 흑수 유 인격 공격 +10%",
+        effect: { keepStack: "yeom", tag: "흑수 유", atk: 0.10 } }
+    ],
+    effect: { keepStack: "yeom" }
+  },
+  {
+    star: 3, name: "상납받은 탄약",
+    flavor: "솔다토가 바친 것. 카포는 사양하지 않는다.",
+    desc: "제2발톱 인격이 히트로 얻는 공격력이 2배",
+    up: [
+      { desc: "히트 2배 · 제2발톱 인격 방어 +8%",
+        effect: { stackMult: { heat: 2 }, tag: "제2발톱", def: 0.08 } },
+      { desc: "히트 2배 · 제2발톱 인격 방어 +15%",
+        effect: { stackMult: { heat: 2 }, tag: "제2발톱", def: 0.15 } }
+    ],
+    effect: { stackMult: { heat: 2 } }
+  },
+  {
+    star: 3, name: "울퉁불퉁의 가호",
+    flavor: "울퉁불퉁한 등껍질은, 남의 몫까지 받아내라고 있는 것.",
+    desc: "남의 몫을 대신 맞을 때(흑수 갑 · 책임) 받는 피해 30% 감소",
+    up: [
+      { desc: "남의 몫을 대신 맞을 때 받는 피해 40% 감소", effect: { coverCut: 0.40 } },
+      { desc: "남의 몫을 대신 맞을 때 받는 피해 50% 감소", effect: { coverCut: 0.50 } }
+    ],
+    effect: { coverCut: 0.30 }
+  },
+  {
+    /* 업적 「이른 이별」(아멜리아가 쓰러져 진 전투)으로만. 아멜리아의 것이었던 돋보기(8-6) */
+    star: 2, noGacha: true, name: "잃어버린 돋보기",
+    flavor: "미세하게 떨린다. 아직, 여기에 있다.",
+    desc: "유아인 공격 +40% · 동기화 1단계 이상이면 「보복」 을 늘 1부터",
+    up: [
+      { desc: "유아인 공격 +50% · 동기화 1단계 이상이면 「보복」 을 늘 1부터",
+        effect: { who: "유아인", atk: 0.50, retribBase: 1 } },
+      { desc: "유아인 공격 +60% · 동기화 1단계 이상이면 「보복」 을 늘 1부터",
+        effect: { who: "유아인", atk: 0.60, retribBase: 1 } }
+    ],
+    effect: { who: "유아인", atk: 0.40, retribBase: 1 }
+  },
+  {
+    /* 업적 「총알값 아까운 놈들」 로만. 원작에 이름이 없던 자리 — «식지 않은 총열» 로 확정(사용자 지침 2026-10-26) */
+    star: 2, noGacha: true, name: "식지 않은 총열",
+    flavor: "쏘고, 또 쏘고, 쓰러질 때까지 쏜다.",
+    desc: "제2발톱 인격이 쓰러질 피해를 받으면, 히트 40 을 태워 체력 1 로 버팀",
+    up: [
+      { desc: "쓰러질 피해를 받으면 히트 30 을 태워 체력 1 로 버팀", effect: { stackGuard: { key: "heat", need: 30 } } },
+      { desc: "쓰러질 피해를 받으면 히트 20 을 태워 체력 1 로 버팀", effect: { stackGuard: { key: "heat", need: 20 } } }
+    ],
+    effect: { stackGuard: { key: "heat", need: 40 } }
+  },
+
+  /* ── 공격 유형 · 흐트러짐 기프트 (사용자 지침 2026-11-18) ───────────────
+   *  뽑기 일곱(★★ 넷 · ★★★ 셋) + 합성으로만 넷(★★★★, 아래 GIFT_FUSES).
+   *  이름 · 한 줄(flavor) · 효과의 결은 사용자 지침, 수치는 지어 넣은 것입니다(NOTES 「유형 기프트」).
+   *  효과 칸은 engine.js typeFx 머리말 — typeDmg · weakAdd · resistMult · staggerDmg · defIgnore · staggerRecover · atkTypeIs · typeTrio. */
+  {
+    star: 2, name: "붉은 색술",
+    flavor: "오래된 검객의 선이 느껴진다.",
+    desc: "참격으로 주는 피해 20% 증가",
+    up: [
+      { desc: "참격으로 주는 피해 25% 증가", effect: { typeDmg: { slash: 0.25 } } },
+      { desc: "참격으로 주는 피해 30% 증가", effect: { typeDmg: { slash: 0.30 } } }
+    ],
+    effect: { typeDmg: { slash: 0.20 } }
+  },
+  {
+    star: 2, name: "평등",
+    flavor: "누구에게나 공평한 물건이다.",
+    desc: "관통으로 주는 피해 20% 증가",
+    up: [
+      { desc: "관통으로 주는 피해 25% 증가", effect: { typeDmg: { pierce: 0.25 } } },
+      { desc: "관통으로 주는 피해 30% 증가", effect: { typeDmg: { pierce: 0.30 } } }
+    ],
+    effect: { typeDmg: { pierce: 0.20 } }
+  },
+  {
+    star: 2, name: "제3발톱식 너클",
+    flavor: "규율은 중대사항이다.",
+    desc: "타격으로 주는 피해 20% 증가",
+    up: [
+      { desc: "타격으로 주는 피해 25% 증가", effect: { typeDmg: { blunt: 0.25 } } },
+      { desc: "타격으로 주는 피해 30% 증가", effect: { typeDmg: { blunt: 0.30 } } }
+    ],
+    effect: { typeDmg: { blunt: 0.20 } }
+  },
+  {
+    star: 2, name: "맥가이버칼",
+    flavor: "모든 상황에 준비되어 있다.",
+    desc: "편성에 관통 · 참격 · 타격이 모두 있으면 모든 인격의 공격력 15% 강화",
+    up: [
+      { desc: "편성에 관통 · 참격 · 타격이 모두 있으면 모든 인격의 공격력 20% 강화", effect: { typeTrio: { atk: 0.20 } } },
+      { desc: "편성에 관통 · 참격 · 타격이 모두 있으면 모든 인격의 공격력 25% 강화", effect: { typeTrio: { atk: 0.25 } } }
+    ],
+    effect: { typeTrio: { atk: 0.15 } }
+  },
+  {
+    star: 3, name: "스카우터",
+    flavor: "너의 전투력, 약점 파악했다.",
+    desc: "약점을 찌를 때의 피해 배율 ×1.5 → ×1.7 (흐트러진 적에게도)",
+    up: [
+      { desc: "약점을 찌를 때의 피해 배율 ×1.5 → ×1.75 (흐트러진 적에게도)", effect: { weakAdd: 0.25 } },
+      { desc: "약점을 찌를 때의 피해 배율 ×1.5 → ×1.8 (흐트러진 적에게도)", effect: { weakAdd: 0.30 } }
+    ],
+    effect: { weakAdd: 0.20 }
+  },
+  {
+    star: 3, name: "메르체",
+    flavor: "빈틈투성이군!",
+    desc: "흐트러진 적에게 주는 피해 25% 증가",
+    up: [
+      { desc: "흐트러진 적에게 주는 피해 30% 증가", effect: { staggerDmg: 0.30 } },
+      { desc: "흐트러진 적에게 주는 피해 35% 증가", effect: { staggerDmg: 0.35 } }
+    ],
+    effect: { staggerDmg: 0.25 }
+  },
+  {
+    /* 강화 불가(noUp — 사용자 지침). 인격이 같은 능력(staggerSkill.recoverEnd)을 지녔으면 그 사람에게는 듣지 않습니다.
+     * 편성 전체에 전투당 1회(사용자 지침 2026-11-18) — engine.js allyStaggerTurn 의 _giftRecover */
+    star: 3, noUp: true, name: "페이스메이커",
+    flavor: "한 번은, 다시 설 수 있다.",
+    desc: "흐트러진 작성위원이 차례가 끝날 때 곧바로 자세를 바로잡음 · 편성 전체에 전투당 1회 (같은 능력을 지닌 인격에게는 적용되지 않음)",
+    effect: { staggerRecover: 1 }
+  },
+  {
+    star: 4, noGacha: true, name: "깨어진 대검",
+    flavor: "더 버텼으면 좋았을텐데.",
+    desc: "참격으로 주는 피해 35% 증가 · 참격 인격의 방어력 25% 강화",
+    up: [
+      { desc: "참격으로 주는 피해 40% 증가 · 참격 인격의 방어력 30% 강화",
+        effect: { typeDmg: { slash: 0.40 }, atkTypeIs: "slash", def: 0.30 } },
+      { desc: "참격으로 주는 피해 45% 증가 · 참격 인격의 방어력 35% 강화",
+        effect: { typeDmg: { slash: 0.45 }, atkTypeIs: "slash", def: 0.35 } }
+    ],
+    effect: { typeDmg: { slash: 0.35 }, atkTypeIs: "slash", def: 0.25 }
+  },
+  {
+    star: 4, noGacha: true, name: "로직 아틀리에제 탄환",
+    flavor: "특별히 주문제작한 물건이라고 들었다.",
+    desc: "관통으로 주는 피해 35% 증가 · 관통 인격이 적의 방어력을 50% 무시",
+    up: [
+      { desc: "관통으로 주는 피해 40% 증가 · 관통 인격이 적의 방어력을 50% 무시",
+        effect: { typeDmg: { pierce: 0.40 }, defIgnore: { type: "pierce", cut: 0.5 } } },
+      { desc: "관통으로 주는 피해 45% 증가 · 관통 인격이 적의 방어력을 50% 무시",
+        effect: { typeDmg: { pierce: 0.45 }, defIgnore: { type: "pierce", cut: 0.5 } } }
+    ],
+    effect: { typeDmg: { pierce: 0.35 }, defIgnore: { type: "pierce", cut: 0.5 } }
+  },
+  {
+    star: 4, noGacha: true, name: "앙갚음 장부",
+    flavor: "제3발톱의 절대적인 규율이 적혀있다.",
+    desc: "타격으로 주는 피해 35% 증가 · 제3발톱 인격의 방어력 25%, 체력 25% 강화",
+    up: [
+      { desc: "타격으로 주는 피해 40% 증가 · 제3발톱 인격의 방어력 30%, 체력 30% 강화",
+        effect: { typeDmg: { blunt: 0.40 }, tag: "제3발톱", def: 0.30, hp: 0.30 } },
+      { desc: "타격으로 주는 피해 45% 증가 · 제3발톱 인격의 방어력 35%, 체력 35% 강화",
+        effect: { typeDmg: { blunt: 0.45 }, tag: "제3발톱", def: 0.35, hp: 0.35 } }
+    ],
+    effect: { typeDmg: { blunt: 0.35 }, tag: "제3발톱", def: 0.25, hp: 0.25 }
+  },
+  {
+    /* 재료 셋의 효과 전부(스카우터 ×1.7 · 명경지수 치명 +10%p 배율 +0.5 · 달의 기억 공격 +20%) + 내성 완전 무시 */
+    star: 4, noGacha: true, name: "초승달의 기억",
+    flavor: "미라빌리스의 영혼.",
+    desc: "적의 내성을 완전히 무시 · 약점 배율 ×1.7 · 크리티컬 확률 +10%p, 크리티컬 배율 +0.5 · 모든 인격 공격력 +20% 강화",
+    up: [
+      { desc: "적의 내성을 완전히 무시 · 약점 배율 ×1.75 · 크리티컬 확률 +12%p, 크리티컬 배율 +0.5 · 모든 인격 공격력 +25% 강화",
+        effect: { resistMult: 1.0, weakAdd: 0.25, crit: 0.12, critMult: 0.5, all: { atk: 0.25 } } },
+      { desc: "적의 내성을 완전히 무시 · 약점 배율 ×1.8 · 크리티컬 확률 +15%p, 크리티컬 배율 +0.5 · 모든 인격 공격력 +30% 강화",
+        effect: { resistMult: 1.0, weakAdd: 0.30, crit: 0.15, critMult: 0.5, all: { atk: 0.30 } } }
+    ],
+    effect: { resistMult: 1.0, weakAdd: 0.20, crit: 0.10, critMult: 0.5, all: { atk: 0.20 } }
   }
 ];
 
@@ -916,7 +1110,15 @@ const GIFT_FUSES = [
   { result: "동기화 모듈 원형",
     parts: ["이소정의 아이패드", "이한범의 지질망치", "김준성이 쥐어준 벌레"], codex: 15, syncModule: 1 },
   { result: "거울굴절철도 정기권",
-    parts: ["명경지수", "길잃은 나침반", "접이식 야전삽"], codex: 15 }
+    parts: ["명경지수", "길잃은 나침반", "접이식 야전삽"], codex: 15 },
+  { result: "깨어진 대검",
+    parts: ["붉은 색술", "철 지난 안전모", "가면라이더의 품격"], codex: 15 },
+  { result: "로직 아틀리에제 탄환",
+    parts: ["평등", "북부 총기협회 제식소총", "L사 지급 필기구"], codex: 15 },
+  { result: "앙갚음 장부",
+    parts: ["제3발톱식 너클", "제3발톱 의리사슬", "I사 특수부대 장비"], codex: 15 },
+  { result: "초승달의 기억",
+    parts: ["스카우터", "명경지수", "달의 기억"], codex: 15 }
 ];
 
 /* 보조 교육위원은 황금교본으로 뽑습니다(기프트는 v2.26.5 부터 원고료). 1성은 없습니다. */
