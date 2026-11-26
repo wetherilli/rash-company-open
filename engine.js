@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "3.0.3";
+const VERSION = "3.0.4";
 const VERSION_NAME = "그리워할 수 밖에 없는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -11852,7 +11852,7 @@ let NOTE_SYN_OPEN = {};
 const NOTE_CREW_ICON = { manager: "노란테", bus: "메카고질라" };
 let NOTE_SYN_DETAIL = null;
 /* 노트의 교육위원 목록 — 정렬과 「보유한 것만」 (사용자 지침 2026-10-11).
- * 편성의 보조 교육위원 창(ADV_SORT·ADV_OWNED_ONLY)과 같은 손잡이인데, 값은 따로 둡니다 —
+ * 편성의 보조 교육위원 창(ADV_OWNED_ONLY — 2026-11-26 부터 그쪽은 정렬 대신 사람별 묶음)과 비슷한 손잡이인데, 값은 따로 둡니다 —
  * 노트는 «도감» 이라 처음에는 전부 보이는 편이 맞고, 편성은 보유한 것만이 기본이기 때문입니다.
  * 접힘은 시너지 무리와 같은 표(NOTE_SYN_OPEN 의 "adv" 칸)에 적습니다 — 처음에는 접혀 있습니다. */
 let NOTE_TUT_OPEN = {};   // 노트 → 튜토리얼 — 펴 둔 안내 (기본은 다 접힘, 2026-11-06)
@@ -18285,12 +18285,17 @@ function openPresetSave(back) {
 }
 
 /* ── 보조 교육위원 편성 ────────────────────────────────────── */
-/* 정렬("added"·"name"·"synergy")과 「보유한 것만」 — 판이 도는 동안 기억합니다.
- * 사용자 지침(2026-08-31)으로 기본을 «보유한 것만 보기»로 바꿨습니다. */
-let ADV_SORT = "added";
+/* 인격 장착(openEquip)처럼 «사람 이름» 으로 묶어 접어 둡니다 (사용자 지침 2026-11-26).
+ *  · 이름줄을 누르면 그 사람의 교육위원(직함들)만 펴지고 접힙니다. 줄에는 지금 세운 직함이 함께 적힙니다.
+ *  · 세운 사람의 줄은 금테(.inparty)와 「배치 중」 딱지.
+ *  · [모두 내리기] · [보유중 / 전부] · [모두 펴기] · [모두 접기] 는 인격 장착처럼 줄 오른쪽에.
+ *  예전의 추가순 · 이름순 · 시너지순 정렬은 묶음이 대신합니다 — 사람은 이름순, 묶음 안은 높은 성급부터.
+ *  펴 둔 사람과 「보유중」 은 창을 닫아도 남습니다. 처음 열 때는 세운 사람만 펴 둡니다.
+ *  (노트의 교육위원 목록은 따로입니다 — NOTE_ADV_SORT · advisorSynergyRank) */
 let ADV_OWNED_ONLY = true;
+let ADV_OPEN = null;        // 이름 -> 펴 두었나 (null 이면 아직 한 번도 안 연 것)
 /* 「시너지순」 정렬용 — 이 교육위원의 제목이 synergySortedList() 의 몇 번째
- * 시너지에 걸리는지를 등수로 돌려줍니다. 어디에도 안 걸리면 맨 뒤로 갑니다. */
+ * 시너지에 걸리는지를 등수로 돌려줍니다. 어디에도 안 걸리면 맨 뒤로 갑니다(노트가 씁니다). */
 function advisorSynergyRank(a) {
   const ordered = synergySortedList();
   for (let i = 0; i < ordered.length; i++) {
@@ -18302,86 +18307,119 @@ function advisorSynergyRank(a) {
 function openAdvisor(back) {
   $modal.classList.add("on");
   const all = advisorList();
-  const mine = all.filter(a => S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
+  const has = a => !!(S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
+  const mine = all.filter(has);
 
   const cap = advisorSlots();
   const nowOn = advisorOnList();
   const 다음 = nextSlotChapter("advisor");
 
-  /* 정렬·「보유한 것만」 — 인격 장착(openEquip)의 EQUIP_OWNED_ONLY와 같은
-   * 요령입니다. 기본은 보유한 것만 보이게(ADV_OWNED_ONLY = true) 해 두었습니다
-   * (사용자 지침 2026-08-31 — "추가된 순서로만 나와서 난잡하다"). */
-  let list = all.slice();
-  if (ADV_SORT === "name") {
-    list.sort((a, b) => a.name.localeCompare(b.name, "ko") || a.title.localeCompare(b.title, "ko"));
-  } else if (ADV_SORT === "synergy") {
-    list.sort((a, b) => advisorSynergyRank(a) - advisorSynergyRank(b) || a.name.localeCompare(b.name, "ko"));
+  /* 사람별 묶음 — 이름순, 묶음 안은 성급 높은 것부터(같으면 들어온 차례) */
+  const names = [];
+  all.forEach(a => { if (names.indexOf(a.name) < 0) names.push(a.name); });
+  names.sort((x, y) => x.localeCompare(y, "ko"));
+  const groupOf = nm => all.map((a, i) => ({ a, i })).filter(p => p.a.name === nm)
+    .sort((p, q) => (q.a.star || 0) - (p.a.star || 0) || p.i - q.i).map(p => p.a);
+  if (ADV_OPEN === null) {
+    ADV_OPEN = {};
+    nowOn.forEach(k => { const a = all.find(x => advisorId(x) === k); if (a) ADV_OPEN[a.name] = true; });
   }
-  if (ADV_OWNED_ONLY) list = list.filter(a => S.advisorsOwned && S.advisorsOwned[advisorId(a)]);
 
   let h = '<h2>보 조 교 육 위 원</h2>' +
-          '<div class="hint">관리자 옆에 <b>' + cap + '명</b>까지 세울 수 있습니다. 직접 싸우지는 않고, ' +
-          '편성된 작성위원 전원에게 상시 효과를 겁니다.　세운 ' + nowOn.length + ' / ' + cap +
-          '　·　보유 ' + mine.length + ' / ' + all.length +
-          (다음 ? '<br>' + 다음 + '을 마치면 한 명 더 세울 수 있습니다.' : '') +
-          '</div>' +
-          '<div class="eqbar">' +
-            '<label class="eqchk"><input type="checkbox" id="advowned"' +
-              (ADV_OWNED_ONLY ? ' checked' : '') + '> 보유한 것만 보기</label>' +
-            '<button id="advsort_added" class="' + (ADV_SORT === "added" ? "" : "ghost") + '">추가순</button>' +
-            '<button id="advsort_name" class="' + (ADV_SORT === "name" ? "" : "ghost") + '">이름순</button>' +
-            '<button id="advsort_synergy" class="' + (ADV_SORT === "synergy" ? "" : "ghost") + '">시너지순</button>' +
-          '</div>' +
-          '<div class="grid">';
+          '<div class="hintbox"><ul class="hintlist">' +
+            '<li>관리자 옆에 <b>' + cap + '명</b>까지 세웁니다. 직접 싸우지는 않고, 편성된 작성위원 전원에게 상시 효과를 겁니다.</li>' +
+            '<li><b>사람 이름</b>을 누르면 그 사람의 직함들이 펴집니다. 한 사람은 한 번만 설 수 있습니다.</li>' +
+            '<li>세운 ' + nowOn.length + ' / ' + cap + '　·　보유 ' + mine.length + ' / ' + all.length + '</li>' +
+            (다음 ? '<li>' + 다음 + '을 마치면 한 명 더 세울 수 있습니다.</li>' : '') +
+          '</ul></div>' +
+          '<div class="eqbar eqend">' +
+            '<button id="advnone" class="ghost' + (!nowOn.length ? ' on' : '') + '">모두 내리기</button>' +
+            '<button id="advowned" class="ghost' + (ADV_OWNED_ONLY ? ' on' : '') + '" title="' +
+              (ADV_OWNED_ONLY ? '지금은 가진 교육위원만 보입니다 — 누르면 아직 없는 직함까지 함께'
+                              : '지금은 아직 없는 직함까지 보입니다 — 누르면 가진 것만') + '">' +
+              (ADV_OWNED_ONLY ? '보유중' : '전부') + '</button>' +
+            '<button id="advall" class="ghost">모두 펴기</button>' +
+            '<button id="advfold" class="ghost">모두 접기</button>' +
+          '</div>';
 
-  h += '<div class="slot' + (!nowOn.length ? ' sel' : '') + '" data-pick="">' +
-         '<div class="nm">모두 내리기</div><div class="sub">아무도 세우지 않습니다</div></div>';
+  let shownNames = 0;
+  names.forEach(nm => {
+    const grp = groupOf(nm);
+    const owned = grp.filter(has);
+    if (ADV_OWNED_ONLY && !owned.length) return;   // 한 장도 없는 사람은 머리줄도 안 섭니다
+    shownNames++;
+    const open = !!ADV_OPEN[nm];
+    const onA = grp.find(a => advisorIsOn(advisorId(a)));
+    const head = onA || owned[0] || grp[0];
+    h += '<div class="eqhead' + (open ? ' open' : '') + (onA ? ' inparty' : '') + '" data-advopen="' + nm + '">' +
+           '<span class="arrow">' + (open ? '▾' : '▸') + '</span>' +
+           iconMini(advisorIconName(head)) +
+           '<b>' + nm + '</b>' +
+           (onA ? '<span class="partytag">배치 중</span>' : '') +
+           '<span class="wearing">' +
+             (onA ? '<span class="star">' + stars(onA.star) + '</span> ' + onA.title : '세우지 않음') +
+           '</span>' +
+           '<span class="cnt">' + owned.length + ' / ' + grp.length + '</span>' +
+         '</div>';
+    if (!open) return;
 
-  if (!list.length)
-    h += '<div class="slot"><div class="sub">' +
-         (ADV_OWNED_ONLY ? '아직 보유한 교육위원이 없습니다.<br>「보유한 것만 보기」를 꺼 보십시오.'
-                         : '표시할 교육위원이 없습니다.') + '</div></div>';
-
-  list.forEach(a => {
-    const k = advisorId(a);
-    const has = !!(S.advisorsOwned && S.advisorsOwned[k]);
-    const on  = advisorIsOn(k);
-    /* 같은 사람을 이미 세웠으면 못 고릅니다 — N사 이형우와 L사 이형우처럼 */
-    const 겹침 = has && !on && advisorNameTaken(k);
-    /* 그 사람이 지금 지원 작성위원으로 편성에 있으면(예: 하축론=이정빈) 못 세웁니다 */
-    const 지원겹침 = has && !on && !겹침 && advisorBlockedBySupport(k);
-    const 고를수있나 = has && !겹침 && !지원겹침;
-    h += '<div class="slot hasic' + (on ? ' sel' : '') + '"' +
-           (고를수있나 ? ' data-pick="' + k + '"' : '') + '>' +
-           iconHTML(advisorIconName(a), { dim: !(고를수있나 || on) }) + '<div>' +
-           '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
-             '<span class="star">' + stars(a.star) + '</span> ' + titleName(a) +
-             (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
-           (has ? flavorHTML(a) : '') +
-           '<div class="sub">' + (has ? a.desc : '미보유') + '</div>' +
-           (겹침 ? '<div class="sub" style="color:var(--red)">' + withJosa(a.name, "을") +
-                   ' 이미 세웠습니다. 한 사람은 한 번만 설 수 있습니다.</div>' : '') +
-           (지원겹침 ? '<div class="sub" style="color:var(--red)">' +
-                   withJosa(지원겹침, "이") + ' 지원 작성위원으로 편성에 있어 세울 수 없습니다.</div>' : '') +
-           (has && a.note ? '<div class="sub">' + a.note + '</div>' : '') +
-         '</div></div>';
+    let body = '<div class="grid eqbody">';
+    grp.forEach(a => {
+      const k = advisorId(a);
+      const mineA = has(a);
+      if (ADV_OWNED_ONLY && !mineA) return;
+      const on  = advisorIsOn(k);
+      /* 같은 사람의 다른 직함을 이미 세웠으면 — 누르면 그 자리에서 바꿔 섭니다(인격 장착과 같은 요령, 아래 data-pick).
+       * 예전 한 줄 목록에서는 «이미 세웠습니다» 로 막았는데, 사람별로 묶고 나니 바꿔 끼우는 쪽이 자연스럽습니다 */
+      /* 그 사람이 지금 지원 작성위원으로 편성에 있으면(예: 하축론=이정빈) 못 세웁니다 */
+      const 지원겹침 = mineA && !on && advisorBlockedBySupport(k);
+      const 고를수있나 = mineA && !지원겹침;
+      body += '<div class="slot hasic' + (on ? ' sel' : '') + '"' +
+               (고를수있나 ? ' data-pick="' + k + '"' : '') + '>' +
+               iconHTML(advisorIconName(a), { dim: !(고를수있나 || on) }) + '<div>' +
+               '<div class="' + (고를수있나 || on ? 'nm' : 'lock') + '">' +
+                 '<span class="star">' + stars(a.star) + '</span> ' + a.title +
+                 (on ? ' <span class="sub">· 배치</span>' : '') + '</div>' +
+               (mineA ? flavorHTML(a) : '') +
+               '<div class="sub">' + (mineA ? a.desc : '미보유') + '</div>' +
+               (지원겹침 ? '<div class="sub" style="color:var(--red)">' +
+                       withJosa(지원겹침, "이") + ' 지원 작성위원으로 편성에 있어 세울 수 없습니다.</div>' : '') +
+               (mineA && a.note ? '<div class="sub">' + a.note + '</div>' : '') +
+             '</div></div>';
+    });
+    h += body + '</div>';
   });
-  h += '</div><div class="modalfoot"><button id="aclose">돌아가기</button></div>';
+  if (!shownNames)
+    h += '<div class="hint">' + (ADV_OWNED_ONLY ? '아직 보유한 교육위원이 없습니다. [보유중] 을 눌러 [전부] 로 바꾸면 어떤 교육위원이 있는지 볼 수 있습니다.'
+                                               : '표시할 교육위원이 없습니다.') + '</div>';
+
+  h += '<div class="modalfoot"><button id="aclose">돌아가기</button></div>';
   $sheet.innerHTML = h;
 
-  document.getElementById("advowned").onchange = (e) => { ADV_OWNED_ONLY = e.target.checked; openAdvisor(back); };
-  ["added", "name", "synergy"].forEach(key => {
-    document.getElementById("advsort_" + key).onclick = () => { ADV_SORT = key; openAdvisor(back); };
+  $sheet.querySelectorAll(".eqhead[data-advopen]").forEach(el => {
+    el.onclick = () => { const nm = el.dataset.advopen; ADV_OPEN[nm] = !ADV_OPEN[nm]; openAdvisor(back); };
   });
+  document.getElementById("advowned").onclick = () => { ADV_OWNED_ONLY = !ADV_OWNED_ONLY; openAdvisor(back); };
+  document.getElementById("advall").onclick = () => { names.forEach(nm => ADV_OPEN[nm] = true); openAdvisor(back); };
+  document.getElementById("advfold").onclick = () => { ADV_OPEN = {}; openAdvisor(back); };
 
+  const apply = () => {
+    S.advisor = advisorOnList()[0] || null;   // 옛 이름도 맞춰 둡니다
+    S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
+    saveVault(); render();
+    openAdvisor(back);
+  };
+  document.getElementById("advnone").onclick = () => { S.advisorOn = []; apply(); };
   $sheet.querySelectorAll(".slot[data-pick]").forEach(el => {
     el.onclick = () => {
       const k = el.dataset.pick;
-      /* 빈 손잡이는 «모두 내리기» */
-      if (!k) S.advisorOn = [];
-      else if (advisorIsOn(k)) S.advisorOn = advisorOnList().filter(x => x !== k);
-      else if (advisorNameTaken(k)) return;      // 같은 사람은 둘 세울 수 없습니다
+      if (advisorIsOn(k)) S.advisorOn = advisorOnList().filter(x => x !== k);
       else if (advisorBlockedBySupport(k)) return; // 지원 작성위원으로 이미 서 있습니다
+      else if (advisorNameTaken(k)) {
+        /* 같은 사람의 다른 직함이 서 있으면 그 자리를 그대로 바꿉니다 — 한 사람은 한 번만 섭니다 */
+        const nm = advisorById(k).name;
+        S.advisorOn = advisorOnList().map(x => { const o = advisorById(x); return o && o.name === nm ? k : x; });
+      }
       else {
         const list = advisorOnList();
         /* 칸이 다 찼으면 «맨 먼저 세운 사람» 이 물러납니다 */
@@ -18389,10 +18427,7 @@ function openAdvisor(back) {
         list.push(k);
         S.advisorOn = list;
       }
-      S.advisor = advisorOnList()[0] || null;   // 옛 이름도 맞춰 둡니다
-      S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
-      saveVault(); render();
-      openAdvisor(back);
+      apply();
     };
   });
   document.getElementById("aclose").onclick = () => { if (back) back(); else { closeModal(); render(); } };

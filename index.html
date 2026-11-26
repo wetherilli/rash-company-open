@@ -681,6 +681,10 @@
   }
   .eqhead .wearing{color:var(--muted);font-size:12px;}
   .eqhead .cnt{margin-left:auto;color:var(--dim);font-size:12.5px;}
+  /* 좁은 화면에서 이름이 «이형 / 우» 처럼 꺾이던 것 — 이름 · 딱지 · 개수는 꺾지 않고, 낀 것(직함 · 인격)만 줄임표로
+   * (사용자 지침 2026-11-26, 보조 교육위원 창을 인격 장착처럼 묶으면서) */
+  .eqhead b,.eqhead .partytag,.eqhead .cnt{flex:none;white-space:nowrap;}
+  .eqhead .wearing{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .eqbody{margin-top:6px;}
 
   /* ── 동기화 — 작성위원마다 한 줄 ─────────── */
@@ -2359,26 +2363,26 @@
 
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 
-<script src="data/access.js?v=3.0.3"></script>
-<script src="data/vault.js?v=3.0.3"></script>
-<script src="data/characters.js?v=3.0.3"></script>
-<script src="data/skills.js?v=3.0.3"></script>
-<script src="data/allies.js?v=3.0.3"></script>
-<script src="data/gifts.js?v=3.0.3"></script>
-<script src="data/pickup.js?v=3.0.3"></script>
-  <script src="data/hard.js?v=3.0.3"></script>
-<script src="data/achievements.js?v=3.0.3"></script>
-<script src="data/mail.js?v=3.0.3"></script>
-<script src="data/notice.js?v=3.0.3"></script>
-<script src="data/patch.js?v=3.0.3"></script>
-<script src="data/event.js?v=3.0.3"></script>
-<script src="data/reward.js?v=3.0.3"></script>
-<script src="data/tutorial.js?v=3.0.3"></script>
-<script src="data/foes.js?v=3.0.3"></script>
-<script src="data/story.js?v=3.0.3"></script>
-<script src="data/mirrorpacks.js?v=3.0.3"></script>
-<script src="data/bgm.js?v=3.0.3"></script>
-<script src="engine.js?v=3.0.3"></script>
+<script src="data/access.js?v=3.0.4"></script>
+<script src="data/vault.js?v=3.0.4"></script>
+<script src="data/characters.js?v=3.0.4"></script>
+<script src="data/skills.js?v=3.0.4"></script>
+<script src="data/allies.js?v=3.0.4"></script>
+<script src="data/gifts.js?v=3.0.4"></script>
+<script src="data/pickup.js?v=3.0.4"></script>
+  <script src="data/hard.js?v=3.0.4"></script>
+<script src="data/achievements.js?v=3.0.4"></script>
+<script src="data/mail.js?v=3.0.4"></script>
+<script src="data/notice.js?v=3.0.4"></script>
+<script src="data/patch.js?v=3.0.4"></script>
+<script src="data/event.js?v=3.0.4"></script>
+<script src="data/reward.js?v=3.0.4"></script>
+<script src="data/tutorial.js?v=3.0.4"></script>
+<script src="data/foes.js?v=3.0.4"></script>
+<script src="data/story.js?v=3.0.4"></script>
+<script src="data/mirrorpacks.js?v=3.0.4"></script>
+<script src="data/bgm.js?v=3.0.4"></script>
+<script src="engine.js?v=3.0.4"></script>
 <script>
 /* 데이터 파일을 못 읽은 경우에 대비한 안내 */
 if (typeof CHAPTERS === "undefined" || typeof SINNERS === "undefined") {
