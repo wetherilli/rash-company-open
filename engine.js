@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "3.0.2";
+const VERSION = "3.0.3";
 const VERSION_NAME = "그리워할 수 밖에 없는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -4253,13 +4253,19 @@ function retribGain(who) {
  *    한 번에 얻는 몫 = atk × 시너지 배율(없으면 1) × stackMult(기프트 · 특전), 소수점 버림.
  *    selfDmg — 얻을 때 체력을 그만큼 깎습니다(투계). 이것으로는 쓰러지지 않습니다 — 1 을 남깁니다.
  *  쌓인 수가 곧 «얻은 공격력» 이고, 카드에 「히트 n」 으로 섭니다(effStats 가 공격에 그대로 더함 —
- *  그 시너지가 켜져 있는 동안만). S.arc.stacks[key][who] 라 갈래(본편 장 · 거울 한 판) 동안 이어집니다.
+ *  그 시너지가 켜져 있는 동안만). S.arc.stacks[key][who] 에 적지만 «그 전투 안에서만» 갑니다 —
+ *  전투를 열 때(startBattleFight)와 끝낼 때(victory · defeat) clearArcStacks 가 0 으로 돌립니다
+ *  (사용자 지침 2026-11-26. 그 전까지는 갈래 — 본편 장 · 거울 한 판 — 동안 이어졌습니다).
  *  쓰러지면 0 — E.G.O 기프트 keepStack: key 를 지녔으면 남깁니다(혈염도).
  *  기프트 · 특전 effect 칸 —
  *    stackMult: { key: 2 }           쌓는 몫 × 2 (상납받은 탄약 · 가속탄)
  *    keepStack: key                  쓰러져도 그 스택을 잃지 않음
  *    stackGuard: { key, need }       쓰러질 피해를 받으면 그 스택 need 를 태워 체력 1 로 버팀(각본 피해에는 안 들음)
  *  인격 줄 stackLine: { key, min, text } — 그 스택이 min 이상인 채 공격할 때 한마디(송하민 「전탄, 격발.」). */
+/* 인격 스택(히트 · 염화)을 모두 0 으로 — 한 전투 안에서만 가는 몫입니다(위 머리말). 광신 · 보복은 그대로 둡니다 */
+function clearArcStacks() {
+  if (S && S.arc && S.arc.stacks) S.arc.stacks = {};
+}
 function arcStacks(key) {
   if (!S.arc) S.arc = { kills: 0, retribution: {} };
   if (!S.arc.stacks) S.arc.stacks = {};
@@ -4462,7 +4468,7 @@ function abilityLinesOf(src) {
              (st.selfDmg ? "체력 " + st.selfDmg + "을 태워 " : "") + "공격력이 " + st.atk + "씩 쌓입니다." +
              (boost ? "\n시너지 「" + boost.name + "」" + josa(boost.name, "이") + " 켜지면 ×1.5(셋 ×1.75 · 넷 ×2)." : "") +
              (st.selfDmg ? "\n태운 체력으로는 쓰러지지도, 흐트러지지도 않습니다." : "") +
-             "\n쓰러지면 잃습니다.");
+             "\n전투가 끝나면 0으로 돌아가고, 쓰러져도 잃습니다.");
   }
   /* stackLine 은 «한마디 하는 자리» 일 뿐 능력이 아니라 적지 않습니다 */
   return out;
@@ -8036,6 +8042,7 @@ function startBattleFight(scene, f) {
   /* 덮여 있던 컷신은 전투를 열면서 걷습니다 — 컷신이 싸움판 위에 얹힌 채로
    * 남으면 적도 체력도 안 보입니다 (showCut 참고). */
   CUR_CUT = null;
+  clearArcStacks();                  /* 히트 · 염화는 전투마다 0 에서 (사용자 지침 2026-11-26) */
   S.battle = {
     id: scene.foe, name: f.name, def: f.def, atk: f.atk,
     hp: f.hp, maxhp: f.hp, boss: !!f.boss,
@@ -10316,6 +10323,7 @@ function resolveTurn() {
 function victory() {
   const b = S.battle;
   foeLogKill(b.id);                  /* 적 도감 — 쓰러뜨린 수 */
+  clearArcStacks();                  /* 히트 · 염화 — 전투가 끝나면 0 (사용자 지침 2026-11-26) */
   battleOver(b);
   battleSuccess(b);
   /* 거울굴절철도 결과 카드에 적을 총 턴수 — 이긴 전투의 턴만 더합니다.
@@ -10608,6 +10616,9 @@ function defeat() {
       say("작성위원 열둘이 모두 내렸다. 이 선로는 여기서 끝이다.", "bad");
     }
   }
+  /* 히트 · 염화 — 전투가 끝나면 0 (사용자 지침 2026-11-26). 위 편도의 «남은 사람을 올려 보낸다» 는
+   * 같은 전투가 이어지는 것이라 그 앞에서는 비우지 않습니다 */
+  clearArcStacks();
   const b = S.battle;
   battleOver(b);
   divider();
