@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "3.0.1";
+const VERSION = "3.0.2";
 const VERSION_NAME = "그리워할 수 밖에 없는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -795,6 +795,8 @@ function vaultMergeOnce(seed) {
   };
   seed.mailTaken = union(seed.mailTaken, now.mailTaken);
   seed.achieved  = union(seed.achieved,  now.achieved);
+  /* 지원 작성위원도 «받은 것» 이라 합칩니다 — 업적만 합치고 이것을 안 합치면 ✓ 만 남고 사람이 빠졌습니다(v3.0.2) */
+  seed.supports  = union(seed.supports,  now.supports);
   /* 이야기 인격 지급 자리도 한 번만 받는 것입니다 — 옛 파일을 들여와도 되살아나지 않게 */
   seed.storyGain = union(seed.storyGain, now.storyGain);
   /* 어려움 클리어도 «한 번만 받는» 표라 합집합입니다 — 어느 쪽에서 마쳤든 마친 것입니다 */
@@ -1279,8 +1281,22 @@ function newState() {
 
   /* 지원 작성위원은 업적으로 얻습니다. 얻지 않은 사람은 편성에 서지 못합니다. */
   const supportsOwned = {};
-  if (v && v.supports) for (const k in v.supports) if (supportBy(k)) supportsOwned[k] = true;
+  if (v && v.supports) for (const k in v.supports) { const c = supportCanon(k); if (c) supportsOwned[c] = true; }
   const achievedMap = (v && v.achieved) ? v.achieved : {};
+  /* 업적은 ✓ 인데 그 보상인 지원 작성위원이 없으면 여기서 채웁니다(사용자 지침 2026-11-26, v3.0.2).
+   * 지원 작성위원은 «달성하는 순간» 에만 지급되는데, 옛 파일을 들여오거나 구름과 합칠 때(vaultMergeOnce)
+   * 업적 표시는 합집합으로 남고 보유 목록은 한쪽 것만 남아 둘이 어긋날 수 있었습니다. 이미 달성한 업적은
+   * 다시 지급되지 않으므로 그대로 두면 영영 못 받습니다. 채운 사람은 supportNote 로 «보관함 정리» 창에 한 번 알립니다.
+   * 중복 환급(SUPPORT_DUP)은 걸지 않습니다 — 없는 사람을 채우는 것뿐입니다. */
+  let supportNote = null;
+  if (v) achieveList().forEach(a => {
+    const g = a.give;
+    if (!g || !g.support || !achievedMap[a.name]) return;
+    const sp = supportBy(SUP_PREFIX + g.support);
+    if (!sp || supportsOwned[supportId(sp)]) return;
+    supportsOwned[supportId(sp)] = true;
+    (supportNote = supportNote || []).push({ ach: a.name, sp: titleName(sp), star: sp.star });
+  });
 
   /* 인격 파편 · 동기화 — who 는 SINNERS 의 고정 키라(제목과 달리 안 바뀝니다)
    * 옮겨 담을 것 없이 지금 있는 사람 것만 골라 받습니다. */
@@ -1331,8 +1347,9 @@ function newState() {
   const okMember = (w, i) =>
     isSupport(w) ? (supportBy(w) && supportsOwned[w] && slotTakesSupport(i))
                  : (SINNERS[w] && equip[w]);
-  if (v && v.party && v.party.length === 3 && v.party.every(okMember))
-    party = v.party.slice();
+  const vParty = (v && v.party) ? v.party.map(w => isSupport(w) ? (supportCanon(w) || w) : w) : null;
+  if (vParty && vParty.length === 3 && vParty.every(okMember))
+    party = vParty;
 
   /* 옛 이름으로 적힌 것도 지금 이름으로 옮겨 담는다 (위원 줄의 was 를 본다).
    * 이렇게 해야 보관함 표시·뽑기 후보·중복 환급이 모두 한 이름으로 맞물린다.
@@ -1454,6 +1471,7 @@ function newState() {
     fragBox,
     pickupPts,              // 특정 배정 선택 획득 횟수 { 배정 name: 횟수 }
     pickupNote,             // 내려간 배정의 횟수를 상자로 돌려줬을 때 한 번 알릴 내용
+    supportNote,            // 업적 ✓ 인데 없던 지원 작성위원을 채웠을 때 한 번 알릴 내용
     enkCap: (v && +v.enkCap) || 0,   // 엔케팔린 캡슐 — 보관함에 남는 소모품
     syncModule: (v && +v.syncModule) || 0,   // 동기화 모듈 — 보관함에 남는 소모품
     /* 선택권 셋 — 보관함에 남는 소모품입니다. 여기서 되돌려 받지 않으면 saveVault 가 제대로
@@ -1639,7 +1657,7 @@ function openPatch(back) {
  *  예전에는 유리창 기록칸에 글줄로만 찍혀 지나가 버렸습니다. 이제 상점 알림(openNotice) 다음에
  *  창 하나로 띄웁니다(glass). 띄울 때 지우고 곧바로 보관함에 적습니다 — 도장을 찍어 두어야
  *  다음 번에 또 깎이거나 또 돌려받지 않습니다. */
-function vaultChangeDue() { return !!(S && (S.verNote || S.eventNote || S.pickupNote)); }
+function vaultChangeDue() { return !!(S && (S.verNote || S.eventNote || S.pickupNote || S.supportNote)); }
 function vaultChangeGroups() {
   const out = [];
   const n = S.verNote;
@@ -1668,11 +1686,17 @@ function vaultChangeGroups() {
     lines: pk.map(x => "「" + x.name + "」에 쌓인 배정 횟수 " + x.n + "회를 " +
                        iconMini("인격 파편 상자 (무작위)") + "인격 파편 상자(무작위) " + x.n + "개로 돌려드렸습니다.")
   });
+  const sn = S.supportNote;
+  if (sn) out.push({
+    head: "받지 못한 지원 작성위원",
+    lines: sn.map(x => iconMini(supportIconName(x)) + "업적 「" + x.ach + "」의 보상 " + stars(x.star) + " " + x.sp +
+                       josa(x.sp, "을") + " 보관함에 넣어 드렸습니다.")
+  });
   return out;
 }
 function openVaultChange(then) {
   const groups = vaultChangeGroups();
-  S.verNote = null; S.eventNote = null; S.pickupNote = null;
+  S.verNote = null; S.eventNote = null; S.pickupNote = null; S.supportNote = null;
   saveVault();
   $modal.classList.add("on");
   $sheet.innerHTML = '<h2>보 관 함 정 리</h2>' +
@@ -4765,8 +4789,13 @@ function supportId(s)  { return s ? SUP_PREFIX + s.title + "|" + s.name : null; 
 function isSupport(w)  { return typeof w === "string" && w.indexOf(SUP_PREFIX) === 0; }
 function supportBy(w) {
   if (!isSupport(w)) return null;
-  return supportList().find(s => supportId(s) === w) || null;
+  return supportList().find(s => supportId(s) === w) ||
+         supportList().find(s => s.was && SUP_PREFIX + s.was + "|" + s.name === w) || null;
 }
+/* 옛 제목(was)으로 적힌 열쇠도 지금 열쇠로 — 인격 · 기프트의 was 와 같은 결입니다.
+ * 지원 작성위원 제목을 고칠 때 data/characters.js SUPPORTS 의 그 줄에 was: "옛 제목" 을 남기십시오.
+ * 남기지 않으면 옛 보관함이 그 사람을 잃고 업적 ✓ 만 남습니다(2026-11-26). 못 알아보면 null. */
+function supportCanon(w) { const sp = supportBy(w); return sp ? supportId(sp) : null; }
 /* 업적으로 얻었는가 */
 let SUP_OPEN = false;
 function supportOwned(sp) {
