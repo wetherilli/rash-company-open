@@ -11,7 +11,7 @@
  *    가운뎃자리  장이 늘거나 기능이 추가될 때
  *    뒷자리  대사·수치 손질
  */
-const VERSION = "3.0.4";
+const VERSION = "3.0.5";
 const VERSION_NAME = "그리워할 수 밖에 없는";
 
 /* ── 규칙 상수 ─ 밸런스를 만지려면 여기 ────────────────────── */
@@ -3116,6 +3116,26 @@ function earn(n) { return Math.max(1, Math.round(n * RULE.moneyGain)); }
  *
  *  거울 던전 안이면 여기를 묻지 않고 언제나 냅니다.
  *  장 밖(어디에도 속하지 않은 전투)이라면 막지 않습니다. */
+/* ── 본편 «자리마다 한 번» (사용자 보고 2026-11-27) ─────────────────────
+ *  처치 원고료 · 황금교본 장면 · 요리 점수 원고료는 «처음 지나갈 때» 만 나옵니다. 여태 그 판정은
+ *  storyFirstRun(«이 장을 아직 안 마쳤는가») 하나뿐이라, 마치기 전에는 몇 번이고 다시 받혔습니다 —
+ *  장을 처음부터 다시 고르기 · 편성 자리(storySave)로 되돌아가기 · 이긴 직후 창을 닫고 이어하기.
+ *  그래서 인격 지급(grant)처럼 «받은 자리» 를 S.storyGain 에 함께 적습니다(보관함 · 손댐 검사 · 합치기가
+ *  이미 그 칸을 지킵니다). 열쇠는 "once:<장 id>[:hard]:<종류>:<장면 번호>" — 어려움 첫 완주는
+ *  일반과 따로 한 번 더 받으므로(storyFirstRun) :hard 를 붙여 가릅니다.
+ *  처음 받는 자리면 참을 돌려주고 표시를 남깁니다. 거울 안에서는 늘 참입니다(거울은 PACK_PAY 가 맡습니다). */
+function storyOnce(kind, scene, alt) {
+  if (S.mirror) return true;
+  const c = curChapter();
+  if (!c) return true;
+  const i = (scene && typeof SCENES !== "undefined" && SCENES) ? SCENES.indexOf(scene) : -1;
+  const at = i >= 0 ? String(i) : String(alt != null ? alt : (S.sc || 0));
+  const key = "once:" + c.id + ((S.cleared && S.cleared[c.id]) ? ":hard" : "") + ":" + kind + ":" + at;
+  if (!S.storyGain) S.storyGain = {};
+  if (S.storyGain[key]) return false;
+  S.storyGain[key] = true;
+  return true;
+}
 function storyPays() {
   if (S.mirror) return true;
   const c = curChapter();
@@ -3487,6 +3507,17 @@ function gainEvent(base, cards) {
   return g.total;
 }
 /* 스토리 장을 마쳤을 때 줄 몫 — 맨 마지막 장이면 더 줍니다 */
+/* 싸움이 하나도 없는 장인가 — 장면 어디에도(회상 · 갈림길 안까지) 전투(battle · bossCine)가 없으면 참 */
+const STORY_ONLY = new Map();   // 장 → 참/거짓 (한 번 훑으면 기억)
+function storyOnlyChapter(c) {
+  if (!c || !c.scenes) return false;
+  if (!STORY_ONLY.has(c)) {
+    const fight = o => !!o && typeof o === "object" &&
+      (o.t === "battle" || o.t === "bossCine" || Object.keys(o).some(k => fight(o[k])));
+    STORY_ONLY.set(c, !fight(c.scenes));
+  }
+  return STORY_ONLY.get(c);
+}
 function eventStoryGain(c, first) {
   const g = eventRule().gain || {};
   /* «마지막 장» 은 **지금 이벤트가 걸린 장** 입니다(사용자 지침 2026-11-14). 복각처럼
@@ -3502,6 +3533,9 @@ function eventStoryGain(c, first) {
   const isLatest = !!(last && c && (gid ? last.part === gid : c.id === last.id));
   const t = isLatest ? g.latest : g.story;
   if (!t) return 0;
+  /* 싸움 없이 이야기만 있는 장(8-1 · 8-6)은 «다시 마친 몫» 이 없습니다(사용자 지침 2026-11-27) —
+   * [계속] 만 누르면 끝나 아무 품 없이 되풀이해 받을 수 있었습니다. 처음 마칠 때의 몫은 그대로입니다. */
+  if (!first && storyOnlyChapter(c)) return 0;
   const base = first ? t.first : t.again;
   return gid ? Math.ceil(base / groupParts(gid).length) : base;
 }
@@ -7270,6 +7304,7 @@ function play(s) {
       const rule = mirrorRuleNow();
       const cleared = ((S.railSave && S.railSave.clearedPacks) || []).slice();
       cleared.push(s.packId);
+      packPayOut();   // 이 팩에서 모은 처치 원고료 — 넘긴 지금 받습니다(PACK_PAY)
       const nextRound = ((S.railSave && S.railSave.round) || 1) + 1;
       /* 마지막 라운드까지 다 깼어도 방금 깬 팩을 S.railSave 에 먼저 실어 둡니다 —
        * mirrorClear() 가 결과 카드(고른 테마팩 목록)를 지을 때 이걸 읽습니다. */
@@ -7390,7 +7425,8 @@ function play(s) {
     /* 본편 황금교본은 그 장을 처음 마칠 때만 준다 */
     case "codex": {
       const c = curChapter();
-      const already = !!c && !storyFirstRun(c);
+      /* 처음 회차라도 이 자리에서 이미 받았으면 없습니다(storyOnce — 다시 시작 · 되돌아가기 · 이어하기) */
+      const already = !!c && (!storyFirstRun(c) || !storyOnce("codex", s));
       divider();
       if (already) {
         say("황금교본은 이미 이 손을 거쳐 갔다.", "sys");
@@ -7899,8 +7935,8 @@ function doCook(s) {
 
     /* 본편과 같은 규칙 — 처음 지나갈 때만 값을 쳐 줍니다 */
     const raw = Math.max(0, score) * (s.pay || 0);
-    const pay = (raw > 0 && storyPays()) ? earn(raw) : 0;
-    if (pay > 0) { S.money += pay; say(CURRENCY + " " + pay + " 획득.", "gain"); render(); }
+    const pay = (raw > 0 && storyPays() && storyOnce("cook", s)) ? earn(raw) : 0;
+    if (pay > 0) { S.money += pay; say(CURRENCY + " " + pay + " 획득.", "gain"); saveVault(); render(); }
 
     S.waiting = false;
     cont();
@@ -10320,6 +10356,28 @@ function resolveTurn() {
   else swing();
 }
 
+/* ── 테마팩 안의 처치 원고료는 «팩을 넘길 때» 한꺼번에 (사용자 보고 2026-11-27) ──────────
+ *  거울 던전(노말 · 하드 · 익스트림 · 어비스)은 팩 안에서 지거나 나가면 그 층 갈림길로 돌아와 팩을 다시
+ *  고릅니다(defeat 의 packCP · resumeMirror). 여태 처치 원고료는 이기는 즉시 들어와 남았으므로, 앞 전투만
+ *  이기고 일부러 지기를 되풀이하면 엔케팔린 없이 끝없이 벌렸습니다. 이제 팩 안에서는 여기 모아 두기만 하고,
+ *  그 팩을 넘기는 자리(mirrorPackDone · deepPackDone)에서 줍니다. 갈림길이 열리면(openPackGate) 비웁니다 —
+ *  넘지 못한 팩의 몫은 특전처럼 사라집니다. 보관함에 담지 않으므로 창을 닫아도 사라집니다. */
+let PACK_PAY = 0;
+function packPayHolds() {
+  const r = S && S.mirror ? mirrorRuleNow() : null;
+  return !!(r && r.packRounds);
+}
+/* 모은 몫을 줍니다 — cards 를 주면 거기에 카드를 얹고, 아니면 제 줄로 세웁니다 */
+function packPayOut(cards) {
+  const n = PACK_PAY;
+  PACK_PAY = 0;
+  if (!(n > 0)) return;
+  S.money += n;
+  const card = moneyCard(n, "이 팩에서 쓰러뜨린 몫");
+  if (cards) cards.unshift(card);
+  else sayGainCards([card], "팩을 넘긴 삯");
+}
+
 function victory() {
   const b = S.battle;
   foeLogKill(b.id);                  /* 적 도감 — 쓰러뜨린 수 */
@@ -10349,10 +10407,13 @@ function victory() {
    *  없는 대형 보상」이어야 할 자리가 매일 도는 최적 파밍 루트가 되어 있었습니다.
    *  처치 원고료를 여기서만 걷어 내고, 대신 첫 완주 삯(bonus)을 크게 올렸습니다. */
   const noKillPay = !!(S.mirror && mirrorRuleNow().noKillPay);
-  const reward = (!noKillPay && storyPays())
+  /* 본편은 «그 전투 자리에서 처음 한 번» 만(storyOnce) — 처음 회차라도 다시 지나가면 없습니다 */
+  const reward = (!noKillPay && storyPays() && storyOnce("kill", b.scene, b.id))
     ? earn(Math.floor((b.maxhp + b.atk * 4) / 6) * (b.boss ? 2 : 1))
     : 0;
-  S.money += reward;
+  const held = reward > 0 && packPayHolds();   // 테마팩 안 — 팩을 넘길 때 받습니다(PACK_PAY)
+  if (held) PACK_PAY += reward;
+  else S.money += reward;
   divider();
   /* spare — 쓰러뜨린 것이 «아닌» 끝 (사용자 지침 2026-10-14). 전투 장면에 spare: true 를
    * 적으면 「격파」라 적지 않고, 깜빡이며 사라지는 연출(foeFalls) 없이 무대에서 조용히 내린 뒤
@@ -10363,7 +10424,8 @@ function victory() {
   const spare = !!(b.scene && b.scene.spare);
   if (spare) say(b.scene.endText || "▶ 승부가 나기 전에 싸움이 끊겼다.", "sys");
   else say("▶ " + b.name + " 격파.", "good");
-  if (reward) say(CURRENCY + " " + reward + " 획득.", "gain");
+  if (held) say(CURRENCY + " " + reward + " — 이 팩을 넘기면 받는다.　(모인 것 " + PACK_PAY + ")", "gain");
+  else if (reward) say(CURRENCY + " " + reward + " 획득.", "gain");
   /* 굴절철도(noKillPay)는 아무 말도 하지 않습니다 (사용자 지침 2026-11-14 — 「이 문구도 다 걷어줘」).
    * 전투마다 「선로 위에서 돈이 될 것은 없다…」가 똑같이 떠서, 일곱~아홉 번 되풀이되고 있었습니다.
    * 들어가기 전 화면(mirrorFacts)이 이미 «선로 위에서는 원고료가 안 나온다» 고 못박아 줍니다. */
@@ -13674,6 +13736,15 @@ function load() {
     /* 마친 자리는 이어 읽지 않습니다 — 다시 읽으면 장 완료가 한 번 더 돕니다(saveSpotDone) */
     if (saveSpotDone(spot)) { glass(); return true; }
     S = newState();                       // 모은 것은 보관함에서
+    /* 거울 갈래 기록 — 기록에는 거울 장면(MIRROR)이 담기지 않으므로 여기서 이어 읽을 수 없습니다.
+     * 체크포인트(railSave)가 있으면 거울 문의 「이어하기」 와 같은 자리로 돌아가고, 없으면 유리창으로.
+     * 예전에는 본편 장면을 거울 자리 번호로 읽어 들어가, 끝에서 mirrorClear 가 다시 돌며
+     * 완주 보상을 거듭 받을 수 있었습니다(사용자 보고 2026-11-27 — 옛 판에서 남은 기록도 여기서 막힙니다). */
+    if (spot.mirror) {
+      if (S.railSave) resumeMirror();
+      if (!S.mirror) { S.ended = true; save(true); glass(); }
+      return true;
+    }
     SAVE_KEEPS.forEach(k => { if (spot[k] !== undefined) S[k] = spot[k]; });
     /* 인격을 잃었거나 이름이 바뀌었으면 기록해 둔 장착은 버립니다 */
     for (const w in (S.equip || {}))
@@ -16245,6 +16316,10 @@ function enterPack(rule, pack, round) {
  * 고릅니다 — 팩 안에서 돌아온 것일 수 있으므로 배경은 늘 기본 배경으로
  * 되돌립니다. */
 function openPackGate(rule, round, clearedPacks) {
+  /* 넘지 못한 팩에서 모은 처치 원고료도 여기서 사라집니다(PACK_PAY 머리말) */
+  const lost = PACK_PAY;
+  PACK_PAY = 0;
+  if (lost > 0) say("넘지 못한 팩에서 모은 " + CURRENCY + " " + lost + "은 유리 조각과 함께 흩어졌다.", "sys");
   /* 다 깨지 못한 팩의 특전은 여기서 빠집니다 — 지고 돌아왔거나 나갔다 이어한 자리 (packPerks 머리말) */
   if (S.railSave && S.railSave.current) delete S.railSave.current;
   if (rule.deep) {
@@ -17206,6 +17281,10 @@ function mirrorClear() {
   S.party.forEach(w => { if (w) S.hp[w] = Math.min(curHp(w), maxHp(w)); });
   MIRROR = null;
   S.ended = true;
+  /* 이어하기 기록도 «마친 자리» 로 못박습니다. 여태 기록(SAVE_KEY)은 마지막 cont() 가 남긴
+   * «거울 진행 중 · 끝 장면 직전» 그대로라, [이어하기] 를 누르면 그 자리에서 다시 끝나며
+   * 완주 보상을 거듭 받을 수 있었습니다(사용자 보고 2026-11-27). chapterEnd 와 같은 마무리입니다. */
+  save(true);
 
   /* ── 보상 먼저, 결과 카드는 한 박자 뒤에 ──────────────────────
    *  완주 보상이 카드로 바뀌면서(v2.29.8) 줄이 길어졌습니다. 그 아래에 결과
@@ -22588,6 +22667,7 @@ SCENE_EXT.deepPackDone = function (s) {
   S.codex += DEEP_PAY.codex;
   addFragBox("select", DEEP_PAY.fragBox);
   const floorCards = [codexCard(DEEP_PAY.codex, "보유 " + S.codex), fragBoxCard(DEEP_PAY.fragBox, "보유 " + fragBoxCount("select"))];
+  packPayOut(floorCards);   // 이 층에서 모은 처치 원고료(PACK_PAY)
   if (!S.mirrorDone) S.mirrorDone = {};
   if (!S.mirrorDone[deepKey(floor)]) {
     S.mirrorDone[deepKey(floor)] = true;
